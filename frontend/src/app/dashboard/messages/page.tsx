@@ -9,25 +9,134 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Skeleton, StatsCardSkeleton, ListSkeleton, ChartSkeleton } from "@/components/ui/skeleton";
-import { ConfirmTooltip } from "@/components/ui/confirm-tooltip";
-import { useAuth } from "@/contexts/AuthProvider";
+import { Checkbox } from "@/components/ui/checkbox";
+import { useToast } from "@/hooks/use-toast";
 import apiClient from "@/lib/api/client";
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, PieChart, Pie, Cell } from 'recharts';
+import {
+  MessageSquare,
+  Users,
+  Clock,
+  Download,
+  RefreshCw,
+  Search,
+  Trash2,
+  Send,
+  Brain,
+  ChevronRight,
+  Loader2,
+  MessageCircle,
+  TrendingUp,
+  BarChart3,
+  Filter,
+  CheckCircle2
+} from "lucide-react";
+import {
+  LineChart,
+  Line,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ResponsiveContainer,
+  BarChart,
+  Bar,
+  PieChart,
+  Pie,
+  Cell
+} from 'recharts';
 
-// ... interfaces ... (omitted for brevity, they remain same)
+// Interfaces
+interface SessionMessage {
+  id: string;
+  timestamp: string;
+  user_message: {
+    content: string;
+    tokens_used?: number;
+  };
+  ai_response: {
+    content: string;
+    tokens_used?: number;
+    embedding_processed?: boolean;
+    response_quality?: 'high' | 'medium' | 'low';
+    sources?: any[];
+  };
+}
 
-// ... COLORS ...
+interface Session {
+  session_id: string;
+  started_at: string;
+  last_activity: string;
+  message_count: number;
+  message_types: number;
+  questions?: { content: string; timestamp: string }[];
+}
+
+interface Stats {
+  totalMessages: { count: number }[];
+  totalSessions: { count: number }[];
+  messageTypes: { message_type: string; count: string }[];
+  topQueries: { content: string; frequency: number }[];
+  dailyActivity: { date: string; messages: number; sessions: number }[];
+}
+
+interface Topic {
+  word: string;
+  frequency: number;
+  answer_ratio?: number;
+}
+
+interface Patterns {
+  avg_messages_per_session?: number;
+  peak_hours?: string[];
+  common_topics?: string[];
+}
+
+const COLORS = ['#3B82F6', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6'];
 
 export default function MessagesPage() {
   const { t } = useTranslation('messages');
-  // token is not needed for apiClient
-  const { user } = useAuth();
+  const { toast } = useToast();
   const [activeTab, setActiveTab] = useState("overview");
+  const [loading, setLoading] = useState(true);
+  const [timeRange, setTimeRange] = useState("30");
 
-  // ... state ...
+  // Data states
+  const [stats, setStats] = useState<Stats>({
+    totalMessages: [],
+    totalSessions: [],
+    messageTypes: [],
+    topQueries: [],
+    dailyActivity: []
+  });
+  const [patterns, setPatterns] = useState<Patterns>({});
+  const [topics, setTopics] = useState<Topic[]>([]);
+  const [sessions, setSessions] = useState<Session[]>([]);
+  const [selectedSession, setSelectedSession] = useState<Session | null>(null);
+  const [sessionMessages, setSessionMessages] = useState<SessionMessage[]>([]);
 
-  // ... useEffect ...
+  // Selection states
+  const [selectedSessions, setSelectedSessions] = useState<string[]>([]);
+  const [selectedMessages, setSelectedMessages] = useState<string[]>([]);
+
+  // Filter and sort states
+  const [filterStatus, setFilterStatus] = useState<'all' | 'embedded' | 'not-embedded'>('all');
+  const [sortBy, setSortBy] = useState<'date' | 'tokens' | 'quality'>('date');
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
+
+  // Search states
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchResults, setSearchResults] = useState<any[]>([]);
+  const [searchLoading, setSearchLoading] = useState(false);
+
+  // Stats
+  const [tokenUsage, setTokenUsage] = useState({ totalTokens: 0, avgTokensPerMessage: 0 });
+  const [embeddingStats, setEmbeddingStats] = useState({ processed: 0, pending: 0 });
+
+  // Load data on mount and time range change
+  useEffect(() => {
+    loadAnalytics();
+    loadSessions();
+  }, [timeRange]);
 
   const loadAnalytics = async () => {
     try {
@@ -35,12 +144,23 @@ export default function MessagesPage() {
       const response = await apiClient.get<any>(`/messages/analytics?timeRange=${timeRange}`);
 
       if (response.data) {
-        setStats(response.data.stats);
-        setPatterns(response.data.patterns);
-        setTopics(response.data.topics);
+        setStats(response.data.stats || {
+          totalMessages: [],
+          totalSessions: [],
+          messageTypes: [],
+          topQueries: [],
+          dailyActivity: []
+        });
+        setPatterns(response.data.patterns || {});
+        setTopics(response.data.topics || []);
       }
     } catch (error) {
       console.error('Error loading analytics:', error);
+      toast({
+        title: t('errors.loadFailed', 'Yükleme başarısız'),
+        description: t('errors.tryAgain', 'Lütfen tekrar deneyin'),
+        variant: 'destructive'
+      });
     } finally {
       setLoading(false);
     }
@@ -51,7 +171,7 @@ export default function MessagesPage() {
       const response = await apiClient.get<any>('/messages/sessions?limit=50');
 
       if (response.data) {
-        setSessions(response.data.sessions);
+        setSessions(response.data.sessions || []);
       }
     } catch (error) {
       console.error('Error loading sessions:', error);
@@ -65,13 +185,29 @@ export default function MessagesPage() {
 
       if (response.data) {
         const data = response.data;
-        setSessionMessages(data.interactions);
+        // Transform interactions to session messages format
+        const messages = data.interactions?.map((interaction: any) => ({
+          id: interaction.id || crypto.randomUUID(),
+          timestamp: interaction.timestamp,
+          user_message: {
+            content: interaction.messages?.find((m: any) => m.type === 'question')?.content || '',
+            tokens_used: interaction.messages?.find((m: any) => m.type === 'question')?.tokens || 0
+          },
+          ai_response: {
+            content: interaction.messages?.find((m: any) => m.type === 'answer')?.content || '',
+            tokens_used: interaction.messages?.find((m: any) => m.type === 'answer')?.tokens || 0,
+            embedding_processed: interaction.messages?.find((m: any) => m.type === 'answer')?.embedded || false,
+            sources: interaction.messages?.find((m: any) => m.type === 'answer')?.sources || []
+          }
+        })) || [];
+
+        setSessionMessages(messages);
 
         // Calculate token usage
-        const totalTokens = data.interactions.reduce((sum: number, interaction: SessionMessage) => {
-          return sum + (interaction.user_message.tokens_used || 0) + (interaction.ai_response.tokens_used || 0);
+        const totalTokens = messages.reduce((sum: number, m: SessionMessage) => {
+          return sum + (m.user_message.tokens_used || 0) + (m.ai_response.tokens_used || 0);
         }, 0);
-        const avgTokens = data.interactions.length > 0 ? totalTokens / data.interactions.length : 0;
+        const avgTokens = messages.length > 0 ? totalTokens / messages.length : 0;
 
         setTokenUsage({
           totalTokens,
@@ -79,10 +215,8 @@ export default function MessagesPage() {
         });
 
         // Calculate embedding stats
-        const processed = data.interactions.filter((i: SessionMessage) =>
-          i.ai_response.embedding_processed
-        ).length;
-        const pending = data.interactions.length - processed;
+        const processed = messages.filter((m: SessionMessage) => m.ai_response.embedding_processed).length;
+        const pending = messages.length - processed;
 
         setEmbeddingStats({ processed, pending });
       }
@@ -97,6 +231,7 @@ export default function MessagesPage() {
     if (!searchQuery.trim()) return;
 
     try {
+      setSearchLoading(true);
       const response = await apiClient.post<any>('/messages/search', {
         query: searchQuery,
         limit: 20,
@@ -104,18 +239,21 @@ export default function MessagesPage() {
       });
 
       if (response.data) {
-        setSearchResults(response.data.messages);
+        setSearchResults(response.data.messages || []);
       }
     } catch (error) {
       console.error('Error searching messages:', error);
+      toast({
+        title: t('errors.searchFailed', 'Arama başarısız'),
+        variant: 'destructive'
+      });
+    } finally {
+      setSearchLoading(false);
     }
   };
 
   const handleExport = async (format: 'json' | 'csv') => {
     try {
-      // For file download, we might need a different approach or apiClient helper
-      // apiClient.get returns parsed JSON usually.
-      // But we can use access raw response type
       const response = await apiClient.get(`/messages/export?format=${format}`, {
         responseType: 'blob'
       });
@@ -127,81 +265,43 @@ export default function MessagesPage() {
         a.download = `messages.${format}`;
         a.click();
         window.URL.revokeObjectURL(url);
+        toast({
+          title: t('alerts.exportSuccess', 'Dışa aktarma başarılı'),
+          description: `messages.${format} indirildi`
+        });
       }
     } catch (error) {
       console.error('Error exporting messages:', error);
+      toast({
+        title: t('errors.exportFailed', 'Dışa aktarma başarısız'),
+        variant: 'destructive'
+      });
     }
   };
 
   const handleFlushSession = async (sessionId: string) => {
     try {
       await apiClient.post(`/messages/sessions/${sessionId}/flush`);
-      alert(t('alerts.sessionFlushed'));
+      toast({
+        title: t('alerts.sessionFlushed', 'Oturum gönderildi'),
+        description: t('alerts.embeddingsQueued', 'Embedding kuyruğuna eklendi')
+      });
       loadSessions();
     } catch (error) {
       console.error('Error flushing session:', error);
-    }
-  };
-
-  const handleGenerateEmbeddings = async () => {
-    try {
-      await apiClient.post('/messages/embeddings/generate');
-      alert(t('alerts.embeddingsGenerationStarted'));
-      loadAnalytics();
-      if (selectedSession) {
-        loadSessionDetails(selectedSession.session_id);
-      }
-    } catch (error) {
-      console.error('Error generating embeddings:', error);
-    }
-  };
-
-  const handleEmbedSpecificResponse = async (interactionId: string) => {
-    try {
-      await apiClient.post(`/messages/embeddings/interactions/${interactionId}`);
-      alert(t('alerts.responseEmbedded'));
-      if (selectedSession) {
-        loadSessionDetails(selectedSession.session_id);
-      }
-    } catch (error) {
-      console.error('Error embedding specific response:', error);
-    }
-  };
-
-  const handleBatchEmbedResponses = async () => {
-    if (!selectedSession || sessionMessages.length === 0) return;
-
-    try {
-      await apiClient.post(`/messages/embeddings/batch/session/${selectedSession.session_id}`);
-      alert(t('alerts.batchEmbeddingStarted'));
-      loadSessionDetails(selectedSession.session_id);
-    } catch (error) {
-      console.error('Error in batch embedding:', error);
-    }
-  };
-
-  const handleBatchEmbedSelected = async () => {
-    if (selectedMessages.length === 0) return;
-
-    try {
-      await apiClient.post('/messages/embeddings/batch', {
-        messageIds: selectedMessages
+      toast({
+        title: t('errors.flushFailed', 'Gönderme başarısız'),
+        variant: 'destructive'
       });
-      alert(t('alerts.selectedEmbeddingStarted'));
-      setSelectedMessages([]);
-      setShowBatchActions(false);
-      if (selectedSession) {
-        loadSessionDetails(selectedSession.session_id);
-      }
-    } catch (error) {
-      console.error('Error in selected batch embedding:', error);
     }
   };
 
   const handleDeleteSession = async (sessionId: string) => {
     try {
       await apiClient.delete(`/messages/sessions/${sessionId}`);
-      alert(t('alerts.sessionDeleted'));
+      toast({
+        title: t('alerts.sessionDeleted', 'Oturum silindi')
+      });
       loadSessions();
       if (selectedSession?.session_id === sessionId) {
         setSelectedSession(null);
@@ -209,6 +309,10 @@ export default function MessagesPage() {
       }
     } catch (error) {
       console.error('Error deleting session:', error);
+      toast({
+        title: t('errors.deleteFailed', 'Silme başarısız'),
+        variant: 'destructive'
+      });
     }
   };
 
@@ -217,72 +321,51 @@ export default function MessagesPage() {
 
     try {
       await apiClient.delete('/messages/sessions/batch', {
-        data: { sessionIds: selectedSessions } // Axios delete body
+        data: { sessionIds: selectedSessions }
       });
-      alert(t('alerts.selectedSessionsDeleted'));
+      toast({
+        title: t('alerts.selectedSessionsDeleted', 'Seçili oturumlar silindi'),
+        description: `${selectedSessions.length} oturum silindi`
+      });
       setSelectedSessions([]);
       loadSessions();
     } catch (error) {
       console.error('Error deleting selected sessions:', error);
-    }
-  };
-
-  const handleSelectAll = () => {
-    if (selectAllChecked) {
-      setSelectedSessions([]);
-      setSelectAllChecked(false);
-    } else {
-      const sessionIds = sessions.map(session => session.session_id);
-      setSelectedSessions(sessionIds);
-      setSelectAllChecked(true);
+      toast({
+        title: t('errors.deleteFailed', 'Silme başarısız'),
+        variant: 'destructive'
+      });
     }
   };
 
   const handleSelectSession = (sessionId: string) => {
     if (selectedSessions.includes(sessionId)) {
       setSelectedSessions(selectedSessions.filter(id => id !== sessionId));
-      setSelectAllChecked(false);
     } else {
       setSelectedSessions([...selectedSessions, sessionId]);
     }
   };
 
-  const handleSelectMessage = (messageId: string) => {
-    if (selectedMessages.includes(messageId)) {
-      setSelectedMessages(selectedMessages.filter(id => id !== messageId));
+  const handleSelectAllSessions = () => {
+    if (selectedSessions.length === sessions.length) {
+      setSelectedSessions([]);
     } else {
-      setSelectedMessages([...selectedMessages, messageId]);
+      setSelectedSessions(sessions.map(s => s.session_id));
     }
   };
 
-  const handleSelectAllMessages = () => {
-    if (selectedMessages.length === sessionMessages.length) {
-      setSelectedMessages([]);
-    } else {
-      const messageIds = sessionMessages.map(message => message.id);
-      setSelectedMessages(messageIds);
-    }
-  };
-
-  // Filter and sort functions
+  // Filter and sort messages
   const getFilteredAndSortedMessages = () => {
     let filtered = [...sessionMessages];
 
-    // Apply filter
     if (filterStatus === 'embedded') {
-      filtered = filtered.filter(message =>
-        message.ai_response.embedding_processed
-      );
+      filtered = filtered.filter(m => m.ai_response.embedding_processed);
     } else if (filterStatus === 'not-embedded') {
-      filtered = filtered.filter(message =>
-        !message.ai_response.embedding_processed
-      );
+      filtered = filtered.filter(m => !m.ai_response.embedding_processed);
     }
 
-    // Apply sorting
     filtered.sort((a, b) => {
       let comparison = 0;
-
       switch (sortBy) {
         case 'date':
           comparison = new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime();
@@ -293,93 +376,54 @@ export default function MessagesPage() {
           comparison = tokensA - tokensB;
           break;
         case 'quality':
-          const qualityA = a.ai_response.response_quality || 'low';
-          const qualityB = b.ai_response.response_quality || 'low';
           const qualityOrder = { 'high': 3, 'medium': 2, 'low': 1 };
-          comparison = qualityOrder[qualityA] - qualityOrder[qualityB];
+          comparison = (qualityOrder[a.ai_response.response_quality || 'low'] || 0) -
+                       (qualityOrder[b.ai_response.response_quality || 'low'] || 0);
           break;
       }
-
       return sortOrder === 'asc' ? comparison : -comparison;
     });
 
     return filtered;
   };
 
-  // User behavior analysis functions
-  const analyzeUserBehavior = () => {
-    if (sessionMessages.length === 0) return null;
-
-    const totalQuestions = sessionMessages.length;
-    const avgQuestionLength = sessionMessages.reduce((sum, msg) =>
-      sum + msg.user_message.content.length, 0) / totalQuestions;
-
-    const responseTimes = sessionMessages.map((_, index) => {
-      if (index === 0) return 0;
-      const current = new Date(sessionMessages[index].timestamp);
-      const previous = new Date(sessionMessages[index - 1].timestamp);
-      return current.getTime() - previous.getTime();
-    }).filter(time => time > 0);
-
-    const avgResponseTime = responseTimes.length > 0
-      ? responseTimes.reduce((sum, time) => sum + time, 0) / responseTimes.length
-      : 0;
-
-    const questionTopics = sessionMessages.map(msg => msg.user_message.content)
-      .join(' ')
-      .toLowerCase()
-      .split(/[,\.\s]+/)
-      .filter(word => word.length > 3);
-
-    const topicFrequency = questionTopics.reduce((freq, topic) => {
-      freq[topic] = (freq[topic] || 0) + 1;
-      return freq;
-    }, {} as Record<string, number>);
-
-    return {
-      totalQuestions,
-      avgQuestionLength: Math.round(avgQuestionLength),
-      avgResponseTime: Math.round(avgResponseTime / 1000), // Convert to seconds
-      mostFrequentTopics: Object.entries(topicFrequency)
-        .sort(([, a], [, b]) => b - a)
-        .slice(0, 5)
-        .map(([topic, freq]) => ({ topic, freq })),
-      sessionDuration: new Date(sessionMessages[sessionMessages.length - 1].timestamp).getTime() -
-        new Date(sessionMessages[0].timestamp).getTime()
-    };
-  };
-
-  const userBehaviorAnalysis = analyzeUserBehavior();
-
   // Prepare chart data
-  const dailyActivityData = stats.dailyActivity?.map((d: any) => ({
+  const dailyActivityData = stats.dailyActivity?.map(d => ({
     date: new Date(d.date).toLocaleDateString('tr-TR', { day: '2-digit', month: '2-digit' }),
     messages: d.messages,
     sessions: d.sessions
   })) || [];
 
-  const messageTypesData = stats.messageTypes?.map((m: any) => ({
-    name: m.message_type === 'question' ? t('messageTypes.questions') :
-      m.message_type === 'answer' ? t('messageTypes.answers') :
-        m.message_type === 'search_result' ? t('messageTypes.searchResults') : m.message_type,
+  const messageTypesData = stats.messageTypes?.map(m => ({
+    name: m.message_type === 'question' ? 'Sorular' :
+      m.message_type === 'answer' ? 'Cevaplar' :
+      m.message_type === 'search_result' ? 'Arama Sonuçları' : m.message_type,
     value: parseInt(m.count),
     color: m.message_type === 'question' ? '#3B82F6' :
       m.message_type === 'answer' ? '#10B981' : '#F59E0B'
   })) || [];
 
-  const topicsData = topics.slice(0, 10).map((t) => ({
+  const topicsData = topics.slice(0, 10).map(t => ({
     name: t.word,
     frequency: t.frequency,
     ratio: t.answer_ratio ? Math.round(t.answer_ratio * 100) : 0
   }));
 
+  const totalMessages = stats.totalMessages?.[0]?.count || 0;
+  const totalSessions = stats.totalSessions?.[0]?.count || 0;
+  const avgPerSession = patterns.avg_messages_per_session ? Math.round(patterns.avg_messages_per_session) : 0;
+
   return (
-    <div className="container mx-auto p-6 space-y-6">
+    <div className="py-6 space-y-6">
+      {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-xl font-semibold">{t('title')}</h1>
+          <h1 className="text-xl font-semibold flex items-center gap-2">
+            <MessageSquare className="h-6 w-6" />
+            {t('title', 'Mesajlar ve Konuşmalar')}
+          </h1>
           <p className="text-muted-foreground mt-1">
-            {t('subtitle')}
+            {t('subtitle', 'AI sohbet geçmişi ve analitikleri')}
           </p>
         </div>
         <div className="flex gap-2">
@@ -388,560 +432,554 @@ export default function MessagesPage() {
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="7">{t('timeRange.last7Days')}</SelectItem>
-              <SelectItem value="30">{t('timeRange.last30Days')}</SelectItem>
-              <SelectItem value="90">{t('timeRange.last90Days')}</SelectItem>
+              <SelectItem value="7">Son 7 Gün</SelectItem>
+              <SelectItem value="30">Son 30 Gün</SelectItem>
+              <SelectItem value="90">Son 90 Gün</SelectItem>
             </SelectContent>
           </Select>
+          <Button variant="outline" onClick={() => loadAnalytics()}>
+            <RefreshCw className="h-4 w-4 mr-2" />
+            Yenile
+          </Button>
           <Button variant="outline" onClick={() => handleExport('json')}>
-            {t('common.download')} (JSON)
+            <Download className="h-4 w-4 mr-2" />
+            JSON
           </Button>
           <Button variant="outline" onClick={() => handleExport('csv')}>
-            {t('common.download')} (CSV)
+            <Download className="h-4 w-4 mr-2" />
+            CSV
           </Button>
         </div>
       </div>
 
+      {/* Stats Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <Card className="bg-gradient-to-br from-blue-50 to-blue-100 dark:from-blue-900 dark:to-blue-800">
+          <CardContent className="p-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-muted-foreground">Toplam Mesaj</p>
+                <p className="text-2xl font-bold">
+                  {loading ? <Loader2 className="h-6 w-6 animate-spin" /> : totalMessages}
+                </p>
+              </div>
+              <MessageCircle className="h-8 w-8 text-blue-600" />
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="bg-gradient-to-br from-green-50 to-green-100 dark:from-green-900 dark:to-green-800">
+          <CardContent className="p-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-muted-foreground">Oturum Sayısı</p>
+                <p className="text-2xl font-bold">
+                  {loading ? <Loader2 className="h-6 w-6 animate-spin" /> : totalSessions}
+                </p>
+              </div>
+              <Users className="h-8 w-8 text-green-600" />
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="bg-gradient-to-br from-orange-50 to-orange-100 dark:from-orange-900 dark:to-orange-800">
+          <CardContent className="p-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-muted-foreground">Ort. Mesaj/Oturum</p>
+                <p className="text-2xl font-bold">
+                  {loading ? <Loader2 className="h-6 w-6 animate-spin" /> : avgPerSession}
+                </p>
+              </div>
+              <TrendingUp className="h-8 w-8 text-orange-600" />
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="bg-gradient-to-br from-purple-50 to-purple-100 dark:from-purple-900 dark:to-purple-800">
+          <CardContent className="p-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-muted-foreground">Popüler Konular</p>
+                <p className="text-2xl font-bold">
+                  {loading ? <Loader2 className="h-6 w-6 animate-spin" /> : topics.length}
+                </p>
+              </div>
+              <BarChart3 className="h-8 w-8 text-purple-600" />
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Main Content Tabs */}
       <Tabs value={activeTab} onValueChange={setActiveTab}>
-        <TabsList className="grid w-full grid-cols-5">
-          <TabsTrigger value="overview">
-            {t('tabs.overview')}
-          </TabsTrigger>
-          <TabsTrigger value="sessions">
-            {t('tabs.sessions')}
-          </TabsTrigger>
-          <TabsTrigger value="topics">
-            {t('tabs.topics')}
-          </TabsTrigger>
-          <TabsTrigger value="search">
-            {t('tabs.research')}
-          </TabsTrigger>
-          <TabsTrigger value="analytics">
-            {t('tabs.analytics')}
-          </TabsTrigger>
+        <TabsList className="grid w-full grid-cols-4">
+          <TabsTrigger value="overview">Genel Bakış</TabsTrigger>
+          <TabsTrigger value="sessions">Oturumlar</TabsTrigger>
+          <TabsTrigger value="search">Arama</TabsTrigger>
+          <TabsTrigger value="topics">Konular</TabsTrigger>
         </TabsList>
 
+        {/* Overview Tab */}
         <TabsContent value="overview" className="space-y-6">
-          {/* Stats Cards */}
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            {/* Daily Activity Chart */}
             <Card>
-              <CardContent className="p-6">
-                <div>
-                  <p className="text-sm text-muted-foreground">{t('stats.totalMessages')}</p>
-                  <p className="text-2xl font-bold">
-                    {loading ? (
-                      <Skeleton className="h-8 w-16" />
-                    ) : (
-                      stats.totalMessages[0]?.count || 0
-                    )}
-                  </p>
-                </div>
+              <CardHeader>
+                <CardTitle>Günlük Aktivite</CardTitle>
+                <CardDescription>Mesaj ve oturum sayıları</CardDescription>
+              </CardHeader>
+              <CardContent>
+                {dailyActivityData.length > 0 ? (
+                  <ResponsiveContainer width="100%" height={300}>
+                    <LineChart data={dailyActivityData}>
+                      <CartesianGrid strokeDasharray="3 3" />
+                      <XAxis dataKey="date" />
+                      <YAxis />
+                      <Tooltip />
+                      <Line type="monotone" dataKey="messages" stroke="#3B82F6" name="Mesajlar" />
+                      <Line type="monotone" dataKey="sessions" stroke="#10B981" name="Oturumlar" />
+                    </LineChart>
+                  </ResponsiveContainer>
+                ) : (
+                  <div className="h-[300px] flex items-center justify-center text-muted-foreground">
+                    Henüz veri yok
+                  </div>
+                )}
               </CardContent>
             </Card>
 
+            {/* Message Types Chart */}
             <Card>
-              <CardContent className="p-6">
-                <div>
-                  <p className="text-sm text-muted-foreground">{t('stats.sessionCount')}</p>
-                  <p className="text-2xl font-bold">
-                    {loading ? (
-                      <Skeleton className="h-8 w-16" />
-                    ) : (
-                      stats.totalSessions[0]?.count || 0
-                    )}
-                  </p>
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardContent className="p-6">
-                <div>
-                  <p className="text-sm text-muted-foreground">{t('stats.averagePerSession')}</p>
-                  <p className="text-2xl font-bold">
-                    {loading ? (
-                      <Skeleton className="h-8 w-16" />
-                    ) : (
-                      patterns.avg_messages_per_session ? Math.round(patterns.avg_messages_per_session) : 0
-                    )}
-                  </p>
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardContent className="p-6">
-                <div>
-                  <p className="text-sm text-muted-foreground">{t('stats.embeddings')}</p>
-                  <p className="text-2xl font-bold">
-                    {loading ? (
-                      <Skeleton className="h-8 w-16" />
-                    ) : (
-                      stats.messageTypes?.reduce((sum: number, m: any) => sum + parseInt(m.count), 0) || 0
-                    )}
-                  </p>
-                </div>
+              <CardHeader>
+                <CardTitle>Mesaj Türleri</CardTitle>
+                <CardDescription>Soru, cevap ve arama dağılımı</CardDescription>
+              </CardHeader>
+              <CardContent>
+                {messageTypesData.length > 0 ? (
+                  <ResponsiveContainer width="100%" height={300}>
+                    <PieChart>
+                      <Pie
+                        data={messageTypesData}
+                        cx="50%"
+                        cy="50%"
+                        labelLine={false}
+                        label={({ name, value }) => `${name}: ${value}`}
+                        outerRadius={100}
+                        dataKey="value"
+                      >
+                        {messageTypesData.map((entry, index) => (
+                          <Cell key={`cell-${index}`} fill={entry.color || COLORS[index % COLORS.length]} />
+                        ))}
+                      </Pie>
+                      <Tooltip />
+                    </PieChart>
+                  </ResponsiveContainer>
+                ) : (
+                  <div className="h-[300px] flex items-center justify-center text-muted-foreground">
+                    Henüz veri yok
+                  </div>
+                )}
               </CardContent>
             </Card>
           </div>
 
-          {/* Charts Removed - No data visualization available yet */}
-
           {/* Top Queries */}
           <Card>
             <CardHeader>
-              <CardTitle>{t('popularQueries.title')}</CardTitle>
+              <CardTitle>Popüler Sorular</CardTitle>
+              <CardDescription>En çok sorulan sorular</CardDescription>
             </CardHeader>
             <CardContent>
               <div className="space-y-3">
-                {stats.topQueries?.slice(0, 10).map((query: any, idx: number) => (
+                {stats.topQueries?.length > 0 ? stats.topQueries.slice(0, 10).map((query, idx) => (
                   <div key={idx} className="flex items-center justify-between p-3 bg-muted/50 rounded-lg">
                     <div className="flex items-center gap-3">
-                      <span className="text-sm font-medium text-muted-foreground">{t('popularQueries.rank')}{idx + 1}</span>
+                      <Badge variant="outline" className="w-8 h-8 flex items-center justify-center">
+                        {idx + 1}
+                      </Badge>
                       <p className="text-sm">{query.content}</p>
                     </div>
-                    <Badge variant="secondary">{query.frequency}</Badge>
+                    <Badge variant="secondary">{query.frequency} kez</Badge>
                   </div>
-                ))}
+                )) : (
+                  <div className="text-center text-muted-foreground py-8">
+                    Henüz popüler soru yok
+                  </div>
+                )}
               </div>
             </CardContent>
           </Card>
         </TabsContent>
 
+        {/* Sessions Tab */}
         <TabsContent value="sessions" className="space-y-6">
-          {/* Sessions Header with Batch Actions */}
-          <Card>
-            <CardHeader>
-              <div className="flex items-center justify-between">
-                <div>
-                  <CardTitle>{t('sessions.title')}</CardTitle>
-                  <CardDescription>
-                    {t('sessions.subtitle')}
-                  </CardDescription>
-                </div>
-                {selectedSessions.length > 0 && (
-                  <div className="flex gap-2">
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            {/* Sessions List */}
+            <Card className="lg:col-span-1">
+              <CardHeader>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <CardTitle>Oturumlar</CardTitle>
+                    <CardDescription>{sessions.length} oturum</CardDescription>
+                  </div>
+                  {selectedSessions.length > 0 && (
                     <Button
                       variant="destructive"
                       size="sm"
                       onClick={handleDeleteSelectedSessions}
                     >
-                      {t('sessions.batchActions.deleteSelected', { count: selectedSessions.length })}
+                      <Trash2 className="h-4 w-4 mr-1" />
+                      {selectedSessions.length}
                     </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => {
-                        setSelectedSessions([]);
-                        setSelectAllChecked(false);
-                      }}
-                    >
-                      {t('sessions.batchActions.clear')}
-                    </Button>
-                  </div>
-                )}
-              </div>
-            </CardHeader>
-            <CardContent>
-              {/* Batch Actions Bar */}
-              {selectedSessions.length > 0 && (
-                <div className="mb-4 p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800">
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm font-medium text-blue-700 dark:text-blue-300">
-                      {t('sessions.batchActions.sessionsSelected', { count: selectedSessions.length })}
-                    </span>
-                    <div className="flex gap-2">
-                      <Button size="sm" onClick={handleSelectAll}>
-                        {selectAllChecked ? '☐' : '☑'}
-                      </Button>
-                    </div>
-                  </div>
+                  )}
                 </div>
-              )}
-
-              <div className="space-y-4">
-                {sessions.map((session) => (
-                  <div
-                    key={session.session_id}
-                    className={`p-4 border rounded-lg transition-colors ${selectedSession?.session_id === session.session_id
-                      ? 'border-primary bg-primary/5'
-                      : selectedSessions.includes(session.session_id)
-                        ? 'border-blue-300 bg-blue-50 dark:bg-blue-900/20'
-                        : 'hover:bg-muted/50'
-                      }`}
-                  >
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-3 flex-1">
-                        {/* Session Selection Checkbox */}
-                        <input
-                          type="checkbox"
-                          checked={selectedSessions.includes(session.session_id)}
-                          onChange={() => handleSelectSession(session.session_id)}
-                          className="w-4 h-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500"
-                        />
-
-                        <div
-                          className="flex-1 cursor-pointer"
-                          onClick={() => {
-                            setSelectedSession(session);
-                            loadSessionDetails(session.session_id);
-                          }}
-                        >
-                          <div className="flex items-center gap-3">
-                            <h3 className="font-medium">{session.session_id}</h3>
-                            <Badge variant="outline">{session.message_count} {t('sessions.messages')}</Badge>
-                            <Badge variant="secondary">{session.message_types} {t('sessions.types')}</Badge>
-                          </div>
-                          <div className="flex items-center gap-4 mt-2 text-sm text-muted-foreground">
-                            <span>{t('sessions.start')}: {new Date(session.started_at).toLocaleString('tr-TR')}</span>
-                            <span>{t('sessions.lastActivity')}: {new Date(session.last_activity).toLocaleString('tr-TR')}</span>
-                          </div>
-                          {session.questions?.length > 0 && (
-                            <div className="mt-2">
-                              <p className="text-sm text-muted-foreground">{t('sessions.lastQuestion')}:</p>
-                              <p className="text-sm">{session.questions[0].content}</p>
+              </CardHeader>
+              <CardContent>
+                <div className="flex items-center gap-2 mb-4">
+                  <Checkbox
+                    checked={selectedSessions.length === sessions.length && sessions.length > 0}
+                    onCheckedChange={handleSelectAllSessions}
+                  />
+                  <span className="text-sm text-muted-foreground">Tümünü seç</span>
+                </div>
+                <ScrollArea className="h-[500px]">
+                  <div className="space-y-2">
+                    {sessions.map((session) => (
+                      <div
+                        key={session.session_id}
+                        className={`p-3 border rounded-lg cursor-pointer transition-colors ${
+                          selectedSession?.session_id === session.session_id
+                            ? 'border-primary bg-primary/5'
+                            : 'hover:bg-muted/50'
+                        }`}
+                      >
+                        <div className="flex items-start gap-2">
+                          <Checkbox
+                            checked={selectedSessions.includes(session.session_id)}
+                            onCheckedChange={() => handleSelectSession(session.session_id)}
+                            onClick={(e) => e.stopPropagation()}
+                          />
+                          <div
+                            className="flex-1"
+                            onClick={() => {
+                              setSelectedSession(session);
+                              loadSessionDetails(session.session_id);
+                            }}
+                          >
+                            <div className="flex items-center justify-between">
+                              <Badge variant="outline">{session.message_count} mesaj</Badge>
+                              <ChevronRight className="h-4 w-4 text-muted-foreground" />
                             </div>
-                          )}
+                            <p className="text-xs text-muted-foreground mt-1">
+                              {new Date(session.started_at).toLocaleString('tr-TR')}
+                            </p>
+                            {session.questions?.[0] && (
+                              <p className="text-xs mt-1 line-clamp-2">
+                                {session.questions[0].content}
+                              </p>
+                            )}
+                          </div>
+                        </div>
+                        <div className="flex gap-1 mt-2 ml-6">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleFlushSession(session.session_id);
+                            }}
+                          >
+                            <Send className="h-3 w-3" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleDeleteSession(session.session_id);
+                            }}
+                          >
+                            <Trash2 className="h-3 w-3" />
+                          </Button>
                         </div>
                       </div>
-                      <div className="flex gap-2">
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleFlushSession(session.session_id);
-                          }}
-                        >
-                          {t('sessions.send')}
-                        </Button>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleDeleteSession(session.session_id);
-                          }}
-                        >
-                          {t('sessions.delete')}
-                        </Button>
-                        <span
-                          className={`text-muted-foreground cursor-pointer hover:text-primary ${selectedSession?.session_id === session.session_id ? 'text-primary' : ''
-                            }`}
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setSelectedSession(session);
-                            loadSessionDetails(session.session_id);
-                          }}
-                        >
-                          →
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
-
-          {selectedSession && (
-            <>
-              {/* Session Overview */}
-              <Card>
-                <CardHeader>
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <CardTitle>{t('sessionOverview.title')}</CardTitle>
-                      <CardDescription>
-                        {selectedSession.session_id} - {sessionMessages.length} {t('sessionOverview.interactions')}
-                      </CardDescription>
-                    </div>
-                    {selectedMessages.length > 0 && (
-                      <div className="flex gap-2">
-                        <Button onClick={handleBatchEmbedSelected} size="sm">
-                          {t('sessionOverview.batchActions.embedSelected', { count: selectedMessages.length })}
-                        </Button>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => setSelectedMessages([])}
-                        >
-                          {t('sessionOverview.batchActions.clear')}
-                        </Button>
+                    ))}
+                    {sessions.length === 0 && (
+                      <div className="text-center text-muted-foreground py-8">
+                        Henüz oturum yok
                       </div>
                     )}
                   </div>
-                </CardHeader>
-                <CardContent>
-                  <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
-                    <div className="p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
-                      <h4 className="text-sm font-medium text-blue-700 dark:text-blue-300">{t('sessionOverview.tokenUsage.title')}</h4>
-                      <p className="text-2xl font-bold text-blue-900 dark:text-blue-100">
-                        {tokenUsage.totalTokens.toLocaleString()}
-                      </p>
-                      <p className="text-xs text-blue-600 dark:text-blue-400">
-                        {t('sessionOverview.tokenUsage.average', { tokens: tokenUsage.avgTokensPerMessage })}
-                      </p>
-                    </div>
-                    <div className="p-4 bg-green-50 dark:bg-green-900/20 rounded-lg">
-                      <h4 className="text-sm font-medium text-green-700 dark:text-green-300">{t('sessionOverview.embeddings.title')}</h4>
-                      <p className="text-2xl font-bold text-green-900 dark:text-blue-100">
-                        {embeddingStats.processed}/{sessionMessages.length}
-                      </p>
-                      <p className="text-xs text-green-600 dark:text-green-400">
-                        {t('sessionOverview.embeddings.processed')}
-                      </p>
-                    </div>
-                    <div className="p-4 bg-orange-50 dark:bg-orange-900/20 rounded-lg">
-                      <h4 className="text-sm font-medium text-orange-700 dark:text-orange-300">{t('sessionOverview.pending.title')}</h4>
-                      <p className="text-2xl font-bold text-orange-900 dark:text-orange-100">
-                        {embeddingStats.pending}
-                      </p>
-                      <p className="text-xs text-orange-600 dark:text-orange-400">
-                        {t('sessionOverview.pending.description')}
-                      </p>
-                    </div>
-                    <div className="p-4 bg-purple-50 dark:bg-purple-900/20 rounded-lg">
-                      <h4 className="text-sm font-medium text-purple-700 dark:text-purple-300">{t('sessionOverview.selected.title')}</h4>
-                      <p className="text-2xl font-bold text-purple-900 dark:text-purple-100">
-                        {selectedMessages.length}
-                      </p>
-                      <p className="text-xs text-purple-600 dark:text-purple-400">
-                        {t('sessionOverview.selected.messages')}
-                      </p>
-                    </div>
-                  </div>
+                </ScrollArea>
+              </CardContent>
+            </Card>
 
-                  {/* Filters and Sort Controls */}
-                  <div className="flex flex-wrap gap-2 mb-4 p-3 bg-muted/50 rounded-lg">
-                    <div className="flex items-center gap-2">
-                      <span className="text-sm text-muted-foreground">{t('sessionOverview.filters.filter')}:</span>
-                      <Select value={filterStatus} onValueChange={(value: any) => setFilterStatus(value)}>
+            {/* Session Details */}
+            <Card className="lg:col-span-2">
+              <CardHeader>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <CardTitle>Konuşma Detayları</CardTitle>
+                    <CardDescription>
+                      {selectedSession
+                        ? `${sessionMessages.length} etkileşim`
+                        : 'Bir oturum seçin'}
+                    </CardDescription>
+                  </div>
+                  {selectedSession && (
+                    <div className="flex gap-2">
+                      <Select value={filterStatus} onValueChange={(v: any) => setFilterStatus(v)}>
                         <SelectTrigger className="w-[140px]">
+                          <Filter className="h-4 w-4 mr-2" />
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="all">{t('sessionOverview.filters.all')}</SelectItem>
-                          <SelectItem value="embedded">{t('sessionOverview.filters.embedded')}</SelectItem>
-                          <SelectItem value="not-embedded">{t('sessionOverview.filters.notEmbedded')}</SelectItem>
+                          <SelectItem value="all">Tümü</SelectItem>
+                          <SelectItem value="embedded">Embedded</SelectItem>
+                          <SelectItem value="not-embedded">Bekliyor</SelectItem>
                         </SelectContent>
                       </Select>
                     </div>
-                    <div className="flex items-center gap-2">
-                      <span className="text-sm text-muted-foreground">{t('sessionOverview.filters.sort')}:</span>
-                      <Select value={sortBy} onValueChange={(value: any) => setSortBy(value)}>
-                        <SelectTrigger className="w-[120px]">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="date">{t('sessionOverview.filters.date')}</SelectItem>
-                          <SelectItem value="tokens">{t('sessionOverview.filters.token')}</SelectItem>
-                          <SelectItem value="quality">{t('sessionOverview.filters.quality')}</SelectItem>
-                        </SelectContent>
-                      </Select>
+                  )}
+                </div>
+              </CardHeader>
+              <CardContent>
+                {selectedSession ? (
+                  <>
+                    {/* Stats Bar */}
+                    <div className="grid grid-cols-3 gap-4 mb-4">
+                      <div className="p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
+                        <p className="text-xs text-blue-600 dark:text-blue-400">Token Kullanımı</p>
+                        <p className="text-lg font-bold">{tokenUsage.totalTokens.toLocaleString()}</p>
+                      </div>
+                      <div className="p-3 bg-green-50 dark:bg-green-900/20 rounded-lg">
+                        <p className="text-xs text-green-600 dark:text-green-400">Embedded</p>
+                        <p className="text-lg font-bold">{embeddingStats.processed}/{sessionMessages.length}</p>
+                      </div>
+                      <div className="p-3 bg-orange-50 dark:bg-orange-900/20 rounded-lg">
+                        <p className="text-xs text-orange-600 dark:text-orange-400">Bekliyor</p>
+                        <p className="text-lg font-bold">{embeddingStats.pending}</p>
+                      </div>
                     </div>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc')}
-                    >
-                      {sortOrder === 'asc' ? '↑' : '↓'}
-                    </Button>
-                    <Button onClick={handleSelectAllMessages} size="sm">
-                      {selectedMessages.length === sessionMessages.length ? '☐' : '☑'}
-                    </Button>
-                  </div>
 
-                  <div className="flex gap-2 mb-4">
-                    <Button onClick={handleBatchEmbedResponses} size="sm">
-                      {t('sessionOverview.batchActions.embedAll')}
-                    </Button>
-                    <Button variant="outline" onClick={handleGenerateEmbeddings} size="sm">
-                      {t('sessionOverview.batchActions.systemEmbeddings')}
-                    </Button>
-                  </div>
-                </CardContent>
-              </Card>
-
-              {/* Session Messages */}
-              <Card>
-                <CardHeader>
-                  <CardTitle>{t('conversation.title')}</CardTitle>
-                  <CardDescription>
-                    {t('conversation.subtitle')}
-                  </CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <ScrollArea className="h-[500px]">
-                    <div className="space-y-6">
-                      {getFilteredAndSortedMessages().map((interaction) => (
-                        <div key={interaction.id} className="p-4 border rounded-lg space-y-3">
-                          {/* Message Selection Checkbox */}
-                          <div className="flex justify-start">
-                            <input
-                              type="checkbox"
-                              checked={selectedMessages.includes(interaction.id)}
-                              onChange={() => handleSelectMessage(interaction.id)}
-                              className="w-4 h-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500"
-                            />
-                          </div>
-
-                          {/* User Message */}
-                          <div className="space-y-2">
-                            <div className="flex items-center justify-between">
-                              <div className="flex items-center gap-2">
-                                <div className="w-8 h-8 bg-blue-100 dark:bg-blue-900 rounded-full flex items-center justify-center">
-                                  <span className="text-xs font-bold text-blue-600 dark:text-blue-400">K</span>
-                                </div>
-                                <div>
-                                  <h4 className="font-medium text-sm">{t('conversation.user')}</h4>
-                                  <p className="text-xs text-muted-foreground">
+                    {/* Messages */}
+                    <ScrollArea className="h-[400px]">
+                      <div className="space-y-4">
+                        {getFilteredAndSortedMessages().map((interaction) => (
+                          <div key={interaction.id} className="p-4 border rounded-lg space-y-3">
+                            {/* User Message */}
+                            <div className="flex items-start gap-3">
+                              <div className="w-8 h-8 bg-blue-100 dark:bg-blue-900 rounded-full flex items-center justify-center shrink-0">
+                                <span className="text-xs font-bold text-blue-600 dark:text-blue-400">U</span>
+                              </div>
+                              <div className="flex-1">
+                                <div className="flex items-center gap-2 mb-1">
+                                  <span className="text-sm font-medium">Kullanıcı</span>
+                                  <span className="text-xs text-muted-foreground">
                                     {new Date(interaction.timestamp).toLocaleString('tr-TR')}
-                                  </p>
+                                  </span>
+                                  {interaction.user_message.tokens_used && (
+                                    <Badge variant="outline" className="text-xs">
+                                      {interaction.user_message.tokens_used} token
+                                    </Badge>
+                                  )}
                                 </div>
-                                {interaction.user_message.tokens_used && (
-                                  <Badge variant="outline" className="text-xs">
-                                    {interaction.user_message.tokens_used} {t('conversation.token')}
-                                  </Badge>
-                                )}
+                                <div className="p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
+                                  <p className="text-sm">{interaction.user_message.content}</p>
+                                </div>
                               </div>
                             </div>
-                            <div className="ml-10 p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
-                              <p className="text-sm">{interaction.user_message.content}</p>
-                            </div>
-                          </div>
 
-                          {/* AI Response */}
-                          <div className="space-y-2">
-                            <div className="flex items-center justify-between">
-                              <div className="flex items-center gap-2">
-                                <div className="w-8 h-8 bg-green-100 dark:bg-green-900 rounded-full flex items-center justify-center">
-                                  <span className="text-xs font-bold text-green-600 dark:text-green-400">AI</span>
+                            {/* AI Response */}
+                            <div className="flex items-start gap-3">
+                              <div className="w-8 h-8 bg-green-100 dark:bg-green-900 rounded-full flex items-center justify-center shrink-0">
+                                <Brain className="h-4 w-4 text-green-600 dark:text-green-400" />
+                              </div>
+                              <div className="flex-1">
+                                <div className="flex items-center gap-2 mb-1">
+                                  <span className="text-sm font-medium">AI</span>
+                                  {interaction.ai_response.tokens_used && (
+                                    <Badge variant="outline" className="text-xs">
+                                      {interaction.ai_response.tokens_used} token
+                                    </Badge>
+                                  )}
+                                  {interaction.ai_response.embedding_processed && (
+                                    <Badge variant="secondary" className="text-xs">
+                                      <CheckCircle2 className="h-3 w-3 mr-1" />
+                                      Embedded
+                                    </Badge>
+                                  )}
                                 </div>
-                                <div>
-                                  <h4 className="font-medium text-sm">{t('conversation.alice')}</h4>
-                                  <p className="text-xs text-muted-foreground">
-                                    {new Date(interaction.timestamp).toLocaleString('tr-TR')}
+                                <div className="p-3 bg-green-50 dark:bg-green-900/20 rounded-lg">
+                                  <p className="text-sm whitespace-pre-wrap">
+                                    {interaction.ai_response.content}
                                   </p>
                                 </div>
-                                {interaction.ai_response.tokens_used && (
-                                  <Badge variant="outline" className="text-xs">
-                                    {interaction.ai_response.tokens_used} {t('conversation.token')}
-                                  </Badge>
-                                )}
-                                {interaction.ai_response.response_quality && (
-                                  <Badge
-                                    variant={interaction.ai_response.response_quality === 'high' ? 'default' :
-                                      interaction.ai_response.response_quality === 'medium' ? 'secondary' : 'destructive'}
-                                    className="text-xs"
-                                  >
-                                    {interaction.ai_response.response_quality === 'high' ? t('conversation.quality.high') :
-                                      interaction.ai_response.response_quality === 'medium' ? t('conversation.quality.medium') : t('conversation.quality.low')}
-                                  </Badge>
-                                )}
-                                {interaction.ai_response.embedding_processed && (
-                                  <Badge variant="secondary" className="text-xs">
-                                    {t('conversation.embedded')}
-                                  </Badge>
-                                )}
-                              </div>
-                              <div className="flex gap-1">
-                                <Button
-                                  variant="outline"
-                                  size="sm"
-                                  onClick={() => handleEmbedSpecificResponse(interaction.id)}
-                                >
-                                  {t('conversation.embed')}
-                                </Button>
-                              </div>
-                            </div>
-                            <div className="ml-10">
-                              <div className="p-3 bg-green-50 dark:bg-green-900/20 rounded-lg">
-                                <p className="text-sm whitespace-pre-wrap">{interaction.ai_response.content}</p>
-                              </div>
-
-                              {/* Sources */}
-                              {interaction.ai_response.sources && interaction.ai_response.sources.length > 0 && (
-                                <div className="mt-2 p-3 bg-yellow-50 dark:bg-yellow-900/20 rounded-lg">
-                                  <p className="text-xs font-medium text-yellow-800 dark:text-yellow-300 mb-2">
-                                    {t('conversation.ragSources')}
-                                  </p>
-                                  <div className="flex flex-wrap gap-1">
+                                {interaction.ai_response.sources && interaction.ai_response.sources.length > 0 && (
+                                  <div className="mt-2 flex flex-wrap gap-1">
                                     {interaction.ai_response.sources.slice(0, 3).map((source: any, idx: number) => (
                                       <Badge key={idx} variant="outline" className="text-xs">
-                                        {source.sourceType || t('conversation.source')}
+                                        {source.sourceType || 'Kaynak'}
                                       </Badge>
                                     ))}
                                   </div>
-                                  {interaction.ai_response.sources.length > 3 && (
-                                    <p className="text-xs text-yellow-700 dark:text-yellow-400 mt-1">
-                                      +{interaction.ai_response.sources.length - 3} {t('conversation.moreSources', { count: interaction.ai_response.sources.length - 3 })}
-                                    </p>
-                                  )}
-                                </div>
-                              )}
+                                )}
+                              </div>
                             </div>
                           </div>
-                        </div>
-                      ))}
-                    </div>
-                  </ScrollArea>
-                </CardContent>
-              </Card>
-
-              {/* User Behavior Analytics */}
-              {userBehaviorAnalysis && (
-                <Card>
-                  <CardHeader>
-                    <CardTitle>{t('userBehavior.title')}</CardTitle>
-                    <CardDescription>
-                      {t('userBehavior.subtitle')}
-                    </CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-                      <div className="p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
-                        <h4 className="text-sm font-medium text-blue-700 dark:text-blue-300">{t('userBehavior.totalQuestions')}</h4>
-                        <p className="text-2xl font-bold text-blue-900 dark:text-blue-100">
-                          {userBehaviorAnalysis.totalQuestions}
-                        </p>
-                      </div>
-                      <div className="p-4 bg-green-50 dark:bg-green-900/20 rounded-lg">
-                        <h4 className="text-sm font-medium text-green-700 dark:text-green-300">{t('userBehavior.avgQuestionLength')}</h4>
-                        <p className="text-2xl font-bold text-green-900 dark:text-green-100">
-                          {userBehaviorAnalysis.avgQuestionLength} {t('userBehavior.characters')}
-                        </p>
-                      </div>
-                      <div className="p-4 bg-orange-50 dark:bg-orange-900/20 rounded-lg">
-                        <h4 className="text-sm font-medium text-orange-700 dark:text-orange-300">{t('userBehavior.avgResponseTime')}</h4>
-                        <p className="text-2xl font-bold text-orange-900 dark:text-orange-100">
-                          {userBehaviorAnalysis.avgResponseTime}s
-                        </p>
-                      </div>
-                      <div className="p-4 bg-purple-50 dark:bg-purple-900/20 rounded-lg">
-                        <h4 className="text-sm font-medium text-purple-700 dark:text-purple-300">{t('userBehavior.sessionDuration')}</h4>
-                        <p className="text-2xl font-bold text-purple-900 dark:text-purple-100">
-                          {Math.round(userBehaviorAnalysis.sessionDuration / 1000 / 60)} {t('userBehavior.minutes')}
-                        </p>
-                      </div>
-                    </div>
-
-                    <div>
-                      <h4 className="text-lg font-medium mb-3">{t('userBehavior.popularTopics')}</h4>
-                      <div className="space-y-2">
-                        {userBehaviorAnalysis.mostFrequentTopics.map((topic, idx) => (
-                          <div key={idx} className="flex items-center justify-between p-2 bg-muted/50 rounded">
-                            <span className="font-medium">{topic.topic}</span>
-                            <Badge variant="secondary">{topic.freq} {t('userBehavior.times')}</Badge>
-                          </div>
                         ))}
+                        {sessionMessages.length === 0 && (
+                          <div className="text-center text-muted-foreground py-8">
+                            Bu oturumda mesaj bulunamadı
+                          </div>
+                        )}
                       </div>
+                    </ScrollArea>
+                  </>
+                ) : (
+                  <div className="h-[500px] flex items-center justify-center text-muted-foreground">
+                    <div className="text-center">
+                      <MessageSquare className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                      <p>Detayları görüntülemek için bir oturum seçin</p>
                     </div>
-                  </CardContent>
-                </Card>
-              )}
-            </>
-          )}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </div>
+        </TabsContent>
+
+        {/* Search Tab */}
+        <TabsContent value="search" className="space-y-6">
+          <Card>
+            <CardHeader>
+              <CardTitle>Semantik Arama</CardTitle>
+              <CardDescription>Mesaj geçmişinde arama yapın</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="flex gap-2 mb-6">
+                <Input
+                  placeholder="Aramak istediğiniz konuyu yazın..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  onKeyPress={(e) => e.key === 'Enter' && handleSearch()}
+                  className="flex-1"
+                />
+                <Button onClick={handleSearch} disabled={searchLoading || !searchQuery.trim()}>
+                  {searchLoading ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Search className="h-4 w-4" />
+                  )}
+                  <span className="ml-2">Ara</span>
+                </Button>
+              </div>
+
+              <ScrollArea className="h-[400px]">
+                <div className="space-y-3">
+                  {searchResults.map((result, idx) => (
+                    <div key={idx} className="p-4 border rounded-lg">
+                      <div className="flex items-center justify-between mb-2">
+                        <Badge variant="outline">{result.message_type}</Badge>
+                        <span className="text-xs text-muted-foreground">
+                          {new Date(result.created_at).toLocaleString('tr-TR')}
+                        </span>
+                      </div>
+                      <p className="text-sm">{result.contentPreview || result.content}</p>
+                      {result.similarity && (
+                        <div className="mt-2">
+                          <Badge variant="secondary">
+                            Benzerlik: {(result.similarity * 100).toFixed(0)}%
+                          </Badge>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                  {searchResults.length === 0 && searchQuery && !searchLoading && (
+                    <div className="text-center text-muted-foreground py-8">
+                      Sonuç bulunamadı
+                    </div>
+                  )}
+                  {!searchQuery && (
+                    <div className="text-center text-muted-foreground py-8">
+                      <Search className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                      <p>Aramak için bir sorgu girin</p>
+                    </div>
+                  )}
+                </div>
+              </ScrollArea>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* Topics Tab */}
+        <TabsContent value="topics" className="space-y-6">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            {/* Topics Bar Chart */}
+            <Card>
+              <CardHeader>
+                <CardTitle>Konu Frekansları</CardTitle>
+                <CardDescription>En çok konuşulan konular</CardDescription>
+              </CardHeader>
+              <CardContent>
+                {topicsData.length > 0 ? (
+                  <ResponsiveContainer width="100%" height={400}>
+                    <BarChart data={topicsData} layout="vertical">
+                      <CartesianGrid strokeDasharray="3 3" />
+                      <XAxis type="number" />
+                      <YAxis dataKey="name" type="category" width={100} />
+                      <Tooltip />
+                      <Bar dataKey="frequency" fill="#3B82F6" name="Frekans" />
+                    </BarChart>
+                  </ResponsiveContainer>
+                ) : (
+                  <div className="h-[400px] flex items-center justify-center text-muted-foreground">
+                    Henüz konu verisi yok
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            {/* Topics List */}
+            <Card>
+              <CardHeader>
+                <CardTitle>Konu Listesi</CardTitle>
+                <CardDescription>Detaylı konu bilgileri</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <ScrollArea className="h-[400px]">
+                  <div className="space-y-3">
+                    {topics.map((topic, idx) => (
+                      <div key={idx} className="p-3 border rounded-lg">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-3">
+                            <Badge variant="outline" className="w-8 h-8 flex items-center justify-center">
+                              {idx + 1}
+                            </Badge>
+                            <span className="font-medium">{topic.word}</span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <Badge variant="secondary">{topic.frequency} kez</Badge>
+                            {topic.answer_ratio !== undefined && (
+                              <Badge variant="outline">
+                                {Math.round(topic.answer_ratio * 100)}% cevaplanmış
+                              </Badge>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                    {topics.length === 0 && (
+                      <div className="text-center text-muted-foreground py-8">
+                        Henüz konu verisi yok
+                      </div>
+                    )}
+                  </div>
+                </ScrollArea>
+              </CardContent>
+            </Card>
+          </div>
         </TabsContent>
       </Tabs>
     </div>
