@@ -405,7 +405,7 @@ export default function DocumentManagerPage() {
   // Fetch embedding job progress (realtime background job tracking)
   const fetchEmbeddingProgress = async () => {
     try {
-      const response = await fetch(`${API_CONFIG.baseUrl}/api/v2/embedding-progress`, {
+      const response = await fetch(`${API_CONFIG.baseUrl}/api/v2/embeddings/progress`, {
         headers: { 'Authorization': `Bearer ${localStorage.getItem('accessToken')}` }
       });
       if (response.ok) {
@@ -433,7 +433,7 @@ export default function DocumentManagerPage() {
   // Pause embedding job
   const pauseEmbeddingJob = async () => {
     try {
-      const response = await fetch(`${API_CONFIG.baseUrl}/api/v2/embedding-progress/api/embeddings/pause`, {
+      const response = await fetch(`${API_CONFIG.baseUrl}/api/v2/embeddings/pause`, {
         method: 'POST',
         headers: { 'Authorization': `Bearer ${localStorage.getItem('accessToken')}` }
       });
@@ -450,7 +450,7 @@ export default function DocumentManagerPage() {
   // Resume embedding job
   const resumeEmbeddingJob = async () => {
     try {
-      const response = await fetch(`${API_CONFIG.baseUrl}/api/v2/migration/resume`, {
+      const response = await fetch(`${API_CONFIG.baseUrl}/api/v2/embeddings/resume`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('accessToken')}`,
@@ -470,7 +470,7 @@ export default function DocumentManagerPage() {
   // Stop embedding job
   const stopEmbeddingJob = async () => {
     try {
-      const response = await fetch(`${API_CONFIG.baseUrl}/api/v2/embedding-progress/api/embeddings/stop`, {
+      const response = await fetch(`${API_CONFIG.baseUrl}/api/v2/embeddings/stop`, {
         method: 'POST',
         headers: { 'Authorization': `Bearer ${localStorage.getItem('accessToken')}` }
       });
