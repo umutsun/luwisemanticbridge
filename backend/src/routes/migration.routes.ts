@@ -1722,9 +1722,10 @@ router.post('/generate', async (req: Request, res: Response) => {
 
         if (unifiedEmbeddingsExists) {
           // Only get IDs of already embedded records (not full rows)
+          // Use case-insensitive comparison since table names may be stored with different casing
           const embeddedIdsResult = await pools.targetPool.query(
-            `SELECT source_id FROM unified_embeddings WHERE source_table = $1`,
-            [normalizedTableName]
+            `SELECT source_id FROM unified_embeddings WHERE LOWER(source_table) = LOWER($1)`,
+            [table]  // Use original table name, LOWER() handles casing
           );
           embeddedIds = new Set(embeddedIdsResult.rows.map(row => row.source_id));
           pendingCount = totalCount - embeddedIds.size;
@@ -2410,7 +2411,7 @@ async function performMigration(migrationId: string, config: any) {
         // Convert IDs to integers (source tables may have text IDs)
         const batchIds = result.rows.map(r => parseInt(r.id, 10)).filter(id => !isNaN(id));
         const existingCheck = await pools.targetPool.query(
-          `SELECT source_id FROM unified_embeddings WHERE source_table = $1 AND source_id = ANY($2::bigint[])`,
+          `SELECT source_id FROM unified_embeddings WHERE LOWER(source_table) = LOWER($1) AND source_id = ANY($2::bigint[])`,
           [table, batchIds]
         );
         const existingIds = new Set(existingCheck.rows.map(r => Number(r.source_id)));
