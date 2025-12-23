@@ -34,7 +34,8 @@ export class SubscriptionService {
   constructor() {
     this.pool = new Pool({
       connectionString: process.env.DATABASE_URL,
-      ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false
+      // SSL disabled - PostgreSQL server doesn't support SSL connections
+      ssl: false
     });
   }
 
