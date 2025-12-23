@@ -16,7 +16,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { 
+import {
   Send,
   Bot,
   User,
@@ -41,6 +41,8 @@ import {
   Code,
   BookOpen
 } from 'lucide-react';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 
 interface Message {
   id: string;
@@ -359,11 +361,80 @@ export default function DataChat() {
                   message.role === 'user' ? 'order-first' : ''
                 }`}>
                   <div className={`rounded-lg p-4 ${
-                    message.role === 'user' 
-                      ? 'bg-primary text-primary-foreground' 
+                    message.role === 'user'
+                      ? 'bg-primary text-primary-foreground'
                       : 'bg-gray-100 dark:bg-gray-800'
                   }`}>
-                    <div className="whitespace-pre-wrap">{message.content}</div>
+                    {message.role === 'user' ? (
+                      <div className="whitespace-pre-wrap">{message.content}</div>
+                    ) : (
+                      <div className="prose prose-sm max-w-none dark:prose-invert prose-headings:text-foreground prose-strong:text-foreground prose-p:text-foreground/90">
+                        <ReactMarkdown
+                          remarkPlugins={[remarkGfm]}
+                          components={{
+                            h1: ({ children }) => (
+                              <h1 className="text-lg font-bold mt-4 mb-2 pb-1 border-b border-gray-200 dark:border-gray-700">
+                                {children}
+                              </h1>
+                            ),
+                            h2: ({ children }) => (
+                              <h2 className="text-base font-semibold mt-3 mb-2">
+                                {children}
+                              </h2>
+                            ),
+                            h3: ({ children }) => (
+                              <h3 className="text-sm font-semibold mt-2 mb-1">
+                                {children}
+                              </h3>
+                            ),
+                            p: ({ children }) => (
+                              <p className="my-2 leading-relaxed">
+                                {children}
+                              </p>
+                            ),
+                            strong: ({ children }) => (
+                              <strong className="font-semibold">
+                                {children}
+                              </strong>
+                            ),
+                            ul: ({ children }) => (
+                              <ul className="list-disc list-outside ml-4 my-2 space-y-1">
+                                {children}
+                              </ul>
+                            ),
+                            ol: ({ children }) => (
+                              <ol className="list-decimal list-outside ml-4 my-2 space-y-1">
+                                {children}
+                              </ol>
+                            ),
+                            li: ({ children }) => (
+                              <li className="pl-1">
+                                {children}
+                              </li>
+                            ),
+                            blockquote: ({ children }) => (
+                              <blockquote className="border-l-4 border-amber-400 bg-amber-50 dark:bg-amber-900/20 pl-3 py-2 my-3 italic">
+                                {children}
+                              </blockquote>
+                            ),
+                            code: ({ children, className }) => {
+                              const isInline = !className;
+                              return isInline ? (
+                                <code className="bg-gray-200 dark:bg-gray-700 px-1.5 py-0.5 rounded text-sm font-mono">
+                                  {children}
+                                </code>
+                              ) : (
+                                <code className="block bg-gray-200 dark:bg-gray-700 p-3 rounded-lg text-sm font-mono overflow-x-auto">
+                                  {children}
+                                </code>
+                              );
+                            },
+                          }}
+                        >
+                          {message.content}
+                        </ReactMarkdown>
+                      </div>
+                    )}
                     
                     {message.metadata && (
                       <div className="mt-3 pt-3 border-t border-gray-200 dark:border-gray-700">
