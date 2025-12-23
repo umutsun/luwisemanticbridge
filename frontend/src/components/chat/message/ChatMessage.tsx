@@ -21,6 +21,8 @@ function formatMarkdownContent(content: string): string {
     .replace(/\s+(\d+)\)\s+/g, '\n\n$1. ')
     // Numbered items with dot inline: "1." "2." etc (when not at start) → new line before
     .replace(/([.!?:,])\s+(\d+)\.\s+/g, '$1\n\n$2. ')
+    // Bold heading after sentence end → new line before (catches inline **Özet** etc.)
+    .replace(/([.!?])\s*(\*\*[^*]+\*\*)/g, '$1\n\n$2')
     // Bold text at start of line followed by text → add newline after
     .replace(/^(\*\*[^*]+\*\*)\s*(?=[A-ZÇĞİÖŞÜa-zçğıöşü])/gm, '$1\n\n')
     // Bold text with colon → treat as heading, add newlines
