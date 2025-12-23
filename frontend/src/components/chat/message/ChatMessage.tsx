@@ -5,6 +5,8 @@ import { Bot, User, ExternalLink } from 'lucide-react';
 import { MessageSkeleton } from '@/components/chat/message-skeleton';
 import { ChatSources } from './ChatSources';
 import { useTranslation } from 'react-i18next';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 
 interface Source {
   title?: string;
@@ -104,15 +106,78 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
                         <Bot className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-primary" />
                       )}
                     </div>
-                    <p
-                      className="text-[13px] sm:text-sm whitespace-pre-wrap flex-1 leading-relaxed"
-                      dangerouslySetInnerHTML={{
-                        __html: message.content
-                          .replace(/\*\*\[([0-9,\s]+)\]\*\*/g, '<strong>[$1]</strong>')
-                          .replace(/(?<!\*\*)\[([0-9,\s]+)\](?!\*\*)/g, '<strong>[$1]</strong>')
-                          .replace(/\n/g, '<br/>')
-                      }}
-                    />
+                    {message.role === 'user' ? (
+                      <p className="text-[13px] sm:text-sm whitespace-pre-wrap flex-1 leading-relaxed">
+                        {message.content}
+                      </p>
+                    ) : (
+                      <div className="flex-1 prose prose-sm max-w-none dark:prose-invert prose-headings:text-foreground prose-strong:text-foreground prose-p:my-1.5 prose-p:leading-relaxed">
+                        <ReactMarkdown
+                          remarkPlugins={[remarkGfm]}
+                          components={{
+                            h1: ({ children }) => (
+                              <h1 className="text-base sm:text-lg font-bold mt-3 mb-2 pb-1 border-b border-border first:mt-0">
+                                {children}
+                              </h1>
+                            ),
+                            h2: ({ children }) => (
+                              <h2 className="text-sm sm:text-base font-semibold mt-3 mb-1.5 first:mt-0">
+                                {children}
+                              </h2>
+                            ),
+                            h3: ({ children }) => (
+                              <h3 className="text-[13px] sm:text-sm font-semibold mt-2 mb-1 first:mt-0">
+                                {children}
+                              </h3>
+                            ),
+                            p: ({ children }) => (
+                              <p className="text-[13px] sm:text-sm my-1.5 leading-relaxed first:mt-0 last:mb-0">
+                                {children}
+                              </p>
+                            ),
+                            strong: ({ children }) => (
+                              <strong className="font-semibold text-foreground">
+                                {children}
+                              </strong>
+                            ),
+                            ul: ({ children }) => (
+                              <ul className="list-disc list-outside ml-4 my-1.5 space-y-0.5 text-[13px] sm:text-sm">
+                                {children}
+                              </ul>
+                            ),
+                            ol: ({ children }) => (
+                              <ol className="list-decimal list-outside ml-4 my-1.5 space-y-0.5 text-[13px] sm:text-sm">
+                                {children}
+                              </ol>
+                            ),
+                            li: ({ children }) => (
+                              <li className="pl-0.5 leading-relaxed">
+                                {children}
+                              </li>
+                            ),
+                            blockquote: ({ children }) => (
+                              <blockquote className="border-l-3 border-amber-400 bg-amber-50 dark:bg-amber-900/20 pl-3 py-1.5 my-2 text-amber-800 dark:text-amber-200 italic text-[13px] sm:text-sm">
+                                {children}
+                              </blockquote>
+                            ),
+                            code: ({ children, className }) => {
+                              const isInline = !className;
+                              return isInline ? (
+                                <code className="bg-muted px-1 py-0.5 rounded text-xs font-mono">
+                                  {children}
+                                </code>
+                              ) : (
+                                <code className="block bg-muted p-2 rounded-lg text-xs font-mono overflow-x-auto my-2">
+                                  {children}
+                                </code>
+                              );
+                            },
+                          }}
+                        >
+                          {message.content}
+                        </ReactMarkdown>
+                      </div>
+                    )}
                   </div>
                 )}
 
