@@ -9,13 +9,26 @@ const path = require('path');
 const { execSync } = require('child_process');
 
 // PDF to image conversion (requires pdftoppm)
+const MAX_PDF_PAGES = 30; // Skip PDFs with more than 30 pages
+const MAX_FILE_SIZE = 30 * 1024 * 1024; // 30MB max
+
 const pdfToImage = async (pdfPath, outputDir) => {
-  const baseName = path.basename(pdfPath, '.pdf');
+  const baseName = path.basename(pdfPath, '.pdf').replace(/[^a-zA-Z0-9-_]/g, '_');
   const outputPath = path.join(outputDir, baseName);
 
   try {
-    // Convert PDF to PNG images (one per page)
-    execSync(`pdftoppm -png -r 300 "${pdfPath}" "${outputPath}"`, { timeout: 60000 });
+    // Check file size first
+    const stats = fs.statSync(pdfPath);
+    if (stats.size > MAX_FILE_SIZE) {
+      console.log(`  ⚠️  File too large (${Math.round(stats.size/1024/1024)}MB), skipping...`);
+      return [];
+    }
+
+    // Convert PDF to PNG images (limit pages, lower resolution for speed)
+    execSync(`pdftoppm -png -r 200 -l ${MAX_PDF_PAGES} "${pdfPath}" "${outputPath}"`, {
+      timeout: 120000,  // 2 minutes max
+      maxBuffer: 100 * 1024 * 1024 // 100MB buffer
+    });
 
     // Find all generated images
     const images = fs.readdirSync(outputDir)
@@ -25,7 +38,7 @@ const pdfToImage = async (pdfPath, outputDir) => {
 
     return images;
   } catch (error) {
-    console.error(`Error converting PDF: ${error.message}`);
+    console.error(`  Error converting PDF: ${error.message}`);
     return [];
   }
 };
