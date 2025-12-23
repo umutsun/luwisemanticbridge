@@ -113,12 +113,20 @@ const EMBEDDING_MODEL = 'text-embedding-3-small';
         const embedding = response.data[0].embedding;
 
         // Save to document_embeddings table
+        // Table columns: id, document_id, chunk_text, embedding, metadata, created_at, model_name, tokens_used, content_type, embedding_dimension
         await pool.query(
-          `INSERT INTO document_embeddings (document_id, chunk_index, chunk_text, embedding, model, created_at)
-           VALUES ($1, $2, $3, $4, $5, NOW())
-           ON CONFLICT (document_id, chunk_index) DO UPDATE
-           SET chunk_text = $3, embedding = $4, model = $5, created_at = NOW()`,
-          [doc.id, j, chunkText.substring(0, 2000), JSON.stringify(embedding), EMBEDDING_MODEL]
+          `INSERT INTO document_embeddings (document_id, chunk_text, embedding, model_name, tokens_used, content_type, embedding_dimension, metadata, created_at)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW())`,
+          [
+            doc.id,
+            chunkText.substring(0, 10000), // chunk_text
+            JSON.stringify(embedding), // embedding as JSON string for vector
+            EMBEDDING_MODEL, // model_name
+            response.usage?.total_tokens || 0, // tokens_used
+            'document', // content_type
+            1536, // embedding_dimension for text-embedding-3-small
+            JSON.stringify({ chunkIndex: j, totalChunks: chunks.length }) // metadata
+          ]
         );
 
         totalChunks++;
