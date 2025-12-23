@@ -837,11 +837,11 @@ async function processTextExtractionQueue(jobId: string, documentIds: string[]):
       const result = await ocrService.extractFromPDF(doc.file_path);
 
       if (result.text && result.text.trim().length > 0 && result.confidence > 0) {
-        // Save to database and update status to processed
+        // Save to database and update processing_status to analyzed
         await lsembPool.query(
           `UPDATE documents
            SET content = $1,
-               status = 'processed',
+               processing_status = 'analyzed',
                metadata = jsonb_set(
                  COALESCE(metadata, '{}'),
                  '{textExtract}',
@@ -987,11 +987,11 @@ async function processOCRQueue(jobId: string, documentIds: string[]): Promise<vo
         detailLevel: 'high'
       });
 
-      // Save to database and update status to processed
+      // Save to database and update processing_status to analyzed
       await lsembPool.query(
         `UPDATE documents
          SET content = $1,
-             status = 'processed',
+             processing_status = 'analyzed',
              metadata = jsonb_set(
                COALESCE(metadata, '{}'),
                '{ocr}',
