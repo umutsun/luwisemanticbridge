@@ -59,6 +59,8 @@ import {
   MoreHorizontal,
   Sparkles,
   Play,
+  Pause,
+  StopCircle,
   HardDrive,
   ChevronDown,
   Brain
@@ -399,6 +401,114 @@ export default function DocumentManagerPage() {
       console.error('Failed to fetch skipped count:', error);
     }
   };
+
+  // Fetch embedding job progress (realtime background job tracking)
+  const fetchEmbeddingProgress = async () => {
+    try {
+      const response = await fetch(`${API_CONFIG.baseUrl}/api/v2/embedding-progress`, {
+        headers: { 'Authorization': `Bearer ${localStorage.getItem('accessToken')}` }
+      });
+      if (response.ok) {
+        const data = await response.json();
+        if (data.status && data.status !== 'idle') {
+          setEmbeddingJob({
+            status: data.status,
+            current: data.current || 0,
+            total: data.total || 0,
+            percentage: data.percentage || 0,
+            tokensUsed: data.tokensUsed || 0,
+            estimatedTimeRemaining: data.estimatedTimeRemaining || null,
+            currentTable: data.currentTable || null,
+            processingSpeed: data.processingSpeed || 0
+          });
+        } else {
+          setEmbeddingJob(null);
+        }
+      }
+    } catch (error) {
+      console.error('Failed to fetch embedding progress:', error);
+    }
+  };
+
+  // Pause embedding job
+  const pauseEmbeddingJob = async () => {
+    try {
+      const response = await fetch(`${API_CONFIG.baseUrl}/api/v2/embedding-progress/api/embeddings/pause`, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${localStorage.getItem('accessToken')}` }
+      });
+      if (response.ok) {
+        toast({ title: t('documents.embedding.paused'), description: t('documents.embedding.pausedDescription') });
+        fetchEmbeddingProgress();
+      }
+    } catch (error) {
+      console.error('Failed to pause embedding job:', error);
+      toast({ title: t('documents.toast.error'), description: t('documents.embedding.pauseFailed'), variant: 'destructive' });
+    }
+  };
+
+  // Resume embedding job
+  const resumeEmbeddingJob = async () => {
+    try {
+      const response = await fetch(`${API_CONFIG.baseUrl}/api/v2/migration/resume`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('accessToken')}`,
+          'Content-Type': 'application/json'
+        }
+      });
+      if (response.ok) {
+        toast({ title: t('documents.embedding.resumed'), description: t('documents.embedding.resumedDescription') });
+        fetchEmbeddingProgress();
+      }
+    } catch (error) {
+      console.error('Failed to resume embedding job:', error);
+      toast({ title: t('documents.toast.error'), description: t('documents.embedding.resumeFailed'), variant: 'destructive' });
+    }
+  };
+
+  // Stop embedding job
+  const stopEmbeddingJob = async () => {
+    try {
+      const response = await fetch(`${API_CONFIG.baseUrl}/api/v2/embedding-progress/api/embeddings/stop`, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${localStorage.getItem('accessToken')}` }
+      });
+      if (response.ok) {
+        toast({ title: t('documents.embedding.stopped'), description: t('documents.embedding.stoppedDescription') });
+        setEmbeddingJob(null);
+        fetchStats(); // Refresh stats after stopping
+      }
+    } catch (error) {
+      console.error('Failed to stop embedding job:', error);
+      toast({ title: t('documents.toast.error'), description: t('documents.embedding.stopFailed'), variant: 'destructive' });
+    }
+  };
+
+  // Polling for embedding job progress (2 second interval when active)
+  useEffect(() => {
+    // Initial fetch
+    fetchEmbeddingProgress();
+
+    const interval = setInterval(() => {
+      if (embeddingJob?.status === 'processing' || embeddingJob?.status === 'paused') {
+        fetchEmbeddingProgress();
+      }
+    }, 2000);
+
+    return () => clearInterval(interval);
+  }, [embeddingJob?.status]);
+
+  // Polling for stats when embedding job is active (10 second interval)
+  useEffect(() => {
+    if (!embeddingJob || embeddingJob.status !== 'processing') return;
+
+    const interval = setInterval(() => {
+      fetchStats();
+    }, 10000);
+
+    return () => clearInterval(interval);
+  }, [embeddingJob?.status]);
 
   // Fetch skipped embeddings (for modal display)
   const fetchSkippedEmbeddings = async () => {
@@ -1888,6 +1998,18 @@ export default function DocumentManagerPage() {
   const [embedQueue, setEmbedQueue] = useState<{id: string; title: string; status: 'pending' | 'processing' | 'completed' | 'skipped' | 'error'}[]>([]);
   const [currentEmbeddingDoc, setCurrentEmbeddingDoc] = useState<string>('');
 
+  // Background embedding job state (realtime from backend)
+  const [embeddingJob, setEmbeddingJob] = useState<{
+    status: 'idle' | 'processing' | 'paused' | 'completed' | 'stopped';
+    current: number;
+    total: number;
+    percentage: number;
+    tokensUsed: number;
+    estimatedTimeRemaining: number | null;
+    currentTable: string | null;
+    processingSpeed: number;
+  } | null>(null);
+
   // WebSocket for batch job progress
   useEffect(() => {
     if (!batchJobId) return;
@@ -3246,6 +3368,111 @@ export default function DocumentManagerPage() {
             </CardContent>
           </Card>
         </div>
+
+        {/* Background Embedding Job Progress Card */}
+        {embeddingJob && (embeddingJob.status === 'processing' || embeddingJob.status === 'paused') && (
+          <Card className="mb-6 border-blue-200 dark:border-blue-800 bg-gradient-to-r from-blue-50 to-cyan-50 dark:from-blue-950/20 dark:to-cyan-950/20">
+            <CardHeader className="pb-2">
+              <div className="flex items-center justify-between">
+                <CardTitle className="flex items-center gap-2 text-base">
+                  {embeddingJob.status === 'processing' ? (
+                    <Loader2 className="h-4 w-4 animate-spin text-blue-600" />
+                  ) : (
+                    <Pause className="h-4 w-4 text-orange-600" />
+                  )}
+                  <span>{t('documents.embedding.title')}</span>
+                  {embeddingJob.currentTable && (
+                    <Badge variant="outline" className="ml-2 text-xs">
+                      {embeddingJob.currentTable}
+                    </Badge>
+                  )}
+                </CardTitle>
+                <div className="flex gap-2">
+                  {embeddingJob.status === 'processing' ? (
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Button onClick={pauseEmbeddingJob} variant="outline" size="sm" className="h-8 px-2">
+                            <Pause className="h-4 w-4" />
+                          </Button>
+                        </TooltipTrigger>
+                        <TooltipContent>{t('documents.embedding.pause')}</TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
+                  ) : (
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Button onClick={resumeEmbeddingJob} variant="outline" size="sm" className="h-8 px-2">
+                            <Play className="h-4 w-4" />
+                          </Button>
+                        </TooltipTrigger>
+                        <TooltipContent>{t('documents.embedding.resume')}</TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
+                  )}
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Button onClick={stopEmbeddingJob} variant="destructive" size="sm" className="h-8 px-2">
+                          <StopCircle className="h-4 w-4" />
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent>{t('documents.embedding.stop')}</TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent>
+              <div className="flex items-center gap-6">
+                {/* Circular Progress */}
+                <ProgressCircle progress={embeddingJob.percentage} size={80} />
+
+                {/* Stats Grid */}
+                <div className="flex-1 grid grid-cols-2 md:grid-cols-4 gap-x-6 gap-y-2 text-sm">
+                  <div>
+                    <span className="text-muted-foreground">{t('documents.embedding.processed')}:</span>
+                    <span className="font-medium ml-2">
+                      {embeddingJob.current.toLocaleString()}/{embeddingJob.total.toLocaleString()}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground">{t('documents.embedding.tokens')}:</span>
+                    <span className="font-medium ml-2">
+                      ~{embeddingJob.tokensUsed > 1000000
+                        ? `${(embeddingJob.tokensUsed / 1000000).toFixed(1)}M`
+                        : embeddingJob.tokensUsed > 1000
+                          ? `${(embeddingJob.tokensUsed / 1000).toFixed(1)}K`
+                          : embeddingJob.tokensUsed}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground">{t('documents.embedding.speed')}:</span>
+                    <span className="font-medium ml-2">
+                      {embeddingJob.processingSpeed > 0 ? `${Math.round(embeddingJob.processingSpeed)}/dk` : '-'}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground">{t('documents.embedding.remaining')}:</span>
+                    <span className="font-medium ml-2">
+                      {embeddingJob.estimatedTimeRemaining && embeddingJob.estimatedTimeRemaining > 0
+                        ? embeddingJob.estimatedTimeRemaining > 3600
+                          ? `~${(embeddingJob.estimatedTimeRemaining / 3600).toFixed(1)} saat`
+                          : embeddingJob.estimatedTimeRemaining > 60
+                            ? `~${Math.round(embeddingJob.estimatedTimeRemaining / 60)} dk`
+                            : `~${Math.round(embeddingJob.estimatedTimeRemaining)} sn`
+                        : t('documents.embedding.calculating')}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Progress Bar */}
+              <Progress value={embeddingJob.percentage} className="mt-4 h-2" />
+            </CardContent>
+          </Card>
+        )}
 
         {/* Files Section - 2 Column Layout */}
         <div className="space-y-4 sm:space-y-6">

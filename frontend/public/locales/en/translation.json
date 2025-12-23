@@ -1751,6 +1751,26 @@
       "success": "Success",
       "errors": "Errors",
       "avgConfidenceLabel": "Avg Confidence"
+    },
+    "embedding": {
+      "title": "Embedding Process",
+      "processed": "Processed",
+      "tokens": "Tokens",
+      "speed": "Speed",
+      "remaining": "Remaining",
+      "calculating": "Calculating...",
+      "pause": "Pause",
+      "resume": "Resume",
+      "stop": "Stop",
+      "paused": "Paused",
+      "pausedDescription": "Embedding process paused",
+      "resumed": "Resumed",
+      "resumedDescription": "Embedding process resumed",
+      "stopped": "Stopped",
+      "stoppedDescription": "Embedding process stopped",
+      "pauseFailed": "Failed to pause",
+      "resumeFailed": "Failed to resume",
+      "stopFailed": "Failed to stop"
     }
   },
   "crawls": {

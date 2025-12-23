@@ -1953,6 +1953,26 @@
       "success": "Başarılı",
       "errors": "Hatalar",
       "avgConfidenceLabel": "Ort Güven"
+    },
+    "embedding": {
+      "title": "Embedding İşlemi",
+      "processed": "İşlenen",
+      "tokens": "Token",
+      "speed": "Hız",
+      "remaining": "Kalan",
+      "calculating": "Hesaplanıyor...",
+      "pause": "Duraklat",
+      "resume": "Devam Et",
+      "stop": "Durdur",
+      "paused": "Duraklatıldı",
+      "pausedDescription": "Embedding işlemi duraklatıldı",
+      "resumed": "Devam Edildi",
+      "resumedDescription": "Embedding işlemi devam ediyor",
+      "stopped": "Durduruldu",
+      "stoppedDescription": "Embedding işlemi durduruldu",
+      "pauseFailed": "Duraklatma başarısız oldu",
+      "resumeFailed": "Devam ettirme başarısız oldu",
+      "stopFailed": "Durdurma başarısız oldu"
     }
   },
   "crawls": {
