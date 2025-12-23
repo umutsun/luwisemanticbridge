@@ -588,8 +588,8 @@ export default function ChatInterface() {
         <div className="pt-20 pb-32 max-w-5xl mx-auto w-[95%] md:w-full px-2 md:px-5">
           <ScrollArea className="h-[calc(100vh-12rem)] pr-4">
             <div className="space-y-4 py-4 pr-2">
-              {/* Welcome using new component */}
-              {isClient && showSuggestions && messages.length === 0 && (
+              {/* Welcome using new component - always show when no messages, ChatWelcome handles enableSuggestions internally */}
+              {isClient && messages.length === 0 && (
                 <ChatWelcome
                   chatbotSettings={chatbotSettings}
                   user={user}
