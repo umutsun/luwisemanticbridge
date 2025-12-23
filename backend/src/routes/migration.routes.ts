@@ -2494,6 +2494,12 @@ async function performMigration(migrationId: string, config: any) {
               title = row.konusu || row.baslik || `${table} ${row.id}`;
               sourceType = 'document';
             }
+            // Generic fallback for tables with English column names (content/title)
+            else if (row.content) {
+              content = row.content || '';
+              title = row.title || row.excerpt || `${table} ${row.id}`;
+              sourceType = 'document';
+            }
 
             if (!content || content.trim().length === 0) continue;
 
