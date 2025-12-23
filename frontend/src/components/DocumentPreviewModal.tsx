@@ -1328,29 +1328,52 @@ export default function DocumentPreviewModal({
     if (!document) return;
 
     setPdfProcessing(true);
-    setPdfProgress(0);
-    setPdfStatus('OCR yapılıyor...');
+    setPdfProgress(10);
+    setPdfStatus('OCR yapılıyor (Tesseract)...');
 
     try {
+      // Try batch-ocr first (background job)
       const ocrResponse = await fetch(`/api/v2/pdf/batch-ocr`, {
         method: 'POST',
         headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
         body: JSON.stringify({ documentIds: [document.id] })
       });
 
-      if (!ocrResponse.ok) throw new Error('OCR failed');
-      const ocrData = await ocrResponse.json();
+      if (ocrResponse.ok) {
+        const ocrData = await ocrResponse.json();
+        console.log('[OCR] Job started:', ocrData.jobId);
 
-      console.log('[OCR] Job started:', ocrData.jobId);
+        // Poll OCR progress
+        await pollJobProgress(ocrData.jobId, 10, 100);
 
-      // Poll OCR progress
-      await pollJobProgress(ocrData.jobId, 0, 100);
+        setPdfProgress(100);
+        setPdfStatus('OCR Tamamlandı!');
+      } else {
+        // Fallback: Use sync text extraction endpoint
+        console.log('[OCR] Batch OCR failed, using fallback text extraction');
+        setPdfProgress(30);
+        setPdfStatus('Text çıkarılıyor...');
 
-      setPdfProgress(100);
-      setPdfStatus('OCR Tamamlandı!');
+        const extractResponse = await fetch(`/api/v2/pdf/extract-text`, {
+          method: 'POST',
+          headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
+          body: JSON.stringify({ documentIds: [document.id] })
+        });
+
+        if (extractResponse.ok) {
+          const extractData = await extractResponse.json();
+          await pollJobProgress(extractData.jobId, 30, 100);
+          setPdfProgress(100);
+          setPdfStatus('Text çıkarma tamamlandı!');
+        } else {
+          throw new Error('OCR ve text extraction başarısız');
+        }
+      }
 
       // Fetch extracted text from updated document
-      const response = await fetch(`/api/v2/documents/${document.id}`);
+      const response = await fetch(`/api/v2/documents/${document.id}`, {
+        headers: getAuthHeaders()
+      });
       if (response.ok) {
         const data = await response.json();
         const doc = data.document || data;
@@ -1370,6 +1393,7 @@ export default function DocumentPreviewModal({
       });
     } catch (error: any) {
       console.error('OCR error:', error);
+      setPdfStatus('OCR başarısız');
       toast({
         title: "Hata",
         description: error.message || 'OCR işlemi başarısız',
