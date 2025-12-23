@@ -1374,8 +1374,15 @@ export default function DocumentPreviewModal({
       const response = await fetch(`/api/v2/documents/${document.id}`, {
         headers: getAuthHeaders()
       });
+      console.log('[OCR] Document fetch response status:', response.status);
       if (response.ok) {
         const data = await response.json();
+        console.log('[OCR] Document fetch response data:', {
+          hasDocument: !!(data.document || data),
+          hasContent: !!(data.document?.content || data.content),
+          contentLength: (data.document?.content || data.content || '').length,
+          processingStatus: data.document?.processing_status || data.processing_status
+        });
         const doc = data.document || data;
         if (doc.content) {
           console.log('[OCR] Extracted text length:', doc.content.length);
@@ -1384,7 +1391,11 @@ export default function DocumentPreviewModal({
 
           // Automatically detect template after OCR
           await detectTemplate(doc.content);
+        } else {
+          console.warn('[OCR] No content found in document response:', doc);
         }
+      } else {
+        console.error('[OCR] Document fetch failed:', response.statusText);
       }
 
       toast({
