@@ -222,9 +222,21 @@ router.get('/', async (req: Request, res: Response) => {
     // Try to get progress from Redis first (check both keys for compatibility)
     let redisProgress = await redis.get('embedding:progress');
 
-    // If not found in embedding:progress, try migration:progress for backward compatibility
+    // If not found in embedding:progress, try migration:progress with dynamic ID
     if (!redisProgress) {
-      redisProgress = await redis.get('migration:progress');
+      // First check if there's an active migration
+      const activeMigrationId = await redis.get('migration:active');
+      if (activeMigrationId) {
+        // Get progress using the dynamic migration ID
+        redisProgress = await redis.get(`migration:progress:${activeMigrationId}`);
+        console.log(`Checking migration:progress:${activeMigrationId} - Found: ${!!redisProgress}`);
+      }
+
+      // Fallback to old key format for backward compatibility
+      if (!redisProgress) {
+        redisProgress = await redis.get('migration:progress');
+      }
+
       if (redisProgress) {
         console.log('Found progress in migration:progress key, converting to embedding:progress format');
         const migrationData = JSON.parse(redisProgress);
@@ -240,18 +252,19 @@ router.get('/', async (req: Request, res: Response) => {
           estimatedCost: migrationData.estimatedCost || ((migrationData.current || 0) * 500) / 1000 * 0.0001,
           startTime: migrationData.startTime || Date.now(),
           estimatedTimeRemaining: migrationData.estimatedTimeRemaining || 0,
-          processedTables: migrationData.tables || [],
+          processedTables: migrationData.tables || migrationData.processedTables || [],
           alreadyEmbedded: migrationData.current || 0,
           pendingCount: (migrationData.total || 0) - (migrationData.current || 0),
           successCount: migrationData.current || 0,
           errorCount: migrationData.error ? 1 : 0,
-          newlyEmbedded: migrationData.newlyEmbedded || 0
+          newlyEmbedded: migrationData.newlyEmbedded || 0,
+          processingSpeed: migrationData.processingSpeed || 0
         };
         redisProgress = JSON.stringify(convertedProgress);
 
-        // Update the embedding:progress key for future requests
-        await redis.set('embedding:progress', redisProgress, 'EX', 7 * 24 * 60 * 60);
-        console.log(' Converted and saved progress to embedding:progress key');
+        // Update the embedding:progress key for future requests (short TTL to keep fresh)
+        await redis.set('embedding:progress', redisProgress, 'EX', 60);
+        console.log('✓ Converted and saved progress to embedding:progress key');
       }
     }
 
@@ -815,9 +828,20 @@ router.get('/progress/stream', async (req: Request, res: Response) => {
         // First check Redis for migration progress (check both keys for compatibility)
         let redisProgress = await redis.get('embedding:progress');
 
-        // If not found in embedding:progress, try migration:progress for backward compatibility
+        // If not found in embedding:progress, try migration:progress with dynamic ID
         if (!redisProgress) {
-          redisProgress = await redis.get('migration:progress');
+          // First check if there's an active migration
+          const activeMigrationId = await redis.get('migration:active');
+          if (activeMigrationId) {
+            // Get progress using the dynamic migration ID
+            redisProgress = await redis.get(`migration:progress:${activeMigrationId}`);
+          }
+
+          // Fallback to old key format for backward compatibility
+          if (!redisProgress) {
+            redisProgress = await redis.get('migration:progress');
+          }
+
           if (redisProgress) {
             console.log('SSE: Found progress in migration:progress key, converting to embedding:progress format');
             const migrationData = JSON.parse(redisProgress);
@@ -833,18 +857,19 @@ router.get('/progress/stream', async (req: Request, res: Response) => {
               estimatedCost: migrationData.estimatedCost || ((migrationData.current || 0) * 500) / 1000 * 0.0001,
               startTime: migrationData.startTime || Date.now(),
               estimatedTimeRemaining: migrationData.estimatedTimeRemaining || 0,
-              processedTables: migrationData.tables || [],
+              processedTables: migrationData.tables || migrationData.processedTables || [],
               alreadyEmbedded: migrationData.current || 0,
               pendingCount: (migrationData.total || 0) - (migrationData.current || 0),
               successCount: migrationData.current || 0,
               errorCount: migrationData.error ? 1 : 0,
-              newlyEmbedded: migrationData.newlyEmbedded || 0
+              newlyEmbedded: migrationData.newlyEmbedded || 0,
+              processingSpeed: migrationData.processingSpeed || 0
             };
             redisProgress = JSON.stringify(convertedProgress);
 
-            // Update the embedding:progress key for future requests
-            await redis.set('embedding:progress', redisProgress, 'EX', 7 * 24 * 60 * 60);
-            console.log('SSE:  Converted and saved progress to embedding:progress key');
+            // Update the embedding:progress key for future requests (short TTL to keep fresh)
+            await redis.set('embedding:progress', redisProgress, 'EX', 60);
+            console.log('SSE: ✓ Converted and saved progress to embedding:progress key');
           }
         }
 
