@@ -51,6 +51,27 @@ const fs = require('fs');
 
     console.log('\nScanning Google Drive folder...\n');
 
+    // First list ALL files to understand folder content
+    const allFilesResponse = await drive.files.list({
+      q: `'${config.folderId}' in parents and trashed=false`,
+      pageSize: 100,
+      fields: 'files(id, name, mimeType, size)'
+    });
+
+    console.log('All files in folder:', allFilesResponse.data.files.length);
+
+    // Group by mime type
+    const mimeTypes = {};
+    allFilesResponse.data.files.forEach(f => {
+      mimeTypes[f.mimeType] = (mimeTypes[f.mimeType] || 0) + 1;
+    });
+
+    console.log('\nFile types:');
+    Object.entries(mimeTypes).forEach(([type, count]) => {
+      console.log(`  ${type}: ${count}`);
+    });
+
+    // Now count PDFs
     do {
       const response = await drive.files.list({
         q: `'${config.folderId}' in parents and mimeType='application/pdf' and trashed=false`,
@@ -75,11 +96,13 @@ const fs = require('fs');
       }
     } while (pageToken);
 
-    console.log('\n=== GOOGLE DRIVE REPORT ===');
+    console.log('\n=== GOOGLE DRIVE PDF REPORT ===');
     console.log(`Total PDFs: ${totalPDFs}`);
     console.log(`Total Size: ${(totalSize / 1024 / 1024).toFixed(2)} MB`);
-    console.log('\nSample files:');
-    sampleFiles.forEach(f => console.log(`  - ${f}`));
+    if (sampleFiles.length > 0) {
+      console.log('\nSample PDF files:');
+      sampleFiles.forEach(f => console.log(`  - ${f}`));
+    }
 
     await pool.end();
   } catch (error) {
