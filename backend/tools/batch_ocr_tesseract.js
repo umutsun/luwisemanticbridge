@@ -61,8 +61,9 @@ const extractPdfText = async (pdfPath) => {
 (async () => {
   console.log('\n=== BATCH OCR EXTRACTION (Tesseract) ===\n');
 
-  // Load config
-  const env = fs.readFileSync('.env', 'utf-8');
+  // Load config from parent directory
+  const envPath = path.join(__dirname, '..', '.env');
+  const env = fs.readFileSync(envPath, 'utf-8');
   const dbUrl = env.match(/DATABASE_URL=(.+)/)[1].trim();
   const pool = new Pool({ connectionString: dbUrl });
 
