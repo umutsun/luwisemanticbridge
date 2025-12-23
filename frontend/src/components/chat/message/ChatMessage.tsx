@@ -11,11 +11,16 @@ import remarkGfm from 'remark-gfm';
 /**
  * Format markdown content for better visual presentation
  * - Adds line breaks before/after bold headings for paragraph separation
+ * - Converts inline numbered items to proper list format
  */
 function formatMarkdownContent(content: string): string {
   if (!content) return '';
 
   return content
+    // Numbered items with parenthesis: "1)" "2)" etc → new line before
+    .replace(/\s+(\d+)\)\s+/g, '\n\n$1. ')
+    // Numbered items with dot inline: "1." "2." etc (when not at start) → new line before
+    .replace(/([.!?:,])\s+(\d+)\.\s+/g, '$1\n\n$2. ')
     // Bold text at start of line followed by text → add newline after
     .replace(/^(\*\*[^*]+\*\*)\s*(?=[A-ZÇĞİÖŞÜa-zçğıöşü])/gm, '$1\n\n')
     // Bold text with colon → treat as heading, add newlines
@@ -24,6 +29,8 @@ function formatMarkdownContent(content: string): string {
     .replace(/\n(\*\*[^*]+\*\*)\n/g, '\n\n$1\n\n')
     // Bold at very start → add newline after
     .replace(/^(\*\*[^*]+\*\*)\s+/m, '$1\n\n')
+    // Dash/bullet items inline → new line before
+    .replace(/([.!?])\s+[-•]\s+/g, '$1\n\n- ')
     // Clean up excessive newlines
     .replace(/\n{3,}/g, '\n\n')
     .trim();
