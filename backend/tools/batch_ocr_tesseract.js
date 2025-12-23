@@ -7,7 +7,6 @@ const { Pool } = require('pg');
 const fs = require('fs');
 const path = require('path');
 const { execSync } = require('child_process');
-const { createCanvas, Image } = require('canvas');
 
 // PDF to image conversion (requires pdftoppm)
 const pdfToImage = async (pdfPath, outputDir) => {

@@ -31,6 +31,19 @@ const MODEL_PRICING: Record<string, Record<string, { input: number; output: numb
   deepseek: {
     'deepseek-chat': { input: 0.14, output: 0.28 },
     'deepseek-coder': { input: 0.14, output: 0.28 },
+  },
+  voyage: {
+    'voyage-3': { input: 0.06, output: 0 },
+    'voyage-3-lite': { input: 0.02, output: 0 },
+    'voyage-code-3': { input: 0.06, output: 0 },
+    'voyage-finance-2': { input: 0.12, output: 0 },
+    'voyage-law-2': { input: 0.12, output: 0 },
+  },
+  cohere: {
+    'embed-multilingual-v3.0': { input: 0.10, output: 0 },
+    'embed-english-v3.0': { input: 0.10, output: 0 },
+    'embed-multilingual-light-v3.0': { input: 0.10, output: 0 },
+    'embed-english-light-v3.0': { input: 0.10, output: 0 },
   }
 };
 
@@ -530,6 +543,119 @@ router.post('/test/:provider', async (req: Request, res: Response) => {
         }
         break;
 
+      case 'voyage':
+        try {
+          console.log(`Testing Voyage AI with API key: ${apiKey?.substring(0, 10)}...`);
+
+          // Voyage AI uses their own API endpoint
+          const voyageResponse = await fetch('https://api.voyageai.com/v1/embeddings', {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${apiKey}`,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              input: ['Test message'],
+              model: model || 'voyage-3'
+            })
+          });
+
+          const responseTime = Date.now() - startTime;
+
+          if (voyageResponse.ok) {
+            const data = await voyageResponse.json();
+            testResult = {
+              success: true,
+              model: model || 'voyage-3',
+              responseTime,
+              usage: {
+                inputTokens: data.usage?.total_tokens || 1,
+                outputTokens: 0,
+                totalTokens: data.usage?.total_tokens || 1
+              },
+              message: 'API connection successful'
+            };
+          } else {
+            const errorData = await voyageResponse.json().catch(() => ({}));
+            let errorMessage = 'Voyage AI API validation failed';
+
+            if (voyageResponse.status === 401) {
+              errorMessage = 'Invalid Voyage AI API key. Get your key from https://dash.voyageai.com/';
+            } else if (voyageResponse.status === 429) {
+              errorMessage = 'Voyage AI API rate limit exceeded.';
+            } else if (errorData.detail) {
+              errorMessage = errorData.detail;
+            }
+
+            throw new Error(errorMessage);
+          }
+        } catch (error: any) {
+          console.error('Voyage AI API validation error:', error);
+          testResult = {
+            success: false,
+            error: error.message || 'Voyage AI API validation failed',
+            type: 'voyage_api_error'
+          };
+        }
+        break;
+
+      case 'cohere':
+        try {
+          console.log(`Testing Cohere with API key: ${apiKey?.substring(0, 10)}...`);
+
+          // Cohere API for embeddings
+          const cohereResponse = await fetch('https://api.cohere.ai/v1/embed', {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${apiKey}`,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              texts: ['Test message'],
+              model: model || 'embed-multilingual-v3.0',
+              input_type: 'search_query'
+            })
+          });
+
+          const responseTime = Date.now() - startTime;
+
+          if (cohereResponse.ok) {
+            const data = await cohereResponse.json();
+            testResult = {
+              success: true,
+              model: model || 'embed-multilingual-v3.0',
+              responseTime,
+              usage: {
+                inputTokens: data.meta?.billed_units?.input_tokens || 1,
+                outputTokens: 0,
+                totalTokens: data.meta?.billed_units?.input_tokens || 1
+              },
+              message: 'API connection successful'
+            };
+          } else {
+            const errorData = await cohereResponse.json().catch(() => ({}));
+            let errorMessage = 'Cohere API validation failed';
+
+            if (cohereResponse.status === 401) {
+              errorMessage = 'Invalid Cohere API key. Get your key from https://dashboard.cohere.com/api-keys';
+            } else if (cohereResponse.status === 429) {
+              errorMessage = 'Cohere API rate limit exceeded.';
+            } else if (errorData.message) {
+              errorMessage = errorData.message;
+            }
+
+            throw new Error(errorMessage);
+          }
+        } catch (error: any) {
+          console.error('Cohere API validation error:', error);
+          testResult = {
+            success: false,
+            error: error.message || 'Cohere API validation failed',
+            type: 'cohere_api_error'
+          };
+        }
+        break;
+
       default:
         return res.status(400).json({
           success: false,
@@ -628,7 +754,9 @@ router.get('/models/:provider', async (req: Request, res: Response) => {
       deepl: ['deepl-free', 'deepl-pro'],
       googleTranslate: ['google-translate'],
       huggingface: ['sentence-transformers/all-MiniLM-L6-v2', 'distilbert-base-uncased', 'bert-base-uncased'],
-      openrouter: ['openai/gpt-4o', 'openai/gpt-4o-mini', 'openai/gpt-4-turbo', 'anthropic/claude-3.5-sonnet', 'meta-llama/llama-3.1-8b-instruct', 'google/gemini-pro-1.5']
+      openrouter: ['openai/gpt-4o', 'openai/gpt-4o-mini', 'openai/gpt-4-turbo', 'anthropic/claude-3.5-sonnet', 'meta-llama/llama-3.1-8b-instruct', 'google/gemini-pro-1.5'],
+      voyage: ['voyage-3', 'voyage-3-lite', 'voyage-code-3', 'voyage-finance-2', 'voyage-law-2'],
+      cohere: ['embed-multilingual-v3.0', 'embed-english-v3.0', 'embed-multilingual-light-v3.0', 'embed-english-light-v3.0']
     };
 
     const providerModels = models[provider as keyof typeof models] || [];
