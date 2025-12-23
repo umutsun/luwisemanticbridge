@@ -638,19 +638,37 @@ export default function DocumentManagerPage() {
     setSelectedDriveFiles(new Set());
   };
 
-  // Helper to get readable file type
+  // Helper to normalize file type for comparisons
+  const getNormalizedFileType = (typeOrMime?: string): string => {
+    if (!typeOrMime) return 'text';
+    const lower = typeOrMime.toLowerCase();
+    if (lower === 'application/pdf' || lower === 'pdf') return 'pdf';
+    if (lower.includes('csv')) return 'csv';
+    if (lower.includes('json')) return 'json';
+    if (lower.includes('word') || lower === 'doc' || lower === 'docx') return 'doc';
+    if (lower === 'md' || lower === 'txt' || lower.startsWith('text/')) return 'text';
+    if (lower.includes('sheet') || lower.includes('excel')) return 'sheet';
+    if (lower.includes('image')) return 'image';
+    return lower.split('/').pop()?.split('.').pop() || 'text';
+  };
+
+  // Helper to get readable file type label
   const getFileTypeLabel = (mimeType?: string): string => {
     if (!mimeType) return 'File';
-    if (mimeType === 'application/vnd.google-apps.folder') return 'Folder';
-    if (mimeType === 'application/pdf') return 'PDF';
-    if (mimeType.includes('word') || mimeType === 'application/vnd.google-apps.document') return 'Doc';
-    if (mimeType.includes('sheet') || mimeType === 'application/vnd.google-apps.spreadsheet') return 'Sheet';
-    if (mimeType.includes('presentation') || mimeType === 'application/vnd.google-apps.presentation') return 'Slides';
-    if (mimeType.startsWith('text/')) return 'Text';
-    if (mimeType.includes('csv')) return 'CSV';
-    if (mimeType.includes('json')) return 'JSON';
-    if (mimeType.includes('image')) return 'Image';
-    return mimeType.split('/').pop()?.split('.').pop() || 'File';
+    const normalized = getNormalizedFileType(mimeType);
+    const labels: Record<string, string> = {
+      'pdf': 'PDF',
+      'csv': 'CSV',
+      'json': 'JSON',
+      'doc': 'Doc',
+      'docx': 'Doc',
+      'text': 'Text',
+      'txt': 'Text',
+      'md': 'Text',
+      'sheet': 'Sheet',
+      'image': 'Image'
+    };
+    return labels[normalized] || normalized.toUpperCase();
   };
 
   // Check if file is importable (not a folder)
@@ -3778,17 +3796,24 @@ export default function DocumentManagerPage() {
                                 {doc.title}
                               </TableCell>
                               <TableCell>
-                                <Badge
-                                  variant="outline"
-                                  className={`text-xs font-semibold border-2 transition-all duration-150 ${(doc.type || doc.file_type || 'text')?.toLowerCase() === 'pdf' ? 'bg-red-50 dark:bg-red-950/30 border-red-200 dark:border-red-800 text-red-700 dark:text-red-400' :
-                                    (doc.type || doc.file_type || 'text')?.toLowerCase() === 'csv' ? 'bg-green-50 dark:bg-green-950/30 border-green-200 dark:border-green-800 text-green-700 dark:text-green-400' :
-                                      (doc.type || doc.file_type || 'text')?.toLowerCase() === 'json' ? 'bg-blue-50 dark:bg-blue-950/30 border-blue-200 dark:border-blue-800 text-blue-700 dark:text-blue-400' :
-                                        ['md', 'txt', 'doc', 'docx'].includes((doc.type || doc.file_type || 'text')?.toLowerCase()) ? 'bg-purple-50 dark:bg-purple-950/30 border-purple-200 dark:border-purple-800 text-purple-700 dark:text-purple-400' :
-                                          'bg-gray-50 dark:bg-gray-950/30 border-gray-200 dark:border-gray-800 text-gray-700 dark:text-gray-400'
-                                    }`}
-                                >
-                                  {(doc.type || doc.file_type || 'TEXT').toUpperCase()}
-                                </Badge>
+                                {(() => {
+                                  const fileType = getNormalizedFileType(doc.type || doc.file_type || doc.metadata?.mimeType);
+                                  const colorClasses: Record<string, string> = {
+                                    'pdf': 'bg-red-50 dark:bg-red-950/30 border-red-200 dark:border-red-800 text-red-700 dark:text-red-400',
+                                    'csv': 'bg-green-50 dark:bg-green-950/30 border-green-200 dark:border-green-800 text-green-700 dark:text-green-400',
+                                    'json': 'bg-blue-50 dark:bg-blue-950/30 border-blue-200 dark:border-blue-800 text-blue-700 dark:text-blue-400',
+                                    'doc': 'bg-purple-50 dark:bg-purple-950/30 border-purple-200 dark:border-purple-800 text-purple-700 dark:text-purple-400',
+                                    'text': 'bg-purple-50 dark:bg-purple-950/30 border-purple-200 dark:border-purple-800 text-purple-700 dark:text-purple-400',
+                                  };
+                                  return (
+                                    <Badge
+                                      variant="outline"
+                                      className={`text-xs font-semibold border-2 transition-all duration-150 ${colorClasses[fileType] || 'bg-gray-50 dark:bg-gray-950/30 border-gray-200 dark:border-gray-800 text-gray-700 dark:text-gray-400'}`}
+                                    >
+                                      {getFileTypeLabel(doc.type || doc.file_type || doc.metadata?.mimeType)}
+                                    </Badge>
+                                  );
+                                })()}
                               </TableCell>
                               <TableCell>
                                 {(() => {

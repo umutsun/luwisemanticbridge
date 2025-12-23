@@ -74,6 +74,18 @@ import { useTransformProgressSubscription } from '@/hooks/useDocumentTransform';
 import { useConfig } from '@/contexts/ConfigContext';
 import JsonViewer from '@/components/ui/json-viewer';
 
+// Helper to check if document is PDF (handles both 'pdf' and 'application/pdf')
+const isPDFDocument = (doc: { type?: string; file_type?: string; title?: string } | null): boolean => {
+  if (!doc) return false;
+  const type = doc.type?.toLowerCase() || '';
+  const fileType = doc.file_type?.toLowerCase() || '';
+  const title = doc.title?.toLowerCase() || '';
+  return type === 'pdf' ||
+         type === 'application/pdf' ||
+         fileType === 'application/pdf' ||
+         title.endsWith('.pdf');
+};
+
 interface DocumentPreviewModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -397,9 +409,7 @@ export default function DocumentPreviewModal({
         }
 
         // Auto-analyze PDF to check if scanned
-        const isPDF = document.type === 'pdf' ||
-                      document.file_type === 'application/pdf' ||
-                      document.title?.toLowerCase().endsWith('.pdf');
+        const isPDF = isPDFDocument(document);
 
         if (isPDF && document.id) {
           // Load saved metadata if available (avoid re-analyzing)
@@ -432,9 +442,7 @@ export default function DocumentPreviewModal({
 
   // Fetch PDF schemas on component mount (for PDF documents only)
   useEffect(() => {
-    const isPDF = document?.type === 'pdf' ||
-                  document?.file_type === 'application/pdf' ||
-                  document?.title?.toLowerCase().endsWith('.pdf');
+    const isPDF = isPDFDocument(document);
 
     if (isPDF && config?.database?.name) {
       fetchPDFSchemas();
@@ -445,9 +453,7 @@ export default function DocumentPreviewModal({
   // Fetch analysis templates for PDF documents
   useEffect(() => {
     console.log('[DocumentPreviewModal] useEffect triggered - document:', document?.id, document?.title);
-    const isPDF = document?.type === 'pdf' ||
-                  document?.file_type === 'application/pdf' ||
-                  document?.title?.toLowerCase().endsWith('.pdf');
+    const isPDF = isPDFDocument(document);
 
     console.log('[DocumentPreviewModal] isPDF check:', isPDF, {
       type: document?.type,
@@ -2938,9 +2944,7 @@ ${selectedArray.map(f => `  ${f.replace(/\./g, '_')} = EXCLUDED.${f.replace(/\./
   const fileType = document.type.toLowerCase();
   const isCSV = fileType === 'csv';
   const isJSON = fileType === 'json';
-  const isPDF = fileType === 'pdf' ||
-                document.file_type === 'application/pdf' ||
-                document.title?.toLowerCase().endsWith('.pdf');
+  const isPDF = isPDFDocument(document);
   const isText = ['txt', 'md', 'doc', 'docx'].includes(fileType);
 
   return (

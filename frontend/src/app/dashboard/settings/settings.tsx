@@ -117,9 +117,10 @@ function LLMSettings() {
     'claude-3-haiku-20240307': { input: 0.25, output: 1.25 },
 
     // Google models (per 1M tokens)
-    'gemini-2.0-flash': { input: 0.10, output: 0.40 },
-    'gemini-1.5-pro-latest': { input: 3.50, output: 10.50 },
-    'gemini-1.5-flash-latest': { input: 0.075, output: 0.30 },
+    'gemini-2.0-flash-exp': { input: 0.10, output: 0.40 },
+    'gemini-1.5-flash': { input: 0.075, output: 0.30 },
+    'gemini-1.5-pro': { input: 3.50, output: 10.50 },
+    'gemini-pro': { input: 0.50, output: 1.50 },
 
     // DeepSeek models (per 1M tokens)
     'deepseek-chat': { input: 0.14, output: 0.28 },
@@ -882,7 +883,7 @@ function LLMSettings() {
     // Fallback: if no test results, return default models
     const defaultModels: Record<string, string[]> = {
       openai: ['gpt-4o-mini', 'gpt-4o', 'gpt-4', 'gpt-3.5-turbo'],
-      google: ['gemini-2.0-flash', 'gemini-1.5-flash-latest', 'gemini-1.5-pro-latest'],
+      google: ['gemini-2.0-flash-exp', 'gemini-1.5-flash', 'gemini-1.5-pro', 'gemini-pro'],
       anthropic: ['claude-3-5-sonnet-20241022', 'claude-3-opus-20240229', 'claude-3-haiku-20240307'],
       deepseek: ['deepseek-chat', 'deepseek-coder'],
       huggingface: ['sentence-transformers/all-MiniLM-L6-v2', 'distilbert-base-uncased', 'bert-base-uncased'],
@@ -896,7 +897,7 @@ function LLMSettings() {
   const getDefaultModelForProvider = (provider: string) => {
     const defaults: Record<string, string> = {
       openai: 'gpt-4o-mini',
-      google: 'gemini-2.0-flash',
+      google: 'gemini-1.5-flash',
       anthropic: 'claude-3-5-sonnet-20241022',
       deepseek: 'deepseek-chat',
       huggingface: 'sentence-transformers/all-MiniLM-L6-v2',

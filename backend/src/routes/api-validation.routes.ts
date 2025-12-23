@@ -23,9 +23,10 @@ const MODEL_PRICING: Record<string, Record<string, { input: number; output: numb
     'gpt-3.5-turbo': { input: 0.5, output: 1.5 },
   },
   google: {
-    'gemini-2.0-flash': { input: 0.1, output: 0.4 },
-    'gemini-1.5-flash-latest': { input: 0.075, output: 0.3 },
-    'gemini-1.5-pro-latest': { input: 1.25, output: 5 },
+    'gemini-2.0-flash-exp': { input: 0.1, output: 0.4 },
+    'gemini-1.5-flash': { input: 0.075, output: 0.3 },
+    'gemini-1.5-pro': { input: 1.25, output: 5 },
+    'gemini-pro': { input: 0.5, output: 1.5 },
   },
   deepseek: {
     'deepseek-chat': { input: 0.14, output: 0.28 },
@@ -164,13 +165,20 @@ router.post('/test/:provider', async (req: Request, res: Response) => {
       case 'google':
         try {
           console.log(` Google AI validation starting with API key: ${apiKey?.substring(0, 10)}...`);
+
+          // Validate API key format
+          if (!apiKey || !apiKey.startsWith('AIza')) {
+            throw new Error('Invalid Google AI API key format. Key should start with "AIza". Get your key from https://aistudio.google.com/apikey');
+          }
+
           const genAI = new GoogleGenerativeAI(apiKey);
 
           // Try different model names in order of preference (updated for 2025)
           const modelNames = [
-            'gemini-2.0-flash',
-            'gemini-1.5-flash-latest',
-            'gemini-1.5-pro-latest'
+            'gemini-2.0-flash-exp',
+            'gemini-1.5-flash',
+            'gemini-1.5-pro',
+            'gemini-pro'
           ];
 
           const testModel = model || modelNames[0];
@@ -179,11 +187,9 @@ router.post('/test/:provider', async (req: Request, res: Response) => {
           const modelInstance = genAI.getGenerativeModel({ model: testModel });
           console.log(' Model instance created, sending test message...');
 
-          const response = await modelInstance.generateContent({
-            contents: [{ parts: [{ text: 'Test message' }] }]
-          });
+          const response = await modelInstance.generateContent('Hello, this is a test message.');
 
-          console.log(' Google AI response received:', response);
+          console.log(' Google AI response received');
           const responseTime = Date.now() - startTime;
 
           // Try to get usage info if available
@@ -217,12 +223,16 @@ router.post('/test/:provider', async (req: Request, res: Response) => {
           // Provide more specific error messages
           let errorMessage = error.message || 'Google AI API validation failed';
 
-          if (error.message?.includes('API key')) {
-            errorMessage = 'Invalid Google AI API key. Please check your API key.';
-          } else if (error.message?.includes('quota')) {
-            errorMessage = 'Google AI API quota exceeded. Please check your billing.';
-          } else if (error.message?.includes('model')) {
-            errorMessage = 'Google AI model not available. Using fallback model.';
+          if (error.message?.includes('API key') || error.message?.includes('API_KEY_INVALID')) {
+            errorMessage = 'Invalid Google AI API key. Get a valid key from https://aistudio.google.com/apikey';
+          } else if (error.message?.includes('quota') || error.message?.includes('RESOURCE_EXHAUSTED')) {
+            errorMessage = 'Google AI API quota exceeded. Please check your billing or wait.';
+          } else if (error.message?.includes('not found') || error.message?.includes('NOT_FOUND')) {
+            errorMessage = 'Google AI model not found. Try gemini-1.5-flash or gemini-pro.';
+          } else if (error.message?.includes('permission') || error.message?.includes('PERMISSION_DENIED')) {
+            errorMessage = 'Permission denied. Enable Generative Language API in Google Cloud Console.';
+          } else if (error.message?.includes('AIza')) {
+            errorMessage = error.message; // Pass through our custom format validation error
           }
 
           testResult = {
@@ -231,7 +241,8 @@ router.post('/test/:provider', async (req: Request, res: Response) => {
             type: error.type || 'google_api_error',
             details: {
               code: error.status,
-              status: error.statusText
+              status: error.statusText,
+              originalError: error.message
             }
           };
         }
@@ -612,7 +623,7 @@ router.get('/models/:provider', async (req: Request, res: Response) => {
     const models = {
       openai: ['gpt-4o', 'gpt-4o-mini', 'gpt-4-turbo', 'gpt-3.5-turbo'],
       anthropic: ['claude-3-5-sonnet-20241022', 'claude-3-opus-20240229', 'claude-3-sonnet-20240229', 'claude-3-haiku-20240307'],
-      google: ['gemini-2.0-flash', 'gemini-1.5-pro-latest', 'gemini-1.5-flash-latest'],
+      google: ['gemini-2.0-flash-exp', 'gemini-1.5-flash', 'gemini-1.5-pro', 'gemini-pro'],
       deepseek: ['deepseek-chat', 'deepseek-coder'],
       deepl: ['deepl-free', 'deepl-pro'],
       googleTranslate: ['google-translate'],
