@@ -8,6 +8,27 @@ import { useTranslation } from 'react-i18next';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 
+/**
+ * Format markdown content for better visual presentation
+ * - Adds line breaks before/after bold headings for paragraph separation
+ */
+function formatMarkdownContent(content: string): string {
+  if (!content) return '';
+
+  return content
+    // Bold text at start of line followed by text → add newline after
+    .replace(/^(\*\*[^*]+\*\*)\s*(?=[A-ZÇĞİÖŞÜa-zçğıöşü])/gm, '$1\n\n')
+    // Bold text with colon → treat as heading, add newlines
+    .replace(/(\*\*[^*]+:\*\*)\s*/g, '\n\n$1\n')
+    // Standalone bold lines → add newline before and after
+    .replace(/\n(\*\*[^*]+\*\*)\n/g, '\n\n$1\n\n')
+    // Bold at very start → add newline after
+    .replace(/^(\*\*[^*]+\*\*)\s+/m, '$1\n\n')
+    // Clean up excessive newlines
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+}
+
 interface Source {
   title?: string;
   content?: string;
@@ -116,37 +137,37 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
                           remarkPlugins={[remarkGfm]}
                           components={{
                             h1: ({ children }) => (
-                              <h1 className="text-base sm:text-lg font-bold mt-3 mb-2 pb-1 border-b border-border first:mt-0">
+                              <h1 className="text-base sm:text-lg font-bold mt-4 mb-2 pb-1 border-b border-border first:mt-0">
                                 {children}
                               </h1>
                             ),
                             h2: ({ children }) => (
-                              <h2 className="text-sm sm:text-base font-semibold mt-3 mb-1.5 first:mt-0">
+                              <h2 className="text-sm sm:text-base font-semibold mt-4 mb-2 first:mt-0">
                                 {children}
                               </h2>
                             ),
                             h3: ({ children }) => (
-                              <h3 className="text-[13px] sm:text-sm font-semibold mt-2 mb-1 first:mt-0">
+                              <h3 className="text-[13px] sm:text-sm font-semibold mt-3 mb-1 first:mt-0">
                                 {children}
                               </h3>
                             ),
                             p: ({ children }) => (
-                              <p className="text-[13px] sm:text-sm my-1.5 leading-relaxed first:mt-0 last:mb-0">
+                              <p className="text-[13px] sm:text-sm my-2 leading-relaxed first:mt-0 last:mb-0">
                                 {children}
                               </p>
                             ),
                             strong: ({ children }) => (
-                              <strong className="font-semibold text-foreground">
+                              <strong className="font-bold text-foreground">
                                 {children}
                               </strong>
                             ),
                             ul: ({ children }) => (
-                              <ul className="list-disc list-outside ml-4 my-1.5 space-y-0.5 text-[13px] sm:text-sm">
+                              <ul className="list-disc list-outside ml-4 my-2 space-y-1 text-[13px] sm:text-sm">
                                 {children}
                               </ul>
                             ),
                             ol: ({ children }) => (
-                              <ol className="list-decimal list-outside ml-4 my-1.5 space-y-0.5 text-[13px] sm:text-sm">
+                              <ol className="list-decimal list-outside ml-4 my-2 space-y-1 text-[13px] sm:text-sm">
                                 {children}
                               </ol>
                             ),
@@ -156,7 +177,7 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
                               </li>
                             ),
                             blockquote: ({ children }) => (
-                              <blockquote className="border-l-3 border-amber-400 bg-amber-50 dark:bg-amber-900/20 pl-3 py-1.5 my-2 text-amber-800 dark:text-amber-200 italic text-[13px] sm:text-sm">
+                              <blockquote className="border-l-4 border-amber-400 bg-amber-50 dark:bg-amber-900/20 pl-3 py-2 my-3 text-amber-800 dark:text-amber-200 italic text-[13px] sm:text-sm">
                                 {children}
                               </blockquote>
                             ),
@@ -174,7 +195,7 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
                             },
                           }}
                         >
-                          {message.content}
+                          {formatMarkdownContent(message.content)}
                         </ReactMarkdown>
                       </div>
                     )}
