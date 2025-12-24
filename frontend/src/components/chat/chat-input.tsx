@@ -275,17 +275,17 @@ export function ChatInput({ onSend, disabled }: ChatInputProps) {
             style={{ lineHeight: '1.5' }}
           />
 
-          {/* Action buttons - minimal, side by side */}
-          <div className="flex items-center gap-1">
+          {/* Action buttons - mobile responsive, minimal */}
+          <div className="flex items-center gap-0.5 sm:gap-1">
             {/* Paperclip button - only visible when PDF upload is enabled */}
             {pdfSettings.enabled && (
               <button
                 onClick={handlePaperclipClick}
                 disabled={disabled || !!pdfFile || isRecording}
-                className="p-2 text-gray-400 hover:text-blue-500 dark:text-gray-500 dark:hover:text-blue-400 transition-colors rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                className="p-1.5 sm:p-2 text-gray-400 hover:text-blue-500 dark:text-gray-500 dark:hover:text-blue-400 transition-colors rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed"
                 title={pdfFile ? t('chatInput.pdfAttached', 'PDF eklendi') : t('chatInput.attachPdf', 'PDF ekle')}
               >
-                <Paperclip className="w-5 h-5" />
+                <Paperclip className="w-4 h-4 sm:w-5 sm:h-5" />
               </button>
             )}
 
@@ -294,7 +294,7 @@ export function ChatInput({ onSend, disabled }: ChatInputProps) {
               <button
                 onClick={isRecording ? stopRecording : startRecording}
                 disabled={disabled || isTranscribing}
-                className={`p-2 transition-colors rounded-lg disabled:opacity-50 disabled:cursor-not-allowed ${
+                className={`p-1.5 sm:p-2 transition-colors rounded-lg disabled:opacity-50 disabled:cursor-not-allowed ${
                   isRecording
                     ? 'text-red-500 hover:text-red-600 bg-red-50 dark:bg-red-900/20 animate-pulse'
                     : isTranscribing
@@ -310,11 +310,11 @@ export function ChatInput({ onSend, disabled }: ChatInputProps) {
                 }
               >
                 {isRecording ? (
-                  <Square className="w-5 h-5" />
+                  <Square className="w-4 h-4 sm:w-5 sm:h-5" />
                 ) : isTranscribing ? (
-                  <Loader2 className="w-5 h-5 animate-spin" />
+                  <Loader2 className="w-4 h-4 sm:w-5 sm:h-5 animate-spin" />
                 ) : (
-                  <Mic className="w-5 h-5" />
+                  <Mic className="w-4 h-4 sm:w-5 sm:h-5" />
                 )}
               </button>
             )}
@@ -322,10 +322,10 @@ export function ChatInput({ onSend, disabled }: ChatInputProps) {
             <button
               onClick={handleSend}
               disabled={disabled || !message.trim() || isRecording}
-              className="p-2 text-gray-400 hover:text-blue-500 dark:text-gray-500 dark:hover:text-blue-400 transition-colors rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-30 disabled:cursor-not-allowed"
+              className="p-1.5 sm:p-2 text-gray-400 hover:text-blue-500 dark:text-gray-500 dark:hover:text-blue-400 transition-colors rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-30 disabled:cursor-not-allowed"
               title={t('chatInput.sendMessage')}
             >
-              <Send className="w-5 h-5" />
+              <Send className="w-4 h-4 sm:w-5 sm:h-5" />
             </button>
           </div>
         </div>
