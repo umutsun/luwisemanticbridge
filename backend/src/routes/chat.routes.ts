@@ -1089,6 +1089,32 @@ router.get('/api/v2/chat/pdf-settings', authenticateToken, async (req: Authentic
 });
 
 /**
+ * Get Voice Settings (TTS & STT)
+ */
+router.get('/api/v2/chat/voice-settings', authenticateToken, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const enableVoiceInput = await settingsService.getSetting('voiceSettings.enableVoiceInput') === 'true';
+    const enableVoiceOutput = await settingsService.getSetting('voiceSettings.enableVoiceOutput') === 'true';
+    const ttsProvider = await settingsService.getSetting('voiceSettings.ttsProvider') || 'openai';
+    const ttsVoice = await settingsService.getSetting('voiceSettings.ttsVoice') || 'alloy';
+    const ttsSpeed = parseFloat(await settingsService.getSetting('voiceSettings.ttsSpeed') || '1.0');
+    const maxRecordingSeconds = parseInt(await settingsService.getSetting('voiceSettings.maxRecordingSeconds') || '60');
+
+    res.json({
+      enableVoiceInput,
+      enableVoiceOutput,
+      ttsProvider,
+      ttsVoice,
+      ttsSpeed,
+      maxRecordingSeconds
+    });
+  } catch (error: any) {
+    console.error('[Voice Settings] Error:', error);
+    res.status(500).json({ error: 'Failed to get voice settings' });
+  }
+});
+
+/**
  * Chat service health check
  */
 router.get('/api/v2/chat/health', async (req: Request, res: Response) => {

@@ -39,6 +39,10 @@ export interface ChatbotFeatures {
 
   // PDF Upload
   enablePdfUpload: boolean;               // Enable PDF file upload in chat
+
+  // Voice Features
+  enableVoiceInput: boolean;              // STT - Voice input via microphone
+  enableVoiceOutput: boolean;             // TTS - Text-to-speech for responses
 }
 
 export interface ChatbotSettings {
@@ -98,7 +102,11 @@ export const defaultFeatures: ChatbotFeatures = {
   enableAutoScroll: true,
 
   // PDF Upload
-  enablePdfUpload: false
+  enablePdfUpload: false,
+
+  // Voice Features
+  enableVoiceInput: false,
+  enableVoiceOutput: false
 };
 
 /**

@@ -1,12 +1,15 @@
 'use client';
 
+import { useState, useEffect } from 'react';
 import { cn } from '@/lib/utils';
-import { User, Bot, FileText } from 'lucide-react';
+import { User, Bot, FileText, Volume2, Pause, Loader2 } from 'lucide-react';
 import { Message } from '@/types/chat';
 import { SourceCitation } from './source-citation';
 import { MessageSkeleton } from './message-skeleton';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import { useAudioPlayer } from '@/lib/hooks/use-audio-player';
+import { fetchWithAuth } from '@/lib/auth-fetch';
 
 // Format file size for display
 const formatFileSize = (bytes: number): string => {
@@ -44,6 +47,47 @@ interface MessageItemProps {
 
 export function MessageItem({ message }: MessageItemProps) {
   const isUser = message.role === 'user';
+  const [voiceOutputEnabled, setVoiceOutputEnabled] = useState(false);
+  const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8083';
+
+  // Audio player hook for TTS
+  const { isPlaying, isLoading, play, pause, stop } = useAudioPlayer({
+    onError: (error) => {
+      console.error('[MessageItem] TTS error:', error);
+    }
+  });
+
+  // Fetch voice settings on mount
+  useEffect(() => {
+    fetchWithAuth(`${apiUrl}/api/v2/chat/voice-settings`)
+      .then(res => res.json())
+      .then(data => {
+        setVoiceOutputEnabled(data.enableVoiceOutput || false);
+      })
+      .catch(err => {
+        console.error('[MessageItem] Failed to fetch voice settings:', err);
+      });
+  }, [apiUrl]);
+
+  // Handle TTS play/pause
+  const handleTTSToggle = () => {
+    if (isPlaying) {
+      pause();
+    } else {
+      // Extract plain text from markdown content
+      const plainText = message.content
+        .replace(/#{1,6}\s/g, '') // Remove headers
+        .replace(/\*\*([^*]+)\*\*/g, '$1') // Remove bold
+        .replace(/\*([^*]+)\*/g, '$1') // Remove italic
+        .replace(/`([^`]+)`/g, '$1') // Remove code
+        .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1') // Remove links
+        .replace(/^\s*[-*]\s/gm, '') // Remove list markers
+        .replace(/^\s*\d+\.\s/gm, '') // Remove numbered list markers
+        .trim();
+
+      play(plainText);
+    }
+  };
 
   // Show skeleton loading for streaming assistant messages
   if (message.isStreaming && message.isLoading && !isUser) {
@@ -262,13 +306,40 @@ export function MessageItem({ message }: MessageItemProps) {
         )}
         
         <div className={cn(
-          'text-xs mt-2 opacity-0 group-hover:opacity-70 transition-all duration-200',
+          'flex items-center justify-between mt-2 opacity-0 group-hover:opacity-70 transition-all duration-200',
           isUser ? 'text-blue-100' : 'text-gray-500 dark:text-gray-400'
         )}>
-          {new Date(message.timestamp).toLocaleTimeString('tr-TR', {
-            hour: '2-digit',
-            minute: '2-digit',
-          })}
+          <span className="text-xs">
+            {new Date(message.timestamp).toLocaleTimeString('tr-TR', {
+              hour: '2-digit',
+              minute: '2-digit',
+            })}
+          </span>
+
+          {/* TTS button for assistant messages */}
+          {!isUser && voiceOutputEnabled && message.content && !message.isLoading && (
+            <button
+              onClick={handleTTSToggle}
+              disabled={isLoading}
+              className={cn(
+                'p-1 rounded transition-colors',
+                isPlaying
+                  ? 'text-blue-500 hover:text-blue-600 bg-blue-50 dark:bg-blue-900/30'
+                  : isLoading
+                    ? 'text-gray-400 cursor-wait'
+                    : 'hover:text-blue-500 hover:bg-gray-100 dark:hover:bg-gray-700'
+              )}
+              title={isPlaying ? 'Durdur' : isLoading ? 'Yükleniyor...' : 'Sesli dinle'}
+            >
+              {isLoading ? (
+                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+              ) : isPlaying ? (
+                <Pause className="w-3.5 h-3.5" />
+              ) : (
+                <Volume2 className="w-3.5 h-3.5" />
+              )}
+            </button>
+          )}
         </div>
       </div>
       

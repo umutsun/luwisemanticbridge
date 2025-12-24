@@ -88,6 +88,7 @@ import documentProcessingRoutes from "./routes/document-processing.routes";
 import ocrRoutes from "./routes/ocr.routes";
 import integrationsRoutes from "./routes/integrations.routes";
 import whisperRoutes from "./routes/whisper.routes";
+import ttsRoutes from "./routes/tts.routes";
 import pdfBatchRoutes from "./routes/pdf-batch.routes";
 import batchFoldersRoutes from "./routes/batch-folders.routes";
 import transformConfigRoutes from "./routes/transform-config.routes";
@@ -561,6 +562,7 @@ app.use("/api/v2/data-schema", dataSchemaRoutes);
 app.use("/api/v2/patterns", patternsRoutes);
 app.use("/api/v2/websocket-log-stream", websocketLogStreamRoutes);
 app.use("/api/whisper", whisperRoutes);
+app.use(ttsRoutes);  // TTS routes at /api/v2/tts/*
 
 // GraphQL server
 try {

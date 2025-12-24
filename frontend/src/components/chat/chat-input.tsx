@@ -1,10 +1,17 @@
 'use client';
 
 import { useState, KeyboardEvent, useEffect, useCallback, useRef, ChangeEvent } from 'react';
-import { Send, Paperclip, Sparkles, RefreshCw, Loader2 } from 'lucide-react';
+import { Send, Paperclip, Sparkles, RefreshCw, Loader2, Mic, Square } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { fetchWithAuth } from '@/lib/auth-fetch';
 import { PdfPreviewChip } from './pdf-preview-chip';
+import { useVoiceRecording } from '@/lib/hooks/use-voice-recording';
+
+interface VoiceSettings {
+  enableVoiceInput: boolean;
+  enableVoiceOutput: boolean;
+  maxRecordingSeconds: number;
+}
 
 interface PdfSettings {
   enabled: boolean;
@@ -29,8 +36,35 @@ export function ChatInput({ onSend, disabled }: ChatInputProps) {
   const [pdfSettings, setPdfSettings] = useState<PdfSettings>({ enabled: false, maxSizeMB: 10, maxPages: 30 });
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // Voice settings state
+  const [voiceSettings, setVoiceSettings] = useState<VoiceSettings>({
+    enableVoiceInput: false,
+    enableVoiceOutput: false,
+    maxRecordingSeconds: 60
+  });
+
   // API URL
   const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8083';
+
+  // Voice recording hook
+  const {
+    isRecording,
+    isTranscribing,
+    recordingDuration,
+    startRecording,
+    stopRecording,
+    cancelRecording
+  } = useVoiceRecording({
+    maxDurationSeconds: voiceSettings.maxRecordingSeconds,
+    onTranscription: (text) => {
+      if (text) {
+        setMessage(prev => prev ? `${prev} ${text}` : text);
+      }
+    },
+    onError: (error) => {
+      console.error('[ChatInput] Voice recording error:', error);
+    }
+  });
 
   // Fetch PDF settings
   useEffect(() => {
@@ -46,6 +80,23 @@ export function ChatInput({ onSend, disabled }: ChatInputProps) {
       })
       .catch(err => {
         console.error('[ChatInput] Failed to fetch PDF settings:', err);
+      });
+  }, [apiUrl]);
+
+  // Fetch Voice settings
+  useEffect(() => {
+    fetchWithAuth(`${apiUrl}/api/v2/chat/voice-settings`)
+      .then(res => res.json())
+      .then(data => {
+        setVoiceSettings({
+          enableVoiceInput: data.enableVoiceInput || false,
+          enableVoiceOutput: data.enableVoiceOutput || false,
+          maxRecordingSeconds: data.maxRecordingSeconds || 60
+        });
+        console.log('[ChatInput] Voice settings loaded:', data);
+      })
+      .catch(err => {
+        console.error('[ChatInput] Failed to fetch voice settings:', err);
       });
   }, [apiUrl]);
 
@@ -230,7 +281,7 @@ export function ChatInput({ onSend, disabled }: ChatInputProps) {
             {pdfSettings.enabled && (
               <button
                 onClick={handlePaperclipClick}
-                disabled={disabled || !!pdfFile}
+                disabled={disabled || !!pdfFile || isRecording}
                 className="p-2 text-gray-400 hover:text-blue-500 dark:text-gray-500 dark:hover:text-blue-400 transition-colors rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed"
                 title={pdfFile ? t('chatInput.pdfAttached', 'PDF eklendi') : t('chatInput.attachPdf', 'PDF ekle')}
               >
@@ -238,9 +289,39 @@ export function ChatInput({ onSend, disabled }: ChatInputProps) {
               </button>
             )}
 
+            {/* Mic button - only visible when voice input is enabled */}
+            {voiceSettings.enableVoiceInput && (
+              <button
+                onClick={isRecording ? stopRecording : startRecording}
+                disabled={disabled || isTranscribing}
+                className={`p-2 transition-colors rounded-lg disabled:opacity-50 disabled:cursor-not-allowed ${
+                  isRecording
+                    ? 'text-red-500 hover:text-red-600 bg-red-50 dark:bg-red-900/20 animate-pulse'
+                    : isTranscribing
+                      ? 'text-blue-500 bg-blue-50 dark:bg-blue-900/20'
+                      : 'text-gray-400 hover:text-blue-500 dark:text-gray-500 dark:hover:text-blue-400 hover:bg-gray-100 dark:hover:bg-gray-700'
+                }`}
+                title={
+                  isRecording
+                    ? `${t('chatInput.stopRecording', 'Kaydi durdur')} (${recordingDuration}s)`
+                    : isTranscribing
+                      ? t('chatInput.transcribing', 'Metne cevriliyor...')
+                      : t('chatInput.startRecording', 'Sesle mesaj gonder')
+                }
+              >
+                {isRecording ? (
+                  <Square className="w-5 h-5" />
+                ) : isTranscribing ? (
+                  <Loader2 className="w-5 h-5 animate-spin" />
+                ) : (
+                  <Mic className="w-5 h-5" />
+                )}
+              </button>
+            )}
+
             <button
               onClick={handleSend}
-              disabled={disabled || !message.trim()}
+              disabled={disabled || !message.trim() || isRecording}
               className="p-2 text-gray-400 hover:text-blue-500 dark:text-gray-500 dark:hover:text-blue-400 transition-colors rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-30 disabled:cursor-not-allowed"
               title={t('chatInput.sendMessage')}
             >
