@@ -1,3 +1,10 @@
+export interface PdfAttachment {
+  filename: string;
+  size: number;
+  pageCount?: number;
+  cacheKey?: string;
+}
+
 export interface Message {
   id: string;
   role: 'user' | 'assistant' | 'system';
@@ -9,6 +16,7 @@ export interface Message {
   status?: 'searching' | 'generating' | 'complete' | 'error';
   statusMessage?: string;
   relatedTopics?: Source[];
+  pdfAttachment?: PdfAttachment;
 }
 
 export interface Source {

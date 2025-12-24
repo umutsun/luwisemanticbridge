@@ -140,6 +140,13 @@ interface ChatMessage {
   sources?: any[];
 }
 
+interface PdfContext {
+  filename: string;
+  extractedText: string;
+  pageCount: number;
+  confidence?: number;
+}
+
 interface ChatOptions {
   temperature?: number;
   model?: string;
@@ -149,6 +156,7 @@ interface ChatOptions {
   language?: string;
   responseStyle?: string;
   maxTokens?: number;
+  pdfContext?: PdfContext;
 }
 
 export class RAGChatService {
@@ -858,6 +866,23 @@ export class RAGChatService {
       const contextLabel = responseLanguage === 'en' ? 'CONTEXT INFORMATION' : 'BAĞLAM BİLGİLERİ';
       const questionLabel = responseLanguage === 'en' ? 'QUESTION' : 'SORU';
 
+      // Build PDF context section if provided
+      let pdfContextSection = '';
+      if (options.pdfContext) {
+        const pdfLabel = responseLanguage === 'en' ? 'UPLOADED DOCUMENT' : 'YUKLENEN BELGE';
+        const pdfFilename = options.pdfContext.filename;
+        const pdfText = options.pdfContext.extractedText;
+
+        // Truncate very long PDF content to avoid context overflow
+        const maxPdfLength = 15000; // ~15K chars max
+        const truncatedText = pdfText.length > maxPdfLength
+          ? pdfText.substring(0, maxPdfLength) + '\n\n[... belge devami kisaltildi ...]'
+          : pdfText;
+
+        pdfContextSection = `\n\n--- ${pdfLabel}: ${pdfFilename} ---\n${truncatedText}\n--- BELGE SONU ---\n`;
+        console.log(`[PDF Context] Added ${truncatedText.length} chars from ${pdfFilename}`);
+      }
+
       let userPrompt: string;
 
       // Check if citation text should be disabled (sources shown but no [1], [2] in response)
@@ -903,7 +928,7 @@ export class RAGChatService {
         const fastModeInstruction = `\n\n${fastModeTemplate.replace(/{maxLength}/g, String(fastModeMaxLength))}`;
         console.log(`⚡ FAST MODE: Using maxLength=${fastModeMaxLength} characters`);
 
-        userPrompt = `${contextLabel}:\n${enhancedContext}${followUpInstruction}\n\n${questionLabel}: ${message}${fastModeInstruction}`;
+        userPrompt = `${contextLabel}:\n${enhancedContext}${pdfContextSection}${followUpInstruction}\n\n${questionLabel}: ${message}${fastModeInstruction}`;
       } else {
         // Normal mode with natural language summary instructions - loaded from settings
         // Supports {sourceCount} and {maxLength} placeholders for dynamic values
@@ -941,7 +966,7 @@ export class RAGChatService {
           .replace(/{sourceCount}/g, String(initialDisplayCount))
           .replace(/{maxLength}/g, String(maxSummaryLength))}`;
 
-        userPrompt = `${contextLabel}:\n${enhancedContext}\n\n${questionLabel}: ${message}${summaryInstruction}`;
+        userPrompt = `${contextLabel}:\n${enhancedContext}${pdfContextSection}\n\n${questionLabel}: ${message}${summaryInstruction}`;
       }
       console.log(` Best similarity score: ${(bestScore * 100).toFixed(1)}% (results sorted by relevance)`);
       console.log(`️ Sending temperature to LLM Manager: ${options.temperature} (type: ${typeof options.temperature})`);

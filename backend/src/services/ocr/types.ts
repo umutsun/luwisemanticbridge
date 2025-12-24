@@ -32,6 +32,7 @@ export interface OCROptions {
   detailLevel?: 'low' | 'high' | 'auto';
   maxPages?: number;
   enhanceImage?: boolean;
+  skipCache?: boolean; // Skip Redis cache (for ephemeral processing like chat PDF)
 }
 
 export interface OCRProviderConfig {

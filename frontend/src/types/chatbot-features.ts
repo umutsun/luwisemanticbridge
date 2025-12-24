@@ -36,6 +36,9 @@ export interface ChatbotFeatures {
   enableStreaming: boolean;               // Stream responses
   enableTypingIndicator: boolean;         // Show typing animation
   enableAutoScroll: boolean;              // Auto scroll to bottom
+
+  // PDF Upload
+  enablePdfUpload: boolean;               // Enable PDF file upload in chat
 }
 
 export interface ChatbotSettings {
@@ -92,7 +95,10 @@ export const defaultFeatures: ChatbotFeatures = {
   // Advanced
   enableStreaming: true,
   enableTypingIndicator: true,
-  enableAutoScroll: true
+  enableAutoScroll: true,
+
+  // PDF Upload
+  enablePdfUpload: false
 };
 
 /**

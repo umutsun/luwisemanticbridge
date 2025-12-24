@@ -119,6 +119,7 @@ interface Stats {
     total: number;
     embedded: number;
     pending: number;
+    failed?: number;
     ocr_processed: number;
     ocr_pending: number;
     under_review: number;
@@ -182,6 +183,13 @@ export default function DocumentManagerPage() {
   const [skippedLoading, setSkippedLoading] = useState(false);
   const [skippedCount, setSkippedCount] = useState(0);
   const [selectedSkippedIds, setSelectedSkippedIds] = useState<Set<number>>(new Set());
+
+  // Failed documents states
+  const [showFailedModal, setShowFailedModal] = useState(false);
+  const [failedDocuments, setFailedDocuments] = useState<any[]>([]);
+  const [failedLoading, setFailedLoading] = useState(false);
+  const [failedCount, setFailedCount] = useState(0);
+  const [selectedFailedIds, setSelectedFailedIds] = useState<Set<number>>(new Set());
 
   // Pagination state for documents
   const [documentsPage, setDocumentsPage] = useState(1);
@@ -559,6 +567,98 @@ export default function DocumentManagerPage() {
     } catch (error) {
       console.error('Failed to delete skipped:', error);
       toast({ title: 'Error', description: 'Failed to delete skipped records', variant: 'destructive' });
+    }
+  };
+
+  // Fetch failed documents (for modal display)
+  const fetchFailedDocuments = async () => {
+    setFailedLoading(true);
+    try {
+      const response = await fetch(`${API_CONFIG.baseUrl}/api/v2/documents/failed`, {
+        headers: { 'Authorization': `Bearer ${localStorage.getItem('accessToken')}` }
+      });
+      if (response.ok) {
+        const data = await response.json();
+        setFailedDocuments(data.documents || []);
+        setFailedCount(data.count || 0);
+        // Pre-select all
+        setSelectedFailedIds(new Set((data.documents || []).map((r: any) => r.id)));
+      }
+    } catch (error) {
+      console.error('Failed to fetch failed documents:', error);
+      toast({ title: 'Error', description: 'Failed to fetch failed documents', variant: 'destructive' });
+    } finally {
+      setFailedLoading(false);
+    }
+  };
+
+  // Retry selected failed documents
+  const handleRetryFailed = async () => {
+    if (selectedFailedIds.size === 0) return;
+
+    let retried = 0;
+    for (const id of Array.from(selectedFailedIds)) {
+      try {
+        const response = await fetch(`${API_CONFIG.baseUrl}/api/v2/documents/failed/${id}/retry`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${localStorage.getItem('accessToken')}`,
+            'Content-Type': 'application/json'
+          }
+        });
+        if (response.ok) {
+          retried++;
+          setFailedDocuments(prev => prev.filter(r => r.id !== id));
+        }
+      } catch (error) {
+        console.error(`Failed to retry document ${id}:`, error);
+      }
+    }
+
+    if (retried > 0) {
+      toast({ title: 'Queued', description: `${retried} document(s) queued for retry` });
+      setFailedCount(prev => prev - retried);
+      setSelectedFailedIds(new Set());
+      if (failedDocuments.length === retried) {
+        setShowFailedModal(false);
+      }
+      // Refresh stats
+      fetchStats();
+    }
+  };
+
+  // Delete selected failed documents
+  const handleDeleteFailed = async () => {
+    if (selectedFailedIds.size === 0) return;
+
+    let deleted = 0;
+    for (const id of Array.from(selectedFailedIds)) {
+      try {
+        const response = await fetch(`${API_CONFIG.baseUrl}/api/v2/documents/${id}`, {
+          method: 'DELETE',
+          headers: {
+            'Authorization': `Bearer ${localStorage.getItem('accessToken')}`
+          }
+        });
+        if (response.ok) {
+          deleted++;
+          setFailedDocuments(prev => prev.filter(r => r.id !== id));
+        }
+      } catch (error) {
+        console.error(`Failed to delete document ${id}:`, error);
+      }
+    }
+
+    if (deleted > 0) {
+      toast({ title: 'Deleted', description: `${deleted} document(s) deleted` });
+      setFailedCount(prev => prev - deleted);
+      setSelectedFailedIds(new Set());
+      if (failedDocuments.length === deleted) {
+        setShowFailedModal(false);
+      }
+      // Refresh documents list
+      fetchDocuments();
+      fetchStats();
     }
   };
 
@@ -3343,6 +3443,27 @@ export default function DocumentManagerPage() {
             </CardContent>
           </Card>
 
+          {/* Failed - Red (failed extractions) */}
+          {(stats.documents?.failed || 0) > 0 && (
+            <Card
+              className="bg-gradient-to-br from-red-50 to-orange-50 dark:from-red-950/20 dark:to-orange-950/20 border-red-200 dark:border-red-800 cursor-pointer hover:shadow-md transition-shadow"
+              onClick={() => { fetchFailedDocuments(); setShowFailedModal(true); }}
+            >
+              <CardContent className="p-3">
+                <div className="text-xs text-red-700 dark:text-red-300 font-medium mb-1 flex items-center gap-1">
+                  Başarısız
+                  <AlertCircle className="w-3 h-3 text-red-500" />
+                </div>
+                <div className="text-xl font-bold text-red-900 dark:text-red-100">
+                  {(stats.documents?.failed || 0).toLocaleString()}
+                </div>
+                <div className="text-xs text-red-600 dark:text-red-400 mt-0.5">
+                  <span className="opacity-75 text-xs">Tıkla → detaylar</span>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
           {/* Embedded - Violet (embedded + skipped combined) */}
           <Card className={`bg-gradient-to-br from-violet-50 to-purple-50 dark:from-violet-950/20 dark:to-purple-950/20 border-violet-200 dark:border-violet-800 ${skippedCount > 0 ? 'cursor-pointer hover:shadow-md transition-shadow' : ''}`}
             onClick={skippedCount > 0 ? () => { fetchSkippedEmbeddings(); setShowSkippedModal(true); } : undefined}
@@ -4920,6 +5041,130 @@ export default function DocumentManagerPage() {
                 >
                   <Trash2 className="w-4 h-4 mr-2" />
                   Delete Selected
+                </Button>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Failed Documents Modal */}
+      <Dialog open={showFailedModal} onOpenChange={(open) => {
+        setShowFailedModal(open);
+        if (!open) {
+          setFailedDocuments([]);
+          setSelectedFailedIds(new Set());
+        }
+      }}>
+        <DialogContent className="max-w-4xl max-h-[80vh] p-0 gap-0">
+          <DialogHeader className="px-6 py-4 border-b">
+            <DialogTitle className="flex items-center gap-2">
+              <AlertCircle className="w-5 h-5 text-red-500" />
+              Başarısız Dokümanlar ({failedCount})
+            </DialogTitle>
+            <DialogDescription>
+              Bu dokümanların metin çıkarma işlemi başarısız oldu. Harita/plan dosyaları OCR ile okunamaz.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="flex-1 overflow-hidden">
+            {failedLoading ? (
+              <div className="flex items-center justify-center py-12">
+                <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+              </div>
+            ) : failedDocuments.length === 0 ? (
+              <div className="text-center py-12">
+                <CheckCircle className="w-12 h-12 text-green-500 mx-auto mb-4" />
+                <p className="text-muted-foreground">Başarısız doküman yok</p>
+              </div>
+            ) : (
+              <ScrollArea className="h-[400px]">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead className="w-10">
+                        <Checkbox
+                          checked={selectedFailedIds.size === failedDocuments.length}
+                          onCheckedChange={(checked) => {
+                            if (checked) {
+                              setSelectedFailedIds(new Set(failedDocuments.map((r: any) => r.id)));
+                            } else {
+                              setSelectedFailedIds(new Set());
+                            }
+                          }}
+                        />
+                      </TableHead>
+                      <TableHead>Dosya Adı</TableHead>
+                      <TableHead>Tür</TableHead>
+                      <TableHead>Başarısızlık Nedeni</TableHead>
+                      <TableHead className="w-32">Tarih</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {failedDocuments.map((doc: any) => (
+                      <TableRow key={doc.id}>
+                        <TableCell>
+                          <Checkbox
+                            checked={selectedFailedIds.has(doc.id)}
+                            onCheckedChange={(checked) => {
+                              const newSet = new Set(selectedFailedIds);
+                              if (checked) {
+                                newSet.add(doc.id);
+                              } else {
+                                newSet.delete(doc.id);
+                              }
+                              setSelectedFailedIds(newSet);
+                            }}
+                          />
+                        </TableCell>
+                        <TableCell className="font-medium max-w-[200px] truncate" title={doc.title}>
+                          {doc.title}
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant="outline" className="text-xs">
+                            {doc.file_type || 'PDF'}
+                          </Badge>
+                        </TableCell>
+                        <TableCell>
+                          <span className="text-xs text-red-600 dark:text-red-400">
+                            {doc.failure_reason}
+                          </span>
+                        </TableCell>
+                        <TableCell className="text-xs text-muted-foreground">
+                          {doc.updated_at ? new Date(doc.updated_at).toLocaleDateString('tr-TR') : '-'}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </ScrollArea>
+            )}
+          </div>
+
+          {/* Footer Actions */}
+          {failedDocuments.length > 0 && (
+            <div className="flex items-center justify-between px-4 py-3 border-t bg-muted/30">
+              <span className="text-sm text-muted-foreground">
+                {selectedFailedIds.size} / {failedDocuments.length} seçili
+              </span>
+              <div className="flex gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleRetryFailed}
+                  disabled={selectedFailedIds.size === 0}
+                >
+                  <RefreshCw className="w-4 h-4 mr-2" />
+                  Tekrar Dene
+                </Button>
+                <Button
+                  variant="destructive"
+                  size="sm"
+                  onClick={handleDeleteFailed}
+                  disabled={selectedFailedIds.size === 0}
+                >
+                  <Trash2 className="w-4 h-4 mr-2" />
+                  Sil
                 </Button>
               </div>
             </div>

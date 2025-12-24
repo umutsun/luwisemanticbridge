@@ -699,6 +699,7 @@ router.get('/stats', authenticateToken, async (req: AuthenticatedRequest, res: R
         COUNT(CASE WHEN processing_status = 'embedded'
                    OR EXISTS (SELECT 1 FROM document_embeddings de WHERE de.document_id = documents.id)
               THEN 1 END)::int as embedded,
+        COUNT(CASE WHEN processing_status = 'failed' THEN 1 END)::int as failed,
         COUNT(CASE WHEN processing_status IN ('completed', 'analyzed', 'embedded')
                    OR content IS NOT NULL AND LENGTH(content) > 50
               THEN 1 END)::int as ocr_processed,
@@ -712,6 +713,7 @@ router.get('/stats', authenticateToken, async (req: AuthenticatedRequest, res: R
     const total = parseInt(doc.total) || 0;
     const pending = parseInt(doc.pending) || 0;
     const embedded = parseInt(doc.embedded) || 0;
+    const failed = parseInt(doc.failed) || 0;
     const ocrProcessed = parseInt(doc.ocr_processed) || 0;
     const ocrPending = parseInt(doc.ocr_pending) || 0;
 
@@ -814,6 +816,7 @@ router.get('/stats', authenticateToken, async (req: AuthenticatedRequest, res: R
         total: total,
         embedded: embedded,
         pending: pending,
+        failed: failed,
         ocr_processed: ocrProcessed,
         ocr_pending: ocrPending,
         under_review: 0
@@ -845,6 +848,96 @@ router.get('/stats', authenticateToken, async (req: AuthenticatedRequest, res: R
     console.error('Error fetching document stats:', error);
     res.status(500).json({
       error: 'Failed to fetch statistics',
+      message: error.message
+    });
+  }
+});
+
+// Get failed documents with failure reasons - REQUIRES AUTHENTICATION
+router.get('/failed', authenticateToken, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const result = await lsembPool.query(`
+      SELECT
+        id,
+        title,
+        file_path,
+        file_type,
+        processing_status,
+        metadata,
+        created_at,
+        updated_at
+      FROM documents
+      WHERE processing_status = 'failed'
+      ORDER BY updated_at DESC
+    `);
+
+    // Extract failure reason from metadata
+    const failedDocs = result.rows.map((doc: any) => {
+      let failureReason = 'Bilinmiyor';
+
+      if (doc.metadata) {
+        const meta = typeof doc.metadata === 'string' ? JSON.parse(doc.metadata) : doc.metadata;
+        if (meta.failure_reason) {
+          failureReason = meta.failure_reason;
+        } else if (meta.error) {
+          failureReason = meta.error;
+        }
+      }
+
+      return {
+        id: doc.id,
+        title: doc.title,
+        file_path: doc.file_path,
+        file_type: doc.file_type,
+        failure_reason: failureReason,
+        created_at: doc.created_at,
+        updated_at: doc.updated_at
+      };
+    });
+
+    res.json({
+      success: true,
+      count: failedDocs.length,
+      documents: failedDocs
+    });
+  } catch (error: any) {
+    console.error('Error fetching failed documents:', error);
+    res.status(500).json({
+      error: 'Failed to fetch failed documents',
+      message: error.message
+    });
+  }
+});
+
+// Retry failed document - REQUIRES AUTHENTICATION
+router.post('/failed/:id/retry', authenticateToken, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const { id } = req.params;
+
+    // Reset document status to pending for re-processing
+    const result = await lsembPool.query(`
+      UPDATE documents
+      SET
+        processing_status = 'pending',
+        metadata = metadata - 'failure_reason',
+        updated_at = NOW()
+      WHERE id = $1 AND processing_status = 'failed'
+      RETURNING id, title
+    `, [id]);
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Failed document not found' });
+    }
+
+    res.json({
+      success: true,
+      message: 'Document queued for retry',
+      document: result.rows[0]
+    });
+  } catch (error: any) {
+    console.error('Error retrying failed document:', error);
+    res.status(500).json({
+      error: 'Failed to retry document',
       message: error.message
     });
   }

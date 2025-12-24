@@ -8,9 +8,31 @@ import { chatWss, chatConnections } from '../server';
 import { MessageStorageService } from '../services/message-storage.service';
 import { v4 as uuidv4 } from 'uuid';
 import { questionGenerationService } from '../services/question-generation.service';
+import multer from 'multer';
+import { ocrRouterService } from '../services/ocr/ocr-router.service';
+import { settingsService } from '../services/settings.service';
+import crypto from 'crypto';
+import fs from 'fs/promises';
+import path from 'path';
 
 const router = Router();
 const subscriptionService = new SubscriptionService();
+
+// PDF upload multer configuration - memory storage for processing
+const pdfUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: {
+    fileSize: 50 * 1024 * 1024 // Hard limit 50MB (actual limit from settings)
+  },
+  fileFilter: (req, file, cb) => {
+    // Only accept PDF files
+    if (file.mimetype === 'application/pdf') {
+      cb(null, true);
+    } else {
+      cb(new Error('Sadece PDF dosyaları desteklenir'));
+    }
+  }
+});
 
 /**
  * Send a chat message - requires authentication and subscription
@@ -880,6 +902,191 @@ async function streamChatResponse(
     }
   }
 }
+
+/**
+ * Chat with PDF - Upload PDF, extract text via OCR, and get AI response
+ * Requires ragSettings.enablePdfUpload to be 'true'
+ */
+router.post('/api/v2/chat/with-pdf',
+  authenticateToken,
+  pdfUpload.single('pdf'),
+  async (req: AuthenticatedRequest, res: Response) => {
+    let tempFilePath: string | null = null;
+
+    try {
+      if (!req.user) {
+        return res.status(401).json({ error: 'Authentication required' });
+      }
+
+      const userId = req.user.userId;
+      const { message, conversationId, temperature, model } = req.body;
+
+      // Check if PDF upload feature is enabled
+      const pdfEnabled = await settingsService.getSetting('ragSettings.enablePdfUpload');
+      if (pdfEnabled !== 'true') {
+        return res.status(403).json({ error: 'PDF upload feature is not enabled' });
+      }
+
+      // Validate message
+      if (!message || message.trim() === '') {
+        return res.status(400).json({ error: 'Message is required' });
+      }
+
+      // Validate PDF file
+      if (!req.file) {
+        return res.status(400).json({ error: 'PDF file is required' });
+      }
+
+      const file = req.file;
+
+      // Check magic bytes for PDF
+      const header = file.buffer.slice(0, 5).toString();
+      if (!header.startsWith('%PDF-')) {
+        return res.status(400).json({ error: 'Invalid PDF file' });
+      }
+
+      // Get size limits from settings
+      const maxSizeMB = parseInt(await settingsService.getSetting('ragSettings.maxPdfSizeMB') || '10');
+      const maxPages = parseInt(await settingsService.getSetting('ragSettings.maxPdfPages') || '30');
+
+      // Check file size
+      const fileSizeMB = file.size / (1024 * 1024);
+      if (fileSizeMB > maxSizeMB) {
+        return res.status(413).json({
+          error: `Dosya boyutu ${maxSizeMB} MB'i gecemez`,
+          maxSize: maxSizeMB,
+          actualSize: fileSizeMB.toFixed(2)
+        });
+      }
+
+      console.log(`[PDF Chat] Processing: ${file.originalname} (${fileSizeMB.toFixed(2)} MB) for user ${userId}`);
+
+      // Generate file hash for caching
+      const fileHash = crypto.createHash('md5').update(file.buffer).digest('hex');
+
+      // Save temp file for OCR processing
+      const tempDir = path.join(process.cwd(), 'uploads', 'temp-pdf-chat');
+      await fs.mkdir(tempDir, { recursive: true });
+      tempFilePath = path.join(tempDir, `${fileHash}.pdf`);
+      await fs.writeFile(tempFilePath, file.buffer);
+
+      // Process OCR (skipCache: true - no Redis storage for chat PDFs)
+      console.log(`[PDF Chat] Starting OCR for: ${file.originalname}`);
+      const startTime = Date.now();
+
+      let ocrResult;
+      try {
+        ocrResult = await ocrRouterService.processDocument(tempFilePath, {
+          provider: 'auto',
+          language: 'tur',
+          maxPages: maxPages,
+          skipCache: true // Don't cache chat PDF content - ephemeral processing only
+        });
+      } catch (ocrError: any) {
+        console.error('[PDF Chat] OCR failed:', ocrError);
+        return res.status(500).json({
+          error: 'Dosya okunamadi, lutfen tekrar deneyin',
+          details: ocrError.message
+        });
+      }
+
+      const ocrTime = Date.now() - startTime;
+      console.log(`[PDF Chat] OCR completed in ${ocrTime}ms, extracted ${ocrResult.text?.length || 0} chars`);
+
+      // Clean up temp file
+      if (tempFilePath) {
+        await fs.unlink(tempFilePath).catch(() => {});
+        tempFilePath = null;
+      }
+
+      // Prepare PDF context for LLM
+      const pdfContext = {
+        filename: file.originalname,
+        extractedText: ocrResult.text || '',
+        pageCount: ocrResult.metadata?.pages || 1,
+        confidence: ocrResult.confidence || 0
+      };
+
+      // Process message with PDF context
+      const result = await ragChat.processMessage(message, conversationId, userId, {
+        temperature: temperature ? parseFloat(temperature) : undefined,
+        model,
+        pdfContext // Pass PDF context to RAG chat
+      });
+
+      // Build response with PDF metadata (no cacheKey - ephemeral processing)
+      const response = {
+        ...result,
+        pdfAttachment: {
+          filename: file.originalname,
+          size: file.size,
+          pageCount: pdfContext.pageCount
+        }
+      };
+
+      console.log(`[PDF Chat] Response generated for: ${file.originalname}`);
+
+      // Save chat interaction
+      setImmediate(async () => {
+        try {
+          await MessageStorageService.saveChatInteraction(
+            result.conversationId || uuidv4(),
+            userId,
+            message,
+            result.response,
+            [],
+            result.sources || [],
+            {
+              model: model || 'default',
+              pdfAttachment: {
+                filename: file.originalname,
+                size: file.size,
+                pageCount: pdfContext.pageCount
+              }
+            }
+          );
+        } catch (saveError) {
+          console.error('[PDF Chat] Failed to save interaction:', saveError);
+        }
+      });
+
+      res.json(response);
+
+    } catch (error: any) {
+      console.error('[PDF Chat] Error:', error);
+
+      // Clean up temp file on error
+      if (tempFilePath) {
+        await fs.unlink(tempFilePath).catch(() => {});
+      }
+
+      res.status(500).json({
+        error: 'PDF processing failed',
+        details: error instanceof Error ? error.message : 'Unknown error'
+      });
+    }
+  }
+);
+
+/**
+ * Get PDF upload settings
+ */
+router.get('/api/v2/chat/pdf-settings', authenticateToken, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const enabled = await settingsService.getSetting('ragSettings.enablePdfUpload') === 'true';
+    const maxSizeMB = parseInt(await settingsService.getSetting('ragSettings.maxPdfSizeMB') || '10');
+    const maxPages = parseInt(await settingsService.getSetting('ragSettings.maxPdfPages') || '30');
+
+    res.json({
+      enabled,
+      maxSizeMB,
+      maxPages
+    });
+  } catch (error: any) {
+    console.error('[PDF Settings] Error:', error);
+    res.status(500).json({ error: 'Failed to get PDF settings' });
+  }
+});
 
 /**
  * Chat service health check

@@ -2,7 +2,8 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { useChatStore } from '@/lib/store/chat-store';
-import { Message } from '../types/chat';
+import { Message, PdfAttachment } from '../types/chat';
+import { fetchWithAuth } from '@/lib/auth-fetch';
 
 // Simple UUID generator
 const generateUUID = () => {
@@ -83,6 +84,7 @@ export function useChatStream() {
 
   const sendMessage = async (
     content: string,
+    pdfFile?: File,
     options: ChatStreamOptions = {}
   ) => {
     if (!currentConversationId) {
@@ -90,9 +92,13 @@ export function useChatStream() {
       return;
     }
 
-    if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) {
-      setError('WebSocket connection not available');
-      return;
+    // Build PDF attachment info if file is provided
+    let pdfAttachment: PdfAttachment | undefined;
+    if (pdfFile) {
+      pdfAttachment = {
+        filename: pdfFile.name,
+        size: pdfFile.size,
+      };
     }
 
     // Create user message
@@ -101,6 +107,7 @@ export function useChatStream() {
       role: 'user',
       content,
       timestamp: new Date(),
+      pdfAttachment,
     };
 
     // Add user message to store
@@ -117,10 +124,55 @@ export function useChatStream() {
       timestamp: new Date(),
       isLoading: true,
       isStreaming: true,
+      status: pdfFile ? 'searching' : undefined,
+      statusMessage: pdfFile ? 'PDF isleniyor...' : undefined,
     };
     addMessage(assistantMessage);
 
     try {
+      // If PDF file is provided, use the PDF chat endpoint
+      if (pdfFile) {
+        const formData = new FormData();
+        formData.append('message', content);
+        formData.append('pdf', pdfFile);
+        formData.append('conversationId', currentConversationId);
+
+        const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8083';
+        const pdfResponse = await fetchWithAuth(`${apiUrl}/api/v2/chat/with-pdf`, {
+          method: 'POST',
+          body: formData,
+          // Note: Don't set Content-Type for FormData - browser will set it with boundary
+        });
+
+        if (!pdfResponse.ok) {
+          const errorData = await pdfResponse.json().catch(() => ({}));
+          throw new Error(errorData.error || `PDF processing failed: ${pdfResponse.status}`);
+        }
+
+        const pdfData = await pdfResponse.json();
+
+        // Update assistant message with response
+        updateMessage(assistantMessageId, {
+          content: pdfData.response,
+          sources: pdfData.sources,
+          relatedTopics: pdfData.relatedTopics,
+          pdfAttachment: pdfData.pdfAttachment,
+          isLoading: false,
+          isStreaming: false,
+          status: 'complete',
+        });
+
+        options.onComplete?.(pdfData.response);
+        setLoading(false);
+        return;
+      }
+
+      // Normal WebSocket streaming for non-PDF messages
+      if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) {
+        setError('WebSocket connection not available');
+        return;
+      }
+
       // Send message via API with streaming flag
       const response = await fetch('/api/chat/stream', {
         method: 'POST',

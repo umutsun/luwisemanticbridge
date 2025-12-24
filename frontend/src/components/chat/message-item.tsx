@@ -1,12 +1,19 @@
 'use client';
 
 import { cn } from '@/lib/utils';
-import { User, Bot } from 'lucide-react';
+import { User, Bot, FileText } from 'lucide-react';
 import { Message } from '@/types/chat';
 import { SourceCitation } from './source-citation';
 import { MessageSkeleton } from './message-skeleton';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+
+// Format file size for display
+const formatFileSize = (bytes: number): string => {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+};
 
 /**
  * Highlights repeating keywords in text with markup
@@ -139,8 +146,22 @@ export function MessageItem({ message }: MessageItemProps) {
         )}
         
         {isUser ? (
-          <div className="text-sm whitespace-pre-wrap">
-            {message.content}
+          <div>
+            <div className="text-sm whitespace-pre-wrap">
+              {message.content}
+            </div>
+            {/* PDF attachment badge for user messages */}
+            {message.pdfAttachment && (
+              <div className="flex items-center gap-1.5 mt-2 pt-2 border-t border-blue-400/30">
+                <FileText className="w-3.5 h-3.5 text-blue-100" />
+                <span className="text-xs text-blue-100 truncate max-w-[200px]" title={message.pdfAttachment.filename}>
+                  {message.pdfAttachment.filename}
+                </span>
+                <span className="text-xs text-blue-200/70">
+                  ({formatFileSize(message.pdfAttachment.size)})
+                </span>
+              </div>
+            )}
           </div>
         ) : (
           <div className={cn(

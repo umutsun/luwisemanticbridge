@@ -129,8 +129,9 @@ export class OCRRouterService {
 
       logger.info(` OCR başlatılıyor: ${path.basename(filePath)} (Provider: ${provider})`);
 
-      // Cache kontrolü
-      if (settings.cacheEnabled) {
+      // Cache kontrolü (skipCache option'ı yoksa)
+      const useCache = settings.cacheEnabled && !options.skipCache;
+      if (useCache) {
         const cached = await ocrCacheService.get(fileHash, provider, options.prompt);
 
         if (cached) {
@@ -150,8 +151,8 @@ export class OCRRouterService {
         settings
       );
 
-      // Cache'e kaydet
-      if (settings.cacheEnabled && result) {
+      // Cache'e kaydet (skipCache option'ı yoksa)
+      if (useCache && result) {
         await ocrCacheService.set(
           fileHash,
           provider,

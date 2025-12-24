@@ -12,9 +12,11 @@
 
 ---
 
-## Active Feature: None (Maintenance Mode)
+## Active Feature: 003-chat-pdf-upload
 
-Currently in maintenance/enhancement mode - no major feature development active.
+**Status**: In Progress
+**Started**: 2025-12-25
+**Description**: Chat interface'e PDF upload ve analiz özelliği. Kullanıcı PDF yükleyip soru sorabilecek (kira kontratı, tapu, mevzuat vb.).
 
 ---
 
@@ -42,6 +44,25 @@ Currently in maintenance/enhancement mode - no major feature development active.
 ---
 
 ## Tracked Features
+
+### 003-chat-pdf-upload
+- **Status**: In Progress
+- **Started**: 2025-12-25
+- **Files**:
+  - `specs/003-chat-pdf-upload/spec.md` (Feature specification)
+  - `plans/003-chat-pdf-upload/plan.md` (Implementation plan)
+  - `tasks/003-chat-pdf-upload/tasks.md` (Task breakdown)
+- **Description**: Chat'te PDF upload ve OCR analizi
+  - Paperclip butonu ile PDF seçimi
+  - Mevcut OCR altyapısı ile metin çıkarma
+  - LLM context'e PDF içeriği ekleme
+  - Settings'den enable/disable
+- **User Decisions**:
+  - Upload flow: PDF ve soru birlikte gönderilsin
+  - Limit: Tek seferde max 1 PDF
+  - Storage: Metadata DB'de, text Redis cache'de
+  - File types: Sadece PDF
+- **Notes**: Mobile responsive - ikonlar daha minimal olacak
 
 ### 001-schema-data-prompt-redesign
 - **Status**: Paused

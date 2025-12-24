@@ -5,7 +5,7 @@ import { Switch } from '@/components/ui/switch';
 import { Separator } from '@/components/ui/separator';
 import { useTranslation } from 'react-i18next';
 import { ChatbotFeatures } from '@/types/chatbot-features';
-import { Eye, Zap, BarChart3, Layout } from 'lucide-react';
+import { Eye, Zap, BarChart3, Layout, FileText } from 'lucide-react';
 
 interface FeatureTogglesProps {
   features: ChatbotFeatures;
@@ -117,6 +117,17 @@ export const FeatureToggles: React.FC<FeatureTogglesProps> = ({ features, onChan
           key: 'enableTypingIndicator',
           label: t('settings.features.typing', 'Typing Indicator'),
           description: t('settings.features.typingDesc', 'Show animated typing indicator')
+        }
+      ]
+    },
+    {
+      title: t('settings.features.pdfUpload', 'PDF Upload'),
+      icon: <FileText className="w-4 h-4" />,
+      features: [
+        {
+          key: 'enablePdfUpload',
+          label: t('settings.features.pdfUploadToggle', 'Chat PDF Upload'),
+          description: t('settings.features.pdfUploadDesc', 'Allow users to upload and analyze PDF documents in chat')
         }
       ]
     }
