@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, KeyboardEvent, useEffect, useCallback, useRef, ChangeEvent } from 'react';
-import { Send, Paperclip, Mic, Sparkles, RefreshCw, Loader2 } from 'lucide-react';
+import { Send, Paperclip, Sparkles, RefreshCw, Loader2 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { fetchWithAuth } from '@/lib/auth-fetch';
 import { PdfPreviewChip } from './pdf-preview-chip';
@@ -212,45 +212,39 @@ export function ChatInput({ onSend, disabled }: ChatInputProps) {
             ) : null}
           </div>
         )}
-        <div className="flex items-end gap-2 sm:gap-3 bg-white dark:bg-gray-800 rounded-2xl p-2 sm:p-3 shadow-lg border border-gray-200/80 dark:border-gray-700/80 backdrop-blur-sm">
-          {/* Paperclip button - only visible when PDF upload is enabled */}
-          {pdfSettings.enabled && (
-            <button
-              onClick={handlePaperclipClick}
-              disabled={disabled || !!pdfFile}
-              className="p-1.5 sm:p-2 text-gray-400 hover:text-blue-500 dark:text-gray-500 dark:hover:text-blue-400 transition-all duration-200 rounded-lg hover:bg-blue-50 dark:hover:bg-blue-900/20 group disabled:opacity-50 disabled:cursor-not-allowed"
-              title={pdfFile ? t('chatInput.pdfAttached', 'PDF eklendi') : t('chatInput.attachPdf', 'PDF ekle')}
-            >
-              <Paperclip className="w-4 h-4 sm:w-5 sm:h-5 group-hover:rotate-12 transition-transform duration-200" />
-            </button>
-          )}
-
+        <div className="flex items-end gap-2 bg-white dark:bg-gray-800 rounded-2xl p-2 sm:p-3 shadow-lg border border-gray-200/80 dark:border-gray-700/80 backdrop-blur-sm">
           <textarea
             value={message}
             onChange={(e) => setMessage(e.target.value)}
             onKeyDown={handleKeyPress}
             placeholder={pdfFile ? t('chatInput.askAboutPdf', 'Bu PDF hakkinda sorunuzu yazin...') : placeholder}
             disabled={disabled}
-            className="flex-1 min-h-[44px] sm:min-h-[52px] max-h-[160px] p-2 sm:p-3 bg-transparent resize-none focus:outline-none text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 disabled:opacity-50 transition-all duration-200 text-sm sm:text-base"
+            className="flex-1 min-h-[40px] sm:min-h-[44px] max-h-[120px] p-2 bg-transparent resize-none focus:outline-none text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 disabled:opacity-50 transition-all duration-200 text-sm"
             rows={1}
-            style={{ lineHeight: '1.6' }}
+            style={{ lineHeight: '1.5' }}
           />
 
-          <div className="flex gap-1 sm:gap-2">
-            <button
-              className="p-1.5 sm:p-2 text-gray-400 hover:text-purple-500 dark:text-gray-500 dark:hover:text-purple-400 transition-all duration-200 rounded-lg hover:bg-purple-50 dark:hover:bg-purple-900/20 group"
-              title={t('chatInput.voiceInput')}
-            >
-              <Mic className="w-4 h-4 sm:w-5 sm:h-5 group-hover:scale-110 transition-transform duration-200" />
-            </button>
+          {/* Action buttons - minimal, side by side */}
+          <div className="flex items-center gap-1">
+            {/* Paperclip button - only visible when PDF upload is enabled */}
+            {pdfSettings.enabled && (
+              <button
+                onClick={handlePaperclipClick}
+                disabled={disabled || !!pdfFile}
+                className="p-2 text-gray-400 hover:text-blue-500 dark:text-gray-500 dark:hover:text-blue-400 transition-colors rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                title={pdfFile ? t('chatInput.pdfAttached', 'PDF eklendi') : t('chatInput.attachPdf', 'PDF ekle')}
+              >
+                <Paperclip className="w-5 h-5" />
+              </button>
+            )}
 
             <button
               onClick={handleSend}
               disabled={disabled || !message.trim()}
-              className="p-2 sm:p-2.5 bg-gradient-to-r from-blue-500 to-blue-600 text-white rounded-xl hover:from-blue-600 hover:to-blue-700 disabled:opacity-40 disabled:cursor-not-allowed transition-all duration-200 transform hover:scale-105 disabled:hover:scale-100 shadow-lg hover:shadow-xl disabled:shadow-md active:scale-95"
+              className="p-2 text-gray-400 hover:text-blue-500 dark:text-gray-500 dark:hover:text-blue-400 transition-colors rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-30 disabled:cursor-not-allowed"
               title={t('chatInput.sendMessage')}
             >
-              <Send className="w-4 h-4 sm:w-5 sm:h-5" />
+              <Send className="w-5 h-5" />
             </button>
           </div>
         </div>
