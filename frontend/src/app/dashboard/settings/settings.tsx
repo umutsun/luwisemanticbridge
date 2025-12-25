@@ -2696,10 +2696,12 @@ function RAGSettings() {
         title: "Success",
         description: "Settings saved successfully",
       });
-    } catch (error) {
+    } catch (error: any) {
+      console.error('[RAG Settings] Save error:', error);
+      const errorMessage = error?.message || error?.toString() || 'Unknown error';
       toast({
         title: "Error",
-        description: "Failed to save settings",
+        description: `Failed to save settings: ${errorMessage}`,
         variant: "destructive",
       });
     } finally {

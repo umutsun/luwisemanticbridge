@@ -237,9 +237,8 @@ export async function updateAppSettings(settings: Partial<AppSettings>): Promise
 export async function updateSettingsCategory(category: string, settings: any): Promise<any> {
   try {
     console.log(`🔧 Updating ${category} settings:`, settings);
-    // Use direct fetch without authentication for settings
-    const baseURL = process.env.NEXT_PUBLIC_API_URL || `http://localhost:${process.env.NEXT_PUBLIC_API_PORT || '8083'}`;
-    const response = await fetch(`${baseURL}/api/v2/settings/${category}`, {
+    // Use relative path to leverage Next.js rewrites (avoids CORS issues)
+    const response = await fetch(`/api/v2/settings/${category}`, {
       method: 'PUT',
       headers: {
         'Content-Type': 'application/json',
