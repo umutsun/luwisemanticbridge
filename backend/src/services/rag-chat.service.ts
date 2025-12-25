@@ -874,14 +874,23 @@ ${questionLabel}: ${message}`;
 
       // Create enhanced context with actual content for better response generation
       // Now includes schema metadata for richer LLM context
-      const enhancedContext = searchResults.slice(0, initialDisplayCount).map((r, idx) => {
+      // 🔧 FIX: Limit context length to prevent model hallucination with small models
+      const maxContextLength = parseInt(settingsMap.get('ragSettings.maxContextLength') || '6000');
+      const maxExcerptLength = parseInt(settingsMap.get('ragSettings.maxExcerptLength') || '250');
+
+      let contextParts: string[] = [];
+      let currentContextLength = 0;
+
+      for (let idx = 0; idx < Math.min(initialDisplayCount, searchResults.length); idx++) {
+        const r = searchResults[idx];
         const score = Math.round(r.score || (r.similarity_score * 100) || 0);
         const title = r.title || `Kaynak ${idx + 1}`;
         // Get content - use excerpt, content, or title as fallback
         // Clean raw metadata content (handles crawler records with listing_id/url format)
         const rawContent = r.excerpt || r.content || '';
         const cleanedContent = this.cleanRawMetadataContent(rawContent, r.metadata);
-        let content = this.truncateExcerpt(cleanedContent, 300);
+        // 🔧 Use configurable excerpt length (smaller for smaller models)
+        let content = this.truncateExcerpt(cleanedContent, maxExcerptLength);
         // If still empty after truncation, use title as content
         if (!content || content.trim().length === 0) {
           content = `Bu kaynak "${title}" başlıklı bir belgedir.`;
@@ -899,8 +908,20 @@ ${questionLabel}: ${message}`;
           }
         }
 
-        return `${idx + 1}. ${title}${metadataLine}\n${content}\n`;
-      }).join('\n');
+        const part = `${idx + 1}. ${title}${metadataLine}\n${content}\n`;
+
+        // 🔧 Stop adding context if we've exceeded max length
+        if (currentContextLength + part.length > maxContextLength) {
+          console.log(`⚠️ Context truncated at source ${idx + 1}/${initialDisplayCount} (limit: ${maxContextLength} chars)`);
+          break;
+        }
+
+        contextParts.push(part);
+        currentContextLength += part.length;
+      }
+
+      const enhancedContext = contextParts.join('\n');
+      console.log(`📊 Context built: ${contextParts.length} sources, ${enhancedContext.length} chars (max: ${maxContextLength})`);
 
       // Check confidence levels based on similarity scores
       const bestScore = searchResults.length > 0 ? (searchResults[0].score || 0) : 0;
