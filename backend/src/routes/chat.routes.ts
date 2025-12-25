@@ -1110,26 +1110,30 @@ router.post('/api/v2/chat/with-pdf',
  */
 router.get('/api/v2/chat/pdf-settings', authenticateToken, async (req: AuthenticatedRequest, res: Response) => {
   try {
-    // Read from chatbot settings (where RAG Settings UI saves them)
-    // Settings are stored under 'chatbot' key, not 'chatbotSettings'
-    const chatbotSettingsRaw = await settingsService.getSetting('chatbot');
-    let chatbotSettings: any = {};
+    // Check multiple sources for PDF settings:
+    // 1. ragSettings.enablePdfUpload (RAG Settings tab)
+    // 2. chatbot.enablePdfUpload (legacy/chatbot JSON)
+    const ragSettingEnabled = await settingsService.getSetting('ragSettings.enablePdfUpload');
 
+    let chatbotEnabled = false;
+    const chatbotSettingsRaw = await settingsService.getSetting('chatbot');
     if (chatbotSettingsRaw) {
       try {
-        chatbotSettings = typeof chatbotSettingsRaw === 'string'
+        const chatbotSettings = typeof chatbotSettingsRaw === 'string'
           ? JSON.parse(chatbotSettingsRaw)
           : chatbotSettingsRaw;
+        chatbotEnabled = chatbotSettings?.enablePdfUpload === true;
       } catch (e) {
-        console.warn('[PDF Settings] Failed to parse chatbot settings:', e);
+        // Ignore parse errors
       }
     }
 
-    const enabled = chatbotSettings?.enablePdfUpload === true;
-    const maxSizeMB = 10; // Default, can be made configurable
-    const maxPages = 30; // Default, can be made configurable
+    // Enable if EITHER source says true
+    const enabled = ragSettingEnabled === 'true' || ragSettingEnabled === true || chatbotEnabled;
+    const maxSizeMB = parseInt(await settingsService.getSetting('ragSettings.maxPdfSizeMB') || '10');
+    const maxPages = parseInt(await settingsService.getSetting('ragSettings.maxPdfPages') || '30');
 
-    console.log('[PDF Settings] Loaded:', { enabled, maxSizeMB, maxPages });
+    console.log('[PDF Settings] Loaded:', { enabled, ragSettingEnabled, chatbotEnabled, maxSizeMB, maxPages });
 
     res.json({
       enabled,
@@ -1143,28 +1147,34 @@ router.get('/api/v2/chat/pdf-settings', authenticateToken, async (req: Authentic
 });
 
 /**
- * Get Voice Settings (TTS & STT) - reads from chatbot settings
+ * Get Voice Settings (TTS & STT) - reads from multiple sources
  */
 router.get('/api/v2/chat/voice-settings', authenticateToken, async (req: AuthenticatedRequest, res: Response) => {
   try {
-    // Read from chatbot settings (where RAG Settings UI saves them)
-    // Settings are stored under 'chatbot' key, not 'chatbotSettings'
-    const chatbotSettingsRaw = await settingsService.getSetting('chatbot');
-    let chatbotSettings: any = {};
+    // Check multiple sources for voice settings:
+    // 1. ragSettings.enableVoiceInput/Output (RAG Settings tab)
+    // 2. chatbot.enableVoiceInput/Output (legacy/chatbot JSON)
+    const ragVoiceInput = await settingsService.getSetting('ragSettings.enableVoiceInput');
+    const ragVoiceOutput = await settingsService.getSetting('ragSettings.enableVoiceOutput');
 
+    let chatbotVoiceInput = false;
+    let chatbotVoiceOutput = false;
+    const chatbotSettingsRaw = await settingsService.getSetting('chatbot');
     if (chatbotSettingsRaw) {
       try {
-        chatbotSettings = typeof chatbotSettingsRaw === 'string'
+        const chatbotSettings = typeof chatbotSettingsRaw === 'string'
           ? JSON.parse(chatbotSettingsRaw)
           : chatbotSettingsRaw;
+        chatbotVoiceInput = chatbotSettings?.enableVoiceInput === true;
+        chatbotVoiceOutput = chatbotSettings?.enableVoiceOutput === true;
       } catch (e) {
-        console.warn('[Voice Settings] Failed to parse chatbot settings:', e);
+        // Ignore parse errors
       }
     }
 
-    const enableVoiceInput = chatbotSettings?.enableVoiceInput === true;
-    const enableVoiceOutput = chatbotSettings?.enableVoiceOutput === true;
-    const enablePdfUpload = chatbotSettings?.enablePdfUpload === true;
+    // Enable if EITHER source says true
+    const enableVoiceInput = ragVoiceInput === 'true' || ragVoiceInput === true || chatbotVoiceInput;
+    const enableVoiceOutput = ragVoiceOutput === 'true' || ragVoiceOutput === true || chatbotVoiceOutput;
 
     // Additional voice settings (can be extended later)
     const ttsProvider = 'openai';
@@ -1172,12 +1182,11 @@ router.get('/api/v2/chat/voice-settings', authenticateToken, async (req: Authent
     const ttsSpeed = 1.0;
     const maxRecordingSeconds = 60;
 
-    console.log('[Voice Settings] Loaded:', { enableVoiceInput, enableVoiceOutput, enablePdfUpload });
+    console.log('[Voice Settings] Loaded:', { enableVoiceInput, enableVoiceOutput, ragVoiceInput, ragVoiceOutput });
 
     res.json({
       enableVoiceInput,
       enableVoiceOutput,
-      enablePdfUpload,
       ttsProvider,
       ttsVoice,
       ttsSpeed,
