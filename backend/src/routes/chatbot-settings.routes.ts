@@ -73,6 +73,10 @@ router.get('/settings', async (req: Request, res: Response) => {
       maxQuestionLength: chatbotData.maxQuestionLength || 500,
       questionTemplate: chatbotData.questionTemplate || 'Yaptığımız konuşmaya göre, şunu da merak ediyor olabilirsiniz: {question}',
       autoGenerateQuestions: chatbotData.autoGenerateQuestions || false,
+      // Chat Input Features
+      enablePdfUpload: chatbotData.enablePdfUpload || false,
+      enableVoiceInput: chatbotData.enableVoiceInput || false,
+      enableVoiceOutput: chatbotData.enableVoiceOutput || false,
       // Add app settings for login page
       app: {
         name: finalTitle,

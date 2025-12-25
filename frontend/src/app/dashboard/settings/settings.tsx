@@ -2644,7 +2644,11 @@ function RAGSettings() {
         maxResponseLength: tempChatbotConfig?.chatbot?.maxResponseLength,
         maxQuestionLength: tempChatbotConfig?.chatbot?.maxQuestionLength,
         questionTemplate: tempChatbotConfig?.chatbot?.questionTemplate,
-        autoGenerateQuestions: tempChatbotConfig?.chatbot?.autoGenerateQuestions
+        autoGenerateQuestions: tempChatbotConfig?.chatbot?.autoGenerateQuestions,
+        // Chat Input Features
+        enablePdfUpload: tempChatbotConfig?.chatbot?.enablePdfUpload ?? false,
+        enableVoiceInput: tempChatbotConfig?.chatbot?.enableVoiceInput ?? false,
+        enableVoiceOutput: tempChatbotConfig?.chatbot?.enableVoiceOutput ?? false
       };
 
       console.log('📤 [RAG SETTINGS SAVE] Saving chatbot settings:', {
