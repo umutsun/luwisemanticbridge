@@ -103,7 +103,8 @@ export default function MessagesPage() {
     try {
       setMessagesLoading(true);
       const token = localStorage.getItem('accessToken');
-      const response = await fetch(`${API_CONFIG.baseUrl}${API_CONFIG.endpoints.conversations}/${conversationId}/messages`, {
+      // Use /api/v2/chat/conversation/:id endpoint which returns conversation with messages
+      const response = await fetch(`${API_CONFIG.baseUrl}/api/v2/chat/conversation/${conversationId}`, {
         headers: token ? { 'Authorization': `Bearer ${token}` } : {}
       });
 
@@ -130,7 +131,7 @@ export default function MessagesPage() {
 
     try {
       const token = localStorage.getItem('accessToken');
-      const response = await fetch(`${API_CONFIG.baseUrl}${API_CONFIG.endpoints.conversations}/${conversationId}`, {
+      const response = await fetch(`${API_CONFIG.baseUrl}/api/v2/chat/conversation/${conversationId}`, {
         method: 'DELETE',
         headers: token ? { 'Authorization': `Bearer ${token}` } : {}
       });

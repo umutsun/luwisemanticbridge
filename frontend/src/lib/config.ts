@@ -14,7 +14,7 @@ export const API_CONFIG = {
 
     // Chat
     chat: '/api/v2/chat',
-    conversations: '/api/v2/conversations',
+    conversations: '/api/v2/chat/conversations',
     messages: '/api/v2/messages',
 
     // Documents

@@ -285,6 +285,43 @@ router.get('/api/v2/chat/conversation/:id', async (req: Request, res: Response) 
 });
 
 /**
+ * Delete a conversation and its messages
+ */
+router.delete('/api/v2/chat/conversation/:id', authenticateToken, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    if (!req.user) {
+      return res.status(401).json({ error: 'Authentication required' });
+    }
+
+    const { id } = req.params;
+    const userId = req.user.userId;
+
+    // Verify ownership
+    const checkQuery = 'SELECT user_id FROM conversations WHERE id = $1';
+    const checkResult = await dbConfig.query(checkQuery, [id]);
+
+    if (checkResult.rows.length === 0) {
+      return res.status(404).json({ error: 'Conversation not found' });
+    }
+
+    if (checkResult.rows[0].user_id !== userId && req.user.role !== 'admin') {
+      return res.status(403).json({ error: 'Not authorized to delete this conversation' });
+    }
+
+    // Delete messages first (foreign key constraint)
+    await dbConfig.query('DELETE FROM messages WHERE conversation_id = $1', [id]);
+
+    // Delete conversation
+    await dbConfig.query('DELETE FROM conversations WHERE id = $1', [id]);
+
+    res.json({ success: true, message: 'Conversation deleted' });
+  } catch (error: any) {
+    console.error('Delete conversation error:', error);
+    res.status(500).json({ error: 'Failed to delete conversation' });
+  }
+});
+
+/**
  * Get popular/suggested questions - LLM-generated schema-aware suggestions
  * Uses QuestionGenerationService to create diverse, context-aware questions
  * Results are cached for 30 minutes to reduce LLM calls
