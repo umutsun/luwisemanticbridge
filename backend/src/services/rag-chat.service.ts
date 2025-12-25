@@ -383,6 +383,104 @@ export class RAGChatService {
     return toneInstructions[tone.toLowerCase() as keyof typeof toneInstructions] || toneInstructions.professional;
   }
 
+  /**
+   * Process a message with PDF content ONLY (no RAG search)
+   * Used when user uploads a PDF - the PDF content is the sole context
+   */
+  private async processPdfOnlyMessage(
+    message: string,
+    conversationId: string,
+    userId: string,
+    systemPrompt: string,
+    options: ChatOptions
+  ) {
+    const pdfContext = options.pdfContext!;
+    const llmManager = LLMManager.getInstance();
+
+    // Batch fetch all PDF-related settings
+    const settingsKeys = [
+      'response_language',
+      'llmSettings.activeChatModel',
+      'ragSettings.pdfInstructionTr',
+      'ragSettings.pdfInstructionEn',
+      'ragSettings.pdfMaxLength'
+    ];
+
+    const settingsResult = await pool.query(
+      `SELECT key, value FROM settings WHERE key = ANY($1)`,
+      [settingsKeys]
+    );
+
+    const settingsMap = new Map(settingsResult.rows.map(r => [r.key, r.value]));
+
+    const responseLanguage = settingsMap.get('response_language') || 'tr';
+    const activeModel = settingsMap.get('llmSettings.activeChatModel') || 'anthropic/claude-3-5-sonnet-20241022';
+
+    // Truncate PDF content to avoid context overflow - configurable from settings
+    const maxPdfLength = parseInt(settingsMap.get('ragSettings.pdfMaxLength') || '20000');
+    let pdfText = pdfContext.extractedText;
+    if (pdfText.length > maxPdfLength) {
+      pdfText = pdfText.substring(0, maxPdfLength) + '\n\n[... belgenin geri kalani kisaltildi ...]';
+    }
+
+    // Build PDF-focused prompt - instruction loaded from settings
+    const pdfLabel = responseLanguage === 'en' ? 'DOCUMENT CONTENT' : 'BELGE ICERIGI';
+    const questionLabel = responseLanguage === 'en' ? 'USER QUESTION' : 'KULLANICI SORUSU';
+
+    // Default instructions (used if not configured in settings)
+    const defaultInstructionTr = `Kullanicinin yuklediği bir belgeyi inceliyorsun. Once belgenin ne hakkinda olduğunu kısaca acıkla (1-2 cumle), sonra kullanicinin sorusunu SADECE belge icerigine dayanarak yanitla. Soru belgeden cevaplanamıyorsa bunu acikca belirt.`;
+    const defaultInstructionEn = `You are analyzing a document the user has uploaded. First, briefly describe what the document is about (1-2 sentences), then answer the user's question based ONLY on the document content. If the question cannot be answered from the document, say so clearly.`;
+
+    const pdfInstruction = responseLanguage === 'en'
+      ? (settingsMap.get('ragSettings.pdfInstructionEn') || defaultInstructionEn)
+      : (settingsMap.get('ragSettings.pdfInstructionTr') || defaultInstructionTr);
+
+    const userPrompt = `${pdfInstruction}
+
+--- ${pdfLabel}: ${pdfContext.filename} ---
+${pdfText}
+--- BELGE SONU ---
+
+${questionLabel}: ${message}`;
+
+    console.log(`[PDF Mode] Sending ${pdfText.length} chars from PDF to LLM (instruction from ${settingsMap.has('ragSettings.pdfInstructionTr') ? 'settings' : 'default'})`);
+
+    // Extract provider from model
+    const providerFromModel = llmManager.extractProviderFromModel(activeModel);
+
+    // Generate response
+    const response = await llmManager.generateChatResponse(
+      userPrompt,
+      {
+        temperature: options.temperature,
+        maxTokens: options.maxTokens || 2000,
+        systemPrompt: systemPrompt,
+        preferredProvider: providerFromModel
+      }
+    );
+
+    // Save message to conversation
+    try {
+      await this.saveMessage(conversationId, 'user', message, { pdfFilename: pdfContext.filename });
+      await this.saveMessage(conversationId, 'assistant', response.content, {
+        model: activeModel,
+        pdfFilename: pdfContext.filename
+      });
+    } catch (saveError) {
+      console.error('[PDF Mode] Failed to save messages:', saveError);
+    }
+
+    console.log(`[PDF Mode] Response generated for: ${pdfContext.filename}`);
+
+    return {
+      response: response.content,
+      sources: [], // No RAG sources in PDF-only mode
+      conversationId: conversationId,
+      pdfMode: true,
+      pdfFilename: pdfContext.filename
+    };
+  }
+
   private async getSystemPrompt(): Promise<string> {
     let basePrompt = '';
     let llmGuide = '';
@@ -558,6 +656,13 @@ export class RAGChatService {
       // Get system prompt from database or use default
       const systemPrompt = options.systemPrompt || await this.getSystemPrompt();
       console.log(` System Prompt loaded (length: ${systemPrompt?.length || 0} chars)`);
+
+      // PDF-ONLY MODE: If user uploaded a PDF, skip RAG search entirely
+      // The PDF content IS the context - no need for semantic search
+      if (options.pdfContext && options.pdfContext.extractedText) {
+        console.log(`[PDF Mode] User uploaded PDF: ${options.pdfContext.filename}, using PDF content as sole context`);
+        return this.processPdfOnlyMessage(message, convId, userId, systemPrompt, options);
+      }
 
       // 2. Search for relevant documents using configured source
       // Check environment variable first, then database setting
@@ -863,25 +968,9 @@ export class RAGChatService {
       // Let LLM generate response, but add instruction for partial matches
 
       // Generate user message with context (NOT including system prompt - it goes separately)
+      // NOTE: PDF-only mode is handled separately by processPdfOnlyMessage() at the start of processMessage()
       const contextLabel = responseLanguage === 'en' ? 'CONTEXT INFORMATION' : 'BAĞLAM BİLGİLERİ';
       const questionLabel = responseLanguage === 'en' ? 'QUESTION' : 'SORU';
-
-      // Build PDF context section if provided
-      let pdfContextSection = '';
-      if (options.pdfContext) {
-        const pdfLabel = responseLanguage === 'en' ? 'UPLOADED DOCUMENT' : 'YUKLENEN BELGE';
-        const pdfFilename = options.pdfContext.filename;
-        const pdfText = options.pdfContext.extractedText;
-
-        // Truncate very long PDF content to avoid context overflow
-        const maxPdfLength = 15000; // ~15K chars max
-        const truncatedText = pdfText.length > maxPdfLength
-          ? pdfText.substring(0, maxPdfLength) + '\n\n[... belge devami kisaltildi ...]'
-          : pdfText;
-
-        pdfContextSection = `\n\n--- ${pdfLabel}: ${pdfFilename} ---\n${truncatedText}\n--- BELGE SONU ---\n`;
-        console.log(`[PDF Context] Added ${truncatedText.length} chars from ${pdfFilename}`);
-      }
 
       let userPrompt: string;
 
@@ -928,7 +1017,7 @@ export class RAGChatService {
         const fastModeInstruction = `\n\n${fastModeTemplate.replace(/{maxLength}/g, String(fastModeMaxLength))}`;
         console.log(`⚡ FAST MODE: Using maxLength=${fastModeMaxLength} characters`);
 
-        userPrompt = `${contextLabel}:\n${enhancedContext}${pdfContextSection}${followUpInstruction}\n\n${questionLabel}: ${message}${fastModeInstruction}`;
+        userPrompt = `${contextLabel}:\n${enhancedContext}${followUpInstruction}\n\n${questionLabel}: ${message}${fastModeInstruction}`;
       } else {
         // Normal mode with natural language summary instructions - loaded from settings
         // Supports {sourceCount} and {maxLength} placeholders for dynamic values
@@ -966,7 +1055,7 @@ export class RAGChatService {
           .replace(/{sourceCount}/g, String(initialDisplayCount))
           .replace(/{maxLength}/g, String(maxSummaryLength))}`;
 
-        userPrompt = `${contextLabel}:\n${enhancedContext}${pdfContextSection}\n\n${questionLabel}: ${message}${summaryInstruction}`;
+        userPrompt = `${contextLabel}:\n${enhancedContext}\n\n${questionLabel}: ${message}${summaryInstruction}`;
       }
       console.log(` Best similarity score: ${(bestScore * 100).toFixed(1)}% (results sorted by relevance)`);
       console.log(`️ Sending temperature to LLM Manager: ${options.temperature} (type: ${typeof options.temperature})`);

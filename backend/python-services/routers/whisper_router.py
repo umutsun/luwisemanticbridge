@@ -13,7 +13,7 @@ from loguru import logger
 from services.whisper_service import get_whisper_service
 from services.youtube_service import get_youtube_service
 
-router = APIRouter(prefix="/whisper", tags=["whisper"])
+router = APIRouter(tags=["whisper"])  # prefix provided by main.py (/api/python/whisper)
 
 # Language-specific optimization prompts
 LANGUAGE_PROMPTS = {
