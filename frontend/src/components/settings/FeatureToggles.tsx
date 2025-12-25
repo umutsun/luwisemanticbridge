@@ -5,7 +5,7 @@ import { Switch } from '@/components/ui/switch';
 import { Separator } from '@/components/ui/separator';
 import { useTranslation } from 'react-i18next';
 import { ChatbotFeatures } from '@/types/chatbot-features';
-import { Eye, Zap, BarChart3, Layout, FileText, Mic } from 'lucide-react';
+import { Eye, Zap, BarChart3, Layout } from 'lucide-react';
 
 interface FeatureTogglesProps {
   features: ChatbotFeatures;
@@ -120,33 +120,6 @@ export const FeatureToggles: React.FC<FeatureTogglesProps> = ({ features, onChan
         }
       ]
     },
-    {
-      title: t('settings.features.pdfUpload', 'PDF Upload'),
-      icon: <FileText className="w-4 h-4" />,
-      features: [
-        {
-          key: 'enablePdfUpload',
-          label: t('settings.features.pdfUploadToggle', 'Chat PDF Upload'),
-          description: t('settings.features.pdfUploadDesc', 'Allow users to upload and analyze PDF documents in chat')
-        }
-      ]
-    },
-    {
-      title: t('settings.features.voice', 'Voice Features'),
-      icon: <Mic className="w-4 h-4" />,
-      features: [
-        {
-          key: 'enableVoiceInput',
-          label: t('settings.features.voiceInput', 'Voice Input (STT)'),
-          description: t('settings.features.voiceInputDesc', 'Allow users to send messages using their microphone')
-        },
-        {
-          key: 'enableVoiceOutput',
-          label: t('settings.features.voiceOutput', 'Voice Output (TTS)'),
-          description: t('settings.features.voiceOutputDesc', 'Allow users to listen to AI responses')
-        }
-      ]
-    }
   ];
 
   return (

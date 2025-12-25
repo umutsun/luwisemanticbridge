@@ -3270,6 +3270,60 @@ function RAGSettings() {
               </div>
 
               {/* Note: Max/Min Results are configured in RAG Settings tab */}
+
+              {/* Chat Input Features */}
+              <div className="space-y-4 pt-4 border-t">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h3 className="text-lg font-medium">Chat Input Features</h3>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Additional input methods for chat
+                    </p>
+                  </div>
+                </div>
+
+                {/* File Attachment */}
+                <div className="flex items-center justify-between py-2">
+                  <div className="flex-1">
+                    <Label>File Attachment (PDF)</Label>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Allow users to upload and analyze PDF documents in chat
+                    </p>
+                  </div>
+                  <Switch
+                    checked={tempChatbotConfig?.chatbot?.enablePdfUpload ?? false}
+                    onCheckedChange={(checked) => updateChatbotSetting('enablePdfUpload', checked)}
+                  />
+                </div>
+
+                {/* Voice Input (STT) */}
+                <div className="flex items-center justify-between py-2">
+                  <div className="flex-1">
+                    <Label>Voice Input (STT)</Label>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Allow users to send messages using their microphone
+                    </p>
+                  </div>
+                  <Switch
+                    checked={tempChatbotConfig?.chatbot?.enableVoiceInput ?? false}
+                    onCheckedChange={(checked) => updateChatbotSetting('enableVoiceInput', checked)}
+                  />
+                </div>
+
+                {/* Voice Output (TTS) */}
+                <div className="flex items-center justify-between py-2">
+                  <div className="flex-1">
+                    <Label>Voice Output (TTS)</Label>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Allow users to listen to AI responses
+                    </p>
+                  </div>
+                  <Switch
+                    checked={tempChatbotConfig?.chatbot?.enableVoiceOutput ?? false}
+                    onCheckedChange={(checked) => updateChatbotSetting('enableVoiceOutput', checked)}
+                  />
+                </div>
+              </div>
             </CardContent>
           </Card>
 

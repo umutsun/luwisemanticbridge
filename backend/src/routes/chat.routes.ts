@@ -1106,13 +1106,29 @@ router.post('/api/v2/chat/with-pdf',
 );
 
 /**
- * Get PDF upload settings
+ * Get PDF upload settings - reads from chatbot settings
  */
 router.get('/api/v2/chat/pdf-settings', authenticateToken, async (req: AuthenticatedRequest, res: Response) => {
   try {
-    const enabled = await settingsService.getSetting('ragSettings.enablePdfUpload') === 'true';
-    const maxSizeMB = parseInt(await settingsService.getSetting('ragSettings.maxPdfSizeMB') || '10');
-    const maxPages = parseInt(await settingsService.getSetting('ragSettings.maxPdfPages') || '30');
+    // Read from chatbot settings (where RAG Settings UI saves them)
+    const chatbotSettingsRaw = await settingsService.getSetting('chatbotSettings');
+    let chatbotSettings: any = {};
+
+    if (chatbotSettingsRaw) {
+      try {
+        chatbotSettings = typeof chatbotSettingsRaw === 'string'
+          ? JSON.parse(chatbotSettingsRaw)
+          : chatbotSettingsRaw;
+      } catch (e) {
+        console.warn('[PDF Settings] Failed to parse chatbot settings:', e);
+      }
+    }
+
+    const enabled = chatbotSettings?.enablePdfUpload === true;
+    const maxSizeMB = 10; // Default, can be made configurable
+    const maxPages = 30; // Default, can be made configurable
+
+    console.log('[PDF Settings] Loaded:', { enabled, maxSizeMB, maxPages });
 
     res.json({
       enabled,
@@ -1126,20 +1142,40 @@ router.get('/api/v2/chat/pdf-settings', authenticateToken, async (req: Authentic
 });
 
 /**
- * Get Voice Settings (TTS & STT)
+ * Get Voice Settings (TTS & STT) - reads from chatbot settings
  */
 router.get('/api/v2/chat/voice-settings', authenticateToken, async (req: AuthenticatedRequest, res: Response) => {
   try {
-    const enableVoiceInput = await settingsService.getSetting('voiceSettings.enableVoiceInput') === 'true';
-    const enableVoiceOutput = await settingsService.getSetting('voiceSettings.enableVoiceOutput') === 'true';
-    const ttsProvider = await settingsService.getSetting('voiceSettings.ttsProvider') || 'openai';
-    const ttsVoice = await settingsService.getSetting('voiceSettings.ttsVoice') || 'alloy';
-    const ttsSpeed = parseFloat(await settingsService.getSetting('voiceSettings.ttsSpeed') || '1.0');
-    const maxRecordingSeconds = parseInt(await settingsService.getSetting('voiceSettings.maxRecordingSeconds') || '60');
+    // Read from chatbot settings (where RAG Settings UI saves them)
+    const chatbotSettingsRaw = await settingsService.getSetting('chatbotSettings');
+    let chatbotSettings: any = {};
+
+    if (chatbotSettingsRaw) {
+      try {
+        chatbotSettings = typeof chatbotSettingsRaw === 'string'
+          ? JSON.parse(chatbotSettingsRaw)
+          : chatbotSettingsRaw;
+      } catch (e) {
+        console.warn('[Voice Settings] Failed to parse chatbot settings:', e);
+      }
+    }
+
+    const enableVoiceInput = chatbotSettings?.enableVoiceInput === true;
+    const enableVoiceOutput = chatbotSettings?.enableVoiceOutput === true;
+    const enablePdfUpload = chatbotSettings?.enablePdfUpload === true;
+
+    // Additional voice settings (can be extended later)
+    const ttsProvider = 'openai';
+    const ttsVoice = 'alloy';
+    const ttsSpeed = 1.0;
+    const maxRecordingSeconds = 60;
+
+    console.log('[Voice Settings] Loaded:', { enableVoiceInput, enableVoiceOutput, enablePdfUpload });
 
     res.json({
       enableVoiceInput,
       enableVoiceOutput,
+      enablePdfUpload,
       ttsProvider,
       ttsVoice,
       ttsSpeed,
