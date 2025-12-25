@@ -2600,7 +2600,11 @@ function RAGSettings() {
           maxResponseLength: chatbotResponse.maxResponseLength,
           maxQuestionLength: chatbotResponse.maxQuestionLength,
           questionTemplate: chatbotResponse.questionTemplate,
-          autoGenerateQuestions: chatbotResponse.autoGenerateQuestions
+          autoGenerateQuestions: chatbotResponse.autoGenerateQuestions,
+          // Chat Input Features
+          enablePdfUpload: chatbotResponse.enablePdfUpload,
+          enableVoiceInput: chatbotResponse.enableVoiceInput,
+          enableVoiceOutput: chatbotResponse.enableVoiceOutput
         }
       };
 
