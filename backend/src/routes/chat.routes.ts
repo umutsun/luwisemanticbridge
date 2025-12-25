@@ -1111,7 +1111,8 @@ router.post('/api/v2/chat/with-pdf',
 router.get('/api/v2/chat/pdf-settings', authenticateToken, async (req: AuthenticatedRequest, res: Response) => {
   try {
     // Read from chatbot settings (where RAG Settings UI saves them)
-    const chatbotSettingsRaw = await settingsService.getSetting('chatbotSettings');
+    // Settings are stored under 'chatbot' key, not 'chatbotSettings'
+    const chatbotSettingsRaw = await settingsService.getSetting('chatbot');
     let chatbotSettings: any = {};
 
     if (chatbotSettingsRaw) {
@@ -1147,7 +1148,8 @@ router.get('/api/v2/chat/pdf-settings', authenticateToken, async (req: Authentic
 router.get('/api/v2/chat/voice-settings', authenticateToken, async (req: AuthenticatedRequest, res: Response) => {
   try {
     // Read from chatbot settings (where RAG Settings UI saves them)
-    const chatbotSettingsRaw = await settingsService.getSetting('chatbotSettings');
+    // Settings are stored under 'chatbot' key, not 'chatbotSettings'
+    const chatbotSettingsRaw = await settingsService.getSetting('chatbot');
     let chatbotSettings: any = {};
 
     if (chatbotSettingsRaw) {
