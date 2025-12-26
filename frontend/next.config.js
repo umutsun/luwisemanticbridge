@@ -2,6 +2,9 @@
 const nextConfig = {
   reactStrictMode: true,
 
+  // Enable source maps in production for debugging
+  productionBrowserSourceMaps: true,
+
   // Optimize images
   images: {
     domains: ['localhost'],
