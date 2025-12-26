@@ -493,30 +493,7 @@ export default function DocumentManagerPage() {
     }
   };
 
-  // Polling for embedding job progress (2 second interval when active)
-  useEffect(() => {
-    // Initial fetch
-    fetchEmbeddingProgress();
-
-    const interval = setInterval(() => {
-      if (embeddingJob?.status === 'processing' || embeddingJob?.status === 'paused') {
-        fetchEmbeddingProgress();
-      }
-    }, 2000);
-
-    return () => clearInterval(interval);
-  }, [embeddingJob?.status]);
-
-  // Polling for stats when embedding job is active (10 second interval)
-  useEffect(() => {
-    if (!embeddingJob || embeddingJob.status !== 'processing') return;
-
-    const interval = setInterval(() => {
-      fetchStats();
-    }, 10000);
-
-    return () => clearInterval(interval);
-  }, [embeddingJob?.status]);
+  // NOTE: embeddingJob polling useEffects moved after embeddingJob state declaration (line ~2111)
 
   // Fetch skipped embeddings (for modal display)
   const fetchSkippedEmbeddings = async () => {
@@ -2109,6 +2086,32 @@ export default function DocumentManagerPage() {
     currentTable: string | null;
     processingSpeed: number;
   } | null>(null);
+
+  // Polling for embedding job progress (2 second interval when active)
+  // NOTE: This useEffect must be AFTER embeddingJob state declaration
+  useEffect(() => {
+    // Initial fetch
+    fetchEmbeddingProgress();
+
+    const interval = setInterval(() => {
+      if (embeddingJob?.status === 'processing' || embeddingJob?.status === 'paused') {
+        fetchEmbeddingProgress();
+      }
+    }, 2000);
+
+    return () => clearInterval(interval);
+  }, [embeddingJob?.status]);
+
+  // Polling for stats when embedding job is active (10 second interval)
+  useEffect(() => {
+    if (!embeddingJob || embeddingJob.status !== 'processing') return;
+
+    const interval = setInterval(() => {
+      fetchStats();
+    }, 10000);
+
+    return () => clearInterval(interval);
+  }, [embeddingJob?.status]);
 
   // WebSocket for batch job progress
   useEffect(() => {
