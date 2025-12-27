@@ -1,45 +1,44 @@
 'use client';
 
-import { Skeleton } from '@/components/ui/skeleton';
-
 interface MessageSkeletonProps {
-  type?: 'searching' | 'generating' | 'default';
-  message?: string; // Keeping for backward compatibility but not using
+  type?: 'searching' | 'generating' | 'reading-document' | 'default';
+  message?: string;
 }
 
 export function MessageSkeleton({ type = 'default', message }: MessageSkeletonProps) {
+  // Gradient colors based on type
+  const getGradientClass = () => {
+    switch (type) {
+      case 'reading-document':
+        return 'from-emerald-400 via-teal-400 to-cyan-400';
+      case 'searching':
+        return 'from-blue-400 via-cyan-400 to-teal-400';
+      case 'generating':
+        return 'from-purple-400 via-pink-400 to-rose-400';
+      default:
+        return 'from-indigo-400 via-purple-400 to-pink-400';
+    }
+  };
+
+  const gradientClass = getGradientClass();
+
   return (
-    <div className="flex gap-3 p-4 animate-in fade-in-0 duration-200 max-w-full overflow-hidden">
-      <div className="flex-1 min-w-0 space-y-3">
-        {/* Status message removed - only skeleton animation */}
-
-        {/* Response skeleton lines */}
-        <div className="space-y-2">
-          <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded-md animate-pulse max-w-full" style={{ width: '85%' }} />
-          <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded-md animate-pulse max-w-full" style={{ width: '95%' }} />
-          <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded-md animate-pulse max-w-full" style={{ width: '75%' }} />
-          <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded-md animate-pulse max-w-full" style={{ width: '90%' }} />
-        </div>
-
-        {/* Sources skeleton */}
-        <div className="space-y-2 pt-2">
-          <div className="flex items-center gap-2">
-            <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded-md animate-pulse w-20" />
-          </div>
-          {[1, 2, 3].map((i) => (
-            <div key={i} className="flex gap-3 p-3 rounded-lg bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700">
-              <div className="w-6 h-6 bg-gray-200 dark:bg-gray-700 rounded-full flex-shrink-0 animate-pulse" />
-              <div className="flex-1 min-w-0 space-y-1">
-                <div className="h-3.5 bg-gray-200 dark:bg-gray-700 rounded-md animate-pulse truncate" style={{ width: '80%' }} />
-                <div className="h-3 bg-gray-200 dark:bg-gray-700 rounded-md animate-pulse truncate" style={{ width: '95%' }} />
-                <div className="h-3 bg-gray-200 dark:bg-gray-700 rounded-md animate-pulse w-full" />
-              </div>
-              <div className="flex items-center gap-1 flex-shrink-0">
-                <div className="h-2 bg-gray-200 dark:bg-gray-700 rounded-full animate-pulse w-8" />
-                <div className="h-5 bg-gray-200 dark:bg-gray-700 rounded-md animate-pulse w-12" />
-              </div>
-            </div>
-          ))}
+    <div className="flex gap-3 p-4 animate-in fade-in-0 duration-300">
+      <div className="flex-1 space-y-3">
+        {/* Colorful animated skeleton lines */}
+        <div className="space-y-2.5">
+          <div
+            className={`h-4 rounded-full bg-gradient-to-r ${gradientClass} opacity-60 animate-pulse`}
+            style={{ width: '90%' }}
+          />
+          <div
+            className={`h-4 rounded-full bg-gradient-to-r ${gradientClass} opacity-50 animate-pulse`}
+            style={{ width: '75%', animationDelay: '150ms' }}
+          />
+          <div
+            className={`h-4 rounded-full bg-gradient-to-r ${gradientClass} opacity-40 animate-pulse`}
+            style={{ width: '60%', animationDelay: '300ms' }}
+          />
         </div>
       </div>
     </div>

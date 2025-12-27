@@ -1,7 +1,7 @@
 'use client';
 
 interface MessageSkeletonProps {
-  type?: 'searching' | 'generating' | 'default';
+  type?: 'reading-document' | 'searching' | 'generating' | 'default';
   message?: string;
 }
 
@@ -9,6 +9,8 @@ export function MessageSkeleton({ type = 'default', message }: MessageSkeletonPr
   // Gradient colors based on type
   const getGradientClass = () => {
     switch (type) {
+      case 'reading-document':
+        return 'from-emerald-400 via-teal-400 to-cyan-400';
       case 'searching':
         return 'from-blue-400 via-cyan-400 to-teal-400';
       case 'generating':

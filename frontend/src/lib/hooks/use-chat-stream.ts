@@ -124,8 +124,8 @@ export function useChatStream() {
       timestamp: new Date(),
       isLoading: true,
       isStreaming: true,
-      status: pdfFile ? 'searching' : undefined,
-      statusMessage: pdfFile ? 'PDF isleniyor...' : undefined,
+      status: pdfFile ? 'reading-document' : undefined,
+      statusMessage: pdfFile ? 'Doküman okunuyor...' : undefined,
     };
     addMessage(assistantMessage);
 

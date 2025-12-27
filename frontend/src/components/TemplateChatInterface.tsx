@@ -136,6 +136,13 @@ export default function TemplateChatInterface(props: any) {
         <style dangerouslySetInnerHTML={{ __html: templateConfig.customCSS }} />
       )}
 
+      {/* Template name indicator for admins - bottom left corner */}
+      {templateConfig?.id && (
+        <div className="fixed bottom-2 left-2 z-50 px-2 py-1 text-[10px] font-mono bg-black/50 text-white/70 rounded backdrop-blur-sm pointer-events-none select-none">
+          {templateConfig.id}
+        </div>
+      )}
+
       {/* Render the loaded template component */}
       <Suspense fallback={<ChatInterfaceLoading />}>
         <ChatComponent {...props} config={templateConfig} />

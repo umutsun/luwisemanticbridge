@@ -13,7 +13,7 @@ export interface Message {
   sources?: Source[];
   isLoading?: boolean;
   isStreaming?: boolean;
-  status?: 'searching' | 'generating' | 'complete' | 'error';
+  status?: 'reading-document' | 'searching' | 'generating' | 'complete' | 'error';
   statusMessage?: string;
   relatedTopics?: Source[];
   pdfAttachment?: PdfAttachment;

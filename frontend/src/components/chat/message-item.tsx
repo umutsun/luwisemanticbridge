@@ -91,9 +91,23 @@ export function MessageItem({ message }: MessageItemProps) {
 
   // Show skeleton loading for streaming assistant messages
   if (message.isStreaming && message.isLoading && !isUser) {
+    // Map status to skeleton type
+    const getSkeletonType = () => {
+      switch (message.status) {
+        case 'reading-document':
+          return 'reading-document';
+        case 'searching':
+          return 'searching';
+        case 'generating':
+          return 'generating';
+        default:
+          return 'default';
+      }
+    };
+
     return (
       <MessageSkeleton
-        type={message.status === 'searching' ? 'searching' : message.status === 'generating' ? 'generating' : 'default'}
+        type={getSkeletonType()}
         message={message.statusMessage}
       />
     );
