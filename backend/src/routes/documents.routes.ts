@@ -609,15 +609,36 @@ router.post('/upload', createUploadRateLimit.middleware, upload.single('file'), 
       ]
     );
 
+    // Generate a brief summary/excerpt from the content
+    const contentText = processedDoc.content || '';
+    let summary = '';
+    if (contentText.length > 0) {
+      // Get first meaningful paragraph (skip empty lines)
+      const paragraphs = contentText.split(/\n\n+/).filter(p => p.trim().length > 50);
+      if (paragraphs.length > 0) {
+        // Take first paragraph, limit to 300 chars
+        summary = paragraphs[0].trim().substring(0, 300);
+        if (paragraphs[0].length > 300) summary += '...';
+      } else {
+        // Fallback to first 300 chars
+        summary = contentText.substring(0, 300).trim();
+        if (contentText.length > 300) summary += '...';
+      }
+    }
+
     res.json({
       success: true,
       document: {
         id: result.rows[0].id.toString(),
         title: result.rows[0].title,
-        type: result.rows[0].type,
+        type: result.rows[0].file_type || result.rows[0].type,
         size: result.rows[0].size,
+        summary: summary, // PDF/document content summary
+        contentLength: contentText.length,
         metadata: {
           created_at: result.rows[0].created_at,
+          needsOCR: cleanedMetadata.needsOCR,
+          pdfStats: cleanedMetadata.pdfStats,
           ...result.rows[0].metadata
         }
       }

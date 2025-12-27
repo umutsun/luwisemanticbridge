@@ -1567,6 +1567,17 @@ export default function DocumentManagerPage() {
           throw new Error(errorData.error || errorData.message || 'Upload failed');
         }
 
+        // Parse response to get summary
+        const responseData = await response.json();
+        if (responseData.document?.summary) {
+          // Show summary in toast for PDF/document content preview
+          toast({
+            title: `📄 ${file.name}`,
+            description: responseData.document.summary,
+            duration: 8000,
+          });
+        }
+
         completedFiles++;
         setUploadProgress((completedFiles / totalFiles) * 100);
       }
