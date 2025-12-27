@@ -434,25 +434,70 @@ export class RAGChatService {
     const questionLabel = responseLanguage === 'en' ? 'USER QUESTION' : 'KULLANICI SORUSU';
 
     // Default instructions (used if not configured in settings)
-    const defaultInstructionTr = `Kullanicinin yuklediği bir belgeyi inceliyorsun. Once belgenin ne hakkinda olduğunu kısaca acıkla (1-2 cumle), sonra kullanicinin sorusunu SADECE belge icerigine dayanarak yanitla. Soru belgeden cevaplanamıyorsa bunu acikca belirt.`;
-    const defaultInstructionEn = `You are analyzing a document the user has uploaded. First, briefly describe what the document is about (1-2 sentences), then answer the user's question based ONLY on the document content. If the question cannot be answered from the document, say so clearly.`;
+    const defaultInstructionTr = `Kullanicinin yuklediği bir belgeyi inceliyorsun.
+
+📄 **BELGE ANALİZİ**
+Önce şu başlıkla belgeyi tanıt:
+"Bu belge bir [BELGE TÜRÜ] belgesidir."
+
+Ardından belgenin önemli noktalarını listele:
+- Taraflar (varsa)
+- Tarihler
+- Tutarlar/Değerler
+- Önemli koşullar
+
+Son olarak kullanıcının sorusunu belge içeriğine dayanarak yanıtla.`;
+
+    const defaultInstructionEn = `You are analyzing a document the user has uploaded.
+
+📄 **DOCUMENT ANALYSIS**
+First introduce the document with:
+"This document is a [DOCUMENT TYPE]."
+
+Then list the important points:
+- Parties involved (if any)
+- Dates
+- Amounts/Values
+- Key conditions
+
+Finally, answer the user's question based on the document content.`;
 
     // Hybrid mode instructions
     const defaultHybridInstructionTr = `Kullanicinin yuklediği bir belgeyi ve ilgili hukuki kaynaklari birlikte inceliyorsun.
 
-GOREVLER:
-1. Once belgenin ne turu bir belge olduğunu belirt (kira kontrati, tapu, sozlesme vb.)
-2. Belgeden onemli bilgileri cikar (taraflar, tarihler, tutarlar, kosullar)
-3. Veritabanindan gelen ilgili hukuki kaynaklar varsa bunlari da degerlendirerek kapsamli bir analiz sun
-4. Kullanicinin sorusunu hem belge hem de hukuki kaynaklar isiginda yanitla`;
+📄 **BELGE ANALİZİ**
+Önce şu başlıkla belgeyi tanıt:
+"Bu belge bir [BELGE TÜRÜ] belgesidir."
+
+Belgeden önemli bilgileri çıkar:
+- Taraflar
+- Tarihler
+- Tutarlar/Değerler
+- Önemli koşullar ve maddeler
+
+⚖️ **HUKUKİ DEĞERLENDİRME**
+Veritabanından gelen ilgili hukuki kaynakları değerlendirerek:
+- Bu tür belgelerde dikkat edilmesi gereken hususları belirt
+- Varsa riskli veya eksik maddeleri işaretle
+- Kullanıcının sorusunu hem belge hem de hukuki kaynaklar ışığında yanıtla`;
 
     const defaultHybridInstructionEn = `You are analyzing a document uploaded by the user along with relevant legal sources.
 
-TASKS:
-1. First identify the document type (lease contract, deed, agreement, etc.)
-2. Extract important information from the document (parties, dates, amounts, conditions)
-3. If there are relevant legal sources from the database, evaluate them for a comprehensive analysis
-4. Answer the user's question in light of both the document and legal sources`;
+📄 **DOCUMENT ANALYSIS**
+First introduce the document with:
+"This document is a [DOCUMENT TYPE]."
+
+Extract important information:
+- Parties involved
+- Dates
+- Amounts/Values
+- Key terms and conditions
+
+⚖️ **LEGAL EVALUATION**
+Using the relevant legal sources from database:
+- Point out what to watch for in this type of document
+- Flag any risky or missing clauses
+- Answer the user's question considering both the document and legal sources`;
 
     let ragSources: any[] = [];
     let ragContext = '';
