@@ -384,10 +384,10 @@ export class RAGChatService {
   }
 
   /**
-   * Process a message with PDF content ONLY (no RAG search)
-   * Used when user uploads a PDF - the PDF content is the sole context
+   * Process a message with PDF content + optional RAG search
+   * Hybrid mode: PDF content analysis + relevant RAG sources
    */
-  private async processPdfOnlyMessage(
+  private async processPdfMessage(
     message: string,
     conversationId: string,
     userId: string,
@@ -403,7 +403,9 @@ export class RAGChatService {
       'llmSettings.activeChatModel',
       'ragSettings.pdfInstructionTr',
       'ragSettings.pdfInstructionEn',
-      'ragSettings.pdfMaxLength'
+      'ragSettings.pdfMaxLength',
+      'ragSettings.pdfEnableRag',
+      'ragSettings.pdfRagMaxResults'
     ];
 
     const settingsResult = await pool.query(
@@ -415,6 +417,10 @@ export class RAGChatService {
 
     const responseLanguage = settingsMap.get('response_language') || 'tr';
     const activeModel = settingsMap.get('llmSettings.activeChatModel') || 'anthropic/claude-3-5-sonnet-20241022';
+
+    // PDF + RAG hybrid mode settings
+    const enableRagWithPdf = settingsMap.get('ragSettings.pdfEnableRag') === 'true';
+    const pdfRagMaxResults = parseInt(settingsMap.get('ragSettings.pdfRagMaxResults') || '5');
 
     // Truncate PDF content to avoid context overflow - configurable from settings
     const maxPdfLength = parseInt(settingsMap.get('ragSettings.pdfMaxLength') || '20000');
@@ -431,19 +437,81 @@ export class RAGChatService {
     const defaultInstructionTr = `Kullanicinin yuklediği bir belgeyi inceliyorsun. Once belgenin ne hakkinda olduğunu kısaca acıkla (1-2 cumle), sonra kullanicinin sorusunu SADECE belge icerigine dayanarak yanitla. Soru belgeden cevaplanamıyorsa bunu acikca belirt.`;
     const defaultInstructionEn = `You are analyzing a document the user has uploaded. First, briefly describe what the document is about (1-2 sentences), then answer the user's question based ONLY on the document content. If the question cannot be answered from the document, say so clearly.`;
 
-    const pdfInstruction = responseLanguage === 'en'
-      ? (settingsMap.get('ragSettings.pdfInstructionEn') || defaultInstructionEn)
-      : (settingsMap.get('ragSettings.pdfInstructionTr') || defaultInstructionTr);
+    // Hybrid mode instructions
+    const defaultHybridInstructionTr = `Kullanicinin yuklediği bir belgeyi ve ilgili hukuki kaynaklari birlikte inceliyorsun.
+
+GOREVLER:
+1. Once belgenin ne turu bir belge olduğunu belirt (kira kontrati, tapu, sozlesme vb.)
+2. Belgeden onemli bilgileri cikar (taraflar, tarihler, tutarlar, kosullar)
+3. Veritabanindan gelen ilgili hukuki kaynaklar varsa bunlari da degerlendirerek kapsamli bir analiz sun
+4. Kullanicinin sorusunu hem belge hem de hukuki kaynaklar isiginda yanitla`;
+
+    const defaultHybridInstructionEn = `You are analyzing a document uploaded by the user along with relevant legal sources.
+
+TASKS:
+1. First identify the document type (lease contract, deed, agreement, etc.)
+2. Extract important information from the document (parties, dates, amounts, conditions)
+3. If there are relevant legal sources from the database, evaluate them for a comprehensive analysis
+4. Answer the user's question in light of both the document and legal sources`;
+
+    let ragSources: any[] = [];
+    let ragContext = '';
+
+    // 🔗 HYBRID MODE: Search RAG database if enabled
+    if (enableRagWithPdf) {
+      console.log(`[PDF+RAG] Hybrid mode enabled, searching RAG with max ${pdfRagMaxResults} results`);
+
+      try {
+        // Extract key terms from PDF for better RAG search
+        const pdfKeyTerms = this.extractKeyTermsFromPdf(pdfText, pdfContext.filename);
+        const searchQuery = `${message} ${pdfKeyTerms}`.trim();
+
+        console.log(`[PDF+RAG] Search query: "${searchQuery.substring(0, 100)}..."`);
+
+        // Search unified embeddings
+        const searchResults = await this.searchUnifiedEmbeddings(searchQuery, pdfRagMaxResults);
+
+        if (searchResults && searchResults.length > 0) {
+          ragSources = searchResults.map((r: any) => ({
+            id: r.id || r.source_id,
+            title: r.title || r.source_title || 'Kaynak',
+            excerpt: r.content?.substring(0, 300) || r.text?.substring(0, 300) || '',
+            relevanceScore: r.similarity || r.score || 0,
+            sourceTable: r.source_table || r.table_name || 'unified_embeddings',
+            category: r.category || r.source_type || 'Hukuki Kaynak'
+          }));
+
+          // Build RAG context
+          const ragLabel = responseLanguage === 'en' ? 'RELATED LEGAL SOURCES' : 'ILGILI HUKUKI KAYNAKLAR';
+          ragContext = `\n\n--- ${ragLabel} ---\n`;
+          ragSources.forEach((source, idx) => {
+            ragContext += `\n[${idx + 1}] ${source.title} (${source.category})\n${source.excerpt}\n`;
+          });
+          ragContext += `--- KAYNAKLAR SONU ---\n`;
+
+          console.log(`[PDF+RAG] Found ${ragSources.length} relevant sources`);
+        }
+      } catch (ragError) {
+        console.warn('[PDF+RAG] RAG search failed, continuing with PDF only:', ragError);
+      }
+    }
+
+    // Select instruction based on mode
+    const pdfInstruction = enableRagWithPdf && ragSources.length > 0
+      ? (responseLanguage === 'en' ? defaultHybridInstructionEn : defaultHybridInstructionTr)
+      : (responseLanguage === 'en'
+        ? (settingsMap.get('ragSettings.pdfInstructionEn') || defaultInstructionEn)
+        : (settingsMap.get('ragSettings.pdfInstructionTr') || defaultInstructionTr));
 
     const userPrompt = `${pdfInstruction}
 
 --- ${pdfLabel}: ${pdfContext.filename} ---
 ${pdfText}
---- BELGE SONU ---
+--- BELGE SONU ---${ragContext}
 
 ${questionLabel}: ${message}`;
 
-    console.log(`[PDF Mode] Sending ${pdfText.length} chars from PDF to LLM (instruction from ${settingsMap.has('ragSettings.pdfInstructionTr') ? 'settings' : 'default'})`);
+    console.log(`[PDF Mode] Sending ${pdfText.length} chars from PDF + ${ragSources.length} RAG sources to LLM`);
 
     // Extract provider from model
     const providerFromModel = llmManager.extractProviderFromModel(activeModel);
@@ -464,21 +532,57 @@ ${questionLabel}: ${message}`;
       await this.saveMessage(conversationId, 'user', message, { pdfFilename: pdfContext.filename });
       await this.saveMessage(conversationId, 'assistant', response.content, {
         model: activeModel,
-        pdfFilename: pdfContext.filename
+        pdfFilename: pdfContext.filename,
+        ragSourceCount: ragSources.length
       });
     } catch (saveError) {
       console.error('[PDF Mode] Failed to save messages:', saveError);
     }
 
-    console.log(`[PDF Mode] Response generated for: ${pdfContext.filename}`);
+    console.log(`[PDF Mode] Response generated for: ${pdfContext.filename} (hybrid: ${enableRagWithPdf})`);
 
     return {
       response: response.content,
-      sources: [], // No RAG sources in PDF-only mode
+      sources: ragSources, // Include RAG sources in hybrid mode
       conversationId: conversationId,
       pdfMode: true,
-      pdfFilename: pdfContext.filename
+      pdfFilename: pdfContext.filename,
+      hybridMode: enableRagWithPdf && ragSources.length > 0
     };
+  }
+
+  /**
+   * Extract key terms from PDF for better RAG search
+   */
+  private extractKeyTermsFromPdf(pdfText: string, filename: string): string {
+    // Extract document type hints from filename
+    const filenameHints: string[] = [];
+    const lowerFilename = filename.toLowerCase();
+
+    if (lowerFilename.includes('kira') || lowerFilename.includes('kiralama')) {
+      filenameHints.push('kira sözleşmesi kiralama');
+    }
+    if (lowerFilename.includes('tapu') || lowerFilename.includes('gayrimenkul')) {
+      filenameHints.push('tapu gayrimenkul mülkiyet');
+    }
+    if (lowerFilename.includes('sozlesme') || lowerFilename.includes('sözleşme')) {
+      filenameHints.push('sözleşme anlaşma');
+    }
+    if (lowerFilename.includes('noter')) {
+      filenameHints.push('noter tasdik');
+    }
+
+    // Extract key terms from content (first 2000 chars)
+    const contentSample = pdfText.substring(0, 2000).toLowerCase();
+    const legalTerms = [
+      'kira', 'tapu', 'sözleşme', 'gayrimenkul', 'mülkiyet', 'kiracı', 'kiraya veren',
+      'teminat', 'depozito', 'noter', 'taşınmaz', 'ipotek', 'haciz', 'kat mülkiyeti',
+      'konut', 'işyeri', 'arsa', 'bina', 'daire', 'tahliye', 'fesih', 'devir'
+    ];
+
+    const foundTerms = legalTerms.filter(term => contentSample.includes(term));
+
+    return [...filenameHints, ...foundTerms].join(' ');
   }
 
   private async getSystemPrompt(): Promise<string> {
@@ -657,11 +761,11 @@ ${questionLabel}: ${message}`;
       const systemPrompt = options.systemPrompt || await this.getSystemPrompt();
       console.log(` System Prompt loaded (length: ${systemPrompt?.length || 0} chars)`);
 
-      // PDF-ONLY MODE: If user uploaded a PDF, skip RAG search entirely
-      // The PDF content IS the context - no need for semantic search
+      // PDF MODE: If user uploaded a PDF, process with optional RAG hybrid mode
+      // Hybrid mode can be enabled via ragSettings.pdfEnableRag = 'true'
       if (options.pdfContext && options.pdfContext.extractedText) {
-        console.log(`[PDF Mode] User uploaded PDF: ${options.pdfContext.filename}, using PDF content as sole context`);
-        return this.processPdfOnlyMessage(message, convId, userId, systemPrompt, options);
+        console.log(`[PDF Mode] User uploaded PDF: ${options.pdfContext.filename}`);
+        return this.processPdfMessage(message, convId, userId, systemPrompt, options);
       }
 
       // 2. Search for relevant documents using configured source
@@ -989,7 +1093,7 @@ ${questionLabel}: ${message}`;
       // Let LLM generate response, but add instruction for partial matches
 
       // Generate user message with context (NOT including system prompt - it goes separately)
-      // NOTE: PDF-only mode is handled separately by processPdfOnlyMessage() at the start of processMessage()
+      // NOTE: PDF mode is handled separately by processPdfMessage() at the start of processMessage()
       const contextLabel = responseLanguage === 'en' ? 'CONTEXT INFORMATION' : 'BAĞLAM BİLGİLERİ';
       const questionLabel = responseLanguage === 'en' ? 'QUESTION' : 'SORU';
 
