@@ -282,7 +282,7 @@ export function ChatInput({ onSend, disabled }: ChatInputProps) {
               <button
                 onClick={handlePaperclipClick}
                 disabled={disabled || !!pdfFile || isRecording}
-                className="p-1.5 sm:p-2 text-gray-400 hover:text-blue-500 dark:text-gray-500 dark:hover:text-blue-400 transition-colors rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                className="p-1.5 sm:p-2 text-gray-500 hover:text-blue-500 dark:text-gray-300 dark:hover:text-blue-400 transition-colors rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed"
                 title={pdfFile ? t('chatInput.pdfAttached', 'PDF eklendi') : t('chatInput.attachPdf', 'PDF ekle')}
               >
                 <Paperclip className="w-4 h-4 sm:w-5 sm:h-5" />
@@ -299,7 +299,7 @@ export function ChatInput({ onSend, disabled }: ChatInputProps) {
                     ? 'text-red-500 hover:text-red-600 bg-red-50 dark:bg-red-900/20 animate-pulse'
                     : isTranscribing
                       ? 'text-blue-500 bg-blue-50 dark:bg-blue-900/20'
-                      : 'text-gray-400 hover:text-blue-500 dark:text-gray-500 dark:hover:text-blue-400 hover:bg-gray-100 dark:hover:bg-gray-700'
+                      : 'text-gray-500 hover:text-blue-500 dark:text-gray-300 dark:hover:text-blue-400 hover:bg-gray-100 dark:hover:bg-gray-700'
                 }`}
                 title={
                   isRecording
