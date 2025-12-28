@@ -916,20 +916,19 @@ ${questionLabel}: ${message}`;
       let initialDisplayCount = 0;
       let searchQuery = message;
 
+      // 🔗 FOLLOW-UP QUESTION DETECTION (moved outside to be available in all modes)
+      const followUpResult = this.detectFollowUpQuestion(message, earlyHistory);
+      if (followUpResult.isFollowUp) {
+        searchQuery = followUpResult.enhancedQuery;
+        console.log(`🔗 Follow-up detected, enhanced query: "${searchQuery.substring(0, 60)}..."`);
+      }
+
       // ⚡ ULTRA FAST MODE: Skip ALL search when citations disabled
       if (citationsDisabled) {
         console.log(`⚡ ULTRA FAST MODE: Citations disabled - skipping semantic search entirely [history: ${timings.history}ms]`);
         timings.search = 0;
         // No search results, LLM will answer from general knowledge
       } else {
-        // 🔗 FOLLOW-UP QUESTION DETECTION (only when search is needed)
-        const followUpResult = this.detectFollowUpQuestion(message, earlyHistory);
-        searchQuery = followUpResult.isFollowUp ? followUpResult.enhancedQuery : message;
-
-        if (followUpResult.isFollowUp) {
-          console.log(`🔗 Follow-up detected, enhanced query: "${searchQuery.substring(0, 60)}..."`);
-        }
-
         // ⏱️ Semantic search timing
         const startSearch = Date.now();
         if (useUnifiedEmbeddings) {
