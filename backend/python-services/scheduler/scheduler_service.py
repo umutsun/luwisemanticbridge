@@ -171,7 +171,7 @@ class SchedulerService:
                     cron_expression, interval_seconds, run_date, timezone,
                     job_config, enabled, max_retries, retry_delay_seconds,
                     next_run_at, created_by, created_at, updated_at
-                ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $16)
+                ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::jsonb, $11, $12, $13, $14, $15, $16, $16)
             """,
                 job_id, request.name, request.description, request.job_type.value,
                 request.schedule_type.value, request.cron_expression, request.interval_seconds,
@@ -614,7 +614,7 @@ class SchedulerService:
                 SET status = $1,
                     completed_at = NOW(),
                     duration_ms = $2,
-                    result = $3,
+                    result = $3::jsonb,
                     error_message = $4
                 WHERE id = $5
             """, status.value, duration_ms, json.dumps(result) if result else None, error_message, log_id)
@@ -682,6 +682,11 @@ class SchedulerService:
 
     def _row_to_response(self, row) -> ScheduledJobResponse:
         """Convert database row to response model"""
+        # Parse job_config if it's a string (JSONB should return dict, but handle both)
+        job_config = row['job_config']
+        if isinstance(job_config, str):
+            job_config = json.loads(job_config)
+
         return ScheduledJobResponse(
             id=str(row['id']),
             name=row['name'],
@@ -692,7 +697,7 @@ class SchedulerService:
             interval_seconds=row['interval_seconds'],
             run_date=row['run_date'],
             timezone=row['timezone'],
-            job_config=row['job_config'],
+            job_config=job_config,
             enabled=row['enabled'],
             paused_at=row['paused_at'],
             paused_reason=row['paused_reason'],
@@ -713,6 +718,11 @@ class SchedulerService:
 
     def _log_row_to_response(self, row) -> JobExecutionLogResponse:
         """Convert log database row to response model"""
+        # Parse result if it's a string
+        result = row['result']
+        if isinstance(result, str):
+            result = json.loads(result)
+
         return JobExecutionLogResponse(
             id=str(row['id']),
             job_id=str(row['job_id']),
@@ -722,7 +732,7 @@ class SchedulerService:
             status=JobStatus(row['status']),
             trigger_type=TriggerType(row['trigger_type']),
             triggered_by=str(row['triggered_by']) if row['triggered_by'] else None,
-            result=row['result'],
+            result=result,
             error_message=row['error_message'],
             error_code=row['error_code'],
             retry_count=row['retry_count'],
