@@ -2,6 +2,7 @@
 
 import React, { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
 import apiClient, { authenticatedFetch } from '@/lib/api/client';
+import { initializeLogger } from '@/lib/logger';
 
 interface Config {
   app: {
@@ -9,6 +10,7 @@ interface Config {
     description: string;
     version: string;
     locale: string;
+    debugMode?: boolean;
   };
   database: {
     host: string;
@@ -190,6 +192,7 @@ export function ConfigProvider({ children }: { children: ReactNode }) {
       }
 
       setConfig(transformedConfig);
+      initializeLogger(transformedConfig.app?.debugMode ?? false);
       setError(null);
       setBackendDown(false);
       setRetryCount(0);
