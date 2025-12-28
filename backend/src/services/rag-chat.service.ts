@@ -789,6 +789,10 @@ ${questionLabel}: ${message}`;
     userId: string = 'demo-user',
     options: ChatOptions = {}
   ) {
+    // ⏱️ PERFORMANCE TIMING
+    const timings: Record<string, number> = {};
+    const startTotal = Date.now();
+
     try {
       // 1. Create or get conversation
       const convId = conversationId || uuidv4();
@@ -829,7 +833,8 @@ ${questionLabel}: ${message}`;
         }
       }
 
-      console.log(`Performing semantic search with pgvector...`);
+      // ⏱️ Settings fetch timing
+      const startSettings = Date.now();
 
       // PERFORMANCE OPTIMIZATION: Batch fetch all settings in ONE query
       // Includes all instruction/prompt settings for full customization
@@ -893,117 +898,56 @@ ${questionLabel}: ${message}`;
 
       // Check if citations are disabled
       const citationsDisabled = maxResults === 0 && minResults === 0;
-      console.log(`️ RAG Settings: maxResults=${maxResults}, minResults=${minResults}, batchSize=${batchSize}, threshold=${minThreshold}, citationsDisabled=${citationsDisabled}`);
+      timings.settings = Date.now() - startSettings;
+      console.log(`⏱️ RAG Settings: maxResults=${maxResults}, minResults=${minResults}, citationsDisabled=${citationsDisabled} [${timings.settings}ms]`);
 
-      // 🔗 EARLY CONVERSATION HISTORY FETCH for follow-up detection
-      // Get history BEFORE search to enable context-aware queries
+      // ⏱️ History fetch timing
+      const startHistory = Date.now();
       let earlyHistory: { role: string; content: string }[] = [];
       try {
         earlyHistory = await this.getConversationHistory(convId, 5);
-        console.log(`📜 Fetched ${earlyHistory.length} previous messages for context detection`);
       } catch (histError) {
-        console.warn('Could not fetch early history for follow-up detection:', histError);
+        console.warn('Could not fetch early history:', histError);
       }
-
-      // 🔗 FOLLOW-UP QUESTION DETECTION
-      // Detect if current question references previous context
-      const followUpResult = this.detectFollowUpQuestion(message, earlyHistory);
-      const searchQuery = followUpResult.isFollowUp ? followUpResult.enhancedQuery : message;
-
-      if (followUpResult.isFollowUp) {
-        console.log(`🔗 Using enhanced query for semantic search: "${searchQuery.substring(0, 80)}..."`);
-      }
+      timings.history = Date.now() - startHistory;
 
       let searchResults: any[] = [];
       let allResults: any[] = [];
       let initialDisplayCount = 0;
+      let searchQuery = message;
 
-      if (!citationsDisabled) {
-        // Use semantic search to find related content (only if citations enabled)
+      // ⚡ ULTRA FAST MODE: Skip ALL search when citations disabled
+      if (citationsDisabled) {
+        console.log(`⚡ ULTRA FAST MODE: Citations disabled - skipping semantic search entirely [history: ${timings.history}ms]`);
+        timings.search = 0;
+        // No search results, LLM will answer from general knowledge
+      } else {
+        // 🔗 FOLLOW-UP QUESTION DETECTION (only when search is needed)
+        const followUpResult = this.detectFollowUpQuestion(message, earlyHistory);
+        searchQuery = followUpResult.isFollowUp ? followUpResult.enhancedQuery : message;
+
+        if (followUpResult.isFollowUp) {
+          console.log(`🔗 Follow-up detected, enhanced query: "${searchQuery.substring(0, 60)}..."`);
+        }
+
+        // ⏱️ Semantic search timing
+        const startSearch = Date.now();
         if (useUnifiedEmbeddings) {
           allResults = await semanticSearch.unifiedSemanticSearch(searchQuery, maxResults);
         } else {
           allResults = await semanticSearch.hybridSearch(searchQuery, maxResults);
         }
+        timings.search = Date.now() - startSearch;
 
-        console.log(` DEBUG: unifiedSemanticSearch returned ${allResults.length} results`);
-        if (allResults.length > 0) {
-          console.log(` DEBUG: First raw result:`, {
-            title: allResults[0].title,
-            score: allResults[0].score,
-            similarity_score: allResults[0].similarity_score
-          });
-        }
-
-        // Sort by similarity score (no threshold filtering - show all results)
-        searchResults = allResults
-          .sort((a, b) => {
-            const scoreA = a.score || (a.similarity_score * 100) || 0;
-            const scoreB = b.score || (b.similarity_score * 100) || 0;
-            return scoreB - scoreA; // Highest similarity first
-          });
-
-        console.log(`Found ${searchResults.length} total results (sorted by similarity, no threshold filtering)`);
-
-        // For initial display, use minResults
-        initialDisplayCount = Math.min(minResults, searchResults.length);
-        console.log(` Displaying ${initialDisplayCount} initial results (minResults: ${minResults})`);
-
-        // Ensure we have at least minResults if available
-        if (searchResults.length === 0 && allResults.length > 0) {
-          searchResults = allResults.slice(0, minResults);
-          console.log('Using all available results');
-        }
-      } else {
-        // ⚡ FAST MODE: Citations disabled but still do semantic search for context
-        console.log('⚡ FAST MODE: Citations disabled - performing keyword-first hybrid search');
-
-        // Extract keywords for faster initial filtering
-        const keywords = this.extractKeywordsForFastSearch(searchQuery);
-        console.log(`⚡ FAST MODE: Keywords extracted: [${keywords.join(', ')}]`);
-
-        // Still perform search but with reduced limit for faster response
-        // Use enhanced searchQuery (includes previous context if follow-up)
-        const fastModeLimit = 15; // Slightly more results for better keyword matching
-        if (useUnifiedEmbeddings) {
-          allResults = await semanticSearch.unifiedSemanticSearch(searchQuery, fastModeLimit);
-        } else {
-          allResults = await semanticSearch.hybridSearch(searchQuery, fastModeLimit);
-        }
-
-        // ⚡ FAST MODE ENHANCEMENT: Keyword boost for better relevance
-        // Boost results that contain extracted keywords in title or content
-        searchResults = allResults.map(result => {
-          let keywordBoost = 0;
-          const titleLower = (result.title || '').toLowerCase();
-          const contentLower = (result.excerpt || result.content || '').toLowerCase();
-
-          keywords.forEach(keyword => {
-            if (titleLower.includes(keyword)) keywordBoost += 0.15; // Title match = strong boost
-            if (contentLower.includes(keyword)) keywordBoost += 0.05; // Content match = slight boost
-          });
-
-          return {
-            ...result,
-            score: (result.score || (result.similarity_score * 100) || 0) + (keywordBoost * 100),
-            keywordBoost
-          };
-        }).sort((a, b) => {
-          const scoreA = a.score || 0;
-          const scoreB = b.score || 0;
+        // Sort by similarity score
+        searchResults = allResults.sort((a, b) => {
+          const scoreA = a.score || (a.similarity_score * 100) || 0;
+          const scoreB = b.score || (b.similarity_score * 100) || 0;
           return scoreB - scoreA;
         });
 
-        // Use top 5 results for context in fast mode
-        initialDisplayCount = Math.min(5, searchResults.length);
-
-        // Log keyword boost effects
-        const boostedCount = searchResults.filter(r => r.keywordBoost > 0).length;
-        console.log(`⚡ FAST MODE: Found ${searchResults.length} results, ${boostedCount} boosted by keywords, using top ${initialDisplayCount} for context`);
-
-        if (searchResults.length > 0) {
-          console.log(`⚡ Top result: "${searchResults[0].title?.substring(0, 50)}..." (score: ${searchResults[0].score?.toFixed(1)}, boost: ${(searchResults[0].keywordBoost * 100).toFixed(0)}%)`);
-        }
+        initialDisplayCount = Math.min(minResults, searchResults.length);
+        console.log(`⏱️ Search: ${searchResults.length} results in ${timings.search}ms, displaying ${initialDisplayCount}`);
       }
 
       // 3. Get conversation history (use early history if already fetched)
@@ -1235,9 +1179,10 @@ ${questionLabel}: ${message}`;
 
       // Extract provider from active model
       const providerFromModel = this.extractProviderFromModel(activeModel);
-      console.log(` Active Chat Model: ${activeModel} (provider: ${providerFromModel})`);
+      console.log(`⏱️ Pre-LLM timings: settings=${timings.settings}ms, history=${timings.history}ms, search=${timings.search}ms`);
 
-      // PERFORMANCE: Pass extracted provider directly (already normalized by extractProviderFromModel)
+      // ⏱️ LLM timing
+      const startLLM = Date.now();
       const response = await llmManager.generateChatResponse(
         userPrompt,  // User message with context (no system prompt here)
         {
@@ -1247,6 +1192,9 @@ ${questionLabel}: ${message}`;
           preferredProvider: providerFromModel  // Pass normalized provider name (claude/openai/gemini/deepseek)
         }
       );
+      timings.llm = Date.now() - startLLM;
+      timings.total = Date.now() - startTotal;
+      console.log(`⏱️ LLM response in ${timings.llm}ms | TOTAL: ${timings.total}ms (settings: ${timings.settings}, history: ${timings.history}, search: ${timings.search}, llm: ${timings.llm})`);
 
       // Clean response content - remove section headings that LLM might add despite instructions
       response.content = this.stripSectionHeadings(response.content);
