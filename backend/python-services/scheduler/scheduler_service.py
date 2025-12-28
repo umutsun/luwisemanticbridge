@@ -46,6 +46,33 @@ def get_scheduler() -> 'SchedulerService':
     return _scheduler_instance
 
 
+async def _job_wrapper_func(job_id: str):
+    """
+    Module-level job wrapper function called by APScheduler.
+
+    This must be a module-level function (not an instance method) because
+    APScheduler serializes the function and its arguments. If we use an
+    instance method, the entire object (including the scheduler) gets
+    serialized, which causes errors.
+    """
+    from .job_types import JobStatus, TriggerType
+
+    scheduler = get_scheduler()
+    log_id = str(uuid4())
+    now = datetime.now(timezone.utc)
+
+    # Create execution log
+    async with scheduler.db_pool.acquire() as conn:
+        await conn.execute("""
+            INSERT INTO job_execution_logs (
+                id, job_id, started_at, status, trigger_type
+            ) VALUES ($1, $2, $3, $4, $5)
+        """, log_id, job_id, now, JobStatus.RUNNING.value, TriggerType.SCHEDULED.value)
+
+    # Execute job
+    await scheduler._execute_job(job_id, log_id)
+
+
 class SchedulerService:
     """
     Main scheduler service using APScheduler with PostgreSQL backend.
@@ -463,7 +490,7 @@ class SchedulerService:
             return
 
         self.scheduler.add_job(
-            self._job_wrapper,
+            _job_wrapper_func,
             trigger=trigger,
             id=job_id,
             args=[job_id],
@@ -536,22 +563,6 @@ class SchedulerService:
                 logger.error(f"Failed to load job {job.id}: {e}")
 
         logger.info(f"Loaded {len(jobs)} jobs from database")
-
-    async def _job_wrapper(self, job_id: str):
-        """Wrapper function called by APScheduler"""
-        log_id = str(uuid4())
-        now = datetime.now(timezone.utc)
-
-        # Create execution log
-        async with self.db_pool.acquire() as conn:
-            await conn.execute("""
-                INSERT INTO job_execution_logs (
-                    id, job_id, started_at, status, trigger_type
-                ) VALUES ($1, $2, $3, $4, $5)
-            """, log_id, job_id, now, JobStatus.RUNNING.value, TriggerType.SCHEDULED.value)
-
-        # Execute job
-        await self._execute_job(job_id, log_id)
 
     async def _execute_job(self, job_id: str, log_id: str):
         """Execute a job and update logs"""
