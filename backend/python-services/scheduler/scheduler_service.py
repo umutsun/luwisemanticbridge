@@ -4,6 +4,7 @@ APScheduler-based job scheduling with PostgreSQL persistence
 """
 
 import os
+import json
 import asyncio
 from datetime import datetime, timezone
 from typing import Optional, List, Dict, Any
@@ -174,7 +175,7 @@ class SchedulerService:
             """,
                 job_id, request.name, request.description, request.job_type.value,
                 request.schedule_type.value, request.cron_expression, request.interval_seconds,
-                request.run_date, request.timezone, validated_config, request.enabled,
+                request.run_date, request.timezone, json.dumps(validated_config), request.enabled,
                 request.max_retries, request.retry_delay_seconds, next_run, user_id, now
             )
 
@@ -260,7 +261,11 @@ class SchedulerService:
             if value is not None:
                 param_count += 1
                 updates.append(f"{field} = ${param_count}")
-                params.append(value)
+                # Serialize job_config as JSON for JSONB column
+                if field == 'job_config' and isinstance(value, dict):
+                    params.append(json.dumps(value))
+                else:
+                    params.append(value)
 
         if not updates:
             return existing
@@ -612,7 +617,7 @@ class SchedulerService:
                     result = $3,
                     error_message = $4
                 WHERE id = $5
-            """, status.value, duration_ms, result, error_message, log_id)
+            """, status.value, duration_ms, json.dumps(result) if result else None, error_message, log_id)
 
     async def _update_job_stats(
         self,
