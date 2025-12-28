@@ -29,6 +29,11 @@ aioredis==2.0.1
 celery==5.3.4
 kombu==5.3.4
 
+# Job Scheduling (APScheduler)
+apscheduler==3.10.4
+croniter==2.0.1
+sqlalchemy==2.0.23
+
 # Google Drive API
 google-auth==2.25.2
 google-auth-oauthlib==1.2.0

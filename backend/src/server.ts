@@ -62,6 +62,7 @@ import llmStatusRoutes from "./routes/llm-status.routes";
 import logsRoutes, { initializeLogWebSocket } from "./routes/logs.routes";
 import translateRoutes from "./routes/translate.routes";
 import translationEmbeddingsRoutes from "./routes/translation-embeddings.routes";
+import schedulerRoutes from "./routes/scheduler.routes";
 import {
   preventNoSQLInjection,
   rateLimits,
@@ -555,6 +556,7 @@ app.use("/api/v2/frontend", frontendLogsRoutes);
 app.use("/api/v2/document-processing", documentProcessingRoutes);
 app.use("/api/v2/ocr", ocrRoutes);
 app.use("/api/v2/integrations", integrationsRoutes);
+app.use("/api/v2/scheduler", schedulerRoutes);
 app.use("/api/v2/services", servicesRoutes);
 app.use("/api/v2/ai-services", aiServicesRoutes);
 app.use("/api/v2/google-drive", googleDriveRoutes);

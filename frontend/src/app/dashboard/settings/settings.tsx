@@ -14,6 +14,12 @@ const DataSchemaSettings = dynamic(() => import('../../../components/settings/Da
   ssr: false,
   loading: () => <div className="flex items-center justify-center h-64">Loading data schema settings...</div>
 });
+
+// Dynamic import for Scheduler settings
+const SchedulerSection = dynamic(() => import('../../../components/settings/SchedulerSection'), {
+  ssr: false,
+  loading: () => <div className="flex items-center justify-center h-64">Loading scheduler...</div>
+});
 import { useToast } from '../../../hooks/use-toast';
 import { useTranslation } from 'react-i18next';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../../../components/ui/card';
@@ -5795,7 +5801,7 @@ export default function OptimizedSettingsPage() {
       />
 
       <Tabs value={activeTab} onValueChange={handleTabChange} className="space-y-6">
-        <TabsList className="grid w-full grid-cols-7 h-14">
+        <TabsList className="grid w-full grid-cols-8 h-14">
           <TabsTrigger value="app" className="h-12 px-4">
             <span className="text-sm">App</span>
           </TabsTrigger>
@@ -5813,6 +5819,9 @@ export default function OptimizedSettingsPage() {
           </TabsTrigger>
           <TabsTrigger value="services" className="h-12 px-4">
             <span className="text-sm">Services</span>
+          </TabsTrigger>
+          <TabsTrigger value="scheduler" className="h-12 px-4">
+            <span className="text-sm">Scheduler</span>
           </TabsTrigger>
           <TabsTrigger value="advanced" className="h-12 px-4">
             <span className="text-sm">Advanced</span>
@@ -5841,6 +5850,10 @@ export default function OptimizedSettingsPage() {
 
         <TabsContent value="services">
           <ServicesPage />
+        </TabsContent>
+
+        <TabsContent value="scheduler">
+          <SchedulerSection />
         </TabsContent>
 
         <TabsContent value="advanced">

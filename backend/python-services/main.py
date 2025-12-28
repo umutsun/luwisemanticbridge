@@ -44,6 +44,7 @@ logger.add(
 
 # Import routers
 from routers import crawl_router, pgai_router, health_router, whisper_router, import_router, worker_router, pdf_router, csv_transform_router, embedding_router, document_analyzer_router, semantic_search_router
+from routers.scheduler_router import router as scheduler_router
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -59,6 +60,15 @@ async def lifespan(app: FastAPI):
         await init_redis()
         logger.info("✅ All services initialized successfully")
 
+        # Initialize and start scheduler
+        from scheduler import get_scheduler
+        from services.database import get_db
+        from services.redis_client import get_redis
+        scheduler = get_scheduler()
+        await scheduler.initialize(await get_db(), await get_redis())
+        await scheduler.start()
+        logger.info("✅ Scheduler service started")
+
         # Auto-recovery: Check for crashed batch jobs and resume them
         await check_and_recover_crashed_jobs()
 
@@ -70,6 +80,13 @@ async def lifespan(app: FastAPI):
 
     # Cleanup
     logger.info(f"🔄 Shutting down {APP_NAME} Python Services...")
+
+    # Stop scheduler first
+    from scheduler import get_scheduler
+    scheduler = get_scheduler()
+    await scheduler.stop()
+    logger.info("⏹️ Scheduler stopped")
+
     from services.database import close_db
     from services.redis_client import close_redis
 
@@ -200,6 +217,11 @@ app.include_router(
     tags=["semantic-search"]
     # High-performance semantic search service
 )
+app.include_router(
+    scheduler_router,
+    tags=["scheduler"]
+    # APScheduler-based job scheduling service
+)
 
 # Global exception handler
 @app.exception_handler(Exception)
@@ -228,6 +250,7 @@ async def root():
             "embedding": "/api/python/embedding",
             "documents": "/api/python/documents",
             "semantic_search": "/api/python/semantic-search",
+            "scheduler": "/api/python/scheduler",
             "docs": "/docs"
         }
     }

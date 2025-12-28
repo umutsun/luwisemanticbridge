@@ -1,4 +1,13 @@
-import * as cron from 'node-cron';
+/**
+ * Message Cleanup Service
+ *
+ * SECURITY NOTE: node-cron removed for security reasons.
+ * All scheduling now handled by Python APScheduler service.
+ *
+ * This service provides on-demand cleanup and flush functions
+ * that can be called via API or scheduled jobs.
+ */
+
 import { MessageStorageService } from './message-storage.service';
 import { logger } from '../utils/logger';
 import { redisClient } from '../config/redis';
@@ -6,27 +15,10 @@ import { pool } from '../config/database.config';
 
 export class MessageCleanupService {
   private static instance: MessageCleanupService;
-  private cleanupTask: cron.ScheduledTask;
-  private flushTask: cron.ScheduledTask;
 
   private constructor() {
-    // Schedule cleanup job - runs every day at 2 AM
-    this.cleanupTask = cron.schedule('0 2 * * *', async () => {
-      logger.info('Running daily message cleanup...');
-      await this.performCleanup();
-    }, {
-      scheduled: true
-    });
-
-    // Schedule flush job - runs every 30 minutes
-    this.flushTask = cron.schedule('*/30 * * * *', async () => {
-      logger.info('Running message flush check...');
-      await this.performFlush();
-    }, {
-      scheduled: true
-    });
-
-    logger.info('Message cleanup service initialized');
+    // No automatic scheduling - handled by Python scheduler
+    logger.info('Message cleanup service initialized (on-demand mode)');
   }
 
   public static getInstance(): MessageCleanupService {
@@ -37,9 +29,15 @@ export class MessageCleanupService {
   }
 
   /**
-   * Perform daily cleanup of old messages
+   * Perform cleanup of old messages
+   * Called by scheduler or manually via API
+   *
+   * @param retentionDays - Number of days to retain (default: 90)
    */
-  private async performCleanup(): Promise<void> {
+  public async performCleanup(retentionDays: number = 90): Promise<{
+    redisCleaned: number;
+    dbDeleted: number;
+  }> {
     try {
       let cleanedCount = 0;
 
@@ -59,32 +57,45 @@ export class MessageCleanupService {
         }
       }
 
-      // Clean up database messages older than 90 days
+      // Clean up database messages older than retention period
       const deleteResult = await pool.query(`
         DELETE FROM message_embeddings
-        WHERE created_at < CURRENT_DATE - INTERVAL '90 days'
+        WHERE created_at < CURRENT_DATE - INTERVAL '${retentionDays} days'
           AND user_id IS NOT NULL
       `);
 
-      logger.info(`Cleanup completed: ${cleanedCount} Redis keys updated, ${deleteResult.rowCount} DB records deleted`);
+      const dbDeleted = deleteResult.rowCount || 0;
+
+      logger.info(`Cleanup completed: ${cleanedCount} Redis keys updated, ${dbDeleted} DB records deleted`);
 
       // Update statistics
-      await this.updateCleanupStats(cleanedCount, deleteResult.rowCount);
+      await this.updateCleanupStats(cleanedCount, dbDeleted);
+
+      return {
+        redisCleaned: cleanedCount,
+        dbDeleted,
+      };
 
     } catch (error) {
       logger.error('Error during cleanup:', error);
+      throw error;
     }
   }
 
   /**
    * Flush Redis messages to embeddings if threshold reached
+   * Called by scheduler or manually via API
+   *
+   * @param threshold - Message count threshold (default: 50)
    */
-  private async performFlush(): Promise<void> {
+  public async performFlush(threshold: number = 50): Promise<{
+    flushedSessions: number;
+  }> {
     try {
       // Check if Redis client is available
       if (!redisClient || redisClient.status !== 'ready') {
         logger.warn('Redis client not available for flush, skipping');
-        return;
+        return { flushedSessions: 0 };
       }
 
       const keys = await redisClient.keys('messages:*');
@@ -92,7 +103,7 @@ export class MessageCleanupService {
 
       for (const key of keys) {
         const messageCount = await redisClient.llen(key);
-        if (messageCount >= 50) { // FLUSH_THRESHOLD
+        if (messageCount >= threshold) {
           // Extract session ID and user ID from key
           const keyParts = key.split(':');
           const sessionId = keyParts[1];
@@ -107,21 +118,28 @@ export class MessageCleanupService {
         logger.info(`Flushed ${flushedSessions} sessions to embeddings`);
       }
 
+      return { flushedSessions };
+
     } catch (error) {
       logger.error('Error during flush:', error);
+      throw error;
     }
   }
 
   /**
-   * Update cleanup statistics
+   * Update cleanup statistics in Redis
    */
   private async updateCleanupStats(redisCleaned: number, dbDeleted: number): Promise<void> {
     try {
+      if (!redisClient || redisClient.status !== 'ready') {
+        return;
+      }
+
       const stats = {
         lastCleanup: new Date().toISOString(),
-        redisCleaned,
-        dbDeleted,
-        totalCleaned: redisCleaned + dbDeleted
+        redisCleaned: redisCleaned.toString(),
+        dbDeleted: dbDeleted.toString(),
+        totalCleaned: (redisCleaned + dbDeleted).toString()
       };
 
       await redisClient.hset('cleanup_stats', stats);
@@ -133,25 +151,54 @@ export class MessageCleanupService {
   }
 
   /**
-   * Get cleanup statistics
+   * Get cleanup statistics from Redis
    */
-  public async getCleanupStats(): Promise<any> {
+  public async getCleanupStats(): Promise<{
+    lastCleanup: string;
+    redisCleaned: number;
+    dbDeleted: number;
+    totalCleaned: number;
+  }> {
     try {
+      if (!redisClient || redisClient.status !== 'ready') {
+        return {
+          lastCleanup: 'Never',
+          redisCleaned: 0,
+          dbDeleted: 0,
+          totalCleaned: 0
+        };
+      }
+
       const stats = await redisClient.hgetall('cleanup_stats');
-      return stats || {
-        lastCleanup: 'Never',
+      if (!stats || Object.keys(stats).length === 0) {
+        return {
+          lastCleanup: 'Never',
+          redisCleaned: 0,
+          dbDeleted: 0,
+          totalCleaned: 0
+        };
+      }
+
+      return {
+        lastCleanup: stats.lastCleanup || 'Never',
+        redisCleaned: parseInt(stats.redisCleaned || '0', 10),
+        dbDeleted: parseInt(stats.dbDeleted || '0', 10),
+        totalCleaned: parseInt(stats.totalCleaned || '0', 10)
+      };
+    } catch (error) {
+      logger.error('Error getting cleanup stats:', error);
+      return {
+        lastCleanup: 'Error',
         redisCleaned: 0,
         dbDeleted: 0,
         totalCleaned: 0
       };
-    } catch (error) {
-      logger.error('Error getting cleanup stats:', error);
-      return {};
     }
   }
 
   /**
-   * Manually trigger cleanup
+   * Manually trigger cleanup (backward compatibility)
+   * @deprecated Use performCleanup() directly
    */
   public async triggerCleanup(): Promise<void> {
     logger.info('Manual cleanup triggered...');
@@ -159,7 +206,8 @@ export class MessageCleanupService {
   }
 
   /**
-   * Manually trigger flush
+   * Manually trigger flush (backward compatibility)
+   * @deprecated Use performFlush() directly
    */
   public async triggerFlush(): Promise<void> {
     logger.info('Manual flush triggered...');
@@ -167,11 +215,10 @@ export class MessageCleanupService {
   }
 
   /**
-   * Stop all jobs
+   * Stop method - no-op since no internal scheduling
+   * Kept for backward compatibility
    */
   public stop(): void {
-    this.cleanupTask.stop();
-    this.flushTask.stop();
-    logger.info('Message cleanup service stopped');
+    logger.info('Message cleanup service stop called (no-op in on-demand mode)');
   }
 }
