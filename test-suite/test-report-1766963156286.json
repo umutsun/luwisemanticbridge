@@ -1,0 +1,206 @@
+{
+  "timestamp": "2025-12-28T23:05:56.286Z",
+  "summary": {
+    "total": 23,
+    "passed": 0,
+    "failed": 23,
+    "successRate": "0.0%"
+  },
+  "details": {
+    "settings": {
+      "tests": [
+        {
+          "testName": "Category Filtering - LLM",
+          "status": false,
+          "error": "Error"
+        },
+        {
+          "testName": "Category Filtering - All Categories",
+          "status": false,
+          "error": "Error"
+        },
+        {
+          "testName": "Cache Performance Test",
+          "status": false,
+          "error": "Error"
+        },
+        {
+          "status": false,
+          "handledCorrectly": true,
+          "time": 10.034900000006019,
+          "testName": "Invalid Category Handling"
+        },
+        {
+          "testName": "Invalid Category Handling",
+          "status": false,
+          "error": "Cannot read properties of undefined (reading 'status')"
+        }
+      ],
+      "passed": 0,
+      "failed": 4,
+      "avgResponse": 0
+    },
+    "chatbot": {
+      "tests": [
+        {
+          "status": false,
+          "authWorking": true,
+          "time": 7.885600000001432,
+          "testName": "Message Stats API Authentication"
+        },
+        {
+          "status": false,
+          "authRequired": true,
+          "endpointExists": true,
+          "time": 6.516999999999825,
+          "testName": "Chat Endpoint Availability"
+        },
+        {
+          "status": false,
+          "authRequired": true,
+          "endpointExists": true,
+          "time": 7.869199999993725,
+          "testName": "RAG Endpoint Test"
+        },
+        {
+          "status": false,
+          "websocketNotConfigured": true,
+          "time": 51.07140000000072,
+          "testName": "WebSocket Connection Test"
+        }
+      ],
+      "passed": 0,
+      "failed": 4,
+      "avgResponse": 0
+    },
+    "scraper": {
+      "tests": [
+        {
+          "status": true,
+          "endpointExists": true,
+          "time": 8.281699999999546,
+          "testName": "Basic Scraper Endpoint"
+        },
+        {
+          "status": false,
+          "routeMissing": false,
+          "needsImplementation": true,
+          "time": 9.924800000000687,
+          "testName": "Enhanced Scraper Check"
+        },
+        {
+          "status": true,
+          "redisConnected": true,
+          "time": 919.0036000000036,
+          "testName": "Redis Connection Test"
+        },
+        {
+          "status": false,
+          "concurrentHandling": 0,
+          "totalRequests": 3,
+          "successRate": "0.00%",
+          "time": 15.422400000003108,
+          "testName": "Concurrent Scraping Test"
+        }
+      ],
+      "passed": 0,
+      "failed": 4,
+      "avgResponse": 0
+    },
+    "documents": {
+      "tests": [
+        {
+          "status": false,
+          "validationWorking": true,
+          "time": 7.414100000001781,
+          "testName": "Translation API Validation"
+        },
+        {
+          "status": false,
+          "validationWorking": true,
+          "time": 9.164300000004005,
+          "testName": "Translation Cost Estimation"
+        },
+        {
+          "status": true,
+          "securityWorking": true,
+          "blockedCorrectly": false,
+          "time": 4.628600000003644,
+          "testName": "Document Upload Security"
+        },
+        {
+          "status": true,
+          "endpoints": [
+            {
+              "endpoint": "/api/v2/documents/preview",
+              "exists": true
+            },
+            {
+              "endpoint": "/api/v2/documents/embeddings",
+              "exists": true
+            },
+            {
+              "endpoint": "/api/v2/documents/process",
+              "exists": true
+            }
+          ],
+          "allExist": true,
+          "time": 17.64140000000043,
+          "testName": "Document Processing Endpoints"
+        }
+      ],
+      "passed": 0,
+      "failed": 4,
+      "avgResponse": 0
+    },
+    "security": {
+      "tests": [
+        {
+          "status": false,
+          "allBlocked": false,
+          "tested": 4,
+          "time": 18.272499999999127,
+          "testName": "SQL Injection Prevention"
+        },
+        {
+          "status": false,
+          "rateLimitingWorking": false,
+          "limitedRequests": 0,
+          "totalRequests": 20,
+          "time": 43.45049999999901,
+          "testName": "Rate Limiting Test"
+        },
+        {
+          "status": false,
+          "error": "Error",
+          "time": 4.5459999999948195,
+          "testName": "CORS Configuration"
+        },
+        {
+          "status": false,
+          "error": "Error",
+          "time": 5.361499999999069,
+          "testName": "Security Headers Check"
+        }
+      ],
+      "passed": 0,
+      "failed": 4,
+      "vulnerabilities": []
+    },
+    "performance": {
+      "tests": [
+        {
+          "status": false,
+          "successRate": "0.00%",
+          "concurrentRequests": 20,
+          "avgResponse": 0,
+          "time": 72.65660000000207,
+          "testName": "Database Connection Pool Test"
+        }
+      ],
+      "passed": 0,
+      "failed": 3,
+      "metrics": {}
+    }
+  }
+}

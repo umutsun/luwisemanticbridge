@@ -31,7 +31,7 @@ class IntegrationTestSuite {
         await this.testCacheInvalidation();
         await this.testConcurrentOperations();
 
-        this.generateIntegrationReport();
+        return this.generateIntegrationReport();
     }
 
     // Test 1: Settings → Chatbot Integration
@@ -779,6 +779,7 @@ class IntegrationTestSuite {
         );
 
         console.log('\n📄 Detailed integration report saved');
+        return reportData;
     }
 }
 

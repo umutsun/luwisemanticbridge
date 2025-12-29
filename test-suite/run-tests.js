@@ -27,11 +27,11 @@ class TestRunner {
 
     async runAllSuites() {
         console.log('🚀 Alice Semantic Bridge - Automated Test Suite');
-        console.log('=' .repeat(80));
+        console.log('='.repeat(80));
         console.log(`Started: ${new Date().toISOString()}`);
         console.log(`Node Version: ${process.version}`);
         console.log(`Platform: ${process.platform}`);
-        console.log('=' .repeat(80));
+        console.log('='.repeat(80));
 
         // Check if services are running
         console.log('\n🔍 Checking service availability...');
@@ -145,14 +145,27 @@ class TestRunner {
             const suite = require(path.join(__dirname, file));
 
             let suiteResults;
-            if (typeof suite === 'function') {
-                suiteResults = await suite();
-            } else if (suite.runComprehensiveTests) {
+
+            // Handle Class exports (like IntegrationTestSuite)
+            if (typeof suite === 'function' && suite.prototype && suite.prototype.runAllTests) {
+                const instance = new suite();
+                suiteResults = await instance.runAllTests();
+            }
+            // Handle specific exports
+            else if (suite.runComprehensiveTests) {
                 suiteResults = await suite.runComprehensiveTests();
             } else if (suite.runAllTests) {
                 suiteResults = await suite.runAllTests();
+            } else if (typeof suite === 'function') {
+                suiteResults = await suite();
             } else {
-                throw new Error('Invalid test suite format');
+                throw new Error('Invalid test suite format: ' + file);
+            }
+
+            // Ensure suiteResults is valid
+            if (!suiteResults) {
+                console.warn(`⚠️  ${name} did not return results.`);
+                suiteResults = { summary: { total: 0, passed: 0, failed: 0 } };
             }
 
             const duration = Date.now() - startTime;
@@ -197,7 +210,7 @@ class TestRunner {
 
         console.log('\n' + '='.repeat(80));
         console.log('📊 FINAL TEST REPORT');
-        console.log('=' .repeat(80));
+        console.log('='.repeat(80));
 
         // Suite summary
         console.log('\nTest Suites:');

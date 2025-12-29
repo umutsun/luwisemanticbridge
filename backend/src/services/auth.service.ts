@@ -321,10 +321,11 @@ export class AuthService {
       }
       */
 
-      // Use PostgreSQL for session validation
+      // Use PostgreSQL for session validation - check by user_id instead of exact token match
+      // This allows multiple valid tokens per user (e.g., multiple devices/tabs)
       const sessionResult = await this.pool.query(
-        "SELECT id FROM user_sessions WHERE token = $1 AND expires_at > NOW()",
-        [token]
+        "SELECT id FROM user_sessions WHERE user_id = $1 AND expires_at > NOW()",
+        [decoded.userId]
       );
 
       if (sessionResult.rows.length === 0) {
