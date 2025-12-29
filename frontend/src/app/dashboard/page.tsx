@@ -22,6 +22,8 @@ import { fetchWithAuth, safeJsonParse } from "@/lib/auth-fetch";
 import { AnimatedNumber } from "@/components/ui/animated-number";
 import { AnimatedResourceBar } from "@/components/ui/animated-progress";
 import { useAnimatedPercentage } from "@/hooks/use-animated-counter";
+import { useMetricsWebSocket } from "@/hooks/useMetricsWebSocket";
+import { Sparkline, AnimatedValue } from "@/components/ui/sparkline";
 
 interface SystemStatus {
   database: {
@@ -318,6 +320,23 @@ export default function DashboardPage() {
 
   // SSE connection status
   const [sseConnected, setSseConnected] = useState(false);
+
+  // WebSocket metrics hook for real-time animated updates
+  const {
+    metrics: wsMetrics,
+    history: metricsHistory,
+    connected: wsConnected,
+    latency: wsLatency
+  } = useMetricsWebSocket({
+    updateRate: 1000,
+    autoConnect: true,
+    onConnect: () => {
+      addConsoleLog('[METRICS-WS] Real-time metrics connected', 'success', 'system');
+    },
+    onDisconnect: () => {
+      addConsoleLog('[METRICS-WS] Disconnected, falling back to SSE', 'warning', 'system');
+    }
+  });
 
   // Component mount'da verileri çek - Sequential to avoid ERR_INSUFFICIENT_RESOURCES
   useEffect(() => {
@@ -1660,122 +1679,195 @@ export default function DashboardPage() {
             </CardContent>
           </Card>
 
-          {/* System Resources - Animated */}
+          {/* System Resources - Real-time with Sparklines */}
           <Card className="border-0 shadow-sm">
             <CardHeader className="pb-3">
-              <div className="flex items-center gap-2">
-                <div className="w-2 h-2 bg-orange-500 rounded-full animate-pulse" />
-                <h3 className="text-sm font-semibold tracking-tight">{t('dashboard.resources.title')}</h3>
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <div className={`w-2 h-2 rounded-full ${wsConnected ? 'bg-green-500 animate-pulse' : 'bg-orange-500 animate-pulse'}`} />
+                  <h3 className="text-sm font-semibold tracking-tight">{t('dashboard.resources.title')}</h3>
+                </div>
+                {wsConnected && (
+                  <Badge variant="outline" className="text-xs bg-green-50 dark:bg-green-950/30 text-green-700 dark:text-green-400 border-green-200 dark:border-green-800">
+                    {wsLatency}ms
+                  </Badge>
+                )}
               </div>
-              {realtimeResources.cpuModel && (
+              {(wsMetrics?.cpu?.model || realtimeResources.cpuModel) && (
                 <p className="text-xs text-gray-500 dark:text-gray-400 truncate mt-1">
-                  {realtimeResources.cpuModel} ({realtimeResources.cpuCores} cores @ {realtimeResources.cpuSpeed}MHz)
+                  {wsMetrics?.cpu?.model || realtimeResources.cpuModel} ({wsMetrics?.cpu?.cores || realtimeResources.cpuCores} cores @ {wsMetrics?.cpu?.speed || realtimeResources.cpuSpeed}MHz)
                 </p>
               )}
             </CardHeader>
             <CardContent className="pt-0">
-              <div className="space-y-3">
-                <div>
+              <div className="space-y-4">
+                {/* CPU with Sparkline */}
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-medium text-gray-700 dark:text-gray-300">{t('dashboard.resources.cpu')}</span>
+                      <AnimatedValue
+                        value={wsMetrics?.cpu?.usage ?? realtimeResources.cpu}
+                        suffix="%"
+                        className={`text-sm ${(wsMetrics?.cpu?.usage ?? realtimeResources.cpu) > 80 ? 'text-red-500' : (wsMetrics?.cpu?.usage ?? realtimeResources.cpu) > 60 ? 'text-yellow-500' : 'text-blue-500'}`}
+                      />
+                    </div>
+                    <Sparkline
+                      data={metricsHistory.cpu.length > 0 ? metricsHistory.cpu : [0, 0]}
+                      width={80}
+                      height={24}
+                      strokeColor={(wsMetrics?.cpu?.usage ?? 0) > 80 ? '#ef4444' : (wsMetrics?.cpu?.usage ?? 0) > 60 ? '#f59e0b' : '#3b82f6'}
+                      fillColor={(wsMetrics?.cpu?.usage ?? 0) > 80 ? '#ef4444' : (wsMetrics?.cpu?.usage ?? 0) > 60 ? '#f59e0b' : '#3b82f6'}
+                      showDots
+                      min={0}
+                      max={100}
+                    />
+                  </div>
                   <AnimatedResourceBar
-                    label={t('dashboard.resources.cpu')}
-                    value={realtimeResources.cpu}
+                    label=""
+                    value={wsMetrics?.cpu?.usage ?? realtimeResources.cpu}
                     thresholds={{ warning: 60, danger: 80 }}
                   />
-                  <div className="flex justify-between text-xs text-gray-500 dark:text-gray-400 mt-0.5 px-1">
-                    <span>Load: {realtimeResources.loadAvg[0]?.toFixed(2) || '0.00'}</span>
-                    <span>{realtimeResources.loadAvg[1]?.toFixed(2) || '0.00'}</span>
-                    <span>{realtimeResources.loadAvg[2]?.toFixed(2) || '0.00'}</span>
+                  <div className="flex justify-between text-xs text-gray-500 dark:text-gray-400 px-1">
+                    <span>Load: {(wsMetrics?.cpu?.loadAvg?.[0] ?? realtimeResources.loadAvg[0])?.toFixed(2) || '0.00'}</span>
+                    <span>{(wsMetrics?.cpu?.loadAvg?.[1] ?? realtimeResources.loadAvg[1])?.toFixed(2) || '0.00'}</span>
+                    <span>{(wsMetrics?.cpu?.loadAvg?.[2] ?? realtimeResources.loadAvg[2])?.toFixed(2) || '0.00'}</span>
                   </div>
                 </div>
-                <div>
+
+                {/* Memory with Sparkline */}
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-medium text-gray-700 dark:text-gray-300">{t('dashboard.resources.memory')}</span>
+                      <AnimatedValue
+                        value={wsMetrics?.memory?.percentage ?? realtimeResources.memory}
+                        suffix="%"
+                        className={`text-sm ${(wsMetrics?.memory?.percentage ?? realtimeResources.memory) > 85 ? 'text-red-500' : (wsMetrics?.memory?.percentage ?? realtimeResources.memory) > 70 ? 'text-yellow-500' : 'text-green-500'}`}
+                      />
+                    </div>
+                    <Sparkline
+                      data={metricsHistory.memory.length > 0 ? metricsHistory.memory : [0, 0]}
+                      width={80}
+                      height={24}
+                      strokeColor={(wsMetrics?.memory?.percentage ?? 0) > 85 ? '#ef4444' : (wsMetrics?.memory?.percentage ?? 0) > 70 ? '#f59e0b' : '#22c55e'}
+                      fillColor={(wsMetrics?.memory?.percentage ?? 0) > 85 ? '#ef4444' : (wsMetrics?.memory?.percentage ?? 0) > 70 ? '#f59e0b' : '#22c55e'}
+                      showDots
+                      min={0}
+                      max={100}
+                    />
+                  </div>
                   <AnimatedResourceBar
-                    label={t('dashboard.resources.memory')}
-                    value={realtimeResources.memory}
+                    label=""
+                    value={wsMetrics?.memory?.percentage ?? realtimeResources.memory}
                     thresholds={{ warning: 70, danger: 85 }}
                     colors={{
-                      normal: {
-                        text: 'text-green-600 dark:text-green-400',
-                        bar: 'bg-green-500',
-                        glow: 'rgba(34, 197, 94, 0.4)',
-                      },
-                      warning: {
-                        text: 'text-yellow-600 dark:text-yellow-400',
-                        bar: 'bg-yellow-500',
-                        glow: 'rgba(245, 158, 11, 0.4)',
-                      },
-                      danger: {
-                        text: 'text-red-600 dark:text-red-400',
-                        bar: 'bg-red-500',
-                        glow: 'rgba(239, 68, 68, 0.4)',
-                      },
+                      normal: { text: 'text-green-600 dark:text-green-400', bar: 'bg-green-500', glow: 'rgba(34, 197, 94, 0.4)' },
+                      warning: { text: 'text-yellow-600 dark:text-yellow-400', bar: 'bg-yellow-500', glow: 'rgba(245, 158, 11, 0.4)' },
+                      danger: { text: 'text-red-600 dark:text-red-400', bar: 'bg-red-500', glow: 'rgba(239, 68, 68, 0.4)' }
                     }}
                   />
-                  <div className="flex justify-between text-xs text-gray-500 dark:text-gray-400 mt-0.5 px-1">
-                    <span>{(realtimeResources.memoryDetails.used / 1024).toFixed(1)} GB used</span>
-                    <span>{(realtimeResources.memoryDetails.total / 1024).toFixed(1)} GB total</span>
+                  <div className="flex justify-between text-xs text-gray-500 dark:text-gray-400 px-1">
+                    <span>{((wsMetrics?.memory?.used ?? realtimeResources.memoryDetails.used) / 1024).toFixed(1)} GB used</span>
+                    <span>{((wsMetrics?.memory?.total ?? realtimeResources.memoryDetails.total) / 1024).toFixed(1)} GB total</span>
                   </div>
                 </div>
-                <div>
+
+                {/* Disk with Sparkline */}
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-medium text-gray-700 dark:text-gray-300">{t('dashboard.resources.disk')}</span>
+                      <AnimatedValue
+                        value={wsMetrics?.disk?.percentage ?? realtimeResources.disk}
+                        suffix="%"
+                        className={`text-sm ${(wsMetrics?.disk?.percentage ?? realtimeResources.disk) > 90 ? 'text-red-500' : (wsMetrics?.disk?.percentage ?? realtimeResources.disk) > 75 ? 'text-yellow-500' : 'text-green-500'}`}
+                      />
+                    </div>
+                    <Sparkline
+                      data={metricsHistory.disk.length > 0 ? metricsHistory.disk : [0, 0]}
+                      width={80}
+                      height={24}
+                      strokeColor="#8b5cf6"
+                      fillColor="#8b5cf6"
+                      showDots
+                      min={0}
+                      max={100}
+                    />
+                  </div>
                   <AnimatedResourceBar
-                    label={t('dashboard.resources.disk')}
-                    value={realtimeResources.disk}
+                    label=""
+                    value={wsMetrics?.disk?.percentage ?? realtimeResources.disk}
                     thresholds={{ warning: 75, danger: 90 }}
                     colors={{
-                      normal: {
-                        text: 'text-green-600 dark:text-green-400',
-                        bar: 'bg-green-500',
-                        glow: 'rgba(34, 197, 94, 0.4)',
-                      },
-                      warning: {
-                        text: 'text-yellow-600 dark:text-yellow-400',
-                        bar: 'bg-yellow-500',
-                        glow: 'rgba(245, 158, 11, 0.4)',
-                      },
-                      danger: {
-                        text: 'text-red-600 dark:text-red-400',
-                        bar: 'bg-red-500',
-                        glow: 'rgba(239, 68, 68, 0.4)',
-                      },
+                      normal: { text: 'text-green-600 dark:text-green-400', bar: 'bg-green-500', glow: 'rgba(34, 197, 94, 0.4)' },
+                      warning: { text: 'text-yellow-600 dark:text-yellow-400', bar: 'bg-yellow-500', glow: 'rgba(245, 158, 11, 0.4)' },
+                      danger: { text: 'text-red-600 dark:text-red-400', bar: 'bg-red-500', glow: 'rgba(239, 68, 68, 0.4)' }
                     }}
                   />
-                  <div className="flex justify-between text-xs text-gray-500 dark:text-gray-400 mt-0.5 px-1">
-                    <span>{realtimeResources.diskMountPoint || '/'} ({realtimeResources.diskFilesystem || 'unknown'})</span>
-                    <span>{(realtimeResources.diskDetails.used / 1024).toFixed(1)} / {(realtimeResources.diskDetails.total / 1024).toFixed(1)} GB</span>
+                  <div className="flex justify-between text-xs text-gray-500 dark:text-gray-400 px-1">
+                    <span>{wsMetrics?.disk?.mountPoint || realtimeResources.diskMountPoint || '/'} ({wsMetrics?.disk?.filesystem || realtimeResources.diskFilesystem || 'unknown'})</span>
+                    <span>{((wsMetrics?.disk?.used ?? realtimeResources.diskDetails.used) / 1024).toFixed(1)} / {((wsMetrics?.disk?.total ?? realtimeResources.diskDetails.total) / 1024).toFixed(1)} GB</span>
                   </div>
                 </div>
-                {/* Network I/O */}
-                <div className="pt-2 border-t border-gray-100 dark:border-gray-800">
-                  <div className="flex items-center justify-between mb-2">
+
+                {/* Network I/O with Sparklines */}
+                <div className="pt-3 border-t border-gray-100 dark:border-gray-800">
+                  <div className="flex items-center justify-between mb-3">
                     <span className="text-sm font-medium text-gray-700 dark:text-gray-300">Network I/O</span>
                     <span className="text-xs text-gray-500 dark:text-gray-400">
-                      {realtimeResources.network.bytesInPerSec > 0 || realtimeResources.network.bytesOutPerSec > 0 ? 'Active' : 'Idle'}
+                      {(wsMetrics?.network?.bytesInPerSec ?? realtimeResources.network.bytesInPerSec) > 0 || (wsMetrics?.network?.bytesOutPerSec ?? realtimeResources.network.bytesOutPerSec) > 0 ? 'Active' : 'Idle'}
                     </span>
                   </div>
                   <div className="grid grid-cols-2 gap-3">
-                    <div className="bg-blue-50 dark:bg-blue-950/20 rounded-lg p-2">
-                      <div className="flex items-center gap-1.5">
-                        <span className="text-blue-500">↓</span>
-                        <span className="text-xs text-gray-600 dark:text-gray-400">In</span>
+                    {/* Download */}
+                    <div className="bg-blue-50 dark:bg-blue-950/20 rounded-lg p-3">
+                      <div className="flex items-center justify-between mb-2">
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-blue-500 text-lg">↓</span>
+                          <span className="text-xs text-gray-600 dark:text-gray-400">In</span>
+                        </div>
+                        <Sparkline
+                          data={metricsHistory.networkIn.length > 0 ? metricsHistory.networkIn : [0, 0]}
+                          width={50}
+                          height={18}
+                          strokeColor="#3b82f6"
+                          strokeWidth={1}
+                          min={0}
+                        />
                       </div>
                       <div className="text-sm font-semibold text-blue-600 dark:text-blue-400">
-                        {realtimeResources.network.bytesInPerSec > 1048576
-                          ? `${(realtimeResources.network.bytesInPerSec / 1048576).toFixed(1)} MB/s`
-                          : realtimeResources.network.bytesInPerSec > 1024
-                          ? `${(realtimeResources.network.bytesInPerSec / 1024).toFixed(1)} KB/s`
-                          : `${realtimeResources.network.bytesInPerSec} B/s`}
+                        {(() => {
+                          const bytes = wsMetrics?.network?.bytesInPerSec ?? realtimeResources.network.bytesInPerSec;
+                          if (bytes > 1048576) return `${(bytes / 1048576).toFixed(1)} MB/s`;
+                          if (bytes > 1024) return `${(bytes / 1024).toFixed(1)} KB/s`;
+                          return `${bytes} B/s`;
+                        })()}
                       </div>
                     </div>
-                    <div className="bg-green-50 dark:bg-green-950/20 rounded-lg p-2">
-                      <div className="flex items-center gap-1.5">
-                        <span className="text-green-500">↑</span>
-                        <span className="text-xs text-gray-600 dark:text-gray-400">Out</span>
+                    {/* Upload */}
+                    <div className="bg-green-50 dark:bg-green-950/20 rounded-lg p-3">
+                      <div className="flex items-center justify-between mb-2">
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-green-500 text-lg">↑</span>
+                          <span className="text-xs text-gray-600 dark:text-gray-400">Out</span>
+                        </div>
+                        <Sparkline
+                          data={metricsHistory.networkOut.length > 0 ? metricsHistory.networkOut : [0, 0]}
+                          width={50}
+                          height={18}
+                          strokeColor="#22c55e"
+                          strokeWidth={1}
+                          min={0}
+                        />
                       </div>
                       <div className="text-sm font-semibold text-green-600 dark:text-green-400">
-                        {realtimeResources.network.bytesOutPerSec > 1048576
-                          ? `${(realtimeResources.network.bytesOutPerSec / 1048576).toFixed(1)} MB/s`
-                          : realtimeResources.network.bytesOutPerSec > 1024
-                          ? `${(realtimeResources.network.bytesOutPerSec / 1024).toFixed(1)} KB/s`
-                          : `${realtimeResources.network.bytesOutPerSec} B/s`}
+                        {(() => {
+                          const bytes = wsMetrics?.network?.bytesOutPerSec ?? realtimeResources.network.bytesOutPerSec;
+                          if (bytes > 1048576) return `${(bytes / 1048576).toFixed(1)} MB/s`;
+                          if (bytes > 1024) return `${(bytes / 1024).toFixed(1)} KB/s`;
+                          return `${bytes} B/s`;
+                        })()}
                       </div>
                     </div>
                   </div>

@@ -60,6 +60,7 @@ import adminRoutes from "./routes/admin.routes";
 import adminTodosRoutes from "./routes/admin-todos.routes";
 import llmStatusRoutes from "./routes/llm-status.routes";
 import logsRoutes, { initializeLogWebSocket } from "./routes/logs.routes";
+import { initializeMetricsWebSocket } from "./services/metrics-websocket.service";
 import translateRoutes from "./routes/translate.routes";
 import translationEmbeddingsRoutes from "./routes/translation-embeddings.routes";
 import schedulerRoutes from "./routes/scheduler.routes";
@@ -167,13 +168,24 @@ const logWss = SERVER.WEBSOCKET.ENABLED
   })
   : null;
 
+// Initialize WebSocket Server for real-time metrics
+const metricsWss = SERVER.WEBSOCKET.ENABLED
+  ? new StandardWebSocketServer({
+    noServer: true,
+    path: "/ws/metrics",
+  })
+  : null;
+
 // Initialize log WebSocket service
 if (SERVER.WEBSOCKET.ENABLED && logWss) {
   initializeLogWebSocket(logWss);
 }
 
+// Initialize metrics WebSocket service (will be fully initialized after database is ready)
+let metricsWebSocketInitialized = false;
+
 // Handle WebSocket upgrade for standard WebSocket connections if enabled
-if (SERVER.WEBSOCKET.ENABLED && (wss || logWss || chatWss)) {
+if (SERVER.WEBSOCKET.ENABLED && (wss || logWss || chatWss || metricsWss)) {
   httpServer.on("upgrade", (request, socket, head) => {
     const host = request.headers.host || "localhost";
     const pathname = new URL(request.url!, "http://" + host).pathname;
@@ -222,6 +234,10 @@ if (SERVER.WEBSOCKET.ENABLED && (wss || logWss || chatWss)) {
 
           ws.send(JSON.stringify({ type: "connected" }));
         }
+      });
+    } else if (pathname === "/ws/metrics" && metricsWss) {
+      metricsWss.handleUpgrade(request, socket, head, (ws) => {
+        metricsWss.emit("connection", ws, request);
       });
     } else {
       socket.destroy();
@@ -1023,6 +1039,13 @@ async function startServer() {
 
     // Initialize Console Log Service after Redis is connected
     consoleLogService = initializeConsoleLogService(redis);
+
+    // Initialize Metrics WebSocket Service
+    if (SERVER.WEBSOCKET.ENABLED && metricsWss && !metricsWebSocketInitialized) {
+      initializeMetricsWebSocket(metricsWss, lsembPool, redis);
+      metricsWebSocketInitialized = true;
+      console.log(" Metrics WebSocket: Initialized");
+    }
 
     // Check Redis database info
     if (redis) {
