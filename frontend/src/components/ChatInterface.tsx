@@ -185,7 +185,8 @@ export default function ChatInterface() {
     placeholder: '',
     primaryColor: '',
     activeChatModel: '',
-    enableSuggestions: true // Default to true, will be overridden by DB
+    enableSuggestions: true, // Default to true, will be overridden by DB
+    suggestionCount: 4 // Default to 4, will be overridden by DB
   });
   const [settingsLoaded, setSettingsLoaded] = useState(false);
 
@@ -207,8 +208,10 @@ export default function ChatInterface() {
     try {
       debug.log('🔄 Fetching fresh suggestions from backend...');
 
-      // Fetch from backend (includes generated questions from database)
-      const response = await fetch(getEndpoint('chat', 'suggestions'));
+      // Fetch from backend with auth (endpoint requires authentication)
+      const response = await fetch(getEndpoint('chat', 'suggestions'), {
+        headers: token ? { 'Authorization': `Bearer ${token}` } : {}
+      });
       if (response.ok) {
         const data = await safeJsonParse(response);
         if (!data) return [];
@@ -298,6 +301,7 @@ export default function ChatInterface() {
   const [shuffledSuggestions, setShuffledSuggestions] = useState<string[]>([]);
 
   // When suggestedQuestions change, shuffle once and store
+  // Uses suggestionCount from settings (dynamic)
   useEffect(() => {
     if (suggestedQuestions.length === 0) {
       setShuffledSuggestions([]);
@@ -312,8 +316,10 @@ export default function ChatInterface() {
       const j = Math.floor(((i + 1) * seed * 7) % shuffled.length);
       [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
     }
-    setShuffledSuggestions(shuffled.slice(0, 4));
-  }, [suggestedQuestions]);
+    // Use dynamic count from settings
+    const count = chatbotSettings.suggestionCount || 4;
+    setShuffledSuggestions(shuffled.slice(0, count));
+  }, [suggestedQuestions, chatbotSettings.suggestionCount]);
 
   // Use stable shuffled suggestions
   const memoizedSuggestions = shuffledSuggestions;
@@ -388,7 +394,9 @@ export default function ChatInterface() {
           placeholder: chatbotData.placeholder || '',  // NO fallback
           primaryColor: chatbotData.primaryColor || '',  // NO fallback
           activeChatModel: settingsData.llmSettings?.activeChatModel || '',  // NO fallback - must be configured
-          enableSuggestions: chatbotData.enableSuggestions !== undefined ? chatbotData.enableSuggestions : true
+          enableSuggestions: chatbotData.enableSuggestions !== undefined ? chatbotData.enableSuggestions : true,
+          // Support both maxSuggestionCards (UI) and suggestionCount (legacy)
+          suggestionCount: chatbotData.maxSuggestionCards || chatbotData.suggestionCount || 4
         };
 
         // Extract RAG settings

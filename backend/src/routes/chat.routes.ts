@@ -322,115 +322,53 @@ router.delete('/api/v2/chat/conversation/:id', authenticateToken, async (req: Au
 });
 
 /**
- * Get popular/suggested questions - LLM-generated schema-aware suggestions
- * Uses QuestionGenerationService to create diverse, context-aware questions
- * Results are cached for 30 minutes to reduce LLM calls
+ * Get suggested questions - simplified 2-tier system
+ * Tier 1: Schema example questions (from active schema config)
+ * Tier 2: User pool questions (quality user questions from chat history)
+ *
+ * Uses Redis caching (1 hour) to reduce database calls
  */
-router.get('/api/v2/chat/suggestions', async (req: Request, res: Response) => {
+router.get('/api/v2/chat/suggestions', authenticateToken, async (req: AuthenticatedRequest, res: Response) => {
   try {
-    let suggestions: string[] = [];
+    const { questionGenerationService } = await import('../services/question-generation.service');
 
-    // Try to get user ID from token (if authenticated)
-    // Parse Authorization header if present
-    let userId: string | null = null;
-    const authHeader = req.headers.authorization;
-    if (authHeader && authHeader.startsWith('Bearer ')) {
-      try {
-        const token = authHeader.substring(7);
-        const payload = JSON.parse(Buffer.from(token.split('.')[1], 'base64').toString());
-        userId = payload.userId || payload.id;
-      } catch (error) {
-        // Not a valid token, proceed without user context
-      }
-    }
-
-    // If user is authenticated, generate LLM-based suggestions using schema context
-    console.log(`[Suggestions] userId from token: ${userId}`);
-    if (userId) {
-      try {
-        const { dataSchemaService } = await import('../services/data-schema.service');
-        const { questionGenerationService } = await import('../services/question-generation.service');
-
-        const activeSchema = await dataSchemaService.getActiveSchemaForUser(userId);
-        console.log(`[Suggestions] Active schema for user: ${activeSchema?.name || 'none'}`);
-
-        if (activeSchema) {
-          // Build schema context for LLM
-          const schemaContext = {
-            schemaName: activeSchema.name,
-            description: activeSchema.description,
-            categories: activeSchema.templates?.categories || [],
-            sampleContent: activeSchema.templates?.example_questions?.join(', ')
-          };
-
-          // Generate LLM-based questions (cached for 30 mins)
-          suggestions = await questionGenerationService.generateWelcomeQuestions(schemaContext, 4);
-          console.log(`[Suggestions] Generated ${suggestions.length} LLM questions for schema: ${activeSchema.name}`);
-        }
-      } catch (schemaError) {
-        console.error('[Suggestions] Failed to generate LLM suggestions:', schemaError);
-      }
-    }
-
-    // Fallback: use default schema example_questions from industry_presets table
-    if (suggestions.length === 0) {
-      try {
-        // Direct DB query for genel_dokuman preset's example_questions
-        const presetsResult = await dbConfig.query(`
-          SELECT templates->'example_questions' as example_questions
-          FROM industry_presets
-          WHERE is_active = true
-          AND templates->'example_questions' IS NOT NULL
-          ORDER BY
-            CASE WHEN schema_name = 'genel_dokuman' THEN 0 ELSE 1 END,
-            sort_order
-          LIMIT 1
-        `);
-
-        if (presetsResult.rows.length > 0 && presetsResult.rows[0].example_questions) {
-          const exampleQuestions = presetsResult.rows[0].example_questions;
-          if (Array.isArray(exampleQuestions) && exampleQuestions.length > 0) {
-            suggestions = [...exampleQuestions];
-            console.log(`[Suggestions] Using preset example_questions: ${suggestions.length} questions`);
-          }
-        }
-      } catch (presetError) {
-        console.error('[Suggestions] Failed to get preset questions:', presetError);
-      }
-    }
-
-    // Final fallback: chatbot settings (only manual questions, NOT auto-generated)
-    // Schema-based questions have priority, autoGenerate is ignored to avoid PDF names in suggestions
-    if (suggestions.length === 0) {
+    // Get suggestion count from settings (default: 4)
+    let suggestionCount = 4;
+    try {
       const settingsResult = await dbConfig.query(`
         SELECT value FROM settings WHERE key = 'chatbot'
       `);
-
       if (settingsResult.rows.length > 0) {
         const rawValue = settingsResult.rows[0].value;
         const chatbotData = typeof rawValue === 'string' ? JSON.parse(rawValue) : (rawValue || {});
+        // Support both maxSuggestionCards (UI) and suggestionCount (legacy)
+        suggestionCount = chatbotData.maxSuggestionCards || chatbotData.suggestionCount || 4;
+      }
+    } catch (e) {
+      // Use default
+    }
 
-        // Use manually configured suggestion questions if available
-        if (chatbotData.suggestionQuestions && chatbotData.suggestionQuestions.length > 0) {
-          suggestions = chatbotData.suggestionQuestions;
-          console.log(`[Suggestions] Using manual chatbot suggestionQuestions: ${suggestions.length} questions`);
+    // Get userId for schema context (now properly authenticated)
+    const userId = req.user?.userId;
+    let schemaName = 'default';
+
+    // Try to get active schema for user
+    if (userId) {
+      try {
+        const { dataSchemaService } = await import('../services/data-schema.service');
+        const activeSchema = await dataSchemaService.getActiveSchemaForUser(userId);
+        if (activeSchema?.name) {
+          schemaName = activeSchema.name;
         }
-        // NOTE: autoGenerateSuggestions is intentionally ignored - schema questions have priority
-        // getPopularQuestions() often returns poor quality titles (PDF names, etc.)
+      } catch (e) {
+        // Use default schema
       }
     }
 
-    // Final shuffle using Fisher-Yates for true randomness
-    if (suggestions.length > 0) {
-      const shuffled = [...suggestions];
-      for (let i = shuffled.length - 1; i > 0; i--) {
-        const j = Math.floor(Math.random() * (i + 1));
-        [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
-      }
-      suggestions = shuffled.slice(0, 4);
-    }
+    // Generate suggestions using simplified 2-tier system
+    const suggestions = await questionGenerationService.generateSimpleSuggestions(schemaName, suggestionCount);
 
-    console.log(`[Suggestions] Returning ${suggestions.length} shuffled suggestions`);
+    console.log(`[Suggestions] Returning ${suggestions.length} suggestions for schema: ${schemaName}`);
     res.json({ suggestions });
   } catch (error: any) {
     console.error('Get suggestions error:', error);

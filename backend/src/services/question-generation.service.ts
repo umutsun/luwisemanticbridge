@@ -1002,6 +1002,68 @@ Sadece soruları listele, her satırda bir soru. Numaralandırma veya açıklama
       // Ignore errors
     }
   }
+
+  /**
+   * Simplified 2-tier suggestion generator
+   * Tier 1: Schema example questions (from active schema config)
+   * Tier 2: User pool questions (quality user questions from chat history)
+   *
+   * No LLM fallback - keeps it simple and fast
+   */
+  async generateSimpleSuggestions(schemaName: string, count: number = 4): Promise<string[]> {
+    console.log(`[Suggestions] generateSimpleSuggestions called for schema: ${schemaName}, count: ${count}`);
+
+    try {
+      const { redis } = await import('../config/redis');
+      const redisKey = `simple_suggestions:${schemaName}`;
+
+      // Try Redis cache first
+      const cached = await redis.get(redisKey);
+      if (cached) {
+        const pool = JSON.parse(cached);
+        console.log(`[Suggestions] Using cached pool (${pool.length} questions)`);
+        return this.getRandomQuestions(pool, count);
+      }
+
+      // Build question pool from 2 sources
+      const questionPool: string[] = [];
+
+      // Tier 1: Schema example questions
+      const schemaQuestions = await this.getSchemaExampleQuestions();
+      if (schemaQuestions.length > 0) {
+        questionPool.push(...schemaQuestions);
+        console.log(`[Suggestions] Added ${schemaQuestions.length} schema questions`);
+      }
+
+      // Tier 2: User pool questions
+      const userPoolQuestions = await this.getUserPoolQuestions(20);
+      if (userPoolQuestions.length > 0) {
+        // Add user questions that aren't already in schema questions
+        const schemaSet = new Set(schemaQuestions.map(q => q.toLowerCase().trim()));
+        const uniqueUserQuestions = userPoolQuestions.filter(
+          q => !schemaSet.has(q.toLowerCase().trim())
+        );
+        questionPool.push(...uniqueUserQuestions);
+        console.log(`[Suggestions] Added ${uniqueUserQuestions.length} unique user pool questions`);
+      }
+
+      // Remove exact duplicates
+      const uniquePool = [...new Set(questionPool)];
+
+      // Cache for 1 hour
+      if (uniquePool.length > 0) {
+        await redis.setex(redisKey, 3600, JSON.stringify(uniquePool));
+        console.log(`[Suggestions] Cached ${uniquePool.length} questions for 1 hour`);
+      }
+
+      console.log(`[Suggestions] Total pool: ${uniquePool.length} questions`);
+      return this.getRandomQuestions(uniquePool, count);
+    } catch (error) {
+      console.error('[Suggestions] Error generating simple suggestions:', error);
+      // Return empty array on error - no fallback
+      return [];
+    }
+  }
 }
 
 // Export singleton instance
