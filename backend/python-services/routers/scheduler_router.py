@@ -279,6 +279,65 @@ async def quick_create_embedding_sync(
     return await scheduler.create_job(job_request)
 
 
+class QuickScrapeAndEmbedRequest(BaseModel):
+    """Quick create for scrape and embed pipeline job"""
+    name: str
+    scraper_type: str  # sahibinden, hepsiburada, trendyol, generic, rss, sitemap, custom
+    scraper_url: str
+    scraper_name: str  # Unique name for Redis key prefix
+    export_to_table: str
+    cron_expression: str = "0 */6 * * *"  # Default: every 6 hours
+    max_pages: int = 50
+    redis_db: int = 1
+    generate_embeddings: bool = True
+    embedding_content_column: str = "content"
+    skip_scrape_if_recent: bool = True
+    recent_threshold_hours: int = 6
+
+
+@router.post("/quick/scrape-and-embed", response_model=ScheduledJobResponse, status_code=201)
+async def quick_create_scrape_and_embed(
+    request: QuickScrapeAndEmbedRequest,
+    scheduler: SchedulerService = Depends(get_scheduler_service)
+):
+    """
+    Quick create a scrape and embed pipeline job.
+
+    Pipeline:
+    1. Scrape data from URL → Redis
+    2. Export Redis data → PostgreSQL table
+    3. Generate embeddings for new records
+
+    Example scrapers:
+    - sahibinden: Real estate listings
+    - hepsiburada: E-commerce products
+    - rss: RSS feed items
+    - sitemap: URLs from sitemap.xml
+    - generic: Any website with generic scraper
+    """
+    job_request = CreateScheduledJobRequest(
+        name=request.name,
+        description=f"Scrape {request.scraper_type}: {request.scraper_url} → {request.export_to_table}",
+        job_type=JobType.SCRAPE_AND_EMBED,
+        schedule_type=ScheduleType.CRON,
+        cron_expression=request.cron_expression,
+        job_config={
+            "scraper_type": request.scraper_type,
+            "scraper_url": request.scraper_url,
+            "scraper_name": request.scraper_name,
+            "max_pages": request.max_pages,
+            "redis_db": request.redis_db,
+            "export_to_table": request.export_to_table,
+            "export_mode": "upsert",
+            "generate_embeddings": request.generate_embeddings,
+            "embedding_content_column": request.embedding_content_column,
+            "skip_scrape_if_recent": request.skip_scrape_if_recent,
+            "recent_threshold_hours": request.recent_threshold_hours,
+        }
+    )
+    return await scheduler.create_job(job_request)
+
+
 # =====================================================
 # Cron Expression Helper
 # =====================================================

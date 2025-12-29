@@ -15,7 +15,7 @@ import httpx
 from .job_types import (
     JobType, ScheduledJobResponse,
     RagQueryConfig, CrawlerConfig, EmbeddingSyncConfig,
-    CleanupConfig, CustomScriptConfig,
+    CleanupConfig, CustomScriptConfig, ScrapeAndEmbedConfig,
 )
 
 logger = logging.getLogger(__name__)
@@ -51,6 +51,7 @@ class JobExecutor:
             JobType.EMBEDDING_SYNC: self._execute_embedding_sync,
             JobType.CLEANUP: self._execute_cleanup,
             JobType.CUSTOM_SCRIPT: self._execute_custom_script,
+            JobType.SCRAPE_AND_EMBED: self._execute_scrape_and_embed,
         }
 
         executor = executors.get(job.job_type)
@@ -324,6 +325,245 @@ class JobExecutor:
             "stdout": stdout.decode()[-5000:],  # Limit output size
             "stderr": stderr.decode()[-1000:] if stderr else None,
         }
+
+    # =====================================================
+    # Scrape and Embed Pipeline Executor
+    # =====================================================
+
+    async def _execute_scrape_and_embed(self, job: ScheduledJobResponse) -> Dict[str, Any]:
+        """
+        Execute a full scrape → Redis → DB → Embed pipeline.
+
+        Pipeline steps:
+        1. Check if scraping is needed (optional: skip if data is recent)
+        2. Run scraper to collect data into Redis
+        3. Export Redis data to PostgreSQL table
+        4. Generate embeddings for new records
+        """
+        import redis.asyncio as aioredis
+
+        config = ScrapeAndEmbedConfig(**job.job_config)
+        result = {
+            "scraper_type": config.scraper_type,
+            "scraper_name": config.scraper_name,
+            "steps_completed": [],
+            "items_scraped": 0,
+            "items_exported": 0,
+            "embeddings_generated": 0,
+            "skipped_reason": None,
+        }
+
+        redis_key_prefix = config.redis_key_prefix or f"crawl4ai:{config.scraper_name}"
+
+        # Step 0: Check if scraping should be skipped
+        if config.skip_scrape_if_recent:
+            skip, reason = await self._check_recent_scrape(
+                redis_key_prefix, config.redis_db, config.recent_threshold_hours
+            )
+            if skip:
+                result["skipped_reason"] = reason
+                result["steps_completed"].append("skipped_scrape")
+                logger.info(f"Skipping scrape: {reason}")
+                # Still proceed with export and embedding if there's data
+            else:
+                # Run scraper
+                scrape_result = await self._run_scraper(config)
+                result["items_scraped"] = scrape_result.get("items_found", 0)
+                result["steps_completed"].append("scrape")
+        else:
+            # Always run scraper
+            scrape_result = await self._run_scraper(config)
+            result["items_scraped"] = scrape_result.get("items_found", 0)
+            result["steps_completed"].append("scrape")
+
+        # Step 2: Export from Redis to PostgreSQL
+        export_result = await self._export_redis_to_db(config)
+        result["items_exported"] = export_result.get("exported", 0)
+        result["steps_completed"].append("export")
+
+        # Step 3: Generate embeddings if enabled
+        if config.generate_embeddings and result["items_exported"] > 0:
+            embed_result = await self._generate_embeddings_for_table(config)
+            result["embeddings_generated"] = embed_result.get("processed", 0)
+            result["steps_completed"].append("embed")
+
+        # Notify if configured
+        if config.notify_on_new_items and result["items_exported"] >= config.min_new_items_to_notify:
+            await self._publish_status(
+                job.id,
+                "new_items",
+                {"count": result["items_exported"], "table": config.export_to_table}
+            )
+
+        logger.info(
+            f"Scrape and embed completed: {result['items_scraped']} scraped, "
+            f"{result['items_exported']} exported, {result['embeddings_generated']} embedded"
+        )
+        return result
+
+    async def _check_recent_scrape(
+        self, redis_key_prefix: str, redis_db: int, threshold_hours: int
+    ) -> tuple[bool, str]:
+        """Check if there was a recent scrape to avoid redundant work."""
+        import redis.asyncio as aioredis
+        from datetime import timedelta
+
+        try:
+            redis_url = os.getenv('REDIS_URL', 'redis://localhost:6379')
+            redis = aioredis.from_url(f"{redis_url}/{redis_db}")
+
+            # Check for metadata key with last scrape time
+            meta_key = f"{redis_key_prefix}:_meta"
+            meta = await redis.hgetall(meta_key)
+            await redis.close()
+
+            if meta and b'last_scrape' in meta:
+                last_scrape = datetime.fromisoformat(meta[b'last_scrape'].decode())
+                age = datetime.now() - last_scrape
+                if age < timedelta(hours=threshold_hours):
+                    return True, f"Last scrape was {age.total_seconds() / 3600:.1f}h ago (threshold: {threshold_hours}h)"
+
+            return False, None
+        except Exception as e:
+            logger.warning(f"Could not check recent scrape: {e}")
+            return False, None
+
+    async def _run_scraper(self, config: ScrapeAndEmbedConfig) -> Dict[str, Any]:
+        """Run the appropriate scraper based on scraper_type."""
+        scraper_map = {
+            "sahibinden": "sahibinden_list_crawler",
+            "hepsiburada": "hepsiburada_crawler",
+            "trendyol": "trendyol_crawler",
+            "generic": "generic_crawler",
+            "rss": "rss_crawler",
+            "sitemap": "sitemap_crawler",
+        }
+
+        crawler_script = scraper_map.get(config.scraper_type, config.scraper_type)
+        crawlers_dir = os.path.join(os.path.dirname(__file__), '..', 'crawlers')
+        script_path = os.path.join(crawlers_dir, f"{crawler_script}.py")
+
+        if not os.path.exists(script_path):
+            # Try custom script path
+            script_path = os.path.join(crawlers_dir, f"{config.scraper_type}.py")
+            if not os.path.exists(script_path):
+                raise FileNotFoundError(f"Crawler script not found: {crawler_script}")
+
+        # Build command args
+        cmd_args = [
+            sys.executable, script_path,
+            "--url", config.scraper_url,
+            "--name", config.scraper_name,
+            "--pages", str(config.max_pages),
+        ]
+
+        if config.redis_db != 1:  # If not default
+            cmd_args.extend(["--redis-db", str(config.redis_db)])
+
+        logger.info(f"Running scraper: {crawler_script} for {config.scraper_name}")
+
+        process = await asyncio.create_subprocess_exec(
+            *cmd_args,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+            cwd=crawlers_dir,
+        )
+
+        try:
+            stdout, stderr = await asyncio.wait_for(
+                process.communicate(),
+                timeout=3600  # 1 hour max
+            )
+        except asyncio.TimeoutError:
+            process.kill()
+            raise asyncio.TimeoutError("Scraper timed out after 1 hour")
+
+        output = stdout.decode()
+
+        # Update metadata in Redis
+        await self._update_scrape_metadata(config)
+
+        # Parse results
+        items_found = 0
+        for line in output.split('\n'):
+            if 'items' in line.lower() or 'found' in line.lower() or 'scraped' in line.lower():
+                import re
+                numbers = re.findall(r'\d+', line)
+                if numbers:
+                    items_found = max(items_found, int(numbers[0]))
+
+        return {
+            "items_found": items_found,
+            "output": output[-2000:],  # Last 2000 chars
+            "return_code": process.returncode,
+        }
+
+    async def _update_scrape_metadata(self, config: ScrapeAndEmbedConfig):
+        """Update Redis metadata with scrape info."""
+        import redis.asyncio as aioredis
+
+        try:
+            redis_url = os.getenv('REDIS_URL', 'redis://localhost:6379')
+            redis = aioredis.from_url(f"{redis_url}/{config.redis_db}")
+
+            meta_key = f"crawl4ai:{config.scraper_name}:_meta"
+            await redis.hset(meta_key, mapping={
+                "last_scrape": datetime.now().isoformat(),
+                "scraper_type": config.scraper_type,
+                "url": config.scraper_url,
+                "max_pages": str(config.max_pages),
+            })
+            await redis.close()
+        except Exception as e:
+            logger.warning(f"Could not update scrape metadata: {e}")
+
+    async def _export_redis_to_db(self, config: ScrapeAndEmbedConfig) -> Dict[str, Any]:
+        """Export scraped data from Redis to PostgreSQL."""
+        async with httpx.AsyncClient(timeout=300.0) as client:
+            response = await client.post(
+                f"{self.backend_url}/api/v2/crawler/crawler-directories/{config.scraper_name}/export-to-db",
+                json={
+                    "tableName": config.export_to_table,
+                    "mode": config.export_mode,
+                    "generateEmbeddings": False,  # We'll do this separately
+                    "idColumn": config.id_column,
+                }
+            )
+
+            if response.status_code == 200:
+                result = response.json()
+                return {
+                    "exported": result.get("exportedCount", result.get("count", 0)),
+                    "table": config.export_to_table,
+                }
+            else:
+                logger.warning(f"Export failed: {response.status_code} - {response.text}")
+                return {"exported": 0, "error": response.text}
+
+    async def _generate_embeddings_for_table(self, config: ScrapeAndEmbedConfig) -> Dict[str, Any]:
+        """Generate embeddings for newly exported records."""
+        async with httpx.AsyncClient(timeout=600.0) as client:
+            response = await client.post(
+                f"{self.python_services_url}/api/python/embeddings/generate",
+                json={
+                    "sourceTable": config.export_to_table,
+                    "batchSize": config.embedding_batch_size,
+                    "model": config.embedding_model,
+                    "skipExisting": True,
+                    "contentColumn": config.embedding_content_column,
+                }
+            )
+
+            if response.status_code == 200:
+                result = response.json()
+                return {
+                    "processed": result.get("processed", 0),
+                    "skipped": result.get("skipped", 0),
+                    "errors": result.get("errors", 0),
+                }
+            else:
+                logger.warning(f"Embedding generation failed: {response.status_code}")
+                return {"processed": 0, "error": response.text}
 
     # =====================================================
     # Helper Methods

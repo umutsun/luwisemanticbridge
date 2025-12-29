@@ -16,6 +16,7 @@ class JobType(str, Enum):
     EMBEDDING_SYNC = "embedding_sync"
     CLEANUP = "cleanup"
     CUSTOM_SCRIPT = "custom_script"
+    SCRAPE_AND_EMBED = "scrape_and_embed"  # Full pipeline: scrape → redis → db → embeddings
 
 
 class ScheduleType(str, Enum):
@@ -109,6 +110,64 @@ class CustomScriptConfig(BaseModel):
         # Prevent path traversal
         if '..' in v:
             raise ValueError('Path traversal not allowed')
+        return v
+
+
+class ScrapeAndEmbedConfig(BaseModel):
+    """
+    Configuration for Scrape and Embed pipeline jobs.
+
+    Pipeline:
+    1. Run crawler/scraper → data to Redis
+    2. Export Redis data to PostgreSQL table
+    3. Generate embeddings for new records
+    """
+    # Scraper settings
+    scraper_type: str = Field(..., description="Type: sahibinden, hepsiburada, generic, custom")
+    scraper_url: str = Field(..., min_length=1)
+    scraper_name: str = Field(..., min_length=1, description="Unique name for Redis key prefix")
+    max_pages: int = Field(default=10, ge=1, le=500)
+
+    # Redis settings
+    redis_db: int = Field(default=1, ge=0, le=15)
+    redis_key_prefix: Optional[str] = None  # If None, uses scraper_name
+    check_existing: bool = Field(default=True, description="Skip items already in Redis")
+
+    # Export settings
+    export_to_table: str = Field(..., min_length=1, description="Target PostgreSQL table")
+    export_mode: str = Field(default="upsert", description="insert, upsert, replace")
+    id_column: str = Field(default="source_id", description="Column for deduplication")
+
+    # Embedding settings
+    generate_embeddings: bool = Field(default=True)
+    embedding_model: str = Field(default="text-embedding-3-small")
+    embedding_content_column: str = Field(default="content")
+    embedding_batch_size: int = Field(default=100, ge=10, le=500)
+
+    # Pipeline control
+    skip_scrape_if_recent: bool = Field(default=False, description="Skip scraping if data is recent")
+    recent_threshold_hours: int = Field(default=6, ge=1, le=168)
+    notify_on_new_items: bool = Field(default=False)
+    min_new_items_to_notify: int = Field(default=10, ge=1)
+
+    @validator('scraper_url')
+    def validate_url(cls, v):
+        if not v.startswith(('http://', 'https://')):
+            raise ValueError('URL must start with http:// or https://')
+        return v
+
+    @validator('scraper_type')
+    def validate_scraper_type(cls, v):
+        allowed = ['sahibinden', 'hepsiburada', 'trendyol', 'generic', 'custom', 'rss', 'sitemap']
+        if v not in allowed:
+            raise ValueError(f'scraper_type must be one of: {allowed}')
+        return v
+
+    @validator('export_mode')
+    def validate_export_mode(cls, v):
+        allowed = ['insert', 'upsert', 'replace']
+        if v not in allowed:
+            raise ValueError(f'export_mode must be one of: {allowed}')
         return v
 
 
@@ -254,6 +313,7 @@ def get_config_model(job_type: JobType):
         JobType.EMBEDDING_SYNC: EmbeddingSyncConfig,
         JobType.CLEANUP: CleanupConfig,
         JobType.CUSTOM_SCRIPT: CustomScriptConfig,
+        JobType.SCRAPE_AND_EMBED: ScrapeAndEmbedConfig,
     }
     return config_models.get(job_type)
 
