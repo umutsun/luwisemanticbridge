@@ -1811,15 +1811,15 @@ export default function DashboardPage() {
           </Card>
         </div>
 
-        {/* Active Pipelines & Services Status */}
+        {/* Pipeline Timeline & Services Status */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mt-8">
-          {/* Active Pipelines */}
+          {/* Scheduler Timeline */}
           <Card className="border-0 shadow-sm">
             <CardHeader className="pb-3">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <div className={`w-2 h-2 rounded-full ${pipelines.some(p => p.status === 'running') ? 'bg-green-500 animate-pulse' : 'bg-gray-400'}`} />
-                  <h3 className="text-sm font-semibold tracking-tight">Active Pipelines</h3>
+                  <h3 className="text-sm font-semibold tracking-tight">Scheduler Timeline</h3>
                 </div>
                 <Badge variant={sseConnected ? "default" : "secondary"} className="text-xs">
                   {sseConnected ? 'Live' : 'Offline'}
@@ -1830,69 +1830,101 @@ export default function DashboardPage() {
               {pipelines.length === 0 || pipelines.every(p => p.status === 'idle') ? (
                 <div className="text-center py-8 text-gray-500 dark:text-gray-400">
                   <div className="text-2xl mb-2">✓</div>
-                  <p className="text-sm">No active pipelines</p>
+                  <p className="text-sm">No scheduled tasks today</p>
                 </div>
               ) : (
-                <div className="space-y-4">
-                  {pipelines.filter(p => p.status !== 'idle').map((pipeline, idx) => (
-                    <div key={idx} className={`p-4 rounded-lg border ${
-                      pipeline.status === 'running' ? 'bg-blue-50 dark:bg-blue-950/20 border-blue-200 dark:border-blue-800' :
-                      pipeline.status === 'paused' ? 'bg-yellow-50 dark:bg-yellow-950/20 border-yellow-200 dark:border-yellow-800' :
-                      pipeline.status === 'error' ? 'bg-red-50 dark:bg-red-950/20 border-red-200 dark:border-red-800' :
-                      pipeline.status === 'completed' ? 'bg-green-50 dark:bg-green-950/20 border-green-200 dark:border-green-800' :
-                      'bg-gray-50 dark:bg-gray-800/50 border-gray-200 dark:border-gray-700'
-                    }`}>
-                      <div className="flex justify-between items-start mb-2">
-                        <div>
-                          <h4 className="font-medium text-sm">{pipeline.name}</h4>
-                          <span className="text-xs text-gray-500 capitalize">{pipeline.type}</span>
-                        </div>
-                        <Badge variant={
-                          pipeline.status === 'running' ? 'default' :
-                          pipeline.status === 'paused' ? 'secondary' :
-                          pipeline.status === 'error' ? 'destructive' :
-                          'outline'
-                        } className="text-xs capitalize">
-                          {pipeline.status === 'running' && <Loader2 className="w-3 h-3 mr-1 animate-spin" />}
-                          {pipeline.status === 'completed' && <CheckCircle className="w-3 h-3 mr-1" />}
-                          {pipeline.status === 'error' && <AlertTriangle className="w-3 h-3 mr-1" />}
-                          {pipeline.status}
-                        </Badge>
+                <div className="relative">
+                  {/* Horizontal Timeline */}
+                  <div className="overflow-x-auto pb-4">
+                    <div className="relative min-w-[600px]">
+                      {/* Timeline line */}
+                      <div className="absolute top-8 left-0 right-0 h-0.5 bg-gray-200 dark:bg-gray-700" />
+
+                      {/* Timeline nodes */}
+                      <div className="flex justify-between items-start relative">
+                        {pipelines.filter(p => p.status !== 'idle').map((pipeline, idx) => (
+                          <div key={idx} className="flex flex-col items-center relative" style={{ width: `${100 / Math.max(pipelines.filter(p => p.status !== 'idle').length, 3)}%` }}>
+                            {/* Node */}
+                            <div className={`relative z-10 flex items-center justify-center w-4 h-4 rounded-full mb-3 ${
+                              pipeline.status === 'running' ? 'bg-blue-500 ring-4 ring-blue-100 dark:ring-blue-900 animate-pulse' :
+                              pipeline.status === 'completed' ? 'bg-green-500 ring-4 ring-green-100 dark:ring-green-900' :
+                              pipeline.status === 'error' ? 'bg-red-500 ring-4 ring-red-100 dark:ring-red-900' :
+                              pipeline.status === 'paused' ? 'bg-yellow-500 ring-4 ring-yellow-100 dark:ring-yellow-900' :
+                              'bg-gray-400 ring-4 ring-gray-100 dark:ring-gray-800'
+                            }`}>
+                              {pipeline.status === 'running' && <Loader2 className="w-2 h-2 text-white animate-spin" />}
+                              {pipeline.status === 'completed' && <CheckCircle className="w-2 h-2 text-white" />}
+                              {pipeline.status === 'error' && <AlertTriangle className="w-2 h-2 text-white" />}
+                            </div>
+
+                            {/* Info Card */}
+                            <div className={`px-3 py-2 rounded-lg border text-center min-w-[120px] ${
+                              pipeline.status === 'running' ? 'bg-blue-50 dark:bg-blue-950/20 border-blue-200 dark:border-blue-800' :
+                              pipeline.status === 'completed' ? 'bg-green-50 dark:bg-green-950/20 border-green-200 dark:border-green-800' :
+                              pipeline.status === 'error' ? 'bg-red-50 dark:bg-red-950/20 border-red-200 dark:border-red-800' :
+                              pipeline.status === 'paused' ? 'bg-yellow-50 dark:bg-yellow-950/20 border-yellow-200 dark:border-yellow-800' :
+                              'bg-gray-50 dark:bg-gray-800/50 border-gray-200 dark:border-gray-700'
+                            }`}>
+                              {/* Time */}
+                              <div className="text-[10px] text-gray-500 dark:text-gray-400 mb-1">
+                                {new Date().toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' })}
+                              </div>
+
+                              {/* Pipeline name */}
+                              <div className="font-medium text-xs mb-1 truncate" title={pipeline.name}>
+                                {pipeline.name.length > 15 ? pipeline.name.substring(0, 15) + '...' : pipeline.name}
+                              </div>
+
+                              {/* Type */}
+                              <div className="text-[10px] text-gray-500 dark:text-gray-400 capitalize mb-1">
+                                {pipeline.type}
+                              </div>
+
+                              {/* Progress */}
+                              {pipeline.progress !== undefined && (
+                                <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-1 mb-1">
+                                  <div
+                                    className={`h-full rounded-full transition-all duration-500 ${
+                                      pipeline.status === 'error' ? 'bg-red-500' :
+                                      pipeline.status === 'paused' ? 'bg-yellow-500' :
+                                      pipeline.status === 'completed' ? 'bg-green-500' :
+                                      'bg-blue-500'
+                                    }`}
+                                    style={{ width: `${pipeline.progress}%` }}
+                                  />
+                                </div>
+                              )}
+
+                              {/* Status badge */}
+                              <Badge variant="outline" className="text-[10px] px-1 py-0 h-4 capitalize">
+                                {pipeline.status}
+                              </Badge>
+                            </div>
+                          </div>
+                        ))}
                       </div>
-
-                      {pipeline.progress !== undefined && (
-                        <>
-                          <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2 mb-2">
-                            <div
-                              className={`h-full rounded-full transition-all duration-500 ${
-                                pipeline.status === 'error' ? 'bg-red-500' :
-                                pipeline.status === 'paused' ? 'bg-yellow-500' :
-                                'bg-blue-500'
-                              }`}
-                              style={{ width: `${pipeline.progress}%` }}
-                            />
-                          </div>
-                          <div className="flex justify-between text-xs text-gray-500 dark:text-gray-400">
-                            <span>{pipeline.current?.toLocaleString() || 0} / {pipeline.total?.toLocaleString() || 0}</span>
-                            <span>{pipeline.progress}%</span>
-                          </div>
-                        </>
-                      )}
-
-                      {(pipeline.speed || pipeline.eta) && (
-                        <div className="flex gap-4 mt-2 text-xs text-gray-500 dark:text-gray-400">
-                          {pipeline.speed && <span>Speed: {pipeline.speed}/min</span>}
-                          {pipeline.eta && <span>ETA: {pipeline.eta}</span>}
-                        </div>
-                      )}
-
-                      {pipeline.error && (
-                        <div className="mt-2 text-xs text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-950/30 p-2 rounded">
-                          {pipeline.error}
-                        </div>
-                      )}
                     </div>
-                  ))}
+                  </div>
+
+                  {/* Legend */}
+                  <div className="flex flex-wrap gap-3 pt-3 border-t border-gray-100 dark:border-gray-800 mt-2">
+                    <div className="flex items-center gap-1.5 text-xs">
+                      <div className="w-2 h-2 rounded-full bg-blue-500" />
+                      <span className="text-gray-600 dark:text-gray-400">Running</span>
+                    </div>
+                    <div className="flex items-center gap-1.5 text-xs">
+                      <div className="w-2 h-2 rounded-full bg-green-500" />
+                      <span className="text-gray-600 dark:text-gray-400">Completed</span>
+                    </div>
+                    <div className="flex items-center gap-1.5 text-xs">
+                      <div className="w-2 h-2 rounded-full bg-red-500" />
+                      <span className="text-gray-600 dark:text-gray-400">Error</span>
+                    </div>
+                    <div className="flex items-center gap-1.5 text-xs">
+                      <div className="w-2 h-2 rounded-full bg-yellow-500" />
+                      <span className="text-gray-600 dark:text-gray-400">Paused</span>
+                    </div>
+                  </div>
                 </div>
               )}
             </CardContent>
