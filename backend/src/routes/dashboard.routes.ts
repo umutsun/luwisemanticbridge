@@ -1451,8 +1451,13 @@ router.get('/stream', async (req: Request, res: Response) => {
           // System resources (real data)
           systemMetrics: {
             cpu: metrics.cpu.usage,
+            cpuModel: metrics.cpu.model,
+            cpuSpeed: metrics.cpu.speed,
+            cpuCores: metrics.cpu.cores,
             memory: metrics.memory.percentage,
             disk: metrics.disk.percentage,
+            diskMountPoint: metrics.disk.mountPoint,
+            diskFilesystem: metrics.disk.filesystem,
             loadAvg: metrics.cpu.loadAvg,
             memoryDetails: {
               used: metrics.memory.used,
@@ -1460,6 +1465,19 @@ router.get('/stream', async (req: Request, res: Response) => {
               free: metrics.memory.free,
               heapUsed: metrics.memory.heapUsed,
               heapTotal: metrics.memory.heapTotal
+            },
+            diskDetails: {
+              used: metrics.disk.used,
+              total: metrics.disk.total,
+              free: metrics.disk.free
+            },
+            network: {
+              bytesIn: metrics.network.bytesIn,
+              bytesOut: metrics.network.bytesOut,
+              bytesInPerSec: metrics.network.bytesInPerSec,
+              bytesOutPerSec: metrics.network.bytesOutPerSec,
+              packetsIn: metrics.network.packetsIn,
+              packetsOut: metrics.network.packetsOut
             },
             timestamp: Date.now()
           },

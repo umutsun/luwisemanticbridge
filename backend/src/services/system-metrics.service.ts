@@ -1,15 +1,31 @@
 /**
  * System Metrics Service
  * Real-time system resource monitoring for dashboard
+ * Enhanced with accurate CPU measurement, real disk stats, and network I/O
  */
 
 import * as os from 'os';
+import { exec } from 'child_process';
+import { promisify } from 'util';
 import { Pool } from 'pg';
+
+const execAsync = promisify(exec);
 
 interface CpuInfo {
   usage: number;
   cores: number;
   loadAvg: number[];
+  model: string;
+  speed: number; // MHz
+}
+
+interface NetworkInfo {
+  bytesIn: number;
+  bytesOut: number;
+  packetsIn: number;
+  packetsOut: number;
+  bytesInPerSec: number;
+  bytesOutPerSec: number;
 }
 
 interface MemoryInfo {
@@ -26,6 +42,8 @@ interface DiskInfo {
   total: number;
   free: number;
   percentage: number;
+  mountPoint: string;
+  filesystem: string;
 }
 
 interface ProcessInfo {
@@ -89,6 +107,7 @@ export interface SystemMetrics {
   cpu: CpuInfo;
   memory: MemoryInfo;
   disk: DiskInfo;
+  network: NetworkInfo;
   process: ProcessInfo;
   services: ServiceStatus[];
   pipelines: PipelineStatus[];
@@ -102,26 +121,75 @@ export class SystemMetricsService {
   private redis: any;
   private lastCpuInfo: os.CpuInfo[] | null = null;
   private lastCpuTime: number = 0;
+  private lastNetworkStats: { bytesIn: number; bytesOut: number; packetsIn: number; packetsOut: number; time: number } | null = null;
 
   constructor(pool: Pool, redis?: any) {
     this.pool = pool;
     this.redis = redis;
+    // Initialize CPU sampling
+    this.lastCpuInfo = os.cpus();
+    this.lastCpuTime = Date.now();
   }
 
   /**
-   * Get CPU usage percentage
+   * Get CPU usage percentage with accurate measurement
+   * Uses delta between two CPU time samples for real usage
    */
   getCpuUsage(): CpuInfo {
-    const cpus = os.cpus();
+    const currentCpus = os.cpus();
     const loadAvg = os.loadavg();
+    const now = Date.now();
 
-    // Calculate CPU usage based on load average
-    const usage = Math.min(100, Math.round((loadAvg[0] / cpus.length) * 100));
+    let usage = 0;
+
+    // Calculate real CPU usage from time deltas
+    if (this.lastCpuInfo && this.lastCpuTime) {
+      const timeDelta = now - this.lastCpuTime;
+
+      if (timeDelta > 0) {
+        let totalIdleDelta = 0;
+        let totalTickDelta = 0;
+
+        for (let i = 0; i < currentCpus.length; i++) {
+          const currentCpu = currentCpus[i];
+          const lastCpu = this.lastCpuInfo[i];
+
+          if (lastCpu) {
+            const currentTotal = currentCpu.times.user + currentCpu.times.nice +
+                                currentCpu.times.sys + currentCpu.times.idle + currentCpu.times.irq;
+            const lastTotal = lastCpu.times.user + lastCpu.times.nice +
+                             lastCpu.times.sys + lastCpu.times.idle + lastCpu.times.irq;
+
+            const idleDelta = currentCpu.times.idle - lastCpu.times.idle;
+            const totalDelta = currentTotal - lastTotal;
+
+            totalIdleDelta += idleDelta;
+            totalTickDelta += totalDelta;
+          }
+        }
+
+        if (totalTickDelta > 0) {
+          usage = Math.round(((totalTickDelta - totalIdleDelta) / totalTickDelta) * 100);
+          usage = Math.max(0, Math.min(100, usage));
+        }
+      }
+    }
+
+    // Update last sample
+    this.lastCpuInfo = currentCpus;
+    this.lastCpuTime = now;
+
+    // Get CPU model and speed
+    const firstCpu = currentCpus[0];
+    const model = firstCpu?.model || 'Unknown';
+    const speed = firstCpu?.speed || 0;
 
     return {
       usage,
-      cores: cpus.length,
-      loadAvg
+      cores: currentCpus.length,
+      loadAvg,
+      model: model.trim(),
+      speed
     };
   }
 
@@ -146,32 +214,154 @@ export class SystemMetricsService {
   }
 
   /**
-   * Get disk usage (estimation based on database size)
+   * Get real disk usage using system commands
+   * Falls back to database size estimation if commands fail
    */
   async getDiskUsage(): Promise<DiskInfo> {
+    const isLinux = process.platform === 'linux';
+    const isWindows = process.platform === 'win32';
+
+    // Try to get real disk stats
+    if (isLinux) {
+      try {
+        // Get disk usage for /var/www or root partition
+        const { stdout } = await execAsync("df -B1 /var/www 2>/dev/null || df -B1 / | tail -1");
+        const lines = stdout.trim().split('\n');
+        const lastLine = lines[lines.length - 1];
+        const parts = lastLine.split(/\s+/);
+
+        if (parts.length >= 6) {
+          const filesystem = parts[0];
+          const total = parseInt(parts[1]) || 0;
+          const used = parseInt(parts[2]) || 0;
+          const free = parseInt(parts[3]) || 0;
+          const percentage = parseInt(parts[4]?.replace('%', '')) || 0;
+          const mountPoint = parts[5] || '/';
+
+          return {
+            used: Math.round(used / 1024 / 1024), // MB
+            total: Math.round(total / 1024 / 1024), // MB
+            free: Math.round(free / 1024 / 1024), // MB
+            percentage,
+            mountPoint,
+            filesystem
+          };
+        }
+      } catch (err) {
+        console.error('Error getting disk usage via df:', err);
+      }
+    } else if (isWindows) {
+      try {
+        // Windows: Get disk usage via WMIC
+        const { stdout } = await execAsync('wmic logicaldisk where "DeviceID=\'C:\'" get Size,FreeSpace /format:csv');
+        const lines = stdout.trim().split('\n').filter(l => l.trim());
+        if (lines.length >= 2) {
+          const parts = lines[1].split(',');
+          if (parts.length >= 3) {
+            const freeSpace = parseInt(parts[1]) || 0;
+            const totalSize = parseInt(parts[2]) || 0;
+            const usedSpace = totalSize - freeSpace;
+
+            return {
+              used: Math.round(usedSpace / 1024 / 1024),
+              total: Math.round(totalSize / 1024 / 1024),
+              free: Math.round(freeSpace / 1024 / 1024),
+              percentage: totalSize > 0 ? Math.round((usedSpace / totalSize) * 100) : 0,
+              mountPoint: 'C:',
+              filesystem: 'NTFS'
+            };
+          }
+        }
+      } catch (err) {
+        console.error('Error getting Windows disk usage:', err);
+      }
+    }
+
+    // Fallback: estimate from database size
     try {
-      // Get database size as a proxy for disk usage
       const result = await this.pool.query(`
         SELECT pg_database_size(current_database()) as db_size
       `);
       const dbSize = parseInt(result.rows[0]?.db_size || 0);
 
-      // Estimate disk usage (this is a rough estimate)
-      // In production, you'd want to get actual disk metrics
       return {
-        used: Math.round(dbSize / 1024 / 1024), // MB
+        used: Math.round(dbSize / 1024 / 1024),
         total: 100 * 1024, // 100GB estimate
         free: (100 * 1024) - Math.round(dbSize / 1024 / 1024),
-        percentage: Math.round((dbSize / (100 * 1024 * 1024 * 1024)) * 100)
+        percentage: Math.round((dbSize / (100 * 1024 * 1024 * 1024)) * 100),
+        mountPoint: 'unknown',
+        filesystem: 'postgres'
       };
     } catch {
       return {
         used: 0,
         total: 100 * 1024,
         free: 100 * 1024,
-        percentage: 0
+        percentage: 0,
+        mountPoint: 'unknown',
+        filesystem: 'unknown'
       };
     }
+  }
+
+  /**
+   * Get network I/O statistics
+   */
+  async getNetworkStats(): Promise<NetworkInfo> {
+    const isLinux = process.platform === 'linux';
+    const now = Date.now();
+
+    let bytesIn = 0;
+    let bytesOut = 0;
+    let packetsIn = 0;
+    let packetsOut = 0;
+
+    if (isLinux) {
+      try {
+        // Read network stats from /proc/net/dev
+        const { stdout } = await execAsync("cat /proc/net/dev | grep -E 'eth0|ens|enp' | head -1");
+        const line = stdout.trim();
+        if (line) {
+          // Format: Interface: bytes packets errs drop fifo frame compressed multicast | bytes packets ...
+          const parts = line.split(/\s+/).filter(p => p);
+          if (parts.length >= 11) {
+            bytesIn = parseInt(parts[1]) || 0;
+            packetsIn = parseInt(parts[2]) || 0;
+            bytesOut = parseInt(parts[9]) || 0;
+            packetsOut = parseInt(parts[10]) || 0;
+          }
+        }
+      } catch (err) {
+        console.error('Error getting network stats:', err);
+      }
+    }
+
+    // Calculate per-second rates
+    let bytesInPerSec = 0;
+    let bytesOutPerSec = 0;
+
+    if (this.lastNetworkStats) {
+      const timeDelta = (now - this.lastNetworkStats.time) / 1000; // seconds
+      if (timeDelta > 0) {
+        bytesInPerSec = Math.round((bytesIn - this.lastNetworkStats.bytesIn) / timeDelta);
+        bytesOutPerSec = Math.round((bytesOut - this.lastNetworkStats.bytesOut) / timeDelta);
+        // Prevent negative values on counter reset
+        if (bytesInPerSec < 0) bytesInPerSec = 0;
+        if (bytesOutPerSec < 0) bytesOutPerSec = 0;
+      }
+    }
+
+    // Update last sample
+    this.lastNetworkStats = { bytesIn, bytesOut, packetsIn, packetsOut, time: now };
+
+    return {
+      bytesIn,
+      bytesOut,
+      packetsIn,
+      packetsOut,
+      bytesInPerSec,
+      bytesOutPerSec
+    };
   }
 
   /**
@@ -510,8 +700,9 @@ export class SystemMetricsService {
    * Get all system metrics
    */
   async getAllMetrics(): Promise<SystemMetrics> {
-    const [disk, pipelines, database, redis, services, performance] = await Promise.all([
+    const [disk, network, pipelines, database, redis, services, performance] = await Promise.all([
       this.getDiskUsage(),
+      this.getNetworkStats(),
       this.getPipelinesStatus(),
       this.getDatabaseStats(),
       this.getRedisStats(),
@@ -524,6 +715,7 @@ export class SystemMetricsService {
       cpu: this.getCpuUsage(),
       memory: this.getMemoryUsage(),
       disk,
+      network,
       process: this.getProcessInfo(),
       services,
       pipelines,

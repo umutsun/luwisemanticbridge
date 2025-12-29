@@ -255,8 +255,13 @@ export default function DashboardPage() {
   // Real-time resources data from SSE stream
   const [realtimeResources, setRealtimeResources] = useState({
     cpu: 0,
+    cpuModel: '',
+    cpuSpeed: 0,
+    cpuCores: 0,
     memory: 0,
     disk: 0,
+    diskMountPoint: '',
+    diskFilesystem: '',
     gpu: 0,
     loadAvg: [0, 0, 0],
     memoryDetails: {
@@ -265,6 +270,19 @@ export default function DashboardPage() {
       free: 0,
       heapUsed: 0,
       heapTotal: 0
+    },
+    diskDetails: {
+      used: 0,
+      total: 0,
+      free: 0
+    },
+    network: {
+      bytesIn: 0,
+      bytesOut: 0,
+      bytesInPerSec: 0,
+      bytesOutPerSec: 0,
+      packetsIn: 0,
+      packetsOut: 0
     }
   });
 
@@ -384,8 +402,13 @@ export default function DashboardPage() {
             if (data.systemMetrics) {
               setRealtimeResources({
                 cpu: data.systemMetrics.cpu || 0,
+                cpuModel: data.systemMetrics.cpuModel || '',
+                cpuSpeed: data.systemMetrics.cpuSpeed || 0,
+                cpuCores: data.systemMetrics.cpuCores || 0,
                 memory: data.systemMetrics.memory || 0,
                 disk: data.systemMetrics.disk || 0,
+                diskMountPoint: data.systemMetrics.diskMountPoint || '',
+                diskFilesystem: data.systemMetrics.diskFilesystem || '',
                 gpu: 0, // GPU not tracked on server
                 loadAvg: data.systemMetrics.loadAvg || [0, 0, 0],
                 memoryDetails: data.systemMetrics.memoryDetails || {
@@ -394,6 +417,19 @@ export default function DashboardPage() {
                   free: 0,
                   heapUsed: 0,
                   heapTotal: 0
+                },
+                diskDetails: data.systemMetrics.diskDetails || {
+                  used: 0,
+                  total: 0,
+                  free: 0
+                },
+                network: data.systemMetrics.network || {
+                  bytesIn: 0,
+                  bytesOut: 0,
+                  bytesInPerSec: 0,
+                  bytesOutPerSec: 0,
+                  packetsIn: 0,
+                  packetsOut: 0
                 }
               });
             }
@@ -1631,80 +1667,119 @@ export default function DashboardPage() {
                 <div className="w-2 h-2 bg-orange-500 rounded-full animate-pulse" />
                 <h3 className="text-sm font-semibold tracking-tight">{t('dashboard.resources.title')}</h3>
               </div>
+              {realtimeResources.cpuModel && (
+                <p className="text-xs text-gray-500 dark:text-gray-400 truncate mt-1">
+                  {realtimeResources.cpuModel} ({realtimeResources.cpuCores} cores @ {realtimeResources.cpuSpeed}MHz)
+                </p>
+              )}
             </CardHeader>
             <CardContent className="pt-0">
               <div className="space-y-3">
-                <AnimatedResourceBar
-                  label={t('dashboard.resources.cpu')}
-                  value={realtimeResources.cpu}
-                  thresholds={{ warning: 60, danger: 80 }}
-                />
-                <AnimatedResourceBar
-                  label={t('dashboard.resources.memory')}
-                  value={realtimeResources.memory}
-                  thresholds={{ warning: 70, danger: 85 }}
-                  colors={{
-                    normal: {
-                      text: 'text-green-600 dark:text-green-400',
-                      bar: 'bg-green-500',
-                      glow: 'rgba(34, 197, 94, 0.4)',
-                    },
-                    warning: {
-                      text: 'text-yellow-600 dark:text-yellow-400',
-                      bar: 'bg-yellow-500',
-                      glow: 'rgba(245, 158, 11, 0.4)',
-                    },
-                    danger: {
-                      text: 'text-red-600 dark:text-red-400',
-                      bar: 'bg-red-500',
-                      glow: 'rgba(239, 68, 68, 0.4)',
-                    },
-                  }}
-                />
-                <AnimatedResourceBar
-                  label={t('dashboard.resources.disk')}
-                  value={realtimeResources.disk}
-                  thresholds={{ warning: 75, danger: 90 }}
-                  colors={{
-                    normal: {
-                      text: 'text-green-600 dark:text-green-400',
-                      bar: 'bg-green-500',
-                      glow: 'rgba(34, 197, 94, 0.4)',
-                    },
-                    warning: {
-                      text: 'text-yellow-600 dark:text-yellow-400',
-                      bar: 'bg-yellow-500',
-                      glow: 'rgba(245, 158, 11, 0.4)',
-                    },
-                    danger: {
-                      text: 'text-red-600 dark:text-red-400',
-                      bar: 'bg-red-500',
-                      glow: 'rgba(239, 68, 68, 0.4)',
-                    },
-                  }}
-                />
-                <AnimatedResourceBar
-                  label={t('dashboard.resources.gpu')}
-                  value={realtimeResources.gpu}
-                  thresholds={{ warning: 70, danger: 90 }}
-                  colors={{
-                    normal: {
-                      text: 'text-gray-600 dark:text-gray-400',
-                      bar: 'bg-gray-400',
-                      glow: 'rgba(156, 163, 175, 0.3)',
-                    },
-                    warning: {
-                      text: 'text-purple-600 dark:text-purple-400',
-                      bar: 'bg-purple-500',
-                      glow: 'rgba(168, 85, 247, 0.4)',
-                    },
-                    danger: {
-                      text: 'text-red-600 dark:text-red-400',
-                      bar: 'bg-red-500',
-                      glow: 'rgba(239, 68, 68, 0.4)',
-                    },
-                  }}
-                />
+                <div>
+                  <AnimatedResourceBar
+                    label={t('dashboard.resources.cpu')}
+                    value={realtimeResources.cpu}
+                    thresholds={{ warning: 60, danger: 80 }}
+                  />
+                  <div className="flex justify-between text-xs text-gray-500 dark:text-gray-400 mt-0.5 px-1">
+                    <span>Load: {realtimeResources.loadAvg[0]?.toFixed(2) || '0.00'}</span>
+                    <span>{realtimeResources.loadAvg[1]?.toFixed(2) || '0.00'}</span>
+                    <span>{realtimeResources.loadAvg[2]?.toFixed(2) || '0.00'}</span>
+                  </div>
+                </div>
+                <div>
+                  <AnimatedResourceBar
+                    label={t('dashboard.resources.memory')}
+                    value={realtimeResources.memory}
+                    thresholds={{ warning: 70, danger: 85 }}
+                    colors={{
+                      normal: {
+                        text: 'text-green-600 dark:text-green-400',
+                        bar: 'bg-green-500',
+                        glow: 'rgba(34, 197, 94, 0.4)',
+                      },
+                      warning: {
+                        text: 'text-yellow-600 dark:text-yellow-400',
+                        bar: 'bg-yellow-500',
+                        glow: 'rgba(245, 158, 11, 0.4)',
+                      },
+                      danger: {
+                        text: 'text-red-600 dark:text-red-400',
+                        bar: 'bg-red-500',
+                        glow: 'rgba(239, 68, 68, 0.4)',
+                      },
+                    }}
+                  />
+                  <div className="flex justify-between text-xs text-gray-500 dark:text-gray-400 mt-0.5 px-1">
+                    <span>{(realtimeResources.memoryDetails.used / 1024).toFixed(1)} GB used</span>
+                    <span>{(realtimeResources.memoryDetails.total / 1024).toFixed(1)} GB total</span>
+                  </div>
+                </div>
+                <div>
+                  <AnimatedResourceBar
+                    label={t('dashboard.resources.disk')}
+                    value={realtimeResources.disk}
+                    thresholds={{ warning: 75, danger: 90 }}
+                    colors={{
+                      normal: {
+                        text: 'text-green-600 dark:text-green-400',
+                        bar: 'bg-green-500',
+                        glow: 'rgba(34, 197, 94, 0.4)',
+                      },
+                      warning: {
+                        text: 'text-yellow-600 dark:text-yellow-400',
+                        bar: 'bg-yellow-500',
+                        glow: 'rgba(245, 158, 11, 0.4)',
+                      },
+                      danger: {
+                        text: 'text-red-600 dark:text-red-400',
+                        bar: 'bg-red-500',
+                        glow: 'rgba(239, 68, 68, 0.4)',
+                      },
+                    }}
+                  />
+                  <div className="flex justify-between text-xs text-gray-500 dark:text-gray-400 mt-0.5 px-1">
+                    <span>{realtimeResources.diskMountPoint || '/'} ({realtimeResources.diskFilesystem || 'unknown'})</span>
+                    <span>{(realtimeResources.diskDetails.used / 1024).toFixed(1)} / {(realtimeResources.diskDetails.total / 1024).toFixed(1)} GB</span>
+                  </div>
+                </div>
+                {/* Network I/O */}
+                <div className="pt-2 border-t border-gray-100 dark:border-gray-800">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-sm font-medium text-gray-700 dark:text-gray-300">Network I/O</span>
+                    <span className="text-xs text-gray-500 dark:text-gray-400">
+                      {realtimeResources.network.bytesInPerSec > 0 || realtimeResources.network.bytesOutPerSec > 0 ? 'Active' : 'Idle'}
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="bg-blue-50 dark:bg-blue-950/20 rounded-lg p-2">
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-blue-500">↓</span>
+                        <span className="text-xs text-gray-600 dark:text-gray-400">In</span>
+                      </div>
+                      <div className="text-sm font-semibold text-blue-600 dark:text-blue-400">
+                        {realtimeResources.network.bytesInPerSec > 1048576
+                          ? `${(realtimeResources.network.bytesInPerSec / 1048576).toFixed(1)} MB/s`
+                          : realtimeResources.network.bytesInPerSec > 1024
+                          ? `${(realtimeResources.network.bytesInPerSec / 1024).toFixed(1)} KB/s`
+                          : `${realtimeResources.network.bytesInPerSec} B/s`}
+                      </div>
+                    </div>
+                    <div className="bg-green-50 dark:bg-green-950/20 rounded-lg p-2">
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-green-500">↑</span>
+                        <span className="text-xs text-gray-600 dark:text-gray-400">Out</span>
+                      </div>
+                      <div className="text-sm font-semibold text-green-600 dark:text-green-400">
+                        {realtimeResources.network.bytesOutPerSec > 1048576
+                          ? `${(realtimeResources.network.bytesOutPerSec / 1048576).toFixed(1)} MB/s`
+                          : realtimeResources.network.bytesOutPerSec > 1024
+                          ? `${(realtimeResources.network.bytesOutPerSec / 1024).toFixed(1)} KB/s`
+                          : `${realtimeResources.network.bytesOutPerSec} B/s`}
+                      </div>
+                    </div>
+                  </div>
+                </div>
               </div>
             </CardContent>
           </Card>
