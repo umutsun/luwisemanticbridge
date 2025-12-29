@@ -5,18 +5,19 @@ dotenv.config();
 
 const poolConfig: PoolConfig = {
   connectionString: process.env.DATABASE_URL,
-  max: parseInt(process.env.DB_POOL_SIZE || '30'),
-  // Increase idle timeout to 10 minutes for long-running operations like embedding
-  idleTimeoutMillis: parseInt(process.env.DB_POOL_IDLE_TIMEOUT || '600000'),
-  connectionTimeoutMillis: parseInt(process.env.DB_POOL_CONNECTION_TIMEOUT || '120000'),
-  allowExitOnIdle: false,
-  // Reuse connections
+  // Pool size: PostgreSQL max_connections=50, 3 instances need max 15 each
+  max: parseInt(process.env.DB_POOL_SIZE || '10'),
+  min: 2, // Keep minimum connections ready
+  // Idle timeout: Release connections quickly to prevent pool exhaustion
+  idleTimeoutMillis: parseInt(process.env.DB_POOL_IDLE_TIMEOUT || '10000'), // 10 seconds
+  connectionTimeoutMillis: parseInt(process.env.DB_POOL_CONNECTION_TIMEOUT || '10000'), // 10 seconds
+  allowExitOnIdle: true, // Allow pool to shrink
+  // Query timeouts for long operations
   statement_timeout: 300000, // 5 minutes for long queries
   query_timeout: 300000, // 5 minutes
-  // Add retry logic
+  // Connection health
   keepAlive: true,
   keepAliveInitialDelayMillis: 10000,
-  // Add retry on connection errors (handled by application logic)
 };
 
 export const pool = new Pool(poolConfig);

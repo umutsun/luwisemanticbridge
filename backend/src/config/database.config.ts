@@ -144,14 +144,14 @@ export function getAppConfig(): any {
 }
 
 // LSEMB System Database Pool - OPTIMIZED
+// NOTE: PostgreSQL max_connections=50, with 3 instances we need max 15 per instance
 export const lsembPool = new Pool({
   ...lsembDbConfig,
-  max: 25, // Increased from 20 to 25 for better concurrency
-  idleTimeoutMillis: 10000, // Reduced from 30000 to 10000 for faster cleanup
-  connectionTimeoutMillis: 60000, // Increased from 30000 to 60000 for reliability
-  // Add connection pool monitoring
-  allowExitOnIdle: false,
-  // Enable automatic connection recovery
+  max: 10, // Reduced: 3 instances × 10 = 30 connections (safe for max_connections=50)
+  min: 2, // Keep minimum 2 connections ready
+  idleTimeoutMillis: 5000, // 5 seconds - release idle connections quickly
+  connectionTimeoutMillis: 10000, // 10 seconds - fail fast if can't connect
+  allowExitOnIdle: true, // Allow pool to shrink when idle
   keepAlive: true,
   keepAliveInitialDelayMillis: 10000,
 });
