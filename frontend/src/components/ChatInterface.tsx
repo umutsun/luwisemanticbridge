@@ -621,7 +621,7 @@ export default function ChatInterface() {
   //   textareaRef.current?.focus();
   // };
 
-  const handleSendMessage = async (fromSource: boolean = false) => {
+  const handleSendMessage = useCallback(async (fromSource: boolean = false) => {
     if (!inputText.trim() || isLoading || isStreaming) return;
 
     const userMessage: Message = {
@@ -888,19 +888,19 @@ export default function ChatInterface() {
       setIsStreaming(false);
       setStreamingMessageId(null);
     }
-  };
+  }, [inputText, isLoading, isStreaming, token, conversationId, chatbotSettings.activeChatModel, activePrompt, llmSettings, user, logout]);
 
-  const handleKeyPress = (e: React.KeyboardEvent) => {
+  const handleKeyPress = useCallback((e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       handleSendMessage();
     }
-  };
+  }, [handleSendMessage]);
 
-  const handleSuggestionClick = (question: string) => {
+  const handleSuggestionClick = useCallback((question: string) => {
     setInputText(question);
     textareaRef.current?.focus();
-  };
+  }, []);
 
   // Create enhanced source click handler with semantic search capabilities
   const handleSourceClick = createEnhancedSourceClickHandler(
@@ -915,7 +915,7 @@ export default function ChatInterface() {
     }
   );
 
-  const clearChat = () => {
+  const clearChat = useCallback(() => {
     // Clear messages and reset to initial state
     setMessages([]);
     setShowSuggestions(chatbotSettings.enableSuggestions);
@@ -929,7 +929,7 @@ export default function ChatInterface() {
         setIsSuggestionsLoading(false);
       });
     }
-  };
+  }, [chatbotSettings.enableSuggestions]);
 
   return (
     <ProtectedRoute>
