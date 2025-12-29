@@ -12,7 +12,7 @@ import { logger } from '../utils/logger';
 const router = Router();
 
 // Python service URL
-const PYTHON_SERVICE_URL = process.env.PYTHON_API_URL || 'http://localhost:8089';
+const PYTHON_SERVICE_URL = process.env.PYTHON_SERVICE_URL || process.env.PYTHON_API_URL || 'http://localhost:8089';
 
 /**
  * Proxy helper function
@@ -157,6 +157,13 @@ router.post('/quick/cleanup', (req, res) => proxyToPython(req, res, '/quick/clea
  * Quick create an embedding sync scheduled job
  */
 router.post('/quick/embedding-sync', (req, res) => proxyToPython(req, res, '/quick/embedding-sync'));
+
+/**
+ * POST /api/v2/scheduler/quick/scrape-and-embed
+ * Quick create a scrape and embed pipeline job
+ * Pipeline: scrape → Redis → DB → embeddings
+ */
+router.post('/quick/scrape-and-embed', (req, res) => proxyToPython(req, res, '/quick/scrape-and-embed'));
 
 // =====================================================
 // Cron Helpers
