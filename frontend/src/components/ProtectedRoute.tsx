@@ -1,5 +1,7 @@
 'use client';
 
+import debug from '@/lib/debug';
+
 import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthProvider';
@@ -14,7 +16,7 @@ export default function ProtectedRoute({ children, requireAdmin = false }: Prote
   const router = useRouter();
 
   useEffect(() => {
-    console.log('ProtectedRoute - Auth Debug:', {
+    debug.log('ProtectedRoute - Auth Debug:', {
       loading,
       isAuthenticated,
       user,
@@ -25,18 +27,18 @@ export default function ProtectedRoute({ children, requireAdmin = false }: Prote
 
     if (!loading) {
       if (!isAuthenticated) {
-        console.log('ProtectedRoute - Redirecting to login...');
+        debug.log('ProtectedRoute - Redirecting to login...');
         router.push('/login');
         return;
       }
 
       if (requireAdmin && user?.role !== 'admin' && user?.role !== 'manager') {
-        console.log('ProtectedRoute - User not admin, redirecting to home...');
+        debug.log('ProtectedRoute - User not admin, redirecting to home...');
         router.push('/');
         return;
       }
 
-      console.log('ProtectedRoute - Access granted');
+      debug.log('ProtectedRoute - Access granted');
     }
   }, [loading, isAuthenticated, user, router, requireAdmin]);
 

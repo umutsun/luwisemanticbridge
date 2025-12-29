@@ -69,6 +69,8 @@ import {
 } from '../../../lib/api/settings';
 import { API_CONFIG } from '../../../lib/config';
 import { chatTemplates } from '@/templates/registry';
+import { DebugSettings } from '../../../components/settings/DebugSettings';
+import debug from '../../../lib/debug';
 
 
 
@@ -163,7 +165,7 @@ function LLMSettings() {
       const activeChatParts = data?.llmSettings?.activeChatModel?.split('/');
       const activeEmbeddingParts = data?.llmSettings?.activeEmbeddingModel?.split('/');
 
-      console.log('🔧 [LLM SETTINGS LOAD] Database values:', {
+      debug.log('🔧 [LLM SETTINGS LOAD] Database values:', {
         activeChatModel: data?.llmSettings?.activeChatModel,
         activeEmbeddingModel: data?.llmSettings?.activeEmbeddingModel,
         embeddingProvider: data?.llmSettings?.embeddingProvider,
@@ -191,10 +193,10 @@ function LLMSettings() {
         model = activeChatParts?.[1] || data?.llmSettings?.model || data?.[provider]?.model || 'gemini-2.0-flash';
       }
 
-      console.log('🎯 [LLM SETTINGS LOAD] Determined provider/model:', { provider, model, activeChatModel: data?.llmSettings?.activeChatModel });
+      debug.log('🎯 [LLM SETTINGS LOAD] Determined provider/model:', { provider, model, activeChatModel: data?.llmSettings?.activeChatModel });
 
       // CRITICAL: Parse embedding model with OpenRouter support (same as chat model)
-      console.log('🔧 [EMBEDDING SETTINGS] Raw activeEmbeddingModel:', data?.llmSettings?.activeEmbeddingModel);
+      debug.log('🔧 [EMBEDDING SETTINGS] Raw activeEmbeddingModel:', data?.llmSettings?.activeEmbeddingModel);
       // OpenRouter embeddings: "openrouter/openai/text-embedding-3-small"
       const embeddingProvider = activeEmbeddingParts?.[0] || data?.llmSettings?.embeddingProvider || 'google';
       let embeddingModel;
@@ -205,7 +207,7 @@ function LLMSettings() {
         embeddingModel = activeEmbeddingParts?.[1] || data?.llmSettings?.embeddingModel || 'text-embedding-004';
       }
 
-      console.log('🎯 [EMBEDDING SETTINGS] Determined:', { embeddingProvider, embeddingModel });
+      debug.log('🎯 [EMBEDDING SETTINGS] Determined:', { embeddingProvider, embeddingModel });
 
       const defaultConfig = {
         provider,
@@ -265,7 +267,7 @@ function LLMSettings() {
         llmSettings: data?.llmSettings || {}
       };
 
-      console.log('📊 [LLM SETTINGS LOAD] Parsed config:', {
+      debug.log('📊 [LLM SETTINGS LOAD] Parsed config:', {
         provider: defaultConfig.provider,
         model: defaultConfig.model,
         embeddingProvider: defaultConfig.embeddingProvider,
@@ -277,7 +279,7 @@ function LLMSettings() {
 
       // If activeChatModel was missing from database, save the determined value
       if (!data?.llmSettings?.activeChatModel && provider && model) {
-        console.log('⚠️ [LLM SETTINGS LOAD] activeChatModel missing in database, saving:', `${provider}/${model}`);
+        debug.log('⚠️ [LLM SETTINGS LOAD] activeChatModel missing in database, saving:', `${provider}/${model}`);
         try {
           await updateSettingsCategory('llm', {
             llmSettings: {
@@ -307,7 +309,7 @@ function LLMSettings() {
         }
       };
 
-      console.log('📊 [LLM SETTINGS LOAD] Final tempConfig:', {
+      debug.log('📊 [LLM SETTINGS LOAD] Final tempConfig:', {
         provider: configWithTranslation.provider,
         model: configWithTranslation.model,
         embeddingProvider: configWithTranslation.embeddingProvider,
@@ -321,7 +323,7 @@ function LLMSettings() {
         setTokenInfo(data.tokenInfo);
       }
       if (data?.apiStatus) {
-        console.log('🔧 Loading API status from backend:', data.apiStatus);
+        debug.log('🔧 Loading API status from backend:', data.apiStatus);
         setApiStatus(data.apiStatus);
       }
       if (data?.modelTokenUsage) {
@@ -340,10 +342,10 @@ function LLMSettings() {
 
         // Only add to validated keys if provider is actually validated
         if (hasApiKey && (hasValidatedStatus || hasVerifiedDate || hasProviderValidatedDate)) {
-          console.log(`✅ Adding ${provider} to validated keys (validated)`);
+          debug.log(`✅ Adding ${provider} to validated keys (validated)`);
           existingValidatedKeys.add(provider);
         } else {
-          console.log(`❌ Not adding ${provider} to validated keys (not validated - hasApiKey: ${hasApiKey}, hasValidatedStatus: ${hasValidatedStatus}, hasVerifiedDate: ${!!hasVerifiedDate}, hasProviderValidatedDate: ${!!hasProviderValidatedDate})`);
+          debug.log(`❌ Not adding ${provider} to validated keys (not validated - hasApiKey: ${hasApiKey}, hasValidatedStatus: ${hasValidatedStatus}, hasVerifiedDate: ${!!hasVerifiedDate}, hasProviderValidatedDate: ${!!hasProviderValidatedDate})`);
         }
       });
       setValidatedKeys(existingValidatedKeys);
@@ -459,11 +461,11 @@ function LLMSettings() {
         modelTokenUsage: modelTokenUsage
       };
 
-      console.log('\n💾 [SETTINGS SAVE] Starting save process...');
-      console.log('🔧 [SETTINGS SAVE] Active Chat Model:', activeChatModel);
-      console.log('🔧 [SETTINGS SAVE] OCR Provider:', tempConfig?.ocrProvider);
-      console.log('🔧 [SETTINGS SAVE] DeepL API Key:', tempConfig?.deepl?.apiKey ? '✅ Set' : '❌ Not set');
-      console.log('🔧 [SETTINGS SAVE] Google Translate Key:', tempConfig?.google?.translate?.apiKey ? '✅ Set' : '❌ Not set');
+      debug.log('\n💾 [SETTINGS SAVE] Starting save process...');
+      debug.log('🔧 [SETTINGS SAVE] Active Chat Model:', activeChatModel);
+      debug.log('🔧 [SETTINGS SAVE] OCR Provider:', tempConfig?.ocrProvider);
+      debug.log('🔧 [SETTINGS SAVE] DeepL API Key:', tempConfig?.deepl?.apiKey ? '✅ Set' : '❌ Not set');
+      debug.log('🔧 [SETTINGS SAVE] Google Translate Key:', tempConfig?.google?.translate?.apiKey ? '✅ Set' : '❌ Not set');
 
       // Extract translation settings to save separately
       const translationSettingsToSave = {
@@ -479,9 +481,9 @@ function LLMSettings() {
 
       // Save LLM settings
       try {
-        console.log('📤 [SETTINGS SAVE] Sending LLM settings to API...');
+        debug.log('📤 [SETTINGS SAVE] Sending LLM settings to API...');
         await updateSettingsCategory('llm', llmSettingsToSave);
-        console.log('✅ [SETTINGS SAVE] LLM settings saved successfully');
+        debug.log('✅ [SETTINGS SAVE] LLM settings saved successfully');
         setLlmConfig(tempConfig);
       } catch (llmError) {
         console.error('❌ [SETTINGS SAVE] LLM settings save error:', llmError);
@@ -490,9 +492,9 @@ function LLMSettings() {
 
       // Save translation settings separately
       try {
-        console.log('📤 [SETTINGS SAVE] Sending translation settings to API...');
+        debug.log('📤 [SETTINGS SAVE] Sending translation settings to API...');
         await updateSettingsCategory('translation', translationSettingsToSave);
-        console.log('✅ [SETTINGS SAVE] Translation settings saved successfully');
+        debug.log('✅ [SETTINGS SAVE] Translation settings saved successfully');
         setTranslationConfig(translationSettingsToSave);
       } catch (translationError) {
         console.error('❌ [SETTINGS SAVE] Translation settings save error:', translationError);
@@ -502,9 +504,9 @@ function LLMSettings() {
       // Save database settings if changed
       if (tempDBConfig?.database) {
         try {
-          console.log('📤 [SETTINGS SAVE] Sending database settings to API...');
+          debug.log('📤 [SETTINGS SAVE] Sending database settings to API...');
           await updateSettingsCategory('database', tempDBConfig);
-          console.log('✅ [SETTINGS SAVE] Database settings saved successfully');
+          debug.log('✅ [SETTINGS SAVE] Database settings saved successfully');
           setDbConfig(tempDBConfig);
         } catch (dbError) {
           console.error('❌ [SETTINGS SAVE] Database settings save error:', dbError);
@@ -522,7 +524,7 @@ function LLMSettings() {
       // Merge with existing validated keys instead of replacing
       setValidatedKeys(prev => {
         const merged = new Set([...prev, ...currentlyValidatedProviders]);
-        console.log('🔧 Updated validated keys after save:', Array.from(merged));
+        debug.log('🔧 Updated validated keys after save:', Array.from(merged));
         return merged;
       });
 
@@ -608,10 +610,10 @@ function LLMSettings() {
   };
 
   const validateAllModelsForProvider = async (provider: string, apiKey: string) => {
-    console.log(`🚀 Starting validation for ${provider} with API key: ${apiKey ? apiKey.substring(0, 10) + '...' : 'none'}`);
+    debug.log(`🚀 Starting validation for ${provider} with API key: ${apiKey ? apiKey.substring(0, 10) + '...' : 'none'}`);
 
     if (!apiKey || apiKey === '••••••••') {
-      console.log('❌ No API key provided or masked key');
+      debug.log('❌ No API key provided or masked key');
       return;
     }
 
@@ -624,7 +626,7 @@ function LLMSettings() {
       } else {
         models = getModelsForProvider(provider);
       }
-      console.log(`📋 Models to test for ${provider}:`, models);
+      debug.log(`📋 Models to test for ${provider}:`, models);
       const modelTestResults = [];
       let allModelsValid = true;
 
@@ -632,7 +634,7 @@ function LLMSettings() {
       for (const model of models) {
         try {
           const startTime = Date.now();
-          console.log(`🔄 Testing ${provider} with model: ${model}`);
+          debug.log(`🔄 Testing ${provider} with model: ${model}`);
 
           const response = await fetch(`/api/v2/api-validation/test/${provider}`, {
             method: 'POST',
@@ -645,11 +647,11 @@ function LLMSettings() {
             })
           });
 
-          console.log(`📡 Response status: ${response.status} for ${model}`);
+          debug.log(`📡 Response status: ${response.status} for ${model}`);
           const result = await response.json();
           const responseTime = Date.now() - startTime;
 
-          console.log(`📊 Result for ${model}:`, result);
+          debug.log(`📊 Result for ${model}:`, result);
 
           if (!response.ok || !result.success) {
             console.warn(`❌ Model ${model} failed:`, result.error);
@@ -660,7 +662,7 @@ function LLMSettings() {
               error: result.error || 'API validation failed'
             });
           } else {
-            console.log(`✅ Model ${model} successful:`, result);
+            debug.log(`✅ Model ${model} successful:`, result);
             modelTestResults.push({
               model,
               success: true,
@@ -881,7 +883,7 @@ function LLMSettings() {
         .map((result: any) => result.model);
 
       if (successfulModels.length > 0) {
-        console.log(`✅ [${provider}] Verified models:`, successfulModels);
+        debug.log(`✅ [${provider}] Verified models:`, successfulModels);
         return successfulModels;
       }
     }
@@ -896,7 +898,7 @@ function LLMSettings() {
       openrouter: ['openai/gpt-4o', 'openai/gpt-4o-mini', 'openai/gpt-4-turbo', 'anthropic/claude-3.5-sonnet', 'meta-llama/llama-3.1-8b-instruct', 'google/gemini-pro-1.5']
     };
 
-    console.log(`⚠️ [${provider}] No verified models, using defaults`);
+    debug.log(`⚠️ [${provider}] No verified models, using defaults`);
     return defaultModels[provider] || [];
   };
 
@@ -1076,7 +1078,7 @@ function LLMSettings() {
     //
     // Solution: Always use hardcoded embedding models, ignore API check results
 
-    console.log(`📋 [Embedding ${provider}] Using hardcoded embedding models (API validation tests chat models only)`);
+    debug.log(`📋 [Embedding ${provider}] Using hardcoded embedding models (API validation tests chat models only)`);
 
     // Embedding models with dimension info (1024+ only, production-ready)
     const models: Record<string, string[]> = {
@@ -1141,7 +1143,7 @@ function LLMSettings() {
     const hasValidatedKey = validatedKeys.has(provider);
     const hasApiKey = llmConfig?.[provider]?.apiKey && llmConfig[provider].apiKey !== '••••••••';
 
-    console.log(`🔍 Checking ${provider}:`, {
+    debug.log(`🔍 Checking ${provider}:`, {
       hasValidatedKey,
       hasApiKey,
       inValidatedKeys: validatedKeys.has(provider)
@@ -1175,7 +1177,7 @@ function LLMSettings() {
       deepl: { key: tempConfig?.deepl?.apiKey || translationConfig?.deepl?.apiKey, name: 'DeepL' },
     }).filter(([provider]) => isProviderValidated(provider));
 
-    console.log('🔍 [VALIDATED PROVIDERS]', providers.map(([p]) => p));
+    debug.log('🔍 [VALIDATED PROVIDERS]', providers.map(([p]) => p));
     return providers;
   };
 
@@ -1445,7 +1447,7 @@ function LLMSettings() {
                   <Select
                     value={(() => {
                       const val = tempConfig?.provider || llmConfig?.provider || 'gemini';
-                      console.log('🎯 [LLM PROVIDER SELECT] Current value:', val, '| tempConfig.provider:', tempConfig?.provider, '| llmConfig.provider:', llmConfig?.provider);
+                      debug.log('🎯 [LLM PROVIDER SELECT] Current value:', val, '| tempConfig.provider:', tempConfig?.provider, '| llmConfig.provider:', llmConfig?.provider);
                       return val;
                     })()}
                     onValueChange={async (value) => {
@@ -1509,7 +1511,7 @@ function LLMSettings() {
                     value={(() => {
                       const currentProvider = tempConfig?.provider || llmConfig?.provider || 'gemini';
                       const val = tempConfig?.model || llmConfig?.model || getDefaultModelForProvider(currentProvider);
-                      console.log('🎯 [LLM MODEL SELECT] Current value:', val, '| tempConfig.model:', tempConfig?.model, '| llmConfig.model:', llmConfig?.model, '| provider:', currentProvider);
+                      debug.log('🎯 [LLM MODEL SELECT] Current value:', val, '| tempConfig.model:', tempConfig?.model, '| llmConfig.model:', llmConfig?.model, '| provider:', currentProvider);
                       return val;
                     })()}
                     onValueChange={async (value) => {
@@ -1595,7 +1597,7 @@ function LLMSettings() {
                     disabled={false}
                     value={(() => {
                       const val = tempConfig?.embeddingProvider;
-                      console.log('🎯 [EMBEDDING PROVIDER SELECT] Current value:', val, '| tempConfig.embeddingProvider:', tempConfig?.embeddingProvider, '| llmConfig.embeddingProvider:', llmConfig?.embeddingProvider);
+                      debug.log('🎯 [EMBEDDING PROVIDER SELECT] Current value:', val, '| tempConfig.embeddingProvider:', tempConfig?.embeddingProvider, '| llmConfig.embeddingProvider:', llmConfig?.embeddingProvider);
                       return val;
                     })()}
                     onValueChange={async (value) => {
@@ -2061,11 +2063,11 @@ function TemplateSelector() {
 
   useEffect(() => {
     // Load active template from backend
-    console.log('🔍 [SETTINGS] Loading active template...');
+    debug.log('🔍 [SETTINGS] Loading active template...');
     fetch('/api/v2/settings/active-template')
       .then(res => res.json())
       .then(data => {
-        console.log('🔍 [SETTINGS] Active template loaded:', data);
+        debug.log('🔍 [SETTINGS] Active template loaded:', data);
         setActiveTemplate(data.active || 'base');
       })
       .catch(err => {
@@ -2075,7 +2077,7 @@ function TemplateSelector() {
   }, []);
 
   const handleTemplateChange = async (value: string) => {
-    console.log('🔍 [SETTINGS] Saving template:', value);
+    debug.log('🔍 [SETTINGS] Saving template:', value);
     setLoading(true);
     try {
       const res = await fetch('/api/v2/settings/set-active-template', {
@@ -2085,7 +2087,7 @@ function TemplateSelector() {
       });
 
       const responseData = await res.json();
-      console.log('🔍 [SETTINGS] Save response:', responseData);
+      debug.log('🔍 [SETTINGS] Save response:', responseData);
 
       if (res.ok) {
         setActiveTemplate(value);
@@ -2562,8 +2564,8 @@ function RAGSettings() {
 
       // Load source tables in parallel
       loadSourceTables();
-      console.log('📊 [RAG SETTINGS LOAD] Full RAG Data from API:', ragData);
-      console.log('📊 [RAG SETTINGS LOAD] RAG Settings values:', {
+      debug.log('📊 [RAG SETTINGS LOAD] Full RAG Data from API:', ragData);
+      debug.log('📊 [RAG SETTINGS LOAD] RAG Settings values:', {
         similarityThreshold: ragData?.ragSettings?.similarityThreshold,
         minResults: ragData?.ragSettings?.minResults,
         maxResults: ragData?.ragSettings?.maxResults,
@@ -2584,7 +2586,7 @@ function RAGSettings() {
       setRagConfig(ragWithDefaults);
       setTempRAGConfig(ragWithDefaults);
 
-      console.log('📥 [RAG SETTINGS LOAD] Chatbot response from API:', {
+      debug.log('📥 [RAG SETTINGS LOAD] Chatbot response from API:', {
         title: chatbotResponse.title,
         subtitle: chatbotResponse.subtitle,
         logoUrl: chatbotResponse.logoUrl ? '✅ Set' : '❌ Not set',
@@ -2614,7 +2616,7 @@ function RAGSettings() {
         }
       };
 
-      console.log('📥 [RAG SETTINGS LOAD] Transformed chatbot data:', chatbotData);
+      debug.log('📥 [RAG SETTINGS LOAD] Transformed chatbot data:', chatbotData);
 
       setChatbotConfig(chatbotData);
       setTempChatbotConfig(chatbotData);
@@ -2630,12 +2632,12 @@ function RAGSettings() {
   }, [loadSettings]);
 
   const saveAllSettings = async () => {
-    console.log('[RAG Settings] Saving...');
+    debug.log('[RAG Settings] Saving...');
     setSaving(true);
     try {
       // Save RAG settings
       await updateSettingsCategory('rag', tempRAGConfig);
-      console.log('[RAG Settings] Saved successfully');
+      debug.log('[RAG Settings] Saved successfully');
 
       // Save chatbot settings using the correct endpoint
       // Note: maxResults/minResults are in RAG settings, not chatbot settings
@@ -2661,7 +2663,7 @@ function RAGSettings() {
         enableVoiceOutput: tempChatbotConfig?.chatbot?.enableVoiceOutput ?? false
       };
 
-      console.log('📤 [RAG SETTINGS SAVE] Saving chatbot settings:', {
+      debug.log('📤 [RAG SETTINGS SAVE] Saving chatbot settings:', {
         title: chatbotPayload.title,
         subtitle: chatbotPayload.subtitle,
         logoUrl: chatbotPayload.logoUrl ? '✅ Set' : '❌ Not set',
@@ -2682,7 +2684,7 @@ function RAGSettings() {
         throw new Error('Failed to save chatbot settings');
       }
 
-      console.log('✅ [RAG SETTINGS SAVE] Chatbot settings saved successfully');
+      debug.log('✅ [RAG SETTINGS SAVE] Chatbot settings saved successfully');
 
       // Save table weights if any tables exist
       if (Object.keys(tableWeights).length > 0) {
@@ -2696,7 +2698,7 @@ function RAGSettings() {
         if (!weightsResponse.ok) {
           console.warn('⚠️ Failed to save table weights');
         } else {
-          console.log('✅ [RAG SETTINGS SAVE] Table weights saved');
+          debug.log('✅ [RAG SETTINGS SAVE] Table weights saved');
         }
       }
 
@@ -2730,7 +2732,7 @@ function RAGSettings() {
   };
 
   const updateChatbotSetting = (key: string, value: any) => {
-    console.log(`📝 [RAG SETTINGS] Updating chatbot setting: ${key} =`, value);
+    debug.log(`📝 [RAG SETTINGS] Updating chatbot setting: ${key} =`, value);
     const newConfig = {
       ...tempChatbotConfig,
       chatbot: {
@@ -2738,7 +2740,7 @@ function RAGSettings() {
         [key]: value
       }
     };
-    console.log(`📝 [RAG SETTINGS] New tempChatbotConfig:`, newConfig);
+    debug.log(`📝 [RAG SETTINGS] New tempChatbotConfig:`, newConfig);
     setTempChatbotConfig(newConfig);
   };
 
@@ -2882,7 +2884,7 @@ function RAGSettings() {
                           ...(checked ? { enableSemanticSearch: true, enableKeywordBoost: true } : {})
                         }
                       }));
-                      console.log(`📝 [RAG SETTINGS] Hybrid search toggled to: ${checked}`);
+                      debug.log(`📝 [RAG SETTINGS] Hybrid search toggled to: ${checked}`);
                     }}
                   />
                 </div>
@@ -5857,7 +5859,10 @@ export default function OptimizedSettingsPage() {
         </TabsContent>
 
         <TabsContent value="advanced">
-          <SecuritySettings />
+          <div className="space-y-6">
+            <DebugSettings />
+            <SecuritySettings />
+          </div>
         </TabsContent>
       </Tabs>
     </div>

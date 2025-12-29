@@ -1,5 +1,7 @@
 'use client';
 
+import debug from '@/lib/debug';
+
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
@@ -195,7 +197,7 @@ export default function Header() {
           let databaseSettings = null;
           try {
             settings = await getAppSettings();
-            console.log('[SystemStatus] Settings loaded:', {
+            debug.log('[SystemStatus] Settings loaded:', {
               activeChatModel: settings?.llmSettings?.activeChatModel,
               activeEmbeddingModel: settings?.llmSettings?.activeEmbeddingModel
             });
@@ -209,7 +211,7 @@ export default function Header() {
             if (dbResponse.ok) {
               databaseSettings = await safeJsonParse(dbResponse);
               if (databaseSettings) {
-                console.log('[SystemStatus] Database settings loaded:', databaseSettings);
+                debug.log('[SystemStatus] Database settings loaded:', databaseSettings);
               }
             }
           } catch (error) {
@@ -222,7 +224,7 @@ export default function Header() {
 
           // Get database name - prioritize source DB from settings over master DB
           let databaseName = 'Unknown';
-          console.log('[SystemStatus] Database sources:', {
+          debug.log('[SystemStatus] Database sources:', {
             databaseSettingsName: databaseSettings?.database?.name,
             settingsDbName: settings?.database?.name,
             healthDbName: healthData.services?.postgres?.database
@@ -231,14 +233,14 @@ export default function Header() {
           // First priority: Source database from database settings (migration/transform target)
           if (databaseSettings && databaseSettings.database?.name) {
             databaseName = databaseSettings.database.name;
-            console.log('[SystemStatus] Using database from databaseSettings:', databaseName);
+            debug.log('[SystemStatus] Using database from databaseSettings:', databaseName);
           } else if (settings && settings.database?.name) {
             databaseName = settings.database.name;
-            console.log('[SystemStatus] Using database from settings.database.name:', databaseName);
+            debug.log('[SystemStatus] Using database from settings.database.name:', databaseName);
           } else if (healthData.services?.postgres?.database) {
             // Fallback: Master database from health endpoint
             databaseName = healthData.services.postgres.database;
-            console.log('[SystemStatus] Using database from health endpoint:', databaseName);
+            debug.log('[SystemStatus] Using database from health endpoint:', databaseName);
           }
 
           // Calculate total records and table count from database schema

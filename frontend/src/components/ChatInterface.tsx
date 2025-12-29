@@ -1,6 +1,8 @@
 'use client';
 
-import React, { useState, useRef, useEffect, useMemo } from 'react';
+import debug from '@/lib/debug';
+
+import React, { useState, useRef, useEffect, useMemo, useCallback, memo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import ProtectedRoute from '@/components/ProtectedRoute';
 import { Card, CardContent } from '@/components/ui/card';
@@ -94,6 +96,22 @@ const getKeywordColor = (keyword: string, isBoosted: boolean = false): string =>
   return colors[index];
 };
 
+// Memoized StreamingTimer component - isolates re-renders to just this component
+const StreamingTimer = memo(({ startTime }: { startTime: number }) => {
+  const [elapsed, setElapsed] = useState(0);
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setElapsed(Date.now() - startTime);
+    }, 100); // Update every 100ms for smoother display
+    return () => clearInterval(interval);
+  }, [startTime]);
+
+  const seconds = (elapsed / 1000).toFixed(1);
+  return <span className="text-xs text-muted-foreground">{seconds}s</span>;
+});
+StreamingTimer.displayName = 'StreamingTimer';
+
 export default function ChatInterface() {
   const { token, user, logout } = useAuth();
 
@@ -120,13 +138,13 @@ export default function ChatInterface() {
     if (suggestionsCache.current) {
       const age = Date.now() - suggestionsCache.current.timestamp;
       if (age < SUGGESTIONS_CACHE_TTL) {
-        console.log('📋 Using cached suggestions');
+        debug.log('📋 Using cached suggestions');
         return suggestionsCache.current.data;
       }
     }
 
     try {
-      console.log('🔄 Fetching fresh suggestions from backend...');
+      debug.log('🔄 Fetching fresh suggestions from backend...');
 
       // Fetch from backend (includes generated questions from database)
       const response = await fetch(getEndpoint('chat', 'suggestions'));
@@ -158,7 +176,7 @@ export default function ChatInterface() {
   const [isStreaming, setIsStreaming] = useState(false);
   const [streamingMessageId, setStreamingMessageId] = useState<string | null>(null);
   const [showSuggestions, setShowSuggestions] = useState(true);
-  const [, setTimerTick] = useState(0); // Force re-render for timer update
+  // Timer state removed - now using isolated StreamingTimer component
   const [suggestedQuestions, setSuggestedQuestions] = useState<string[]>([]);
   const [isSuggestionsLoading, setIsSuggestionsLoading] = useState(false);
   const [isClient, setIsClient] = useState(false);
@@ -286,13 +304,13 @@ export default function ChatInterface() {
             maxTokens: parseInt(activePromptObj.maxTokens || '2048'),
             conversationTone: activePromptObj.conversationTone || 'professional'
           };
-          console.log('✅ [ChatInterface] Active prompt loaded:', {
+          debug.log('✅ [ChatInterface] Active prompt loaded:', {
             name: activePromptObj.name,
             temperature: activePromptData.temperature,
             maxTokens: activePromptData.maxTokens
           });
         } else {
-          console.log('⚠️ [ChatInterface] No active prompt found, using LLM defaults');
+          debug.log('⚠️ [ChatInterface] No active prompt found, using LLM defaults');
         }
 
         // CRITICAL: NO fallback defaults - use ONLY what's in database
@@ -333,7 +351,7 @@ export default function ChatInterface() {
           tone: 'professional'
         };
 
-        console.log('🤖 Chatbot initialized with full config:', {
+        debug.log('🤖 Chatbot initialized with full config:', {
           title: config.title,
           activeChatModel: config.activeChatModel,
           ragSettings: rag,
@@ -358,15 +376,7 @@ export default function ChatInterface() {
     // No interval to cleanup - suggestions are fetched once and cached
   }, []);
 
-  // Update timer every second when streaming
-  useEffect(() => {
-    if (isStreaming) {
-      const interval = setInterval(() => {
-        setTimerTick(prev => prev + 1);
-      }, 1000);
-      return () => clearInterval(interval);
-    }
-  }, [isStreaming]);
+  // Timer useEffect removed - now using isolated StreamingTimer component
 
   // Fetch available models
   const fetchAvailableModels = async (forceRefresh = false) => {
@@ -386,11 +396,11 @@ export default function ChatInterface() {
       });
       if (response.ok) {
         const settings = await response.json();
-        console.log('Fetched settings:', settings);
+        debug.log('Fetched settings:', settings);
         const models = [];
 
         if (settings.openai?.apiKey) {
-          console.log('OpenAI API key found, adding OpenAI models');
+          debug.log('OpenAI API key found, adding OpenAI models');
           models.push({
             provider: 'openai',
             model: 'openai/gpt-4o',
@@ -398,7 +408,7 @@ export default function ChatInterface() {
             description: 'OpenAI GPT'
           });
         } else {
-          console.log('OpenAI API key NOT found, skipping OpenAI models');
+          debug.log('OpenAI API key NOT found, skipping OpenAI models');
         }
         if (settings.anthropic?.apiKey) {
           // Add Claude 3.5 models only
@@ -416,7 +426,7 @@ export default function ChatInterface() {
           });
         }
         if (settings.google?.apiKey) {
-          console.log('Adding Google/Gemini models');
+          debug.log('Adding Google/Gemini models');
           models.push({
             provider: 'google',
             model: 'google/gemini-1.5-pro',
@@ -424,10 +434,10 @@ export default function ChatInterface() {
             description: 'Google Gemini'
           });
         } else {
-          console.log('Google API key not found');
+          debug.log('Google API key not found');
         }
         if (settings.deepseek?.apiKey) {
-          console.log('Adding DeepSeek models');
+          debug.log('Adding DeepSeek models');
           models.push({
             provider: 'deepseek',
             model: 'deepseek/deepseek-chat',
@@ -435,7 +445,7 @@ export default function ChatInterface() {
             description: 'DeepSeek AI'
           });
         } else {
-          console.log('DeepSeek API key not found');
+          debug.log('DeepSeek API key not found');
         }
 
         setAvailableModels(models);
@@ -445,11 +455,11 @@ export default function ChatInterface() {
           const activeModel = models.find(m => m.model === chatbotSettings.activeChatModel);
           if (activeModel) {
             setCurrentModel(activeModel.displayName);
-              console.log(`Set active model: ${activeModel.displayName} (${activeModel.model})`);
+              debug.log(`Set active model: ${activeModel.displayName} (${activeModel.model})`);
           } else {
             // Fallback to first available model
             setCurrentModel(models[0].displayName);
-              console.log(`Set fallback model: ${models[0].displayName}`);
+              debug.log(`Set fallback model: ${models[0].displayName}`);
           }
         }
       }
@@ -474,7 +484,7 @@ export default function ChatInterface() {
       });
 
       if (response.ok) {
-        console.log(`Model switched to: ${model}`);
+        debug.log(`Model switched to: ${model}`);
 
         // Update local state immediately for better UX
         setChatbotSettings(prev => ({
@@ -520,7 +530,7 @@ export default function ChatInterface() {
 
     // Listen for settings updates to refresh available models
     const handleSettingsUpdate = () => {
-      console.log('Settings updated, clearing models and refreshing...');
+      debug.log('Settings updated, clearing models and refreshing...');
       setAvailableModels([]); // Clear models first
       fetchAvailableModels(true);
     };
@@ -650,7 +660,7 @@ export default function ChatInterface() {
       const maxTokens = activePrompt.content ? activePrompt.maxTokens : llmSettings.maxTokens;
       const systemPrompt = activePrompt.content || undefined;
 
-      console.log('📤 Sending chat request with settings:', {
+      debug.log('📤 Sending chat request with settings:', {
         model: chatbotSettings.activeChatModel,
         temperature,
         maxTokens,
@@ -786,7 +796,7 @@ export default function ChatInterface() {
           });
           if (finalResponse.ok) {
             finalData = await finalResponse.json();
-            console.log('📦 Final data received:', {
+            debug.log('📦 Final data received:', {
               hasSources: !!finalData.sources,
               sourcesCount: finalData.sources?.length || 0,
               sources: finalData.sources?.map((s: any) => ({
@@ -801,8 +811,8 @@ export default function ChatInterface() {
         }
 
         // Finalize message - KEEP the accumulated content and ADD sources
-        console.log('Setting sources on message:', finalData.sources?.length || 0, 'sources');
-        console.log('Accumulated content length:', accumulatedContent.length);
+        debug.log('Setting sources on message:', finalData.sources?.length || 0, 'sources');
+        debug.log('Accumulated content length:', accumulatedContent.length);
 
         setMessages(prev => prev.map(msg =>
           msg.id === messageId

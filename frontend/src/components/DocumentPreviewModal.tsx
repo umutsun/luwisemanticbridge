@@ -9,6 +9,8 @@
 
 'use client';
 
+import debug from '@/lib/debug';
+
 import React, { useState, useEffect } from 'react';
 import {
   Dialog,
@@ -279,7 +281,7 @@ export default function DocumentPreviewModal({
   const checkPDFType = async () => {
     if (!document) return;
 
-    console.log('[PDF Init] checkPDFType started', {
+    debug.log('[PDF Init] checkPDFType started', {
       documentId: document.id,
       title: document.title,
       hasContent: !!document.content,
@@ -289,7 +291,7 @@ export default function DocumentPreviewModal({
 
     // If already have content, show it immediately
     if (document.content && document.content.trim().length > 0) {
-      console.log('[PDF Init] Using cached content, length:', document.content.length);
+      debug.log('[PDF Init] Using cached content, length:', document.content.length);
       setPdfExtractedText(document.content);
       setPdfIsScanned(false);
       await detectTemplate(document.content);
@@ -297,7 +299,7 @@ export default function DocumentPreviewModal({
     }
 
     // No content - need to check if scanned or text-based
-    console.log('[PDF Init] No content, calling analyze-batch API...');
+    debug.log('[PDF Init] No content, calling analyze-batch API...');
     setPdfAnalyzing(true);
 
     const abortController = new AbortController();
@@ -312,17 +314,17 @@ export default function DocumentPreviewModal({
       });
 
       clearTimeout(timeoutId);
-      console.log('[PDF Init] API response:', { ok: response.ok, status: response.status });
+      debug.log('[PDF Init] API response:', { ok: response.ok, status: response.status });
 
       if (response.ok) {
         const data = await response.json();
         const isScanned = data.analysis?.scannedPDFs?.length > 0;
-        console.log('[PDF Init] Analysis result:', { isScanned });
+        debug.log('[PDF Init] Analysis result:', { isScanned });
         setPdfIsScanned(isScanned);
 
         if (!isScanned) {
           // Text-based PDF - fetch content from document
-          console.log('[PDF Init] Text-based PDF detected, fetching content...');
+          debug.log('[PDF Init] Text-based PDF detected, fetching content...');
           try {
             const docResponse = await fetch(`/api/v2/documents/${document.id}`, {
               headers: getAuthHeaders()
@@ -334,7 +336,7 @@ export default function DocumentPreviewModal({
                 await detectTemplate(docData.content);
               } else {
                 // No content - start text extraction (not OCR)
-                console.log('[PDF Init] No content found, extracting text...');
+                debug.log('[PDF Init] No content found, extracting text...');
                 setPdfAnalyzing(false);
                 setPdfIsScanned(false);
                 setPdfProcessing(true);
@@ -351,7 +353,7 @@ export default function DocumentPreviewModal({
           }
         } else {
           // Scanned PDF - start OCR automatically
-          console.log('[PDF Init] Scanned PDF detected, starting OCR...');
+          debug.log('[PDF Init] Scanned PDF detected, starting OCR...');
           setPdfAnalyzing(false);
           await handleRunOCR();
         }
@@ -393,7 +395,7 @@ export default function DocumentPreviewModal({
         if (document.type === 'csv' && document.metadata) {
           const estimatedRows = document.metadata.estimatedTotalRows || document.metadata.totalRows;
           if (estimatedRows && estimatedRows > 0) {
-            console.log('[CSV] Using estimated total rows from metadata:', estimatedRows);
+            debug.log('[CSV] Using estimated total rows from metadata:', estimatedRows);
             setTotalRowCount(estimatedRows);
           }
         }
@@ -414,7 +416,7 @@ export default function DocumentPreviewModal({
         if (isPDF && document.id) {
           // Load saved metadata if available (avoid re-analyzing)
           if (document.metadata?.analysis) {
-            console.log('[PDF Init] Loading saved metadata from document');
+            debug.log('[PDF Init] Loading saved metadata from document');
             setPdfMetadata(document.metadata.analysis);
 
             // Load previously selected fields if available, otherwise select all
@@ -452,10 +454,10 @@ export default function DocumentPreviewModal({
 
   // Fetch analysis templates for PDF documents
   useEffect(() => {
-    console.log('[DocumentPreviewModal] useEffect triggered - document:', document?.id, document?.title);
+    debug.log('[DocumentPreviewModal] useEffect triggered - document:', document?.id, document?.title);
     const isPDF = isPDFDocument(document);
 
-    console.log('[DocumentPreviewModal] isPDF check:', isPDF, {
+    debug.log('[DocumentPreviewModal] isPDF check:', isPDF, {
       type: document?.type,
       file_type: document?.file_type,
       title: document?.title
@@ -465,23 +467,23 @@ export default function DocumentPreviewModal({
       fetchAnalysisTemplates();
       fetchActiveLLM(); // Fetch active LLM for display
     } else {
-      console.log('[DocumentPreviewModal] Not a PDF, skipping template fetch');
+      debug.log('[DocumentPreviewModal] Not a PDF, skipping template fetch');
     }
   }, [document?.id]);
 
   const fetchAnalysisTemplates = async () => {
     try {
-      console.log('[DocumentPreviewModal] Loading templates from database...');
+      debug.log('[DocumentPreviewModal] Loading templates from database...');
       const response = await fetch(`${config?.backendUrl || 'http://localhost:8083'}/api/v2/templates?active=true`, {
         method: 'GET',
         headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
         credentials: 'include',
       });
 
-      console.log('[DocumentPreviewModal] Response status:', response.status);
+      debug.log('[DocumentPreviewModal] Response status:', response.status);
       if (response.ok) {
         const data = await response.json();
-        console.log('[DocumentPreviewModal] Templates loaded from database:', data.templates?.length || 0, data.templates);
+        debug.log('[DocumentPreviewModal] Templates loaded from database:', data.templates?.length || 0, data.templates);
         // Map database templates to expected format
         const mappedTemplates = (data.templates || []).map((t: any) => ({
           id: t.template_id,
@@ -513,7 +515,7 @@ export default function DocumentPreviewModal({
             provider: data.services.active_llm.provider,
             model: data.services.active_llm.model
           });
-          console.log('[LLM Info] Active LLM:', data.services.active_llm.provider, data.services.active_llm.model);
+          debug.log('[LLM Info] Active LLM:', data.services.active_llm.provider, data.services.active_llm.model);
         }
       }
     } catch (error) {
@@ -524,7 +526,7 @@ export default function DocumentPreviewModal({
   };
 
   const loadFallbackTemplates = () => {
-    console.log('[DocumentPreviewModal] Using fallback templates');
+    debug.log('[DocumentPreviewModal] Using fallback templates');
     const fallbackTemplates = [
       { id: 'general', name: 'General Document', category: 'General' },
       { id: 'legal', name: 'Legal Document (Kanun/Mevzuat)', category: 'Legal' },
@@ -540,7 +542,7 @@ export default function DocumentPreviewModal({
   const fetchGraphQLData = async () => {
     if (!document) return;
     try {
-      console.log('[DocumentPreview] Fetching GraphQL data for document:', {
+      debug.log('[DocumentPreview] Fetching GraphQL data for document:', {
         id: document.id,
         title: document.title,
         type: document.type,
@@ -549,19 +551,19 @@ export default function DocumentPreviewModal({
         GET_DOCUMENT_PREVIEW,
         { documentId: document.id }
       );
-      console.log('[DocumentPreview] GraphQL response received');
+      debug.log('[DocumentPreview] GraphQL response received');
       setGraphqlData(response.documentPreview);
 
       // ⚡ For CSV files, immediately use GraphQL data (don't wait for parseCSV)
       if (document.type === 'csv' && response.documentPreview.columnHeaders && response.documentPreview.sampleRows) {
-        console.log('[GraphQL] CSV data received - updating preview immediately');
+        debug.log('[GraphQL] CSV data received - updating preview immediately');
         setCsvHeaders(response.documentPreview.columnHeaders);
         setOriginalCsvHeaders(response.documentPreview.columnHeaders);
         setParsedData(response.documentPreview.sampleRows);
         // Use metadata's estimated total rows (for large files) or GraphQL rowCount
         const estimatedFromMetadata = document.metadata?.estimatedTotalRows || document.metadata?.totalRows;
         const rowCount = estimatedFromMetadata || response.documentPreview.rowCount || response.documentPreview.sampleRows.length;
-        console.log('[GraphQL] Row count sources:', { estimatedFromMetadata, graphqlRowCount: response.documentPreview.rowCount, final: rowCount });
+        debug.log('[GraphQL] Row count sources:', { estimatedFromMetadata, graphqlRowCount: response.documentPreview.rowCount, final: rowCount });
         setTotalRowCount(rowCount);
         setCsvLoading(false);
       }
@@ -607,7 +609,7 @@ export default function DocumentPreviewModal({
     const maxCount = Math.max(...counts);
     const delimiterIndex = counts.indexOf(maxCount);
 
-    console.log('[CSV Parser] Delimiter detection:', {
+    debug.log('[CSV Parser] Delimiter detection:', {
       delimiters: delimiters.map(d => d === '\t' ? 'TAB' : d),
       counts,
       detected: delimiters[delimiterIndex] === '\t' ? 'TAB' : delimiters[delimiterIndex]
@@ -621,7 +623,7 @@ export default function DocumentPreviewModal({
 
     // ✅ Priority 1: Use GraphQL data if available (already parsed correctly by backend)
     if (graphqlData?.columnHeaders && graphqlData.sampleRows) {
-      console.log('[CSV Parser] Using GraphQL data (backend-parsed, correct delimiter)');
+      debug.log('[CSV Parser] Using GraphQL data (backend-parsed, correct delimiter)');
       setCsvHeaders(graphqlData.columnHeaders);
       setOriginalCsvHeaders(graphqlData.columnHeaders);
       setParsedData(graphqlData.sampleRows);
@@ -636,14 +638,14 @@ export default function DocumentPreviewModal({
     // Wait for GraphQL data instead - it's already optimized on backend
     const FIVE_MB = 5_000_000;
     if (content && content.length > FIVE_MB) {
-      console.log(`[CSV Parser] Large file (${(content.length / 1024 / 1024).toFixed(1)}MB) - waiting for GraphQL preview...`);
+      debug.log(`[CSV Parser] Large file (${(content.length / 1024 / 1024).toFixed(1)}MB) - waiting for GraphQL preview...`);
       // Don't set loading to false - keep showing spinner until GraphQL arrives
       return;
     }
 
     // Check if content is in processed format (from contextual-document-processor)
     if (content.includes('Tabular Data Overview:') && content.includes('Data Records:')) {
-      console.log('[CSV Parser] Detected processed CSV format, extracting data...');
+      debug.log('[CSV Parser] Detected processed CSV format, extracting data...');
 
       // Extract data records section
       const dataRecordsIndex = content.indexOf('Data Records:');
@@ -682,7 +684,7 @@ export default function DocumentPreviewModal({
             setTotalRowCount(recordLines.length);
             setParsedData(data);
             setCsvLoading(false);
-            console.log('[CSV Parser] Successfully parsed processed CSV:', {
+            debug.log('[CSV Parser] Successfully parsed processed CSV:', {
               headers: headers.length,
               rows: data.length,
               totalRows: recordLines.length
@@ -693,18 +695,18 @@ export default function DocumentPreviewModal({
       }
 
       // If we couldn't extract from processed format, try to extract from metadata
-      console.log('[CSV Parser] Could not extract from processed format, checking metadata...');
+      debug.log('[CSV Parser] Could not extract from processed format, checking metadata...');
       if (document!.metadata?.dataStructure?.headers) {
         const metaHeaders = document!.metadata.dataStructure.headers;
         setCsvHeaders(metaHeaders);
         setOriginalCsvHeaders(metaHeaders); // Store original keys for data access
-        console.log('[CSV Parser] Using headers from metadata');
+        debug.log('[CSV Parser] Using headers from metadata');
       }
     }
 
     // Standard CSV parsing (for raw CSV or fallback)
     // OPTIMIZED: Only extract first 25 lines for preview (don't split entire file!)
-    console.log('[CSV Parser] Using optimized CSV parsing (preview only)...');
+    debug.log('[CSV Parser] Using optimized CSV parsing (preview only)...');
 
     // Find first 25 newlines without splitting entire content
     const PREVIEW_LINES = 25; // header + 20 data rows + buffer
@@ -778,7 +780,7 @@ export default function DocumentPreviewModal({
         if (content[i] === '\n') sampleNewlines++;
       }
       estimatedTotalRows = Math.round((sampleNewlines / sampleSize) * content.length);
-      console.log('[CSV Parser] Large file - estimated rows from sample:', estimatedTotalRows);
+      debug.log('[CSV Parser] Large file - estimated rows from sample:', estimatedTotalRows);
     } else {
       // Small file (<1MB) - count all newlines
       for (let i = 0; i < content.length; i++) {
@@ -800,7 +802,7 @@ export default function DocumentPreviewModal({
 
     setParsedData(data);
     setCsvLoading(false);
-    console.log('[CSV Parser] Preview parse complete:', {
+    debug.log('[CSV Parser] Preview parse complete:', {
       delimiter: delimiter === '\t' ? 'TAB' : delimiter,
       headers: headers.length,
       previewRows: data.length,
@@ -983,7 +985,7 @@ export default function DocumentPreviewModal({
         return;
       }
 
-      console.log('[DocumentPreview] Generating table:', {
+      debug.log('[DocumentPreview] Generating table:', {
         documentId: document.id,
         tableName, // Use user-edited table name
         sourceDbName,
@@ -1005,7 +1007,7 @@ export default function DocumentPreviewModal({
       const receivedJobId = result.transformDocumentsToSourceDb.jobId;
       setJobId(receivedJobId); // Store job ID for progress tracking
 
-      console.log('[DocumentPreview] Table generation job started:', receivedJobId);
+      debug.log('[DocumentPreview] Table generation job started:', receivedJobId);
 
       toast({
         title: 'Table Generation Started',
@@ -1341,7 +1343,7 @@ export default function DocumentPreviewModal({
 
       if (ocrResponse.ok) {
         const ocrData = await ocrResponse.json();
-        console.log('[OCR] Job started:', ocrData.jobId);
+        debug.log('[OCR] Job started:', ocrData.jobId);
 
         // Poll OCR progress
         await pollJobProgress(ocrData.jobId, 10, 100);
@@ -1350,7 +1352,7 @@ export default function DocumentPreviewModal({
         setPdfStatus('OCR Tamamlandı!');
       } else {
         // Fallback: Use sync text extraction endpoint
-        console.log('[OCR] Batch OCR failed, using fallback text extraction');
+        debug.log('[OCR] Batch OCR failed, using fallback text extraction');
         setPdfProgress(30);
         setPdfStatus('Text çıkarılıyor...');
 
@@ -1374,10 +1376,10 @@ export default function DocumentPreviewModal({
       const response = await fetch(`/api/v2/documents/${document.id}`, {
         headers: getAuthHeaders()
       });
-      console.log('[OCR] Document fetch response status:', response.status);
+      debug.log('[OCR] Document fetch response status:', response.status);
       if (response.ok) {
         const data = await response.json();
-        console.log('[OCR] Document fetch response data:', {
+        debug.log('[OCR] Document fetch response data:', {
           hasDocument: !!(data.document || data),
           hasContent: !!(data.document?.content || data.content),
           contentLength: (data.document?.content || data.content || '').length,
@@ -1385,7 +1387,7 @@ export default function DocumentPreviewModal({
         });
         const doc = data.document || data;
         if (doc.content) {
-          console.log('[OCR] Extracted text length:', doc.content.length);
+          debug.log('[OCR] Extracted text length:', doc.content.length);
           setPdfExtractedText(doc.content);
           setPdfIsScanned(false); // Mark as processed
 
@@ -1433,7 +1435,7 @@ export default function DocumentPreviewModal({
       if (!extractResponse.ok) throw new Error('Text extraction failed');
       const extractData = await extractResponse.json();
 
-      console.log('[Text Extract] Job started:', extractData.jobId);
+      debug.log('[Text Extract] Job started:', extractData.jobId);
 
       // Poll extraction progress
       await pollJobProgress(extractData.jobId, 0, 100);
@@ -1447,7 +1449,7 @@ export default function DocumentPreviewModal({
         const data = await response.json();
         const doc = data.document || data;
         if (doc.content) {
-          console.log('[Text Extract] Extracted text length:', doc.content.length);
+          debug.log('[Text Extract] Extracted text length:', doc.content.length);
           setPdfExtractedText(doc.content);
           setPdfIsScanned(false);
 
@@ -1475,18 +1477,18 @@ export default function DocumentPreviewModal({
   // Automatically detect template based on PDF content
   const detectTemplate = async (text: string) => {
     if (!text || text.length < 100) {
-      console.log('[Template Detection] Text too short, skipping');
+      debug.log('[Template Detection] Text too short, skipping');
       return;
     }
 
     setTemplateDetecting(true);
     try {
-      console.log('[Template Detection] Starting detection for text length:', text.length);
+      debug.log('[Template Detection] Starting detection for text length:', text.length);
 
       // STEP 1: Detect language first (critical for better template selection)
       let detectedLanguage: any = null;
       try {
-        console.log('[Language Detection] Detecting language...');
+        debug.log('[Language Detection] Detecting language...');
         const languageResponse = await fetch(`${config?.backendUrl || 'http://localhost:8083'}/api/v2/pdf/detect-language`, {
           method: 'POST',
           headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
@@ -1499,7 +1501,7 @@ export default function DocumentPreviewModal({
           const languageData = await languageResponse.json();
           if (languageData.success && languageData.language) {
             detectedLanguage = languageData.language;
-            console.log(`[Language Detection] Detected: ${detectedLanguage.name} (${detectedLanguage.code}) - ${detectedLanguage.confidence}%`);
+            debug.log(`[Language Detection] Detected: ${detectedLanguage.name} (${detectedLanguage.code}) - ${detectedLanguage.confidence}%`);
 
             toast({
               title: "Language Detected",
@@ -1517,8 +1519,8 @@ export default function DocumentPreviewModal({
       let visualElements: any[] = [];
       if (document?.metadata?.visionOCR?.visualElements) {
         visualElements = document.metadata.visionOCR.visualElements;
-        console.log('[Template Detection] Including visual elements:', visualElements.length);
-        console.log('[Template Detection] Visual types:', visualElements.map((v: any) => v.type).join(', '));
+        debug.log('[Template Detection] Including visual elements:', visualElements.length);
+        debug.log('[Template Detection] Visual types:', visualElements.map((v: any) => v.type).join(', '));
       }
 
       const response = await fetch(`${config?.backendUrl || 'http://localhost:8083'}/api/v2/templates/detect`, {
@@ -1539,7 +1541,7 @@ export default function DocumentPreviewModal({
       const data = await response.json();
 
       if (data.success && data.template) {
-        console.log('[Template Detection] Detected:', data.template);
+        debug.log('[Template Detection] Detected:', data.template);
         const detectionInfo = {
           templateId: data.template.template_id,
           templateName: data.template.name,
@@ -1899,7 +1901,7 @@ export default function DocumentPreviewModal({
       if (response.ok) {
         const data = await response.json();
         setPdfSchemas(data.schemas || []);
-        console.log('[PDF Schema] Loaded schemas:', data.schemas?.length || 0);
+        debug.log('[PDF Schema] Loaded schemas:', data.schemas?.length || 0);
       }
     } catch (error) {
       console.error('[PDF Schema] Failed to fetch schemas:', error);
@@ -1930,7 +1932,7 @@ export default function DocumentPreviewModal({
           description: `Applied schema: ${schema.name}`,
         });
 
-        console.log('[PDF Schema] Loaded and applied schema:', schema.name);
+        debug.log('[PDF Schema] Loaded and applied schema:', schema.name);
       }
     } catch (error) {
       console.error('[PDF Schema] Failed to load schema:', error);
@@ -2042,7 +2044,7 @@ export default function DocumentPreviewModal({
         setPdfSchemaDescription('');
         setPdfSelectedSchema(data.schema.id); // Select the newly saved schema
 
-        console.log('[PDF Schema] Saved new schema:', data.schema);
+        debug.log('[PDF Schema] Saved new schema:', data.schema);
       } else {
         const error = await response.json();
         throw new Error(error.message || 'Failed to save schema');
@@ -2158,9 +2160,9 @@ ${selectedArray.map(f => `  ${f.replace(/\./g, '_')} = EXCLUDED.${f.replace(/\./
         return;
       }
 
-      console.log('[PDF Transform] Custom schema mode');
-      console.log('[PDF Transform] Table:', customTableSchema.tableName);
-      console.log('[PDF Transform] Fields:', customTableSchema.fields);
+      debug.log('[PDF Transform] Custom schema mode');
+      debug.log('[PDF Transform] Table:', customTableSchema.tableName);
+      debug.log('[PDF Transform] Fields:', customTableSchema.fields);
 
       setPdfProcessing(true);
       setPdfProgress(0);
@@ -2250,11 +2252,11 @@ ${selectedArray.map(f => `  ${f.replace(/\./g, '_')} = EXCLUDED.${f.replace(/\./
       return;
     }
 
-    console.log('[PDF Transform] Starting transform...');
-    console.log('[PDF Transform] Selected fields:', Array.from(pdfSelectedFields));
-    console.log('[PDF Transform] Table name:', finalTableName);
-    console.log('[PDF Transform] Source DB:', sourceDbName);
-    console.log('[PDF Transform] SQL Schema:', generateSQLSchema());
+    debug.log('[PDF Transform] Starting transform...');
+    debug.log('[PDF Transform] Selected fields:', Array.from(pdfSelectedFields));
+    debug.log('[PDF Transform] Table name:', finalTableName);
+    debug.log('[PDF Transform] Source DB:', sourceDbName);
+    debug.log('[PDF Transform] SQL Schema:', generateSQLSchema());
 
     // Reset transform progress
     setPdfTransformProgress(0);
@@ -2299,7 +2301,7 @@ ${selectedArray.map(f => `  ${f.replace(/\./g, '_')} = EXCLUDED.${f.replace(/\./
       }
 
       const data = await response.json();
-      console.log('[PDF Transform] Job started:', data.jobId);
+      debug.log('[PDF Transform] Job started:', data.jobId);
 
       // Set job ID for progress tracking
       setPdfTransformJobId(data.jobId);
@@ -2458,27 +2460,27 @@ ${selectedArray.map(f => `  ${f.replace(/\./g, '_')} = EXCLUDED.${f.replace(/\./
 
     try {
       // Fetch document from database to get updated metadata
-      console.log('[PDF Metadata] Fetching for document ID:', document.id);
+      debug.log('[PDF Metadata] Fetching for document ID:', document.id);
       const response = await fetch(`/api/v2/documents/${document.id}`);
-      console.log('[PDF Metadata] Response status:', response.status, response.statusText);
+      debug.log('[PDF Metadata] Response status:', response.status, response.statusText);
 
       if (response.ok) {
         const data = await response.json();
-        console.log('[PDF Metadata] Full response:', JSON.stringify(data, null, 2));
+        debug.log('[PDF Metadata] Full response:', JSON.stringify(data, null, 2));
 
         // Backend returns { document: { metadata: { analysis: ... } } }
         const docData = data.document || data;
-        console.log('[PDF Metadata] Has document.metadata?', !!docData.metadata);
-        console.log('[PDF Metadata] Has document.metadata.analysis?', !!docData.metadata?.analysis);
+        debug.log('[PDF Metadata] Has document.metadata?', !!docData.metadata);
+        debug.log('[PDF Metadata] Has document.metadata.analysis?', !!docData.metadata?.analysis);
 
         if (docData.metadata?.analysis) {
-          console.log('[PDF Metadata] Setting metadata:', docData.metadata.analysis);
+          debug.log('[PDF Metadata] Setting metadata:', docData.metadata.analysis);
           setPdfMetadata(docData.metadata.analysis);
 
           // Handle field selections
           if (preserveSelections) {
             // Re-Analyze: Keep user's previous selections + add any new fields
-            console.log('[PDF Metadata] Preserving user selections from re-analyze');
+            debug.log('[PDF Metadata] Preserving user selections from re-analyze');
             const allNewPaths = getAllFieldPaths(docData.metadata.analysis);
             const mergedSelections = new Set([
               ...Array.from(preserveSelections),

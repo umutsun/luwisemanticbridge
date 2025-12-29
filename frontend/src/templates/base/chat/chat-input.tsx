@@ -1,5 +1,7 @@
 'use client';
 
+import debug from '@/lib/debug';
+
 import { useState, KeyboardEvent, useEffect, useCallback, useRef, ChangeEvent } from 'react';
 import { Send, Paperclip, Sparkles, RefreshCw, Loader2, Mic, Square } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
@@ -76,7 +78,7 @@ export function ChatInput({ onSend, disabled }: ChatInputProps) {
           maxSizeMB: data.maxSizeMB || 10,
           maxPages: data.maxPages || 30
         });
-        console.log('[ChatInput] PDF settings loaded:', data);
+        debug.log('[ChatInput] PDF settings loaded:', data);
       })
       .catch(err => {
         console.error('[ChatInput] Failed to fetch PDF settings:', err);
@@ -93,7 +95,7 @@ export function ChatInput({ onSend, disabled }: ChatInputProps) {
           enableVoiceOutput: data.enableVoiceOutput || false,
           maxRecordingSeconds: data.maxRecordingSeconds || 60
         });
-        console.log('[ChatInput] Voice settings loaded:', data);
+        debug.log('[ChatInput] Voice settings loaded:', data);
       })
       .catch(err => {
         console.error('[ChatInput] Failed to fetch voice settings:', err);
@@ -110,12 +112,12 @@ export function ChatInput({ onSend, disabled }: ChatInputProps) {
         if (data.suggestions && data.suggestions.length > 0) {
           // Backend returned schema-aware questions
           setSampleQuestions(data.suggestions.slice(0, 4));
-          console.log('[ChatInput] Loaded schema-aware suggestions:', data.suggestions.length);
+          debug.log('[ChatInput] Loaded schema-aware suggestions:', data.suggestions.length);
           return;
         }
       }
       // Fallback: use empty array if backend returns no suggestions
-      console.log('[ChatInput] No schema-aware suggestions from backend');
+      debug.log('[ChatInput] No schema-aware suggestions from backend');
       setSampleQuestions([]);
     } catch (err) {
       console.error('[ChatInput] Failed to fetch suggestions:', err);
@@ -164,7 +166,7 @@ export function ChatInput({ onSend, disabled }: ChatInputProps) {
     }
 
     setPdfFile(file);
-    console.log('[ChatInput] PDF selected:', file.name, `(${fileSizeMB.toFixed(2)} MB)`);
+    debug.log('[ChatInput] PDF selected:', file.name, `(${fileSizeMB.toFixed(2)} MB)`);
 
     // Reset file input
     if (fileInputRef.current) {

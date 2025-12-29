@@ -4,6 +4,7 @@
  */
 
 import { useState, useEffect, useCallback, useRef } from 'react';
+import debug from '@/lib/debug';
 
 export interface MigrationProgress {
   migrationId: string;
@@ -60,13 +61,13 @@ export function useMigrationProgress(options: UseMigrationProgressOptions = {}) 
     }
 
     const wsUrl = `ws://localhost:8083/ws/migration/${id}`;
-    console.log('Connecting to WebSocket:', wsUrl);
+    debug.log('Connecting to WebSocket:', wsUrl);
 
     try {
       const ws = new WebSocket(wsUrl);
 
       ws.onopen = () => {
-        console.log('WebSocket connected');
+        debug.log('WebSocket connected');
         setIsConnected(true);
         setError(null);
       };
@@ -91,7 +92,7 @@ export function useMigrationProgress(options: UseMigrationProgressOptions = {}) 
       };
 
       ws.onclose = () => {
-        console.log('WebSocket disconnected');
+        debug.log('WebSocket disconnected');
         setIsConnected(false);
         wsRef.current = null;
 
@@ -118,13 +119,13 @@ export function useMigrationProgress(options: UseMigrationProgressOptions = {}) 
     }
 
     const sseUrl = `http://localhost:8083/api/v2/migration/progress/${id}/stream`;
-    console.log('Connecting to SSE:', sseUrl);
+    debug.log('Connecting to SSE:', sseUrl);
 
     try {
       const eventSource = new EventSource(sseUrl);
 
       eventSource.onopen = () => {
-        console.log('SSE connected');
+        debug.log('SSE connected');
         setIsConnected(true);
         setError(null);
       };

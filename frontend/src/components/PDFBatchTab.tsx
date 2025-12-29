@@ -5,6 +5,8 @@
 
 'use client';
 
+import debug from '@/lib/debug';
+
 import { useState, useEffect, useCallback } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
@@ -120,7 +122,7 @@ export default function PDFBatchTab({ selectedDocuments, allDocuments, onComplet
 
   const loadTemplates = async () => {
     try {
-      console.log('[PDFBatchTab] Loading templates...');
+      debug.log('[PDFBatchTab] Loading templates...');
       
       // Try multiple endpoints for templates
       let templates = [];
@@ -128,11 +130,11 @@ export default function PDFBatchTab({ selectedDocuments, allDocuments, onComplet
       // Try the main templates endpoint first
       try {
         const response = await fetch('/api/v2/pdf/analysis-templates');
-        console.log('[PDFBatchTab] Response status:', response.status);
+        debug.log('[PDFBatchTab] Response status:', response.status);
         if (response.ok) {
           const data = await response.json();
           templates = data.templates || data || [];
-          console.log('[PDFBatchTab] Templates loaded from main endpoint:', templates.length, templates);
+          debug.log('[PDFBatchTab] Templates loaded from main endpoint:', templates.length, templates);
         }
       } catch (endpointError) {
         console.warn('[PDFBatchTab] Main endpoint failed:', endpointError);
@@ -145,7 +147,7 @@ export default function PDFBatchTab({ selectedDocuments, allDocuments, onComplet
           if (fallbackResponse.ok) {
             const fallbackData = await fallbackResponse.json();
             templates = fallbackData.templates || fallbackData || [];
-            console.log('[PDFBatchTab] Templates loaded from fallback endpoint:', templates.length, templates);
+            debug.log('[PDFBatchTab] Templates loaded from fallback endpoint:', templates.length, templates);
           }
         } catch (fallbackError) {
           console.warn('[PDFBatchTab] Fallback endpoint failed:', fallbackError);
@@ -154,7 +156,7 @@ export default function PDFBatchTab({ selectedDocuments, allDocuments, onComplet
       
       // If still no templates, use hardcoded fallback
       if (templates.length === 0) {
-        console.log('[PDFBatchTab] Using hardcoded fallback templates');
+        debug.log('[PDFBatchTab] Using hardcoded fallback templates');
         templates = [
           { id: 'general', name: 'General Document', category: 'General' },
           { id: 'legal', name: 'Legal Document (Kanun/Mevzuat)', category: 'Legal' },
@@ -167,7 +169,7 @@ export default function PDFBatchTab({ selectedDocuments, allDocuments, onComplet
       }
       
       setAvailableTemplates(templates);
-      console.log('[PDFBatchTab] Final templates set:', templates.length, templates);
+      debug.log('[PDFBatchTab] Final templates set:', templates.length, templates);
       
     } catch (error) {
       console.error('[PDFBatchTab] Failed to load templates:', error);
@@ -176,7 +178,7 @@ export default function PDFBatchTab({ selectedDocuments, allDocuments, onComplet
   };
 
   const loadFallbackTemplates = () => {
-    console.log('[PDFBatchTab] Using fallback templates');
+    debug.log('[PDFBatchTab] Using fallback templates');
     const fallbackTemplates = [
       { id: 'general', name: 'General Document', category: 'General' },
       { id: 'legal', name: 'Legal Document (Kanun/Mevzuat)', category: 'Legal' },
@@ -225,11 +227,11 @@ export default function PDFBatchTab({ selectedDocuments, allDocuments, onComplet
   useEffect(() => {
     if (!jobId || stage === 'complete' || stage === 'error') return;
 
-    console.log('[PDFBatchTab] Setting up WebSocket for job:', jobId);
+    debug.log('[PDFBatchTab] Setting up WebSocket for job:', jobId);
 
     // Subscribe to WebSocket progress updates
     const handleProgressUpdate = (update: ProgressUpdate) => {
-      console.log('[PDFBatchTab] WebSocket Progress update:', update);
+      debug.log('[PDFBatchTab] WebSocket Progress update:', update);
 
       setProgress(update.percentage || 0);
       setCurrentFile(update.currentFile || '');
@@ -261,18 +263,18 @@ export default function PDFBatchTab({ selectedDocuments, allDocuments, onComplet
     try {
       pdfProgressWSClient.connect();
       pdfProgressWSClient.subscribeToJob(jobId, handleProgressUpdate);
-      console.log('[PDFBatchTab] Successfully subscribed to WebSocket updates for job:', jobId);
+      debug.log('[PDFBatchTab] Successfully subscribed to WebSocket updates for job:', jobId);
     } catch (error) {
       console.error('[PDFBatchTab] Failed to subscribe to WebSocket updates:', error);
       // Fallback to polling if WebSocket fails
-      console.log('[PDFBatchTab] Falling back to polling for progress updates');
+      debug.log('[PDFBatchTab] Falling back to polling for progress updates');
     }
 
     // Cleanup on unmount
     return () => {
       try {
         pdfProgressWSClient.unsubscribeFromJob(jobId);
-        console.log('[PDFBatchTab] Unsubscribed from WebSocket updates for job:', jobId);
+        debug.log('[PDFBatchTab] Unsubscribed from WebSocket updates for job:', jobId);
       } catch (error) {
         console.error('[PDFBatchTab] Failed to unsubscribe from WebSocket updates:', error);
       }
@@ -283,14 +285,14 @@ export default function PDFBatchTab({ selectedDocuments, allDocuments, onComplet
   useEffect(() => {
     if (!jobId || stage === 'complete' || stage === 'error') return;
 
-    console.log('[PDFBatchTab] Setting up polling for job:', jobId);
+    debug.log('[PDFBatchTab] Setting up polling for job:', jobId);
 
     const interval = setInterval(async () => {
       try {
         const response = await fetch(`/api/v2/pdf/job-status/${jobId}`);
         const data = await response.json();
 
-        console.log('[PDFBatchTab] Polling response:', data);
+        debug.log('[PDFBatchTab] Polling response:', data);
 
         if (data.success && data.progress) {
           const {
@@ -350,7 +352,7 @@ export default function PDFBatchTab({ selectedDocuments, allDocuments, onComplet
 
     return () => {
       clearInterval(interval);
-      console.log('[PDFBatchTab] Polling cleanup for job:', jobId);
+      debug.log('[PDFBatchTab] Polling cleanup for job:', jobId);
     };
   }, [jobId, stage, toast, onComplete]);
 

@@ -1,5 +1,7 @@
 'use client';
 
+import debug from '@/lib/debug';
+
 import React, { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -125,9 +127,9 @@ const DocumentPreview: React.FC<DocumentPreviewProps> = ({ isOpen, onClose, docu
             setJsonData({ raw: actualContent });
           }
         } else if (document.type === 'csv') {
-          console.log('Parsing CSV content...');
-          console.log('Raw content preview:', document.content.substring(0, 500));
-          console.log('Document source:', document.source);
+          debug.log('Parsing CSV content...');
+          debug.log('Raw content preview:', document.content.substring(0, 500));
+          debug.log('Document source:', document.source);
 
           // Extract CSV stats from metadata if available
           if (document.metadata?.csvStats) {
@@ -138,7 +140,7 @@ const DocumentPreview: React.FC<DocumentPreviewProps> = ({ isOpen, onClose, docu
 
           // Check if content is in processed format (from contextual-document-processor)
           if (content.includes('Tabular Data Overview:') && content.includes('Data Records:')) {
-            console.log('[CSV Parser] Detected processed CSV format, extracting data...');
+            debug.log('[CSV Parser] Detected processed CSV format, extracting data...');
 
             // Extract data records section
             const dataRecordsIndex = content.indexOf('Data Records:');
@@ -174,7 +176,7 @@ const DocumentPreview: React.FC<DocumentPreviewProps> = ({ isOpen, onClose, docu
                   }).filter(Boolean);
 
                   setCsvData(data);
-                  console.log('[CSV Parser] Successfully parsed processed CSV:', {
+                  debug.log('[CSV Parser] Successfully parsed processed CSV:', {
                     headers: headers.length,
                     rows: data.length
                   });
@@ -184,15 +186,15 @@ const DocumentPreview: React.FC<DocumentPreviewProps> = ({ isOpen, onClose, docu
             }
 
             // If we couldn't extract from processed format, try metadata
-            console.log('[CSV Parser] Could not extract from processed format, checking metadata...');
+            debug.log('[CSV Parser] Could not extract from processed format, checking metadata...');
             if (document.metadata?.dataStructure?.headers) {
               setCsvHeaders(document.metadata.dataStructure.headers);
-              console.log('[CSV Parser] Using headers from metadata');
+              debug.log('[CSV Parser] Using headers from metadata');
             }
           }
 
           // Standard CSV parsing (for raw CSV or fallback)
-          console.log('[CSV Parser] Using standard CSV parsing...');
+          debug.log('[CSV Parser] Using standard CSV parsing...');
 
           // Proper CSV parsing function that handles quoted fields with commas
           const parseCSVLine = (line: string): string[] => {
@@ -229,15 +231,15 @@ const DocumentPreview: React.FC<DocumentPreviewProps> = ({ isOpen, onClose, docu
 
           const lines = content.split('\n').filter(line => line.trim());
 
-          console.log(`CSV lines found: ${lines.length}`);
+          debug.log(`CSV lines found: ${lines.length}`);
 
           if (lines.length > 0) {
             // First line is headers
             const headers = parseCSVLine(lines[0]);
             setCsvHeaders(headers);
 
-            console.log('CSV Headers:', headers);
-            console.log('Column count:', headers.length);
+            debug.log('CSV Headers:', headers);
+            debug.log('Column count:', headers.length);
 
             // Parse data rows (skip header, take first 10 rows for preview)
             const dataRows = lines.slice(1, 11); // First 10 data rows
@@ -251,8 +253,8 @@ const DocumentPreview: React.FC<DocumentPreviewProps> = ({ isOpen, onClose, docu
               return obj;
             });
 
-            console.log('CSV Data parsed:', data.length, 'rows');
-            console.log('Sample row:', data[0]);
+            debug.log('CSV Data parsed:', data.length, 'rows');
+            debug.log('Sample row:', data[0]);
             setCsvData(data);
           }
         }
