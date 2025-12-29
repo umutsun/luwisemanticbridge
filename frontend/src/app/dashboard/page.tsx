@@ -23,7 +23,8 @@ import { AnimatedNumber } from "@/components/ui/animated-number";
 import { AnimatedResourceBar } from "@/components/ui/animated-progress";
 import { useAnimatedPercentage } from "@/hooks/use-animated-counter";
 import { useMetricsWebSocket } from "@/hooks/useMetricsWebSocket";
-import { Sparkline, AnimatedValue } from "@/components/ui/sparkline";
+import { CircularProgress } from "@/components/ui/circular-progress";
+import { isDebugMode } from "@/lib/debug";
 
 interface SystemStatus {
   database: {
@@ -177,6 +178,23 @@ export default function DashboardPage() {
   const [newUrl, setNewUrl] = useState("");
   const [scrapingStatus, setScrapingStatus] = useState<"idle" | "running" | "paused" | "completed">("idle");
 
+  // Debug mode state - shows console when enabled
+  const [debugModeEnabled, setDebugModeEnabled] = useState(false);
+
+  // Listen for debug mode changes
+  useEffect(() => {
+    setDebugModeEnabled(isDebugMode());
+
+    const handleDebugModeChange = (e: CustomEvent) => {
+      setDebugModeEnabled(e.detail);
+    };
+
+    window.addEventListener('debugModeChanged', handleDebugModeChange as EventListener);
+    return () => {
+      window.removeEventListener('debugModeChanged', handleDebugModeChange as EventListener);
+    };
+  }, []);
+
   // Console state for real functionality
   const [consoleFilter, setConsoleFilter] = useState<'all' | 'backend' | 'frontend' | 'error' | 'warn' | 'info'>('all');
   const [isConsolePaused, setIsConsolePaused] = useState(false);
@@ -324,7 +342,6 @@ export default function DashboardPage() {
   // WebSocket metrics hook for real-time animated updates
   const {
     metrics: wsMetrics,
-    history: metricsHistory,
     connected: metricsWsConnected,
     latency: metricsWsLatency
   } = useMetricsWebSocket({
@@ -1679,9 +1696,9 @@ export default function DashboardPage() {
             </CardContent>
           </Card>
 
-          {/* System Resources - Real-time with Sparklines */}
+          {/* System Resources - Circular Progress Design */}
           <Card className="border-0 shadow-sm">
-            <CardHeader className="pb-3">
+            <CardHeader className="pb-2">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <div className={`w-2 h-2 rounded-full ${metricsWsConnected ? 'bg-green-500 animate-pulse' : 'bg-orange-500 animate-pulse'}`} />
@@ -1693,182 +1710,99 @@ export default function DashboardPage() {
                   </Badge>
                 )}
               </div>
-              {(wsMetrics?.cpu?.model || realtimeResources.cpuModel) && (
-                <p className="text-xs text-gray-500 dark:text-gray-400 truncate mt-1">
-                  {wsMetrics?.cpu?.model || realtimeResources.cpuModel} ({wsMetrics?.cpu?.cores || realtimeResources.cpuCores} cores @ {wsMetrics?.cpu?.speed || realtimeResources.cpuSpeed}MHz)
-                </p>
-              )}
             </CardHeader>
             <CardContent className="pt-0">
-              <div className="space-y-4">
-                {/* CPU with Sparkline */}
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <span className="text-sm font-medium text-gray-700 dark:text-gray-300">{t('dashboard.resources.cpu')}</span>
-                      <AnimatedValue
-                        value={wsMetrics?.cpu?.usage ?? realtimeResources.cpu}
-                        suffix="%"
-                        className={`text-sm ${(wsMetrics?.cpu?.usage ?? realtimeResources.cpu) > 80 ? 'text-red-500' : (wsMetrics?.cpu?.usage ?? realtimeResources.cpu) > 60 ? 'text-yellow-500' : 'text-blue-500'}`}
-                      />
-                    </div>
-                    <Sparkline
-                      data={metricsHistory.cpu.length > 0 ? metricsHistory.cpu : [0, 0]}
-                      width={80}
-                      height={24}
-                      strokeColor={(wsMetrics?.cpu?.usage ?? 0) > 80 ? '#ef4444' : (wsMetrics?.cpu?.usage ?? 0) > 60 ? '#f59e0b' : '#3b82f6'}
-                      fillColor={(wsMetrics?.cpu?.usage ?? 0) > 80 ? '#ef4444' : (wsMetrics?.cpu?.usage ?? 0) > 60 ? '#f59e0b' : '#3b82f6'}
-                      showDots
-                      min={0}
-                      max={100}
-                    />
-                  </div>
-                  <AnimatedResourceBar
-                    label=""
+              {/* CPU, Memory, Disk Circles */}
+              <div className="flex justify-around items-start py-4">
+                {/* CPU */}
+                <div className="flex flex-col items-center">
+                  <CircularProgress
                     value={wsMetrics?.cpu?.usage ?? realtimeResources.cpu}
+                    size={90}
+                    strokeWidth={8}
+                    label="CPU"
                     thresholds={{ warning: 60, danger: 80 }}
                   />
-                  <div className="flex justify-between text-xs text-gray-500 dark:text-gray-400 px-1">
-                    <span>Load: {(wsMetrics?.cpu?.loadAvg?.[0] ?? realtimeResources.loadAvg[0])?.toFixed(2) || '0.00'}</span>
-                    <span>{(wsMetrics?.cpu?.loadAvg?.[1] ?? realtimeResources.loadAvg[1])?.toFixed(2) || '0.00'}</span>
-                    <span>{(wsMetrics?.cpu?.loadAvg?.[2] ?? realtimeResources.loadAvg[2])?.toFixed(2) || '0.00'}</span>
+                  <div className="mt-2 text-center">
+                    <p className="text-[10px] text-gray-500 dark:text-gray-400">
+                      Load: {(wsMetrics?.cpu?.loadAvg?.[0] ?? realtimeResources.loadAvg[0])?.toFixed(1) || '0.0'}
+                    </p>
                   </div>
                 </div>
 
-                {/* Memory with Sparkline */}
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <span className="text-sm font-medium text-gray-700 dark:text-gray-300">{t('dashboard.resources.memory')}</span>
-                      <AnimatedValue
-                        value={wsMetrics?.memory?.percentage ?? realtimeResources.memory}
-                        suffix="%"
-                        className={`text-sm ${(wsMetrics?.memory?.percentage ?? realtimeResources.memory) > 85 ? 'text-red-500' : (wsMetrics?.memory?.percentage ?? realtimeResources.memory) > 70 ? 'text-yellow-500' : 'text-green-500'}`}
-                      />
-                    </div>
-                    <Sparkline
-                      data={metricsHistory.memory.length > 0 ? metricsHistory.memory : [0, 0]}
-                      width={80}
-                      height={24}
-                      strokeColor={(wsMetrics?.memory?.percentage ?? 0) > 85 ? '#ef4444' : (wsMetrics?.memory?.percentage ?? 0) > 70 ? '#f59e0b' : '#22c55e'}
-                      fillColor={(wsMetrics?.memory?.percentage ?? 0) > 85 ? '#ef4444' : (wsMetrics?.memory?.percentage ?? 0) > 70 ? '#f59e0b' : '#22c55e'}
-                      showDots
-                      min={0}
-                      max={100}
-                    />
-                  </div>
-                  <AnimatedResourceBar
-                    label=""
+                {/* Memory */}
+                <div className="flex flex-col items-center">
+                  <CircularProgress
                     value={wsMetrics?.memory?.percentage ?? realtimeResources.memory}
+                    size={90}
+                    strokeWidth={8}
+                    label="RAM"
                     thresholds={{ warning: 70, danger: 85 }}
-                    colors={{
-                      normal: { text: 'text-green-600 dark:text-green-400', bar: 'bg-green-500', glow: 'rgba(34, 197, 94, 0.4)' },
-                      warning: { text: 'text-yellow-600 dark:text-yellow-400', bar: 'bg-yellow-500', glow: 'rgba(245, 158, 11, 0.4)' },
-                      danger: { text: 'text-red-600 dark:text-red-400', bar: 'bg-red-500', glow: 'rgba(239, 68, 68, 0.4)' }
-                    }}
                   />
-                  <div className="flex justify-between text-xs text-gray-500 dark:text-gray-400 px-1">
-                    <span>{((wsMetrics?.memory?.used ?? realtimeResources.memoryDetails.used) / 1024).toFixed(1)} GB used</span>
-                    <span>{((wsMetrics?.memory?.total ?? realtimeResources.memoryDetails.total) / 1024).toFixed(1)} GB total</span>
+                  <div className="mt-2 text-center">
+                    <p className="text-[10px] text-gray-500 dark:text-gray-400">
+                      {((wsMetrics?.memory?.used ?? realtimeResources.memoryDetails.used) / 1024).toFixed(1)} / {((wsMetrics?.memory?.total ?? realtimeResources.memoryDetails.total) / 1024).toFixed(0)} GB
+                    </p>
                   </div>
                 </div>
 
-                {/* Disk with Sparkline */}
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <span className="text-sm font-medium text-gray-700 dark:text-gray-300">{t('dashboard.resources.disk')}</span>
-                      <AnimatedValue
-                        value={wsMetrics?.disk?.percentage ?? realtimeResources.disk}
-                        suffix="%"
-                        className={`text-sm ${(wsMetrics?.disk?.percentage ?? realtimeResources.disk) > 90 ? 'text-red-500' : (wsMetrics?.disk?.percentage ?? realtimeResources.disk) > 75 ? 'text-yellow-500' : 'text-green-500'}`}
-                      />
-                    </div>
-                    <Sparkline
-                      data={metricsHistory.disk.length > 0 ? metricsHistory.disk : [0, 0]}
-                      width={80}
-                      height={24}
-                      strokeColor="#8b5cf6"
-                      fillColor="#8b5cf6"
-                      showDots
-                      min={0}
-                      max={100}
-                    />
-                  </div>
-                  <AnimatedResourceBar
-                    label=""
+                {/* Disk */}
+                <div className="flex flex-col items-center">
+                  <CircularProgress
                     value={wsMetrics?.disk?.percentage ?? realtimeResources.disk}
+                    size={90}
+                    strokeWidth={8}
+                    label="Disk"
                     thresholds={{ warning: 75, danger: 90 }}
-                    colors={{
-                      normal: { text: 'text-green-600 dark:text-green-400', bar: 'bg-green-500', glow: 'rgba(34, 197, 94, 0.4)' },
-                      warning: { text: 'text-yellow-600 dark:text-yellow-400', bar: 'bg-yellow-500', glow: 'rgba(245, 158, 11, 0.4)' },
-                      danger: { text: 'text-red-600 dark:text-red-400', bar: 'bg-red-500', glow: 'rgba(239, 68, 68, 0.4)' }
-                    }}
                   />
-                  <div className="flex justify-between text-xs text-gray-500 dark:text-gray-400 px-1">
-                    <span>{wsMetrics?.disk?.mountPoint || realtimeResources.diskMountPoint || '/'} ({wsMetrics?.disk?.filesystem || realtimeResources.diskFilesystem || 'unknown'})</span>
-                    <span>{((wsMetrics?.disk?.used ?? realtimeResources.diskDetails.used) / 1024).toFixed(1)} / {((wsMetrics?.disk?.total ?? realtimeResources.diskDetails.total) / 1024).toFixed(1)} GB</span>
+                  <div className="mt-2 text-center">
+                    <p className="text-[10px] text-gray-500 dark:text-gray-400">
+                      {((wsMetrics?.disk?.used ?? realtimeResources.diskDetails.used) / 1024).toFixed(0)} / {((wsMetrics?.disk?.total ?? realtimeResources.diskDetails.total) / 1024).toFixed(0)} GB
+                    </p>
                   </div>
                 </div>
+              </div>
 
-                {/* Network I/O with Sparklines */}
-                <div className="pt-3 border-t border-gray-100 dark:border-gray-800">
-                  <div className="flex items-center justify-between mb-3">
-                    <span className="text-sm font-medium text-gray-700 dark:text-gray-300">Network I/O</span>
-                    <span className="text-xs text-gray-500 dark:text-gray-400">
-                      {(wsMetrics?.network?.bytesInPerSec ?? realtimeResources.network.bytesInPerSec) > 0 || (wsMetrics?.network?.bytesOutPerSec ?? realtimeResources.network.bytesOutPerSec) > 0 ? 'Active' : 'Idle'}
-                    </span>
-                  </div>
-                  <div className="grid grid-cols-2 gap-3">
-                    {/* Download */}
-                    <div className="bg-blue-50 dark:bg-blue-950/20 rounded-lg p-3">
-                      <div className="flex items-center justify-between mb-2">
-                        <div className="flex items-center gap-1.5">
-                          <span className="text-blue-500 text-lg">↓</span>
-                          <span className="text-xs text-gray-600 dark:text-gray-400">In</span>
-                        </div>
-                        <Sparkline
-                          data={metricsHistory.networkIn.length > 0 ? metricsHistory.networkIn : [0, 0]}
-                          width={50}
-                          height={18}
-                          strokeColor="#3b82f6"
-                          strokeWidth={1}
-                          min={0}
-                        />
-                      </div>
-                      <div className="text-sm font-semibold text-blue-600 dark:text-blue-400">
+              {/* CPU Info */}
+              {(wsMetrics?.cpu?.model || realtimeResources.cpuModel) && (
+                <div className="text-center py-2 border-t border-gray-100 dark:border-gray-800">
+                  <p className="text-[10px] text-gray-400 dark:text-gray-500 truncate px-2">
+                    {wsMetrics?.cpu?.model || realtimeResources.cpuModel} ({wsMetrics?.cpu?.cores || realtimeResources.cpuCores} cores)
+                  </p>
+                </div>
+              )}
+
+              {/* Network I/O - Compact */}
+              <div className="pt-3 border-t border-gray-100 dark:border-gray-800">
+                <div className="grid grid-cols-2 gap-2">
+                  {/* Download */}
+                  <div className="flex items-center gap-2 bg-blue-50 dark:bg-blue-950/20 rounded-lg px-3 py-2">
+                    <span className="text-blue-500 text-sm">↓</span>
+                    <div>
+                      <p className="text-xs text-gray-500 dark:text-gray-400">In</p>
+                      <p className="text-sm font-semibold text-blue-600 dark:text-blue-400">
                         {(() => {
                           const bytes = wsMetrics?.network?.bytesInPerSec ?? realtimeResources.network.bytesInPerSec;
                           if (bytes > 1048576) return `${(bytes / 1048576).toFixed(1)} MB/s`;
                           if (bytes > 1024) return `${(bytes / 1024).toFixed(1)} KB/s`;
                           return `${bytes} B/s`;
                         })()}
-                      </div>
+                      </p>
                     </div>
-                    {/* Upload */}
-                    <div className="bg-green-50 dark:bg-green-950/20 rounded-lg p-3">
-                      <div className="flex items-center justify-between mb-2">
-                        <div className="flex items-center gap-1.5">
-                          <span className="text-green-500 text-lg">↑</span>
-                          <span className="text-xs text-gray-600 dark:text-gray-400">Out</span>
-                        </div>
-                        <Sparkline
-                          data={metricsHistory.networkOut.length > 0 ? metricsHistory.networkOut : [0, 0]}
-                          width={50}
-                          height={18}
-                          strokeColor="#22c55e"
-                          strokeWidth={1}
-                          min={0}
-                        />
-                      </div>
-                      <div className="text-sm font-semibold text-green-600 dark:text-green-400">
+                  </div>
+                  {/* Upload */}
+                  <div className="flex items-center gap-2 bg-green-50 dark:bg-green-950/20 rounded-lg px-3 py-2">
+                    <span className="text-green-500 text-sm">↑</span>
+                    <div>
+                      <p className="text-xs text-gray-500 dark:text-gray-400">Out</p>
+                      <p className="text-sm font-semibold text-green-600 dark:text-green-400">
                         {(() => {
                           const bytes = wsMetrics?.network?.bytesOutPerSec ?? realtimeResources.network.bytesOutPerSec;
                           if (bytes > 1048576) return `${(bytes / 1048576).toFixed(1)} MB/s`;
                           if (bytes > 1024) return `${(bytes / 1024).toFixed(1)} KB/s`;
                           return `${bytes} B/s`;
                         })()}
-                      </div>
+                      </p>
                     </div>
                   </div>
                 </div>
@@ -2068,6 +2002,98 @@ export default function DashboardPage() {
         </div>
       </div>
 
+      {/* Debug Console - Only visible when debug mode is enabled */}
+      {debugModeEnabled && (
+        <div className="mt-8">
+          <Card className="border-0 shadow-sm bg-gray-900 text-gray-100">
+            <CardHeader className="pb-2 border-b border-gray-800">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="flex items-center gap-2">
+                    <div className={`w-2 h-2 rounded-full ${metricsWsConnected ? 'bg-green-500 animate-pulse' : 'bg-orange-500'}`} />
+                    <h3 className="text-sm font-mono font-semibold text-gray-100">Debug Console</h3>
+                  </div>
+                  <Badge variant="outline" className="text-xs bg-yellow-500/20 text-yellow-400 border-yellow-600">
+                    Debug Mode
+                  </Badge>
+                </div>
+                <div className="flex items-center gap-2">
+                  {/* Filter buttons */}
+                  <div className="flex gap-1">
+                    {(['all', 'backend', 'frontend', 'error', 'warn', 'info'] as const).map(filter => (
+                      <Button
+                        key={filter}
+                        variant={consoleFilter === filter ? 'default' : 'ghost'}
+                        size="sm"
+                        className={`h-6 px-2 text-xs ${consoleFilter === filter ? 'bg-blue-600' : 'text-gray-400 hover:text-gray-100'}`}
+                        onClick={() => setConsoleFilter(filter)}
+                      >
+                        {filter}
+                      </Button>
+                    ))}
+                  </div>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-6 px-2 text-xs text-gray-400 hover:text-gray-100"
+                    onClick={() => setConsoleLog([])}
+                  >
+                    Clear
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className={`h-6 px-2 text-xs ${isConsolePaused ? 'text-yellow-400' : 'text-gray-400 hover:text-gray-100'}`}
+                    onClick={() => setIsConsolePaused(!isConsolePaused)}
+                  >
+                    {isConsolePaused ? 'Resume' : 'Pause'}
+                  </Button>
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent className="p-0">
+              {/* Console output */}
+              <div
+                className="overflow-y-auto font-mono text-xs p-3 space-y-1"
+                style={{ height: consoleHeight, maxHeight: 500 }}
+              >
+                {filteredConsoleLogs.length === 0 ? (
+                  <div className="text-gray-500 text-center py-8">No logs yet. Type /help for commands.</div>
+                ) : (
+                  filteredConsoleLogs.map((log) => (
+                    <div
+                      key={log.id}
+                      className={`flex gap-2 hover:bg-gray-800/50 px-1 py-0.5 rounded ${
+                        log.type === 'error' ? 'text-red-400' :
+                        log.type === 'warn' ? 'text-yellow-400' :
+                        log.type === 'success' ? 'text-green-400' :
+                        log.source === 'backend' ? 'text-blue-300' :
+                        log.source === 'frontend' ? 'text-purple-300' :
+                        log.source === 'user' ? 'text-cyan-300' :
+                        'text-gray-300'
+                      }`}
+                    >
+                      <span className="text-gray-500 shrink-0">[{log.timestamp}]</span>
+                      <span className="break-all">{log.message}</span>
+                    </div>
+                  ))
+                )}
+              </div>
+              {/* Command input */}
+              <div className="border-t border-gray-800 p-2 flex gap-2">
+                <span className="text-green-400 font-mono text-sm">$</span>
+                <Input
+                  value={consoleCommand}
+                  onChange={(e) => setConsoleCommand(e.target.value)}
+                  onKeyDown={handleConsoleKeyDown}
+                  placeholder="Type /help for commands..."
+                  className="flex-1 bg-transparent border-0 text-gray-100 placeholder-gray-500 font-mono text-sm h-7 focus-visible:ring-0 focus-visible:ring-offset-0"
+                />
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
 
     </div >
   );
