@@ -112,6 +112,67 @@ const StreamingTimer = memo(({ startTime }: { startTime: number }) => {
 });
 StreamingTimer.displayName = 'StreamingTimer';
 
+// Static markdown components - defined outside component to prevent recreation on every render
+const markdownComponents = {
+  h1: ({ children }: { children?: React.ReactNode }) => (
+    <h1 className="text-base sm:text-lg font-bold mt-4 mb-2 pb-1 border-b border-border">
+      {children}
+    </h1>
+  ),
+  h2: ({ children }: { children?: React.ReactNode }) => (
+    <h2 className="text-sm sm:text-base font-semibold mt-4 mb-2">
+      {children}
+    </h2>
+  ),
+  h3: ({ children }: { children?: React.ReactNode }) => (
+    <h3 className="text-xs sm:text-sm font-semibold mt-3 mb-1">
+      {children}
+    </h3>
+  ),
+  p: ({ children }: { children?: React.ReactNode }) => (
+    <p className="text-xs sm:text-sm my-2 leading-relaxed">
+      {children}
+    </p>
+  ),
+  strong: ({ children }: { children?: React.ReactNode }) => (
+    <strong className="font-semibold text-foreground">
+      {children}
+    </strong>
+  ),
+  ul: ({ children }: { children?: React.ReactNode }) => (
+    <ul className="list-disc list-outside ml-4 my-2 space-y-1 text-xs sm:text-sm">
+      {children}
+    </ul>
+  ),
+  ol: ({ children }: { children?: React.ReactNode }) => (
+    <ol className="list-decimal list-outside ml-4 my-2 space-y-1 text-xs sm:text-sm">
+      {children}
+    </ol>
+  ),
+  li: ({ children }: { children?: React.ReactNode }) => (
+    <li className="pl-1">
+      {children}
+    </li>
+  ),
+  blockquote: ({ children }: { children?: React.ReactNode }) => (
+    <blockquote className="border-l-4 border-amber-400 bg-amber-50 dark:bg-amber-900/20 pl-3 py-2 my-3 text-amber-800 dark:text-amber-200 italic text-xs sm:text-sm">
+      {children}
+    </blockquote>
+  ),
+  code: ({ children, className }: { children?: React.ReactNode; className?: string }) => {
+    const isInline = !className;
+    return isInline ? (
+      <code className="bg-muted px-1.5 py-0.5 rounded text-xs font-mono">
+        {children}
+      </code>
+    ) : (
+      <code className="block bg-muted p-3 rounded-lg text-xs font-mono overflow-x-auto">
+        {children}
+      </code>
+    );
+  },
+};
+
 export default function ChatInterface() {
   const { token, user, logout } = useAuth();
 
@@ -172,9 +233,14 @@ export default function ChatInterface() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [conversationId, setConversationId] = useState<string | undefined>(undefined);
   const [inputText, setInputText] = useState('');
-  const [isLoading, setIsLoading] = useState(false);
-  const [isStreaming, setIsStreaming] = useState(false);
-  const [streamingMessageId, setStreamingMessageId] = useState<string | null>(null);
+  // Consolidated loading state to reduce re-renders during message send
+  const [loadingState, setLoadingState] = useState({
+    isLoading: false,
+    isStreaming: false,
+    streamingMessageId: null as string | null
+  });
+  // Destructure for backward compatibility
+  const { isLoading, isStreaming, streamingMessageId } = loadingState;
   const [showSuggestions, setShowSuggestions] = useState(true);
   // Timer state removed - now using isolated StreamingTimer component
   const [suggestedQuestions, setSuggestedQuestions] = useState<string[]>([]);
@@ -636,7 +702,7 @@ export default function ChatInterface() {
     const messageContent = inputText;
     setLastUserQuery(inputText); // Save for keyword boost highlighting
     setInputText('');
-    setIsLoading(true);
+    setLoadingState(prev => ({ ...prev, isLoading: true }));
     setShowSuggestions(false);
 
     // Create empty streaming message
@@ -651,8 +717,8 @@ export default function ChatInterface() {
       startTime: messageStartTime,
     };
     setMessages(prev => [...prev, streamingMessage]);
-    setStreamingMessageId(messageId);
-    setIsStreaming(true);
+    // Update streaming state in single call
+    setLoadingState({ isLoading: true, isStreaming: true, streamingMessageId: messageId });
 
     try {
       // Use active prompt settings if available, otherwise fall back to LLM settings
@@ -704,11 +770,9 @@ export default function ChatInterface() {
         if (response.status === 401 && (errorData.code === 'TOKEN_INVALID' || errorData.code === 'TOKEN_MISSING' || errorData.code === 'TOKEN_EXPIRED')) {
           console.error('🔒 [ChatInterface] Authentication failed - token invalid or expired, logging out');
 
-          // Clear streaming message
+          // Clear streaming message and reset loading state
           setMessages(prev => prev.filter(msg => msg.id !== messageId));
-          setIsLoading(false);
-          setIsStreaming(false);
-          setStreamingMessageId(null);
+          setLoadingState({ isLoading: false, isStreaming: false, streamingMessageId: null });
 
           // Logout will clear tokens and redirect to login page
           logout();
@@ -884,9 +948,8 @@ export default function ChatInterface() {
           : msg
       ));
     } finally {
-      setIsLoading(false);
-      setIsStreaming(false);
-      setStreamingMessageId(null);
+      // Reset all loading state in single call
+      setLoadingState({ isLoading: false, isStreaming: false, streamingMessageId: null });
     }
   }, [inputText, isLoading, isStreaming, token, conversationId, chatbotSettings.activeChatModel, activePrompt, llmSettings, user, logout]);
 
@@ -902,17 +965,20 @@ export default function ChatInterface() {
     textareaRef.current?.focus();
   }, []);
 
+  // Static options for source click handler - memoized to prevent recreation
+  const sourceClickOptions = useMemo(() => ({
+    includeCrossSourceContext: true,
+    includeRelevanceContext: true,
+    maxSemanticTerms: 3,
+    queryStyle: 'detailed' as const
+  }), []);
+
   // Create enhanced source click handler with semantic search capabilities
   const handleSourceClick = createEnhancedSourceClickHandler(
     () => inputText,
     setInputText,
     () => textareaRef.current?.focus(),
-    {
-      includeCrossSourceContext: true,
-      includeRelevanceContext: true,
-      maxSemanticTerms: 3,
-      queryStyle: 'detailed'
-    }
+    sourceClickOptions
   );
 
   const clearChat = useCallback(() => {
@@ -1217,65 +1283,7 @@ export default function ChatInterface() {
                                       <div className="flex-1 prose prose-sm max-w-none dark:prose-invert prose-headings:text-foreground prose-p:text-foreground/90 prose-strong:text-foreground prose-li:text-foreground/90">
                                         <ReactMarkdown
                                           remarkPlugins={[remarkGfm]}
-                                          components={{
-                                            h1: ({ children }) => (
-                                              <h1 className="text-base sm:text-lg font-bold mt-4 mb-2 pb-1 border-b border-border">
-                                                {children}
-                                              </h1>
-                                            ),
-                                            h2: ({ children }) => (
-                                              <h2 className="text-sm sm:text-base font-semibold mt-4 mb-2">
-                                                {children}
-                                              </h2>
-                                            ),
-                                            h3: ({ children }) => (
-                                              <h3 className="text-xs sm:text-sm font-semibold mt-3 mb-1">
-                                                {children}
-                                              </h3>
-                                            ),
-                                            p: ({ children }) => (
-                                              <p className="text-xs sm:text-sm my-2 leading-relaxed">
-                                                {children}
-                                              </p>
-                                            ),
-                                            strong: ({ children }) => (
-                                              <strong className="font-semibold text-foreground">
-                                                {children}
-                                              </strong>
-                                            ),
-                                            ul: ({ children }) => (
-                                              <ul className="list-disc list-outside ml-4 my-2 space-y-1 text-xs sm:text-sm">
-                                                {children}
-                                              </ul>
-                                            ),
-                                            ol: ({ children }) => (
-                                              <ol className="list-decimal list-outside ml-4 my-2 space-y-1 text-xs sm:text-sm">
-                                                {children}
-                                              </ol>
-                                            ),
-                                            li: ({ children }) => (
-                                              <li className="pl-1">
-                                                {children}
-                                              </li>
-                                            ),
-                                            blockquote: ({ children }) => (
-                                              <blockquote className="border-l-4 border-amber-400 bg-amber-50 dark:bg-amber-900/20 pl-3 py-2 my-3 text-amber-800 dark:text-amber-200 italic text-xs sm:text-sm">
-                                                {children}
-                                              </blockquote>
-                                            ),
-                                            code: ({ children, className }) => {
-                                              const isInline = !className;
-                                              return isInline ? (
-                                                <code className="bg-muted px-1.5 py-0.5 rounded text-xs font-mono">
-                                                  {children}
-                                                </code>
-                                              ) : (
-                                                <code className="block bg-muted p-3 rounded-lg text-xs font-mono overflow-x-auto">
-                                                  {children}
-                                                </code>
-                                              );
-                                            },
-                                          }}
+                                          components={markdownComponents}
                                         >
                                           {message.content}
                                         </ReactMarkdown>
