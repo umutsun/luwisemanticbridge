@@ -325,8 +325,8 @@ export default function DashboardPage() {
   const {
     metrics: wsMetrics,
     history: metricsHistory,
-    connected: wsConnected,
-    latency: wsLatency
+    connected: metricsWsConnected,
+    latency: metricsWsLatency
   } = useMetricsWebSocket({
     updateRate: 1000,
     autoConnect: true,
@@ -1684,12 +1684,12 @@ export default function DashboardPage() {
             <CardHeader className="pb-3">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                  <div className={`w-2 h-2 rounded-full ${wsConnected ? 'bg-green-500 animate-pulse' : 'bg-orange-500 animate-pulse'}`} />
+                  <div className={`w-2 h-2 rounded-full ${metricsWsConnected ? 'bg-green-500 animate-pulse' : 'bg-orange-500 animate-pulse'}`} />
                   <h3 className="text-sm font-semibold tracking-tight">{t('dashboard.resources.title')}</h3>
                 </div>
-                {wsConnected && (
+                {metricsWsConnected && (
                   <Badge variant="outline" className="text-xs bg-green-50 dark:bg-green-950/30 text-green-700 dark:text-green-400 border-green-200 dark:border-green-800">
-                    {wsLatency}ms
+                    {metricsWsLatency}ms
                   </Badge>
                 )}
               </div>
