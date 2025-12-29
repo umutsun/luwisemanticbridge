@@ -8,13 +8,17 @@ const router = Router();
 const pythonService = PythonIntegrationService.getInstance();
 
 /**
- * Semantic search endpoint
+ * Semantic search endpoint (GET and POST)
  * Uses Python microservice for faster performance with intelligent caching
  * Falls back to Node.js implementation if Python service is unavailable
  */
-router.post('/api/v2/search/semantic', async (req: Request, res: Response) => {
+const semanticSearchHandler = async (req: Request, res: Response) => {
   try {
-    const { query, limit = 25, usePython = true } = req.body;
+    // Support both GET (query params) and POST (body)
+    const isGet = req.method === 'GET';
+    const { query, limit: limitStr, usePython: usePythonStr } = isGet ? req.query : req.body;
+    const limit = parseInt(limitStr as string || '25', 10);
+    const usePython = isGet ? (usePythonStr === 'false' ? false : true) : (usePythonStr !== false);
 
     if (!query) {
       return res.status(400).json({ error: 'Query is required' });
@@ -46,6 +50,7 @@ router.post('/api/v2/search/semantic', async (req: Request, res: Response) => {
     const results = await semanticSearch.semanticSearch(query, limit);
 
     res.json({
+      success: true,
       query,
       results,
       count: results.length,
@@ -54,9 +59,13 @@ router.post('/api/v2/search/semantic', async (req: Request, res: Response) => {
     });
   } catch (error) {
     console.error('Semantic search error:', error);
-    res.status(500).json({ error: 'Search failed' });
+    res.status(500).json({ success: false, error: 'Search failed' });
   }
-});
+};
+
+// Register both GET and POST for semantic search
+router.get('/api/v2/search/semantic', semanticSearchHandler);
+router.post('/api/v2/search/semantic', semanticSearchHandler);
 
 /**
  * Main search endpoint - used by chat interface
