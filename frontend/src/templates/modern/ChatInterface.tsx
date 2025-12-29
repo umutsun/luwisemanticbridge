@@ -414,7 +414,11 @@ export default function ChatInterface() {
         throw new Error(`Failed to get response: ${response.status}`);
       }
 
-      if (response.body) {
+      // Check if response is SSE stream or JSON
+      const contentType = response.headers.get('content-type') || '';
+      const isStreamingResponse = contentType.includes('text/event-stream');
+
+      if (isStreamingResponse && response.body) {
         const reader = response.body.getReader();
         const decoder = new TextDecoder();
         let accumulatedContent = '';
@@ -490,6 +494,30 @@ export default function ChatInterface() {
               responseTime: msg.startTime ? Date.now() - msg.startTime : undefined,
               tokens: finalData.tokens || finalData.usage,
               fastMode: finalData.fastMode
+            }
+            : msg
+        ));
+      } else {
+        // Non-streaming JSON response (default mode)
+        const data = await response.json();
+
+        // Save conversation ID from response
+        if (data.conversationId && !conversationId) {
+          setConversationId(data.conversationId);
+        }
+
+        setMessages(prev => prev.map(msg =>
+          msg.id === messageId
+            ? {
+              ...msg,
+              content: data.message?.content || data.response || data.message || t('chat.errors.general', 'Bir hata oluştu.'),
+              isStreaming: false,
+              sources: data.fastMode ? [] : data.sources,
+              relatedTopics: data.relatedTopics,
+              context: data.context,
+              responseTime: msg.startTime ? Date.now() - msg.startTime : undefined,
+              tokens: data.tokens || data.usage,
+              fastMode: data.fastMode
             }
             : msg
         ));

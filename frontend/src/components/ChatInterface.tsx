@@ -727,8 +727,12 @@ export default function ChatInterface() {
         throw new Error(`Failed to get response: ${response.status} - ${errorText}`);
       }
 
-      // Handle streaming response
-      if (response.body) {
+      // Check if response is SSE stream or JSON
+      const contentType = response.headers.get('content-type') || '';
+      const isStreamingResponse = contentType.includes('text/event-stream');
+
+      // Handle streaming response (SSE)
+      if (isStreamingResponse && response.body) {
         const reader = response.body.getReader();
         const decoder = new TextDecoder();
         let accumulatedContent = '';
@@ -815,7 +819,7 @@ export default function ChatInterface() {
             : msg
         ));
       } else {
-        // Fallback to non-streaming
+        // Non-streaming JSON response (default mode)
         const data = await response.json();
 
         // Save conversation ID from response

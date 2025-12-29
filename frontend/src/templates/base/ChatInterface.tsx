@@ -430,8 +430,12 @@ export default function ChatInterface() {
         throw new Error(`Failed to get response: ${response.status}`);
       }
 
-      // Handle streaming
-      if (response.body) {
+      // Check if response is SSE stream or JSON
+      const contentType = response.headers.get('content-type') || '';
+      const isStreamingResponse = contentType.includes('text/event-stream');
+
+      // Handle streaming (SSE)
+      if (isStreamingResponse && response.body) {
         const reader = response.body.getReader();
         const decoder = new TextDecoder();
         let accumulatedContent = '';
@@ -506,6 +510,29 @@ export default function ChatInterface() {
               context: finalData.context,
               responseTime: msg.startTime ? Date.now() - msg.startTime : undefined,
               tokens: finalData.tokens || finalData.usage
+            }
+            : msg
+        ));
+      } else {
+        // Non-streaming JSON response (default mode)
+        const data = await response.json();
+
+        // Save conversation ID from response
+        if (data.conversationId && !conversationId) {
+          setConversationId(data.conversationId);
+        }
+
+        setMessages(prev => prev.map(msg =>
+          msg.id === messageId
+            ? {
+              ...msg,
+              content: data.message?.content || data.response || data.message || 'Üzgünüm, şu anda yanıt veremiyorum.',
+              isStreaming: false,
+              sources: data.sources,
+              relatedTopics: data.relatedTopics,
+              context: data.context,
+              responseTime: msg.startTime ? Date.now() - msg.startTime : undefined,
+              tokens: data.tokens || data.usage
             }
             : msg
         ));
