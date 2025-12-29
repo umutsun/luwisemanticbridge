@@ -923,31 +923,30 @@ ${questionLabel}: ${message}`;
         console.log(`🔗 Follow-up detected, enhanced query: "${searchQuery.substring(0, 60)}..."`);
       }
 
-      // ⚡ ULTRA FAST MODE: Skip ALL search when citations disabled
+      // 🔍 Always perform semantic search (even when citations disabled)
+      const searchMaxResults = citationsDisabled ? 5 : maxResults;
       if (citationsDisabled) {
-        console.log(`⚡ ULTRA FAST MODE: Citations disabled - skipping semantic search entirely [history: ${timings.history}ms]`);
-        timings.search = 0;
-        // No search results, LLM will answer from general knowledge
-      } else {
-        // ⏱️ Semantic search timing
-        const startSearch = Date.now();
-        if (useUnifiedEmbeddings) {
-          allResults = await semanticSearch.unifiedSemanticSearch(searchQuery, maxResults);
-        } else {
-          allResults = await semanticSearch.hybridSearch(searchQuery, maxResults);
-        }
-        timings.search = Date.now() - startSearch;
-
-        // Sort by similarity score
-        searchResults = allResults.sort((a, b) => {
-          const scoreA = a.score || (a.similarity_score * 100) || 0;
-          const scoreB = b.score || (b.similarity_score * 100) || 0;
-          return scoreB - scoreA;
-        });
-
-        initialDisplayCount = Math.min(minResults, searchResults.length);
-        console.log(`⏱️ Search: ${searchResults.length} results in ${timings.search}ms, displaying ${initialDisplayCount}`);
+        console.log(`🔍 SILENT SEARCH: Citations disabled, searching with ${searchMaxResults} results`);
       }
+
+      // ⏱️ Semantic search timing
+      const startSearch = Date.now();
+      if (useUnifiedEmbeddings) {
+        allResults = await semanticSearch.unifiedSemanticSearch(searchQuery, searchMaxResults);
+      } else {
+        allResults = await semanticSearch.hybridSearch(searchQuery, searchMaxResults);
+      }
+      timings.search = Date.now() - startSearch;
+
+      // Sort by similarity score
+      searchResults = allResults.sort((a, b) => {
+        const scoreA = a.score || (a.similarity_score * 100) || 0;
+        const scoreB = b.score || (b.similarity_score * 100) || 0;
+        return scoreB - scoreA;
+      });
+
+      initialDisplayCount = Math.min(minResults, searchResults.length);
+      console.log(`⏱️ Search: ${searchResults.length} results in ${timings.search}ms, displaying ${initialDisplayCount}`);
 
       // 3. Get conversation history (use early history if already fetched)
       let history = earlyHistory;
@@ -1050,7 +1049,8 @@ ${questionLabel}: ${message}`;
       console.log(` Context quality: bestScore=${(bestScore * 100).toFixed(1)}%, threshold=${(LOW_CONFIDENCE_THRESHOLD * 100).toFixed(0)}%, results=${searchResults.length}, hasActualContent=${hasActualContent}, high=${hasHighConfidence}, partial=${hasPartialMatch}, belowThreshold=${isBelowThreshold}`);
 
       // CASE 1: No results - return "not found" message from settings (configurable per tenant)
-      if (hasNoResults) {
+      // Skip this when citations disabled - let LLM answer with search context
+      if (hasNoResults && !citationsDisabled) {
         // Get customizable "no results" message from settings
         const noResultsMessageTr = settingsMap.get('ragSettings.noResultsMessageTr') ||
           'Bu konuda yeterli bilgi bulunamadı. Daha spesifik bir soru sorarak veya farklı anahtar kelimelerle tekrar deneyebilirsiniz.';
