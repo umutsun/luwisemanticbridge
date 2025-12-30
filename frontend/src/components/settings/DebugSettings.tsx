@@ -19,15 +19,12 @@ export function DebugSettings() {
     setDebugEnabled(enabled);
   };
 
+  // Just return the Switch - parent component handles layout
   return (
-    <div className="flex items-center justify-between py-2 px-3 text-xs text-muted-foreground border-t">
-      <span>Debug Mode</span>
-      <Switch
-        checked={debugEnabled}
-        onCheckedChange={handleToggle}
-        className="scale-75"
-      />
-    </div>
+    <Switch
+      checked={debugEnabled}
+      onCheckedChange={handleToggle}
+    />
   );
 }
 
