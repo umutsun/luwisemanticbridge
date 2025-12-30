@@ -279,4 +279,75 @@ router.post('/alerts/:alertId/acknowledge', async (req: Request, res: Response) 
   await proxyToPython(req, res, `/alerts/${alertId}/acknowledge`, 'POST');
 });
 
+// ==========================================
+// Self-Management (Tenant Isolation Mode)
+// ==========================================
+
+/**
+ * GET /api/v2/devops/config
+ * Get current tenant configuration
+ */
+router.get('/config', async (req: Request, res: Response) => {
+  await proxyToPython(req, res, '/config', 'GET');
+});
+
+/**
+ * POST /api/v2/devops/self/deploy
+ * Deploy this tenant (self-service)
+ */
+router.post('/self/deploy', async (req: Request, res: Response) => {
+  const deployType = req.query.deploy_type || 'full';
+  await proxyToPython(req, res, `/self/deploy?deploy_type=${deployType}`, 'POST');
+});
+
+/**
+ * POST /api/v2/devops/self/nginx/reload
+ * Reload Nginx configuration
+ */
+router.post('/self/nginx/reload', async (req: Request, res: Response) => {
+  await proxyToPython(req, res, '/self/nginx/reload', 'POST');
+});
+
+/**
+ * POST /api/v2/devops/self/nginx/test
+ * Test Nginx configuration
+ */
+router.post('/self/nginx/test', async (req: Request, res: Response) => {
+  await proxyToPython(req, res, '/self/nginx/test', 'POST');
+});
+
+/**
+ * GET /api/v2/devops/self/pm2/status
+ * Get PM2 status for this tenant
+ */
+router.get('/self/pm2/status', async (req: Request, res: Response) => {
+  await proxyToPython(req, res, '/self/pm2/status', 'GET');
+});
+
+/**
+ * POST /api/v2/devops/self/pm2/restart/:service
+ * Restart PM2 service (backend, frontend, python, or all)
+ */
+router.post('/self/pm2/restart/:service', async (req: Request, res: Response) => {
+  const { service } = req.params;
+  await proxyToPython(req, res, `/self/pm2/restart/${service}`, 'POST');
+});
+
+/**
+ * GET /api/v2/devops/self/metrics
+ * Get server metrics for this tenant
+ */
+router.get('/self/metrics', async (req: Request, res: Response) => {
+  await proxyToPython(req, res, '/self/metrics', 'GET');
+});
+
+/**
+ * POST /api/v2/devops/self/security/scan
+ * Run security scan on this tenant
+ */
+router.post('/self/security/scan', async (req: Request, res: Response) => {
+  const scanType = req.query.scan_type || 'quick';
+  await proxyToPython(req, res, `/self/security/scan?scan_type=${scanType}`, 'POST');
+});
+
 export default router;

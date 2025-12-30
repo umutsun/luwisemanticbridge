@@ -5,7 +5,6 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { Progress } from '@/components/ui/progress';
 import {
   Select,
   SelectContent,
@@ -20,14 +19,6 @@ import {
   AccordionTrigger,
 } from '@/components/ui/accordion';
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog';
-import {
   Shield,
   ShieldAlert,
   ShieldCheck,
@@ -35,131 +26,41 @@ import {
   Play,
   Loader2,
   AlertTriangle,
-  CheckCircle2,
-  XCircle,
-  Wrench,
   Bug,
   Lock,
   Activity,
   FileWarning,
   Server
 } from 'lucide-react';
-import { useSecurityScanner, SecurityScanResult, SecurityFinding } from '@/hooks/useDevOps';
+import { useSelfSecurityScan, SecurityScanResult, SecurityFinding } from '@/hooks/useDevOps';
 
-interface ServerConfig {
-  id: string;
-  name: string;
-  hostname: string;
-  port: number;
-  username: string;
-  ssh_key_id?: string;
-}
-
-export default function SecurityScanner() {
-  const [servers, setServers] = useState<ServerConfig[]>([]);
-  const [selectedServer, setSelectedServer] = useState<string>('');
+export default function SelfSecurityPanel() {
   const [scanType, setScanType] = useState<'full' | 'quick'>('quick');
   const [lastScan, setLastScan] = useState<SecurityScanResult | null>(null);
-  const [showFixDialog, setShowFixDialog] = useState(false);
-  const [selectedFinding, setSelectedFinding] = useState<SecurityFinding | null>(null);
-  const [fixLogs, setFixLogs] = useState<string>('');
 
-  const {
-    scanning,
-    fixing,
-    error,
-    scanResult,
-    runScan,
-    autoFix,
-    getPlaybooks
-  } = useSecurityScanner();
+  const { scanning, error, result: scanResult, runScan } = useSelfSecurityScan();
 
+  // Load last scan from localStorage
   useEffect(() => {
-    loadServers();
-    loadLastScan();
-  }, []);
-
-  useEffect(() => {
-    if (scanResult) {
-      setLastScan(scanResult);
-      localStorage.setItem('devops_last_security_scan', JSON.stringify(scanResult));
-    }
-  }, [scanResult]);
-
-  const loadServers = () => {
-    const stored = localStorage.getItem('devops_servers');
-    if (stored) {
-      const parsed = JSON.parse(stored);
-      setServers(parsed);
-      if (parsed.length > 0 && !selectedServer) {
-        setSelectedServer(parsed[0].id);
-      }
-    }
-  };
-
-  const loadLastScan = () => {
-    const stored = localStorage.getItem('devops_last_security_scan');
+    const stored = localStorage.getItem('devops_self_security_scan');
     if (stored) {
       setLastScan(JSON.parse(stored));
     }
-  };
+  }, []);
 
-  const getServerCredentials = (serverId: string) => {
-    const server = servers.find(s => s.id === serverId);
-    if (!server || !server.ssh_key_id) return null;
-
-    const keyData = localStorage.getItem(`ssh_key_${server.ssh_key_id}`);
-    if (!keyData) return null;
-
-    const key = JSON.parse(keyData);
-    return {
-      hostname: server.hostname,
-      private_key: key.private_key,
-      username: server.username,
-      port: server.port,
-      passphrase: key.passphrase
-    };
-  };
+  // Save scan result
+  useEffect(() => {
+    if (scanResult) {
+      setLastScan(scanResult);
+      localStorage.setItem('devops_self_security_scan', JSON.stringify(scanResult));
+    }
+  }, [scanResult]);
 
   const handleRunScan = async () => {
-    const credentials = getServerCredentials(selectedServer);
-    if (!credentials) {
-      alert('Please configure SSH key for the selected server');
-      return;
-    }
-
     try {
-      await runScan(credentials, scanType);
+      await runScan(scanType);
     } catch (err) {
       console.error('Scan failed:', err);
-    }
-  };
-
-  const handleAutoFix = async (finding: SecurityFinding) => {
-    if (!finding.has_autofix) return;
-
-    setSelectedFinding(finding);
-    setShowFixDialog(true);
-    setFixLogs('');
-
-    const credentials = getServerCredentials(selectedServer);
-    if (!credentials) {
-      setFixLogs('Error: No SSH credentials available');
-      return;
-    }
-
-    try {
-      setFixLogs('Applying fix...\n');
-      const result = await autoFix(credentials, finding.check);
-      setFixLogs(prev => prev + result.logs + '\n');
-
-      if (result.fixed) {
-        setFixLogs(prev => prev + '\n✅ Fix applied successfully! Re-run scan to verify.');
-      } else {
-        setFixLogs(prev => prev + '\n❌ Fix could not be applied. Manual intervention required.');
-      }
-    } catch (err: any) {
-      setFixLogs(prev => prev + `\n❌ Error: ${err.message}`);
     }
   };
 
@@ -224,27 +125,11 @@ export default function SecurityScanner() {
             Security Scanner
           </CardTitle>
           <CardDescription>
-            Scan servers for security vulnerabilities, malware, and misconfigurations
+            Scan this server for security vulnerabilities and misconfigurations
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="flex flex-wrap gap-4">
-            <div className="flex-1 min-w-[200px]">
-              <label className="text-sm font-medium mb-2 block">Target Server</label>
-              <Select value={selectedServer} onValueChange={setSelectedServer}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Select server" />
-                </SelectTrigger>
-                <SelectContent>
-                  {servers.map((server) => (
-                    <SelectItem key={server.id} value={server.id}>
-                      {server.name} ({server.hostname})
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
+          <div className="flex flex-wrap gap-4 items-end">
             <div className="w-40">
               <label className="text-sm font-medium mb-2 block">Scan Type</label>
               <Select value={scanType} onValueChange={(v: 'full' | 'quick') => setScanType(v)}>
@@ -258,25 +143,23 @@ export default function SecurityScanner() {
               </Select>
             </div>
 
-            <div className="flex items-end">
-              <Button
-                onClick={handleRunScan}
-                disabled={scanning || !selectedServer}
-                size="lg"
-              >
-                {scanning ? (
-                  <>
-                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                    Scanning...
-                  </>
-                ) : (
-                  <>
-                    <Play className="w-4 h-4 mr-2" />
-                    Run Scan
-                  </>
-                )}
-              </Button>
-            </div>
+            <Button
+              onClick={handleRunScan}
+              disabled={scanning}
+              size="lg"
+            >
+              {scanning ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  Scanning...
+                </>
+              ) : (
+                <>
+                  <Play className="w-4 h-4 mr-2" />
+                  Run Scan
+                </>
+              )}
+            </Button>
           </div>
 
           {error && (
@@ -354,12 +237,6 @@ export default function SecurityScanner() {
                             </div>
                           </div>
                           {getSeverityBadge(finding.severity)}
-                          {finding.has_autofix && (
-                            <Badge variant="outline" className="ml-2">
-                              <Wrench className="w-3 h-3 mr-1" />
-                              Auto-fix
-                            </Badge>
-                          )}
                         </div>
                       </AccordionTrigger>
                       <AccordionContent className="pt-4">
@@ -370,28 +247,6 @@ export default function SecurityScanner() {
                               {finding.output || 'No additional output'}
                             </pre>
                           </div>
-
-                          {finding.has_autofix && (
-                            <div className="flex justify-end">
-                              <Button
-                                onClick={() => handleAutoFix(finding)}
-                                disabled={fixing}
-                                variant="outline"
-                              >
-                                {fixing ? (
-                                  <>
-                                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                                    Applying Fix...
-                                  </>
-                                ) : (
-                                  <>
-                                    <Wrench className="w-4 h-4 mr-2" />
-                                    Apply Auto-Fix
-                                  </>
-                                )}
-                              </Button>
-                            </div>
-                          )}
                         </div>
                       </AccordionContent>
                     </AccordionItem>
@@ -418,38 +273,11 @@ export default function SecurityScanner() {
             <Shield className="w-16 h-16 mx-auto text-muted-foreground mb-4" />
             <h3 className="text-lg font-semibold mb-2">No Scan Results</h3>
             <p className="text-muted-foreground mb-4">
-              Select a server and run a security scan to check for vulnerabilities
+              Run a security scan to check for vulnerabilities
             </p>
           </CardContent>
         </Card>
       )}
-
-      {/* Auto-Fix Dialog */}
-      <Dialog open={showFixDialog} onOpenChange={setShowFixDialog}>
-        <DialogContent className="sm:max-w-[600px]">
-          <DialogHeader>
-            <DialogTitle>Auto-Fix: {selectedFinding?.check}</DialogTitle>
-            <DialogDescription>
-              Applying automated fix for this security issue
-            </DialogDescription>
-          </DialogHeader>
-
-          <div className="py-4">
-            <pre className="bg-muted p-4 rounded-md text-xs h-64 overflow-auto font-mono">
-              {fixLogs || 'Initializing...'}
-            </pre>
-          </div>
-
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setShowFixDialog(false)}>
-              Close
-            </Button>
-            <Button onClick={handleRunScan} disabled={scanning || fixing}>
-              Re-run Scan
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }

@@ -626,17 +626,421 @@ async def get_deployment_status(deploy_id: str):
 
 
 # ==========================================
+# Tenant Self-Management (Isolated Mode)
+# ==========================================
+
+@router.get("/config")
+async def get_tenant_config():
+    """Get current tenant configuration from environment"""
+    import os
+
+    return {
+        "tenant_id": os.getenv("TENANT_ID", "unknown"),
+        "tenant_path": os.getenv("TENANT_PATH", "/var/www/unknown"),
+        "ssh_host": os.getenv("DEVOPS_SSH_HOST", "localhost"),
+        "ssh_port": int(os.getenv("DEVOPS_SSH_PORT", "22")),
+        "ssh_user": os.getenv("DEVOPS_SSH_USER", "root"),
+        "ssh_key_configured": bool(os.getenv("DEVOPS_SSH_KEY_PATH") or os.getenv("DEVOPS_SSH_KEY")),
+        "pm2_services": {
+            "backend": os.getenv("DEVOPS_PM2_BACKEND", ""),
+            "frontend": os.getenv("DEVOPS_PM2_FRONTEND", ""),
+            "python": os.getenv("DEVOPS_PM2_PYTHON", "")
+        },
+        "nginx_conf": os.getenv("DEVOPS_NGINX_CONF", "")
+    }
+
+
+@router.post("/self/deploy")
+async def self_deploy(deploy_type: str = "full"):
+    """Deploy this tenant using environment configuration"""
+    import os
+    from services.devops import ssh_manager, deployment_manager, devops_monitor
+
+    tenant_id = os.getenv("TENANT_ID")
+    tenant_path = os.getenv("TENANT_PATH")
+
+    if not tenant_id or not tenant_path:
+        raise HTTPException(status_code=400, detail="Tenant configuration not set in environment")
+
+    # Get SSH credentials from environment
+    ssh_key = os.getenv("DEVOPS_SSH_KEY")
+    ssh_key_path = os.getenv("DEVOPS_SSH_KEY_PATH")
+
+    if not ssh_key and ssh_key_path:
+        try:
+            with open(ssh_key_path, 'r') as f:
+                ssh_key = f.read()
+        except Exception as e:
+            raise HTTPException(status_code=400, detail=f"Cannot read SSH key: {e}")
+
+    if not ssh_key:
+        raise HTTPException(status_code=400, detail="SSH key not configured")
+
+    logger.info(f"Starting self-deploy for {tenant_id}: {deploy_type}")
+
+    try:
+        await devops_monitor.initialize()
+
+        deploy_id = await devops_monitor.start_deployment(
+            tenant_id=tenant_id,
+            deploy_type=deploy_type,
+            triggered_by="self-service"
+        )
+
+        client = await ssh_manager.connect(
+            hostname=os.getenv("DEVOPS_SSH_HOST", "localhost"),
+            private_key=ssh_key,
+            username=os.getenv("DEVOPS_SSH_USER", "root"),
+            port=int(os.getenv("DEVOPS_SSH_PORT", "22"))
+        )
+
+        async def progress_callback(progress: int, step: str, log: str):
+            await devops_monitor.update_deployment(deploy_id, progress=progress, step=step, log_line=log)
+
+        result = await deployment_manager.deploy_tenant(
+            client,
+            {'tenant_id': tenant_id, 'tenant_path': tenant_path},
+            deploy_type,
+            progress_callback
+        )
+
+        await devops_monitor.complete_deployment(deploy_id, result['success'])
+        client.close()
+
+        return {"deploy_id": deploy_id, **result}
+
+    except Exception as e:
+        logger.error(f"Self-deploy failed: {e}")
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.post("/self/nginx/reload")
+async def self_nginx_reload():
+    """Reload Nginx configuration"""
+    import os
+    from services.devops import ssh_manager
+
+    ssh_key = os.getenv("DEVOPS_SSH_KEY")
+    ssh_key_path = os.getenv("DEVOPS_SSH_KEY_PATH")
+
+    if not ssh_key and ssh_key_path:
+        try:
+            with open(ssh_key_path, 'r') as f:
+                ssh_key = f.read()
+        except Exception as e:
+            raise HTTPException(status_code=400, detail=f"Cannot read SSH key: {e}")
+
+    if not ssh_key:
+        raise HTTPException(status_code=400, detail="SSH key not configured")
+
+    try:
+        client = await ssh_manager.connect(
+            hostname=os.getenv("DEVOPS_SSH_HOST", "localhost"),
+            private_key=ssh_key,
+            username=os.getenv("DEVOPS_SSH_USER", "root"),
+            port=int(os.getenv("DEVOPS_SSH_PORT", "22"))
+        )
+
+        # Test nginx config first
+        test_result = await ssh_manager.execute(client, "nginx -t 2>&1")
+        if test_result['exit_code'] != 0:
+            client.close()
+            return {
+                "success": False,
+                "action": "test",
+                "output": test_result['stderr'] or test_result['stdout'],
+                "error": "Nginx configuration test failed"
+            }
+
+        # Reload nginx
+        reload_result = await ssh_manager.execute(client, "systemctl reload nginx")
+        client.close()
+
+        return {
+            "success": reload_result['exit_code'] == 0,
+            "action": "reload",
+            "output": reload_result['stdout'],
+            "error": reload_result['stderr'] if reload_result['exit_code'] != 0 else None
+        }
+
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.post("/self/nginx/test")
+async def self_nginx_test():
+    """Test Nginx configuration"""
+    import os
+    from services.devops import ssh_manager
+
+    ssh_key = os.getenv("DEVOPS_SSH_KEY")
+    ssh_key_path = os.getenv("DEVOPS_SSH_KEY_PATH")
+
+    if not ssh_key and ssh_key_path:
+        try:
+            with open(ssh_key_path, 'r') as f:
+                ssh_key = f.read()
+        except Exception as e:
+            raise HTTPException(status_code=400, detail=f"Cannot read SSH key: {e}")
+
+    if not ssh_key:
+        raise HTTPException(status_code=400, detail="SSH key not configured")
+
+    try:
+        client = await ssh_manager.connect(
+            hostname=os.getenv("DEVOPS_SSH_HOST", "localhost"),
+            private_key=ssh_key,
+            username=os.getenv("DEVOPS_SSH_USER", "root"),
+            port=int(os.getenv("DEVOPS_SSH_PORT", "22"))
+        )
+
+        result = await ssh_manager.execute(client, "nginx -t 2>&1")
+        client.close()
+
+        return {
+            "success": result['exit_code'] == 0,
+            "output": result['stdout'] + result['stderr'],
+            "valid": result['exit_code'] == 0
+        }
+
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.get("/self/pm2/status")
+async def self_pm2_status():
+    """Get PM2 status for this tenant's services"""
+    import os
+    from services.devops import ssh_manager
+
+    ssh_key = os.getenv("DEVOPS_SSH_KEY")
+    ssh_key_path = os.getenv("DEVOPS_SSH_KEY_PATH")
+
+    if not ssh_key and ssh_key_path:
+        try:
+            with open(ssh_key_path, 'r') as f:
+                ssh_key = f.read()
+        except Exception as e:
+            raise HTTPException(status_code=400, detail=f"Cannot read SSH key: {e}")
+
+    if not ssh_key:
+        raise HTTPException(status_code=400, detail="SSH key not configured")
+
+    tenant_id = os.getenv("TENANT_ID", "")
+    pm2_backend = os.getenv("DEVOPS_PM2_BACKEND", "")
+    pm2_frontend = os.getenv("DEVOPS_PM2_FRONTEND", "")
+    pm2_python = os.getenv("DEVOPS_PM2_PYTHON", "")
+
+    try:
+        client = await ssh_manager.connect(
+            hostname=os.getenv("DEVOPS_SSH_HOST", "localhost"),
+            private_key=ssh_key,
+            username=os.getenv("DEVOPS_SSH_USER", "root"),
+            port=int(os.getenv("DEVOPS_SSH_PORT", "22"))
+        )
+
+        result = await ssh_manager.execute(client, "pm2 jlist")
+        client.close()
+
+        if result['exit_code'] != 0:
+            return {"success": False, "services": [], "error": result['stderr']}
+
+        import json
+        try:
+            all_services = json.loads(result['stdout'])
+        except:
+            return {"success": False, "services": [], "error": "Failed to parse PM2 output"}
+
+        # Filter only this tenant's services
+        service_names = [pm2_backend, pm2_frontend, pm2_python]
+        tenant_services = [
+            {
+                "name": s.get("name"),
+                "status": s.get("pm2_env", {}).get("status", "unknown"),
+                "cpu": s.get("monit", {}).get("cpu", 0),
+                "memory": s.get("monit", {}).get("memory", 0),
+                "uptime": s.get("pm2_env", {}).get("pm_uptime", 0),
+                "restarts": s.get("pm2_env", {}).get("restart_time", 0)
+            }
+            for s in all_services
+            if s.get("name") in service_names or s.get("name", "").startswith(tenant_id)
+        ]
+
+        return {
+            "success": True,
+            "tenant_id": tenant_id,
+            "services": tenant_services
+        }
+
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.post("/self/pm2/restart/{service}")
+async def self_pm2_restart(service: str):
+    """Restart a specific PM2 service (backend, frontend, python, or all)"""
+    import os
+    from services.devops import ssh_manager
+
+    ssh_key = os.getenv("DEVOPS_SSH_KEY")
+    ssh_key_path = os.getenv("DEVOPS_SSH_KEY_PATH")
+
+    if not ssh_key and ssh_key_path:
+        try:
+            with open(ssh_key_path, 'r') as f:
+                ssh_key = f.read()
+        except Exception as e:
+            raise HTTPException(status_code=400, detail=f"Cannot read SSH key: {e}")
+
+    if not ssh_key:
+        raise HTTPException(status_code=400, detail="SSH key not configured")
+
+    # Map service type to PM2 name
+    service_map = {
+        "backend": os.getenv("DEVOPS_PM2_BACKEND", ""),
+        "frontend": os.getenv("DEVOPS_PM2_FRONTEND", ""),
+        "python": os.getenv("DEVOPS_PM2_PYTHON", ""),
+    }
+
+    if service == "all":
+        services_to_restart = [v for v in service_map.values() if v]
+    elif service in service_map:
+        if not service_map[service]:
+            raise HTTPException(status_code=400, detail=f"Service {service} not configured")
+        services_to_restart = [service_map[service]]
+    else:
+        raise HTTPException(status_code=400, detail=f"Unknown service: {service}. Use: backend, frontend, python, or all")
+
+    try:
+        client = await ssh_manager.connect(
+            hostname=os.getenv("DEVOPS_SSH_HOST", "localhost"),
+            private_key=ssh_key,
+            username=os.getenv("DEVOPS_SSH_USER", "root"),
+            port=int(os.getenv("DEVOPS_SSH_PORT", "22"))
+        )
+
+        results = []
+        for svc in services_to_restart:
+            result = await ssh_manager.execute(client, f"pm2 restart {svc}")
+            results.append({
+                "service": svc,
+                "success": result['exit_code'] == 0,
+                "output": result['stdout']
+            })
+
+        client.close()
+
+        return {
+            "success": all(r['success'] for r in results),
+            "results": results
+        }
+
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.get("/self/metrics")
+async def self_metrics():
+    """Get server metrics for this tenant"""
+    import os
+    from services.devops import ssh_manager, devops_monitor
+
+    ssh_key = os.getenv("DEVOPS_SSH_KEY")
+    ssh_key_path = os.getenv("DEVOPS_SSH_KEY_PATH")
+
+    if not ssh_key and ssh_key_path:
+        try:
+            with open(ssh_key_path, 'r') as f:
+                ssh_key = f.read()
+        except Exception as e:
+            raise HTTPException(status_code=400, detail=f"Cannot read SSH key: {e}")
+
+    if not ssh_key:
+        raise HTTPException(status_code=400, detail="SSH key not configured")
+
+    try:
+        client = await ssh_manager.connect(
+            hostname=os.getenv("DEVOPS_SSH_HOST", "localhost"),
+            private_key=ssh_key,
+            username=os.getenv("DEVOPS_SSH_USER", "root"),
+            port=int(os.getenv("DEVOPS_SSH_PORT", "22"))
+        )
+
+        await devops_monitor.initialize()
+        metrics = await devops_monitor.collect_metrics(os.getenv("TENANT_ID", "default"), client)
+        client.close()
+
+        return {
+            "success": True,
+            "tenant_id": os.getenv("TENANT_ID"),
+            "metrics": metrics
+        }
+
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.post("/self/security/scan")
+async def self_security_scan(scan_type: str = "quick"):
+    """Run security scan on this tenant's server"""
+    import os
+    from services.devops import ssh_manager, security_scanner
+
+    ssh_key = os.getenv("DEVOPS_SSH_KEY")
+    ssh_key_path = os.getenv("DEVOPS_SSH_KEY_PATH")
+
+    if not ssh_key and ssh_key_path:
+        try:
+            with open(ssh_key_path, 'r') as f:
+                ssh_key = f.read()
+        except Exception as e:
+            raise HTTPException(status_code=400, detail=f"Cannot read SSH key: {e}")
+
+    if not ssh_key:
+        raise HTTPException(status_code=400, detail="SSH key not configured")
+
+    try:
+        client = await ssh_manager.connect(
+            hostname=os.getenv("DEVOPS_SSH_HOST", "localhost"),
+            private_key=ssh_key,
+            username=os.getenv("DEVOPS_SSH_USER", "root"),
+            port=int(os.getenv("DEVOPS_SSH_PORT", "22"))
+        )
+
+        if scan_type == 'quick':
+            result = await security_scanner.quick_scan(client)
+        else:
+            result = await security_scanner.full_scan(client)
+
+        client.close()
+
+        return {
+            "success": True,
+            "tenant_id": os.getenv("TENANT_ID"),
+            "scan_type": scan_type,
+            "hostname": os.getenv("DEVOPS_SSH_HOST"),
+            **result
+        }
+
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+# ==========================================
 # Health Check
 # ==========================================
 
 @router.get("/health")
 async def devops_health():
     """DevOps service health check"""
+    import os
     from services.devops import ssh_manager
 
     return {
         "status": "healthy",
         "service": "devops",
+        "tenant_id": os.getenv("TENANT_ID", "unknown"),
         "encryption_enabled": ssh_manager.fernet is not None,
+        "ssh_configured": bool(os.getenv("DEVOPS_SSH_KEY_PATH") or os.getenv("DEVOPS_SSH_KEY")),
         "timestamp": datetime.now().isoformat()
     }

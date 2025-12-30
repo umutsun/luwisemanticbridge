@@ -1,42 +1,46 @@
 /**
- * DevOps Dashboard Hooks
- * SSH management, security scanning, deployments
+ * DevOps Dashboard Hooks - Tenant Self-Management Mode
+ * Each tenant manages only itself using environment configuration
  */
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { API_CONFIG } from '../lib/config';
 
 const DEVOPS_API = `${API_CONFIG.BASE_URL}/api/v2/devops`;
 
 // Types
-export interface SSHTestRequest {
-  hostname: string;
-  private_key: string;
-  username?: string;
-  port?: number;
-  passphrase?: string;
+export interface TenantConfig {
+  tenant_id: string;
+  tenant_path: string;
+  ssh_host: string;
+  ssh_port: number;
+  ssh_user: string;
+  ssh_key_configured: boolean;
+  pm2_services: {
+    backend: string;
+    frontend: string;
+    python: string;
+  };
+  nginx_conf: string;
 }
 
-export interface SSHTestResult {
-  success: boolean;
-  hostname: string;
-  output?: string;
-  os_info?: string;
-  latency_ms?: number;
-  error?: string;
+export interface PM2Service {
+  name: string;
+  status: 'online' | 'stopped' | 'errored' | 'unknown';
+  cpu: number;
+  memory: number;
+  uptime: number;
+  restarts: number;
 }
 
-export interface CommandRequest extends SSHTestRequest {
-  command: string;
-  timeout?: number;
-}
-
-export interface CommandResult {
-  success: boolean;
-  stdout: string;
-  stderr: string;
-  exit_code: number;
-  duration_ms: number;
+export interface ServerMetrics {
+  cpu: string;
+  ram: string;
+  disk: string;
+  load: string;
+  procs: string;
+  uptime: string;
+  timestamp: string;
 }
 
 export interface SecurityFinding {
@@ -50,6 +54,7 @@ export interface SecurityFinding {
 
 export interface SecurityScanResult {
   success: boolean;
+  tenant_id: string;
   scan_type: string;
   hostname: string;
   summary: {
@@ -64,12 +69,6 @@ export interface SecurityScanResult {
   findings: SecurityFinding[];
 }
 
-export interface DeployRequest extends SSHTestRequest {
-  tenant_id: string;
-  tenant_path: string;
-  deploy_type?: 'full' | 'backend' | 'frontend' | 'python' | 'hotfix' | 'restart';
-}
-
 export interface DeployResult {
   success: boolean;
   deploy_id: string;
@@ -82,16 +81,6 @@ export interface DeployResult {
   error?: string;
 }
 
-export interface ServerMetrics {
-  cpu: string;
-  ram: string;
-  disk: string;
-  load: string;
-  procs: string;
-  uptime: string;
-  timestamp: string;
-}
-
 export interface Alert {
   id: string;
   server_id: string;
@@ -101,6 +90,15 @@ export interface Alert {
   message: string;
   created_at: string;
   acknowledged: string;
+}
+
+export interface HealthStatus {
+  status: string;
+  service: string;
+  tenant_id: string;
+  encryption_enabled: boolean;
+  ssh_configured: boolean;
+  timestamp: string;
 }
 
 // Generic API call helper
@@ -126,50 +124,158 @@ async function apiCall<T>(
 }
 
 /**
- * Hook for SSH operations
+ * Hook for tenant configuration
  */
-export function useSSH() {
+export function useTenantConfig() {
+  const [config, setConfig] = useState<TenantConfig | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const loadConfig = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const result = await apiCall<TenantConfig>('/config', 'GET');
+      setConfig(result);
+      return result;
+    } catch (err: any) {
+      setError(err.message);
+      throw err;
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadConfig().catch(() => {});
+  }, [loadConfig]);
+
+  return {
+    config,
+    loading,
+    error,
+    refresh: loadConfig,
+  };
+}
+
+/**
+ * Hook for health check
+ */
+export function useHealthCheck() {
+  const [health, setHealth] = useState<HealthStatus | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  const checkHealth = useCallback(async () => {
+    setLoading(true);
+    try {
+      const result = await apiCall<HealthStatus>('/health', 'GET');
+      setHealth(result);
+      return result;
+    } catch (err) {
+      setHealth(null);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    checkHealth();
+  }, [checkHealth]);
+
+  return {
+    health,
+    loading,
+    refresh: checkHealth,
+  };
+}
+
+/**
+ * Hook for PM2 service management
+ */
+export function usePM2Services() {
+  const [services, setServices] = useState<PM2Service[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const testConnection = useCallback(async (request: SSHTestRequest): Promise<SSHTestResult> => {
+  const loadServices = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const result = await apiCall<SSHTestResult>('/ssh/test', 'POST', request);
-      return result;
-    } catch (err: any) {
-      setError(err.message);
-      throw err;
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  const executeCommand = useCallback(async (request: CommandRequest): Promise<CommandResult> => {
-    setLoading(true);
-    setError(null);
-    try {
-      const result = await apiCall<CommandResult>('/ssh/execute', 'POST', request);
-      return result;
-    } catch (err: any) {
-      setError(err.message);
-      throw err;
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  const encryptKey = useCallback(async (privateKey: string): Promise<{ encrypted_key: string; key_type: string }> => {
-    setLoading(true);
-    setError(null);
-    try {
-      const result = await apiCall<{ success: boolean; encrypted_key: string; key_type: string }>(
-        '/ssh/encrypt-key',
-        'POST',
-        { private_key: privateKey }
+      const result = await apiCall<{ success: boolean; tenant_id: string; services: PM2Service[] }>(
+        '/self/pm2/status',
+        'GET'
       );
-      return { encrypted_key: result.encrypted_key, key_type: result.key_type };
+      setServices(result.services);
+      return result.services;
+    } catch (err: any) {
+      setError(err.message);
+      throw err;
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  const restartService = useCallback(async (service: 'backend' | 'frontend' | 'python' | 'all') => {
+    setLoading(true);
+    setError(null);
+    try {
+      const result = await apiCall<{ success: boolean; results: any[] }>(
+        `/self/pm2/restart/${service}`,
+        'POST'
+      );
+      // Refresh services after restart
+      await loadServices();
+      return result;
+    } catch (err: any) {
+      setError(err.message);
+      throw err;
+    } finally {
+      setLoading(false);
+    }
+  }, [loadServices]);
+
+  return {
+    services,
+    loading,
+    error,
+    loadServices,
+    restartService,
+  };
+}
+
+/**
+ * Hook for Nginx management
+ */
+export function useNginx() {
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const testConfig = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const result = await apiCall<{ success: boolean; output: string; valid: boolean }>(
+        '/self/nginx/test',
+        'POST'
+      );
+      return result;
+    } catch (err: any) {
+      setError(err.message);
+      throw err;
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  const reload = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const result = await apiCall<{ success: boolean; action: string; output: string; error?: string }>(
+        '/self/nginx/reload',
+        'POST'
+      );
+      return result;
     } catch (err: any) {
       setError(err.message);
       throw err;
@@ -181,104 +287,31 @@ export function useSSH() {
   return {
     loading,
     error,
-    testConnection,
-    executeCommand,
-    encryptKey,
+    testConfig,
+    reload,
   };
 }
 
 /**
- * Hook for Security Scanner
+ * Hook for self-deployment
  */
-export function useSecurityScanner() {
-  const [scanning, setScanning] = useState(false);
-  const [fixing, setFixing] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [scanResult, setScanResult] = useState<SecurityScanResult | null>(null);
-
-  const runScan = useCallback(async (
-    request: SSHTestRequest,
-    scanType: 'full' | 'quick' = 'full'
-  ): Promise<SecurityScanResult> => {
-    setScanning(true);
-    setError(null);
-    try {
-      const result = await apiCall<SecurityScanResult>('/security/scan', 'POST', {
-        ...request,
-        scan_type: scanType,
-      });
-      setScanResult(result);
-      return result;
-    } catch (err: any) {
-      setError(err.message);
-      throw err;
-    } finally {
-      setScanning(false);
-    }
-  }, []);
-
-  const autoFix = useCallback(async (
-    request: SSHTestRequest,
-    findingName: string
-  ): Promise<{ fixed: boolean; logs: string }> => {
-    setFixing(true);
-    setError(null);
-    try {
-      const result = await apiCall<{ fixed: boolean; logs: string; finding: string }>(
-        '/security/auto-fix',
-        'POST',
-        { ...request, finding_name: findingName }
-      );
-      return result;
-    } catch (err: any) {
-      setError(err.message);
-      throw err;
-    } finally {
-      setFixing(false);
-    }
-  }, []);
-
-  const getPlaybooks = useCallback(async (): Promise<Record<string, { description: string; commands_count: number }>> => {
-    const result = await apiCall<{ playbooks: Record<string, any> }>('/security/playbooks', 'GET');
-    return result.playbooks;
-  }, []);
-
-  const getBruteforceStats = useCallback(async (): Promise<{
-    blocked_ips: string[];
-    blocked_count: number;
-    active_attackers: Array<{ ip: string; attempts: number; first_seen: string; last_attempt: string }>;
-    total_attempts_24h: number;
-  }> => {
-    return apiCall('/security/bruteforce', 'GET');
-  }, []);
-
-  return {
-    scanning,
-    fixing,
-    error,
-    scanResult,
-    runScan,
-    autoFix,
-    getPlaybooks,
-    getBruteforceStats,
-  };
-}
-
-/**
- * Hook for Deployments
- */
-export function useDeployment() {
+export function useSelfDeploy() {
   const [deploying, setDeploying] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [deployResult, setDeployResult] = useState<DeployResult | null>(null);
+  const [result, setResult] = useState<DeployResult | null>(null);
 
-  const deploy = useCallback(async (request: DeployRequest): Promise<DeployResult> => {
+  const deploy = useCallback(async (
+    deployType: 'full' | 'backend' | 'frontend' | 'python' | 'hotfix' | 'restart' = 'full'
+  ) => {
     setDeploying(true);
     setError(null);
     try {
-      const result = await apiCall<DeployResult>('/deploy', 'POST', request);
-      setDeployResult(result);
-      return result;
+      const deployResult = await apiCall<DeployResult>(
+        `/self/deploy?deploy_type=${deployType}`,
+        'POST'
+      );
+      setResult(deployResult);
+      return deployResult;
     } catch (err: any) {
       setError(err.message);
       throw err;
@@ -287,60 +320,29 @@ export function useDeployment() {
     }
   }, []);
 
-  const clearCache = useCallback(async (request: DeployRequest): Promise<{ success: boolean; output: string }> => {
-    return apiCall('/deploy/clear-cache', 'POST', request);
-  }, []);
-
-  const getGitStatus = useCallback(async (request: DeployRequest): Promise<{ success: boolean; output: string }> => {
-    return apiCall('/deploy/git-status', 'POST', request);
-  }, []);
-
-  const getPM2Status = useCallback(async (
-    request: SSHTestRequest,
-    tenantId?: string
-  ): Promise<{ success: boolean; services: any[] }> => {
-    return apiCall(`/deploy/pm2-status${tenantId ? `?tenant_id=${tenantId}` : ''}`, 'POST', request);
-  }, []);
-
-  const getDeploymentHistory = useCallback(async (
-    tenantId: string,
-    limit: number = 20
-  ): Promise<{ tenant_id: string; deployments: any[]; count: number }> => {
-    return apiCall(`/deployments/${tenantId}?limit=${limit}`, 'GET');
-  }, []);
-
   return {
     deploying,
     error,
-    deployResult,
+    result,
     deploy,
-    clearCache,
-    getGitStatus,
-    getPM2Status,
-    getDeploymentHistory,
   };
 }
 
 /**
- * Hook for Monitoring
+ * Hook for server metrics
  */
-export function useMonitoring() {
+export function useSelfMetrics() {
+  const [metrics, setMetrics] = useState<ServerMetrics | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [metrics, setMetrics] = useState<ServerMetrics | null>(null);
-  const [alerts, setAlerts] = useState<Alert[]>([]);
 
-  const collectMetrics = useCallback(async (
-    request: SSHTestRequest,
-    serverId: string = 'default'
-  ): Promise<ServerMetrics> => {
+  const loadMetrics = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const result = await apiCall<{ success: boolean; server_id: string; metrics: ServerMetrics }>(
-        `/monitor/metrics?server_id=${serverId}`,
-        'POST',
-        request
+      const result = await apiCall<{ success: boolean; tenant_id: string; metrics: ServerMetrics }>(
+        '/self/metrics',
+        'GET'
       );
       setMetrics(result.metrics);
       return result.metrics;
@@ -352,54 +354,121 @@ export function useMonitoring() {
     }
   }, []);
 
-  const getMetrics = useCallback(async (serverId: string): Promise<{
-    current: ServerMetrics | null;
-    history: ServerMetrics[];
-  }> => {
-    return apiCall(`/monitor/metrics/${serverId}`, 'GET');
-  }, []);
+  return {
+    metrics,
+    loading,
+    error,
+    loadMetrics,
+  };
+}
 
-  const getActiveAlerts = useCallback(async (): Promise<Alert[]> => {
-    const result = await apiCall<{ alerts: Alert[]; count: number }>('/alerts', 'GET');
-    setAlerts(result.alerts);
-    return result.alerts;
-  }, []);
+/**
+ * Hook for security scanning
+ */
+export function useSelfSecurityScan() {
+  const [scanning, setScanning] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [result, setResult] = useState<SecurityScanResult | null>(null);
 
-  const acknowledgeAlert = useCallback(async (alertId: string): Promise<{ acknowledged: boolean }> => {
-    const result = await apiCall<{ acknowledged: boolean }>(`/alerts/${alertId}/acknowledge`, 'POST');
-    if (result.acknowledged) {
-      setAlerts(prev => prev.filter(a => a.id !== alertId));
+  const runScan = useCallback(async (scanType: 'full' | 'quick' = 'quick') => {
+    setScanning(true);
+    setError(null);
+    try {
+      const scanResult = await apiCall<SecurityScanResult>(
+        `/self/security/scan?scan_type=${scanType}`,
+        'POST'
+      );
+      setResult(scanResult);
+      return scanResult;
+    } catch (err: any) {
+      setError(err.message);
+      throw err;
+    } finally {
+      setScanning(false);
     }
-    return result;
   }, []);
 
   return {
+    scanning,
+    error,
+    result,
+    runScan,
+  };
+}
+
+/**
+ * Hook for alerts
+ */
+export function useAlerts() {
+  const [alerts, setAlerts] = useState<Alert[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const loadAlerts = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const result = await apiCall<{ alerts: Alert[]; count: number }>('/alerts', 'GET');
+      setAlerts(result.alerts);
+      return result.alerts;
+    } catch (err: any) {
+      setError(err.message);
+      throw err;
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  const acknowledgeAlert = useCallback(async (alertId: string) => {
+    try {
+      const result = await apiCall<{ acknowledged: boolean }>(
+        `/alerts/${alertId}/acknowledge`,
+        'POST'
+      );
+      if (result.acknowledged) {
+        setAlerts(prev => prev.filter(a => a.id !== alertId));
+      }
+      return result;
+    } catch (err: any) {
+      setError(err.message);
+      throw err;
+    }
+  }, []);
+
+  return {
+    alerts,
     loading,
     error,
-    metrics,
-    alerts,
-    collectMetrics,
-    getMetrics,
-    getActiveAlerts,
+    loadAlerts,
     acknowledgeAlert,
   };
 }
 
 /**
- * Combined DevOps hook
+ * Combined DevOps hook for self-management
  */
-export function useDevOps() {
-  const ssh = useSSH();
-  const security = useSecurityScanner();
-  const deployment = useDeployment();
-  const monitoring = useMonitoring();
+export function useDevOpsSelf() {
+  const config = useTenantConfig();
+  const health = useHealthCheck();
+  const pm2 = usePM2Services();
+  const nginx = useNginx();
+  const deploy = useSelfDeploy();
+  const metrics = useSelfMetrics();
+  const security = useSelfSecurityScan();
+  const alerts = useAlerts();
 
   return {
-    ssh,
+    config,
+    health,
+    pm2,
+    nginx,
+    deploy,
+    metrics,
     security,
-    deployment,
-    monitoring,
+    alerts,
   };
 }
 
-export default useDevOps;
+// Legacy exports for backwards compatibility
+export { useDevOpsSelf as useDevOps };
+export default useDevOpsSelf;
