@@ -5860,8 +5860,10 @@ export default function OptimizedSettingsPage() {
 
         <TabsContent value="advanced">
           <div className="space-y-6">
-            <DebugSettings />
             <SecuritySettings />
+          </div>
+          <div className="mt-8 max-w-xs">
+            <DebugSettings />
           </div>
         </TabsContent>
       </Tabs>
