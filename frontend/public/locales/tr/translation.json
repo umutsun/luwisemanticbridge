@@ -1,6 +1,6 @@
 {
   "login": {
-    "title": "Başlık",
+    "title": "Giriş",
     "email": "E-posta",
     "emailPlaceholder": "E-posta adresinizi girin",
     "password": "Şifre",
@@ -617,7 +617,7 @@
     }
   },
   "dashboard": {
-    "title": "Başlık",
+    "title": "Kontrol Paneli",
     "loading": "Dashboard yükleniyor...",
     "loadError": "Dashboard verisi yüklenemedi",
     "documents": "Dokümanlar",
@@ -668,7 +668,7 @@
     "indexStatus": "İndeks Durumu",
     "lastIndexTime": "Son İndeksleme Zamanı",
     "sessionStats": {
-      "title": "Başlık",
+      "title": "Oturum İstatistikleri",
       "totalSessions": "Toplam Oturum",
       "activeSessions": "Aktif Oturumlar",
       "averageSessionDuration": "Ortalama Oturum Süresi",
@@ -680,7 +680,7 @@
       "thisMonth": "Bu Ay"
     },
     "tokenUsage": {
-      "title": "Başlık",
+      "title": "Token Kullanımı",
       "totalTokens": "Toplam Token",
       "inputTokens": "Giriş Tokenları",
       "outputTokens": "Çıkış Tokenları",
@@ -690,14 +690,14 @@
       "dailyAverage": "Günlük Ortalama"
     },
     "performance": {
-      "title": "Başlık",
+      "title": "Performans",
       "responseTime": "Yanıt Süresi",
       "dailyQueries": "Günlük Sorgular",
       "documents": "Dokümanlar",
       "cacheHit": "Cache İsabeti"
     },
     "embeddingsResources": {
-      "title": "Başlık",
+      "title": "Vektör Kaynakları",
       "migratedData": "Taşınan Veri",
       "documents": "Dokümanlar",
       "scrapedContent": "Kazınan İçerik",
@@ -708,7 +708,7 @@
       "failedEmbeddings": "Başarısız Vektörlemeler"
     },
     "systemInfo": {
-      "title": "Başlık",
+      "title": "Sistem Bilgisi",
       "database": "Veritabanı",
       "llmModel": "LLM Modeli",
       "embeddingModel": "Vektör Modeli",
@@ -722,7 +722,7 @@
       "redis": "Redis"
     },
     "resourceMonitoring": {
-      "title": "Başlık",
+      "title": "Kaynak İzleme",
       "cpu": "CPU",
       "memory": "Bellek",
       "disk": "Disk",
@@ -736,7 +736,7 @@
       "free": "Boş"
     },
     "consoleCommands": {
-      "title": "Başlık",
+      "title": "Konsol Komutları",
       "help": "Mevcut komutlar için /help yazın",
       "clear": "Konsolu temizle",
       "status": "Sistem durumunu göster",
@@ -768,14 +768,14 @@
       "error": "Sistem Hatası"
     },
     "resources": {
-      "title": "Başlık",
+      "title": "Sistem Kaynakları",
       "cpu": "CPU",
       "memory": "Bellek",
       "disk": "Disk",
       "gpu": "GPU"
     },
     "activity": {
-      "title": "Başlık",
+      "title": "Aktivite",
       "loadError": "[AUTO] Failed to load activities",
       "totalActivities": "[AUTO] Total Activities",
       "last30Days": "[AUTO] Last 30 days",
@@ -1229,7 +1229,7 @@
       "error": "[AUTO] Failed to export data"
     },
     "activity": {
-      "title": "Başlık",
+      "title": "Aktivite",
       "description": "[AUTO] Monitor user activities in the system",
       "filterByUser": "[AUTO] Filter by user",
       "filterByAction": "[AUTO] Filter by action",
