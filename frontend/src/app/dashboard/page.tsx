@@ -339,14 +339,15 @@ export default function DashboardPage() {
   // SSE connection status
   const [sseConnected, setSseConnected] = useState(false);
 
-  // WebSocket metrics hook for real-time animated updates
+  // WebSocket metrics hook - disabled for now, using SSE instead
+  // WebSocket will be re-enabled after fixing connection issues
   const {
     metrics: wsMetrics,
     connected: metricsWsConnected,
     latency: metricsWsLatency
   } = useMetricsWebSocket({
     updateRate: 1000,
-    autoConnect: true,
+    autoConnect: false, // Disabled - using SSE for real-time metrics
     onConnect: () => {
       addConsoleLog('[METRICS-WS] Real-time metrics connected', 'success', 'system');
     },
