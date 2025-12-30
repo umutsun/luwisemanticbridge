@@ -416,120 +416,100 @@ export default function DashboardPage() {
   //   }
   // }, [isConsolePaused]);
 
-  // Real-time SSE connection for system metrics
+  // Real-time metrics polling (replaces SSE for better compatibility)
   useEffect(() => {
-    let eventSource: EventSource | null = null;
-    let reconnectTimeout: NodeJS.Timeout | null = null;
+    let intervalId: NodeJS.Timeout | null = null;
+    let isMounted = true;
 
-    const connect = () => {
+    const fetchMetrics = async () => {
+      if (!isMounted) return;
+
       try {
-        const sseUrl = `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8083'}/api/v2/dashboard/stream`;
-        eventSource = new EventSource(sseUrl);
+        const response = await fetchWithAuth(
+          apiConfig.getApiUrl('/api/v2/dashboard/metrics')
+        );
 
-        eventSource.onopen = () => {
+        if (response.ok && isMounted) {
+          const data = await safeJsonParse(response);
+          if (!data) return;
+
           setSseConnected(true);
-          addConsoleLog('[SSE] Real-time dashboard stream connected', 'success', 'system');
-        };
 
-        eventSource.onmessage = (event) => {
-          try {
-            const data = JSON.parse(event.data);
-
-            // Update system resources
-            if (data.systemMetrics) {
-              setRealtimeResources({
-                cpu: data.systemMetrics.cpu || 0,
-                cpuModel: data.systemMetrics.cpuModel || '',
-                cpuSpeed: data.systemMetrics.cpuSpeed || 0,
-                cpuCores: data.systemMetrics.cpuCores || 0,
-                memory: data.systemMetrics.memory || 0,
-                disk: data.systemMetrics.disk || 0,
-                diskMountPoint: data.systemMetrics.diskMountPoint || '',
-                diskFilesystem: data.systemMetrics.diskFilesystem || '',
-                gpu: 0, // GPU not tracked on server
-                loadAvg: data.systemMetrics.loadAvg || [0, 0, 0],
-                memoryDetails: data.systemMetrics.memoryDetails || {
-                  used: 0,
-                  total: 0,
-                  free: 0,
-                  heapUsed: 0,
-                  heapTotal: 0
-                },
-                diskDetails: data.systemMetrics.diskDetails || {
-                  used: 0,
-                  total: 0,
-                  free: 0
-                },
-                network: data.systemMetrics.network || {
-                  bytesIn: 0,
-                  bytesOut: 0,
-                  bytesInPerSec: 0,
-                  bytesOutPerSec: 0,
-                  packetsIn: 0,
-                  packetsOut: 0
-                }
-              });
-            }
-
-            // Update pipelines status
-            if (data.pipelines) {
-              setPipelines(data.pipelines);
-            }
-
-            // Update services status
-            if (data.services) {
-              setServicesStatus(data.services);
-            }
-
-            // Update database stats
-            if (data.database) {
-              setEmbeddingStats(prev => ({
-                ...prev,
-                total_embeddings: data.database.embeddings || 0
-              }));
-              setDocumentStats(prev => ({
-                ...prev,
-                total: data.database.documents || 0
-              }));
-            }
-
-            // Update performance metrics
-            if (data.performance) {
-              setPerformanceMetrics({
-                avgResponseTime: data.performance.avgResponseTime || 0,
-                dailyQueries: data.performance.dailyQueries || 0,
-                cacheHitRate: data.performance.cacheHitRate || 0,
-                totalDocuments: data.performance.totalDocuments || 0
-              });
-            }
-
-          } catch (err) {
-            console.error('SSE parse error:', err);
+          // Update system resources
+          if (data.systemMetrics) {
+            setRealtimeResources({
+              cpu: data.systemMetrics.cpu || 0,
+              cpuModel: data.systemMetrics.cpuModel || '',
+              cpuSpeed: data.systemMetrics.cpuSpeed || 0,
+              cpuCores: data.systemMetrics.cpuCores || 0,
+              memory: data.systemMetrics.memory || 0,
+              disk: data.systemMetrics.disk || 0,
+              diskMountPoint: data.systemMetrics.diskMountPoint || '',
+              diskFilesystem: data.systemMetrics.diskFilesystem || '',
+              gpu: 0,
+              loadAvg: data.systemMetrics.loadAvg || [0, 0, 0],
+              memoryDetails: data.systemMetrics.memoryDetails || {
+                used: 0, total: 0, free: 0, heapUsed: 0, heapTotal: 0
+              },
+              diskDetails: data.systemMetrics.diskDetails || {
+                used: 0, total: 0, free: 0
+              },
+              network: data.systemMetrics.network || {
+                bytesIn: 0, bytesOut: 0, bytesInPerSec: 0, bytesOutPerSec: 0,
+                packetsIn: 0, packetsOut: 0
+              }
+            });
           }
-        };
 
-        eventSource.onerror = () => {
+          // Update pipelines status
+          if (data.pipelines) {
+            setPipelines(data.pipelines);
+          }
+
+          // Update services status
+          if (data.services) {
+            setServicesStatus(data.services);
+          }
+
+          // Update database stats
+          if (data.database) {
+            setEmbeddingStats(prev => ({
+              ...prev,
+              total_embeddings: data.database.embeddings || 0
+            }));
+            setDocumentStats(prev => ({
+              ...prev,
+              total: data.database.documents || 0
+            }));
+          }
+
+          // Update performance metrics
+          if (data.performance) {
+            setPerformanceMetrics({
+              avgResponseTime: data.performance.avgResponseTime || 0,
+              dailyQueries: data.performance.dailyQueries || 0,
+              cacheHitRate: data.performance.cacheHitRate || 0,
+              totalDocuments: data.performance.totalDocuments || 0
+            });
+          }
+        } else {
           setSseConnected(false);
-          eventSource?.close();
-
-          // Reconnect after 5 seconds
-          reconnectTimeout = setTimeout(() => {
-            addConsoleLog('[SSE] Reconnecting to dashboard stream...', 'warn', 'system');
-            connect();
-          }, 5000);
-        };
-
+        }
       } catch (err) {
-        console.error('SSE connection error:', err);
-        setSseConnected(false);
+        console.error('Metrics fetch error:', err);
+        if (isMounted) setSseConnected(false);
       }
     };
 
-    connect();
+    // Initial fetch
+    fetchMetrics();
+
+    // Poll every 3 seconds
+    intervalId = setInterval(fetchMetrics, 3000);
 
     return () => {
-      eventSource?.close();
-      if (reconnectTimeout) clearTimeout(reconnectTimeout);
+      isMounted = false;
+      if (intervalId) clearInterval(intervalId);
     };
   }, []);
 

@@ -1393,6 +1393,90 @@ router.get('/', authenticateToken, async (req: AuthenticatedRequest, res: Respon
   }
 });
 
+// Dashboard metrics endpoint - polling-based alternative to SSE
+router.get('/metrics', async (req: Request, res: Response) => {
+  try {
+    const { pgPool, redis } = require('../server');
+    const metricsService = new SystemMetricsService(pgPool, redis);
+
+    // Get all system metrics
+    const metrics = await metricsService.getAllMetrics();
+
+    // Get embedding progress from Redis
+    let embeddingProgress = { status: 'idle', percentage: 0 };
+    try {
+      const progressData = await redis.get('embedding:progress');
+      if (progressData) {
+        embeddingProgress = JSON.parse(progressData);
+      }
+    } catch (err) { /* ignore */ }
+
+    const dashboardData = {
+      systemMetrics: {
+        cpu: metrics.cpu.usage,
+        cpuModel: metrics.cpu.model,
+        cpuSpeed: metrics.cpu.speed,
+        cpuCores: metrics.cpu.cores,
+        memory: metrics.memory.percentage,
+        disk: metrics.disk.percentage,
+        diskMountPoint: metrics.disk.mountPoint,
+        diskFilesystem: metrics.disk.filesystem,
+        loadAvg: metrics.cpu.loadAvg,
+        memoryDetails: {
+          used: metrics.memory.used,
+          total: metrics.memory.total,
+          free: metrics.memory.free,
+          heapUsed: metrics.memory.heapUsed,
+          heapTotal: metrics.memory.heapTotal
+        },
+        diskDetails: {
+          used: metrics.disk.used,
+          total: metrics.disk.total,
+          free: metrics.disk.free
+        },
+        network: {
+          bytesIn: metrics.network.bytesIn,
+          bytesOut: metrics.network.bytesOut,
+          bytesInPerSec: metrics.network.bytesInPerSec,
+          bytesOutPerSec: metrics.network.bytesOutPerSec,
+          packetsIn: metrics.network.packetsIn,
+          packetsOut: metrics.network.packetsOut
+        },
+        timestamp: Date.now()
+      },
+      database: {
+        documents: metrics.database.documents,
+        embeddings: metrics.database.embeddings,
+        size: metrics.database.size,
+        tables: metrics.database.tables
+      },
+      redis: {
+        connected: metrics.redis.connected,
+        usedMemory: metrics.redis.usedMemory,
+        totalKeys: metrics.redis.totalKeys,
+        hitRate: metrics.redis.hitRate
+      },
+      performance: {
+        avgResponseTime: metrics.performance.avgResponseTime,
+        dailyQueries: metrics.performance.dailyQueries,
+        cacheHitRate: metrics.performance.cacheHitRate,
+        totalDocuments: metrics.performance.totalDocuments
+      },
+      services: metrics.services,
+      pipelines: metrics.pipelines,
+      embeddingProgress
+    };
+
+    res.json(dashboardData);
+  } catch (error: any) {
+    console.error('Error fetching metrics:', error);
+    res.status(500).json({
+      error: 'Failed to fetch metrics',
+      message: error.message
+    });
+  }
+});
+
 // Dashboard streaming endpoint for real-time updates
 router.get('/stream', async (req: Request, res: Response) => {
   res.setHeader('Content-Type', 'text/event-stream');
