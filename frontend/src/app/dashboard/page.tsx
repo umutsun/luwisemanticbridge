@@ -1472,7 +1472,7 @@ export default function DashboardPage() {
         {/* Session Metrics & Token Usage - Animated */}
         <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
           {/* Active Sessions */}
-          <Card className="border-0 shadow-sm hover:shadow-md transition-shadow duration-300">
+          <Card className="border border-gray-100 dark:border-gray-800 shadow hover:shadow-md transition-shadow duration-300">
             <CardContent className="p-6">
               <div className="mb-2">
                 <span className="text-base font-medium text-gray-600 dark:text-gray-400">{t('dashboard.stats.activeSession')}</span>
@@ -1485,7 +1485,7 @@ export default function DashboardPage() {
           </Card>
 
           {/* Total Sessions */}
-          <Card className="border-0 shadow-sm hover:shadow-md transition-shadow duration-300">
+          <Card className="border border-gray-100 dark:border-gray-800 shadow hover:shadow-md transition-shadow duration-300">
             <CardContent className="p-6">
               <div className="mb-2">
                 <span className="text-base font-medium text-gray-600 dark:text-gray-400">{t('dashboard.stats.totalSession')}</span>
@@ -1500,7 +1500,7 @@ export default function DashboardPage() {
           </Card>
 
           {/* Token Usage */}
-          <Card className="border-0 shadow-sm hover:shadow-md transition-shadow duration-300">
+          <Card className="border border-gray-100 dark:border-gray-800 shadow hover:shadow-md transition-shadow duration-300">
             <CardContent className="p-6">
               <div className="mb-2">
                 <span className="text-base font-medium text-gray-600 dark:text-gray-400">{t('dashboard.stats.tokenUsage')}</span>
@@ -1515,7 +1515,7 @@ export default function DashboardPage() {
           </Card>
 
           {/* Avg Messages per Session */}
-          <Card className="border-0 shadow-sm hover:shadow-md transition-shadow duration-300">
+          <Card className="border border-gray-100 dark:border-gray-800 shadow hover:shadow-md transition-shadow duration-300">
             <CardContent className="p-6">
               <div className="mb-2">
                 <span className="text-base font-medium text-gray-600 dark:text-gray-400">{t('dashboard.stats.avgMessagesPerSession')}</span>
@@ -1529,7 +1529,7 @@ export default function DashboardPage() {
         </div>
 
         {/* Embeddings Kaynak Paneli */}
-        <Card className="border-0 shadow-sm">
+        <Card className="border border-gray-100 dark:border-gray-800 shadow">
           <CardHeader>
             <div>
               <h3 className="text-base font-semibold tracking-tight">{t('dashboard.embeddings.resources')}</h3>
@@ -1611,7 +1611,7 @@ export default function DashboardPage() {
         {/* Performance & System Resources */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           {/* System Information - Real Data */}
-          <Card className="border-0 shadow-sm">
+          <Card className="border border-gray-100 dark:border-gray-800 shadow">
             <CardHeader className="pb-3">
               <div className="flex items-center gap-2">
                 <div className="w-2 h-2 bg-blue-500 rounded-full" />
@@ -1657,7 +1657,7 @@ export default function DashboardPage() {
           </Card>
 
           {/* Performance Metrics - Animated */}
-          <Card className="border-0 shadow-sm">
+          <Card className="border border-gray-100 dark:border-gray-800 shadow">
             <CardHeader className="pb-3">
               <div className="flex items-center gap-2">
                 <div className="w-2 h-2 bg-purple-500 rounded-full animate-pulse" />
@@ -1697,7 +1697,7 @@ export default function DashboardPage() {
           </Card>
 
           {/* System Resources - Circular Progress Design */}
-          <Card className="border-0 shadow-sm">
+          <Card className="border border-gray-100 dark:border-gray-800 shadow">
             <CardHeader className="pb-2">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
@@ -1811,10 +1811,10 @@ export default function DashboardPage() {
           </Card>
         </div>
 
-        {/* Pipeline Timeline & Services Status */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mt-8">
+        {/* Pipeline Timeline */}
+        <div className="mt-8">
           {/* Scheduler Timeline */}
-          <Card className="border-0 shadow-sm">
+          <Card className="border border-gray-100 dark:border-gray-800 shadow">
             <CardHeader className="pb-3">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
@@ -1930,107 +1930,6 @@ export default function DashboardPage() {
             </CardContent>
           </Card>
 
-          {/* Services Status */}
-          <Card className="border-0 shadow-sm">
-            <CardHeader className="pb-3">
-              <div className="flex items-center gap-2">
-                <div className={`w-2 h-2 rounded-full ${servicesStatus.every(s => s.status === 'running') ? 'bg-green-500' : 'bg-yellow-500'}`} />
-                <h3 className="text-sm font-semibold tracking-tight">Services Status</h3>
-              </div>
-            </CardHeader>
-            <CardContent className="pt-0">
-              <div className="space-y-3">
-                {servicesStatus.length === 0 ? (
-                  <div className="text-center py-4 text-gray-500 dark:text-gray-400">
-                    <p className="text-sm">Loading services...</p>
-                  </div>
-                ) : (
-                  servicesStatus.map((service, idx) => (
-                    <div key={idx} className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-800/50 border border-gray-100 dark:border-gray-700 rounded-lg">
-                      <div className="flex items-center gap-3">
-                        <div className={`w-2 h-2 rounded-full ${
-                          service.status === 'running' ? 'bg-green-500' :
-                          service.status === 'error' ? 'bg-red-500' :
-                          'bg-gray-400'
-                        }`} />
-                        <div>
-                          <div className="font-medium text-sm">{service.name}</div>
-                          {service.port && <div className="text-xs text-gray-500">Port: {service.port}</div>}
-                        </div>
-                      </div>
-                      <div className="text-right">
-                        <Badge variant={service.status === 'running' ? 'default' : 'secondary'} className="text-xs capitalize">
-                          {service.status}
-                        </Badge>
-                        {service.uptime && (
-                          <div className="text-xs text-gray-500 mt-1">
-                            Uptime: {Math.floor(service.uptime / 60)}m
-                          </div>
-                        )}
-                        {service.memory && (
-                          <div className="text-xs text-gray-500">
-                            Memory: {service.memory} MB
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  ))
-                )}
-              </div>
-
-              {/* Memory Details */}
-              {realtimeResources.memoryDetails.total > 0 && (
-                <div className="mt-4 p-3 bg-blue-50 dark:bg-blue-950/20 border border-blue-100 dark:border-blue-800 rounded-lg">
-                  <div className="text-xs font-medium text-blue-700 dark:text-blue-300 mb-2">Memory Details</div>
-                  <div className="grid grid-cols-3 gap-2 text-xs">
-                    <div>
-                      <span className="text-gray-500">Used:</span>
-                      <span className="font-medium ml-1">{realtimeResources.memoryDetails.used} MB</span>
-                    </div>
-                    <div>
-                      <span className="text-gray-500">Free:</span>
-                      <span className="font-medium ml-1">{realtimeResources.memoryDetails.free} MB</span>
-                    </div>
-                    <div>
-                      <span className="text-gray-500">Total:</span>
-                      <span className="font-medium ml-1">{realtimeResources.memoryDetails.total} MB</span>
-                    </div>
-                  </div>
-                  <div className="grid grid-cols-2 gap-2 text-xs mt-2 pt-2 border-t border-blue-100 dark:border-blue-700">
-                    <div>
-                      <span className="text-gray-500">Heap Used:</span>
-                      <span className="font-medium ml-1">{realtimeResources.memoryDetails.heapUsed} MB</span>
-                    </div>
-                    <div>
-                      <span className="text-gray-500">Heap Total:</span>
-                      <span className="font-medium ml-1">{realtimeResources.memoryDetails.heapTotal} MB</span>
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {/* Load Average */}
-              {realtimeResources.loadAvg[0] > 0 && (
-                <div className="mt-3 p-3 bg-gray-50 dark:bg-gray-800/50 border border-gray-100 dark:border-gray-700 rounded-lg">
-                  <div className="text-xs font-medium text-gray-600 dark:text-gray-300 mb-2">Load Average</div>
-                  <div className="flex gap-4 text-xs">
-                    <div>
-                      <span className="text-gray-500">1 min:</span>
-                      <span className="font-medium ml-1">{realtimeResources.loadAvg[0]?.toFixed(2)}</span>
-                    </div>
-                    <div>
-                      <span className="text-gray-500">5 min:</span>
-                      <span className="font-medium ml-1">{realtimeResources.loadAvg[1]?.toFixed(2)}</span>
-                    </div>
-                    <div>
-                      <span className="text-gray-500">15 min:</span>
-                      <span className="font-medium ml-1">{realtimeResources.loadAvg[2]?.toFixed(2)}</span>
-                    </div>
-                  </div>
-                </div>
-              )}
-            </CardContent>
-          </Card>
         </div>
       </div>
 
