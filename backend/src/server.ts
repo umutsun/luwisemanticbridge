@@ -102,6 +102,7 @@ import csvTransformRoutes from "./routes/csv-transform.routes";
 import scrapedEmbeddingsRoutes from "./routes/scraped-embeddings.routes";
 import databaseSettingsRoutes from "./routes/database-settings.routes";
 import patternsRoutes from "./routes/api/v2/patterns.routes";
+import devopsRoutes from "./routes/devops.routes";
 import websocketLogStreamRoutes from "./api/websocket-log-stream.router";
 import { initPDFProgressWS } from './services/pdf/pdf-progress-ws.service';
 import importJobService from './services/import-job.service';
@@ -578,6 +579,7 @@ app.use("/api/v2/ai-services", aiServicesRoutes);
 app.use("/api/v2/google-drive", googleDriveRoutes);
 app.use("/api/v2/data-schema", dataSchemaRoutes);
 app.use("/api/v2/patterns", patternsRoutes);
+app.use("/api/v2/devops", devopsRoutes);  // DevOps Dashboard: SSH, security, deployments
 app.use("/api/v2/websocket-log-stream", websocketLogStreamRoutes);
 app.use("/api/whisper", whisperRoutes);
 app.use(ttsRoutes);  // TTS routes at /api/v2/tts/*

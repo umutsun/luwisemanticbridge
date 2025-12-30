@@ -43,7 +43,7 @@ logger.add(
 )
 
 # Import routers
-from routers import crawl_router, pgai_router, health_router, whisper_router, import_router, worker_router, pdf_router, csv_transform_router, embedding_router, document_analyzer_router, semantic_search_router
+from routers import crawl_router, pgai_router, health_router, whisper_router, import_router, worker_router, pdf_router, csv_transform_router, embedding_router, document_analyzer_router, semantic_search_router, devops_router
 from routers.scheduler_router import router as scheduler_router
 
 @asynccontextmanager
@@ -222,6 +222,11 @@ app.include_router(
     tags=["scheduler"]
     # APScheduler-based job scheduling service
 )
+app.include_router(
+    devops_router,
+    tags=["devops"]
+    # DevOps Dashboard: SSH, security scanning, deployments
+)
 
 # Global exception handler
 @app.exception_handler(Exception)
@@ -251,6 +256,7 @@ async def root():
             "documents": "/api/python/documents",
             "semantic_search": "/api/python/semantic-search",
             "scheduler": "/api/python/scheduler",
+            "devops": "/api/python/devops",
             "docs": "/docs"
         }
     }
