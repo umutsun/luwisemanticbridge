@@ -163,7 +163,9 @@ export const Console: React.FC<ConsoleProps> = ({
         '/help', '/clear', '/status', '/refresh', '/health', '/uptime',
         '/stats', '/logs', '/export', '/search', '/tail', '/grep',
         '/filter', '/bookmark', '/history', '/settings', '/metrics',
-        '/services', '/api', '/token', '/theme', '/time', '/calc'
+        '/services', '/api', '/token', '/theme', '/time', '/calc',
+        // DevOps commands
+        '/deploy', '/gitpull', '/pm2', '/nginx', '/restart', '/build'
     ];
 
     // Initialize connection (WebSocket with SSE fallback)
@@ -539,8 +541,129 @@ export const Console: React.FC<ConsoleProps> = ({
                     addLog('error', t('terminal.status.themeUsage'), 'system');
                 }
                 break;
+            // DevOps Commands
+            case '/deploy':
+                executeDevOpsCommand('deploy', args[0] || 'hotfix');
+                break;
+            case '/gitpull':
+                executeDevOpsCommand('gitpull');
+                break;
+            case '/pm2':
+                if (args[0] === 'status') {
+                    executeDevOpsCommand('pm2status');
+                } else if (args[0] === 'restart') {
+                    executeDevOpsCommand('pm2restart', args[1] || 'all');
+                } else {
+                    addLog('info', 'Usage: /pm2 status | /pm2 restart [backend|frontend|python|all]', 'system');
+                }
+                break;
+            case '/nginx':
+                if (args[0] === 'test') {
+                    executeDevOpsCommand('nginxtest');
+                } else if (args[0] === 'reload') {
+                    executeDevOpsCommand('nginxreload');
+                } else {
+                    addLog('info', 'Usage: /nginx test | /nginx reload', 'system');
+                }
+                break;
+            case '/restart':
+                executeDevOpsCommand('pm2restart', args[0] || 'all');
+                break;
+            case '/build':
+                executeDevOpsCommand('deploy', 'frontend');
+                break;
             default:
                 addLog('warn', t('terminal.status.unknownCommand', { cmd: cmd }), 'system');
+        }
+    }, [addLog]);
+
+    // Execute DevOps commands via API
+    const executeDevOpsCommand = useCallback(async (action: string, arg?: string) => {
+        const API_BASE = '/api/v2/devops';
+
+        try {
+            switch (action) {
+                case 'deploy':
+                    addLog('info', `🚀 Starting ${arg} deploy...`, 'devops');
+                    const deployRes = await fetch(`${API_BASE}/self/deploy?deploy_type=${arg}`, { method: 'POST' });
+                    const deployData = await deployRes.json();
+                    if (deployData.success) {
+                        addLog('success', `✅ Deploy completed! Duration: ${(deployData.duration_ms / 1000).toFixed(1)}s`, 'devops');
+                        if (deployData.git_commit_after) {
+                            addLog('info', `📌 Commit: ${deployData.git_commit_after.substring(0, 7)}`, 'devops');
+                        }
+                    } else {
+                        addLog('error', `❌ Deploy failed: ${deployData.error || 'Unknown error'}`, 'devops');
+                    }
+                    break;
+
+                case 'gitpull':
+                    addLog('info', '📥 Running git pull...', 'devops');
+                    const pullRes = await fetch(`${API_BASE}/self/deploy?deploy_type=hotfix`, { method: 'POST' });
+                    const pullData = await pullRes.json();
+                    if (pullData.success) {
+                        addLog('success', '✅ Git pull completed!', 'devops');
+                    } else {
+                        addLog('error', `❌ Git pull failed: ${pullData.error}`, 'devops');
+                    }
+                    break;
+
+                case 'pm2status':
+                    addLog('info', '📊 Fetching PM2 status...', 'devops');
+                    const pm2Res = await fetch(`${API_BASE}/self/pm2/status`);
+                    const pm2Data = await pm2Res.json();
+                    if (pm2Data.success && pm2Data.services) {
+                        addLog('info', '═══════════════════════════════════════════════', 'devops');
+                        addLog('info', '🔧 PM2 SERVICES', 'devops');
+                        addLog('info', '═══════════════════════════════════════════════', 'devops');
+                        pm2Data.services.forEach((svc: any) => {
+                            const status = svc.status === 'online' ? '🟢' : '🔴';
+                            addLog('info', `${status} ${svc.name}: ${svc.status} (CPU: ${svc.cpu}%, Mem: ${(svc.memory / 1024 / 1024).toFixed(0)}MB)`, 'devops');
+                        });
+                    } else {
+                        addLog('error', '❌ Failed to fetch PM2 status', 'devops');
+                    }
+                    break;
+
+                case 'pm2restart':
+                    addLog('info', `🔄 Restarting ${arg}...`, 'devops');
+                    const restartRes = await fetch(`${API_BASE}/self/pm2/restart/${arg}`, { method: 'POST' });
+                    const restartData = await restartRes.json();
+                    if (restartData.success) {
+                        addLog('success', `✅ ${arg} restarted successfully!`, 'devops');
+                    } else {
+                        addLog('error', `❌ Restart failed: ${restartData.error || 'Unknown error'}`, 'devops');
+                    }
+                    break;
+
+                case 'nginxtest':
+                    addLog('info', '🔍 Testing Nginx config...', 'devops');
+                    const testRes = await fetch(`${API_BASE}/self/nginx/test`, { method: 'POST' });
+                    const testData = await testRes.json();
+                    if (testData.valid) {
+                        addLog('success', '✅ Nginx config is valid!', 'devops');
+                    } else {
+                        addLog('error', '❌ Nginx config has errors:', 'devops');
+                        addLog('error', testData.output, 'devops');
+                    }
+                    break;
+
+                case 'nginxreload':
+                    addLog('info', '🔄 Reloading Nginx...', 'devops');
+                    const reloadRes = await fetch(`${API_BASE}/self/nginx/reload`, { method: 'POST' });
+                    const reloadData = await reloadRes.json();
+                    if (reloadData.success) {
+                        addLog('success', '✅ Nginx reloaded successfully!', 'devops');
+                    } else {
+                        addLog('error', `❌ Nginx reload failed: ${reloadData.error}`, 'devops');
+                    }
+                    break;
+
+                default:
+                    addLog('error', `Unknown DevOps action: ${action}`, 'devops');
+            }
+        } catch (error: any) {
+            addLog('error', `❌ DevOps command failed: ${error.message}`, 'devops');
         }
     }, [addLog]);
 
@@ -575,6 +698,16 @@ ${t('terminal.help.advancedCommands')}
   /tail [n]       - ${t('terminal.help.tailDesc')}
   /metrics        - ${t('terminal.help.metricsDesc')}
   /services       - ${t('terminal.help.servicesDesc')}
+
+🚀 DEVOPS COMMANDS:
+  /deploy [type]  - Deploy (full|hotfix|frontend|backend|python)
+  /gitpull        - Quick git pull and restart
+  /pm2 status     - Show PM2 service status
+  /pm2 restart [s]- Restart service (backend|frontend|python|all)
+  /nginx test     - Test Nginx configuration
+  /nginx reload   - Reload Nginx
+  /restart [s]    - Shortcut for /pm2 restart
+  /build          - Shortcut for /deploy frontend
 
 ═══════════════════════════════════════════════════════════════════════════════
     `;
@@ -846,6 +979,7 @@ ${t('terminal.help.advancedCommands')}
             case 'system': return 'bg-cyan-500/20 text-cyan-600 dark:text-cyan-400';
             case 'backend': return 'bg-blue-500/20 text-blue-600 dark:text-blue-400';
             case 'frontend': return 'bg-green-500/20 text-green-600 dark:text-green-400';
+            case 'devops': return 'bg-orange-500/20 text-orange-600 dark:text-orange-400';
             default: return 'bg-gray-500/20 text-gray-600 dark:text-gray-400';
         }
     };
