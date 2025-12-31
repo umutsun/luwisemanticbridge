@@ -1595,11 +1595,12 @@ function DeploymentModal({ isOpen, onOpenChange }: { isOpen: boolean; onOpenChan
 
     await runAction(`logs ${service} --lines ${lines}`, async () => {
       // Use tail to read PM2 log files directly (more reliable than pm2 logs --nostream)
+      // Use /root/.pm2/logs/ instead of ~/.pm2/logs/ for proper path resolution
       const response = await fetch('/api/v2/devops/ssh/execute', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          command: `tail -n ${lines} ~/.pm2/logs/${serviceName}-out.log 2>/dev/null || tail -n ${lines} ~/.pm2/logs/${serviceName}-error.log 2>/dev/null || echo "No logs found for ${serviceName}"`
+          command: `tail -n ${lines} /root/.pm2/logs/${serviceName}-out.log 2>/dev/null || tail -n ${lines} /root/.pm2/logs/${serviceName}-error.log 2>/dev/null || echo "No logs found for ${serviceName}"`
         })
       });
 
