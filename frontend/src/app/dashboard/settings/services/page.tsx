@@ -1589,12 +1589,17 @@ function DeploymentModal({ isOpen, onOpenChange }: { isOpen: boolean; onOpenChan
   };
 
   const handleViewPM2Logs = async (service: 'backend' | 'frontend' | 'python', lines: number = 30) => {
-    await runAction(`pm2 logs ${service} --lines ${lines}`, async () => {
+    // Get tenant ID for log file path
+    const tenantId = process.env.NEXT_PUBLIC_TENANT_ID || 'vergilex';
+    const serviceName = `${tenantId}-${service}`;
+
+    await runAction(`logs ${service} --lines ${lines}`, async () => {
+      // Use tail to read PM2 log files directly (more reliable than pm2 logs --nostream)
       const response = await fetch('/api/v2/devops/ssh/execute', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          command: `pm2 logs ${service} --lines ${lines} --nostream 2>&1 | tail -${lines}`
+          command: `tail -n ${lines} ~/.pm2/logs/${serviceName}-out.log 2>/dev/null || tail -n ${lines} ~/.pm2/logs/${serviceName}-error.log 2>/dev/null || echo "No logs found for ${serviceName}"`
         })
       });
 
@@ -1611,12 +1616,12 @@ function DeploymentModal({ isOpen, onOpenChange }: { isOpen: boolean; onOpenChan
       }
 
       if (result?.success && result?.output) {
-        addOutput(`--- PM2 ${service} Logs ---`);
+        addOutput(`--- ${serviceName} Logs ---`);
         const outputLines = result.output.split('\n').filter((line: string) => line.trim());
-        if (outputLines.length === 0) {
+        if (outputLines.length === 0 || result.output.includes('No logs found')) {
           addOutput('No logs available for this service.');
         } else {
-          outputLines.forEach((line: string) => addOutput(line));
+          outputLines.slice(-lines).forEach((line: string) => addOutput(line));
         }
         addOutput('--- End of logs ---');
       } else if (result?.error) {
@@ -1625,7 +1630,7 @@ function DeploymentModal({ isOpen, onOpenChange }: { isOpen: boolean; onOpenChan
           addOutput(`HINT: ${result.hint}`);
         }
       } else {
-        addOutput('FAILED: Could not fetch logs. SSH/Python service may not be running.');
+        addOutput('FAILED: Could not fetch logs.');
       }
     });
   };
@@ -1937,7 +1942,7 @@ function DeploymentModal({ isOpen, onOpenChange }: { isOpen: boolean; onOpenChan
         {/* Terminal Output - Main Body */}
         <div
           ref={outputRef}
-          className="flex-1 bg-[#1a1a1a] p-3 overflow-y-auto font-mono text-xs leading-relaxed"
+          className="flex-1 bg-[#1a1a1a] p-2 overflow-y-auto font-mono text-[10px] leading-tight"
         >
           {output.length === 0 ? (
             <div className="text-gray-500">
