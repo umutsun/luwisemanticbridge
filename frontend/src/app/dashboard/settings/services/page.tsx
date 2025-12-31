@@ -1244,106 +1244,88 @@ function WhisperConfig() {
   const [mode, setMode] = useState<"api" | "local">("api");
 
   return (
-    <div className="space-y-4">
-      <Alert>
-        <AlertDescription>
-          Whisper supports both OpenAI API (paid) and self-hosted (free) modes.
-        </AlertDescription>
-      </Alert>
-
-      <div className="space-y-2">
-        <Label>Mode</Label>
-        <Select value={mode} onValueChange={(v: "api" | "local") => setMode(v)}>
-          <SelectTrigger>
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="api">OpenAI API (Recommended)</SelectItem>
-            <SelectItem value="local">Self-hosted (Free, GPU recommended)</SelectItem>
-          </SelectContent>
-        </Select>
-        <p className="text-xs text-muted-foreground">
-          {mode === "api" ? "Uses OpenAI API key from settings ($0.006/minute)" : "Runs locally on your server (free)"}
-        </p>
+    <div className="space-y-3">
+      {/* Mode Selection */}
+      <div className="grid grid-cols-2 gap-2">
+        <div className="space-y-1">
+          <Label className="text-xs">Mode</Label>
+          <Select value={mode} onValueChange={(v: "api" | "local") => setMode(v)}>
+            <SelectTrigger className="h-8 text-xs">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent className="z-[250]">
+              <SelectItem value="api">OpenAI API</SelectItem>
+              <SelectItem value="local">Self-hosted</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+        {mode === "local" && (
+          <div className="space-y-1">
+            <Label className="text-xs">Model Size</Label>
+            <Select defaultValue="base">
+              <SelectTrigger className="h-8 text-xs">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent className="z-[250]">
+                <SelectItem value="tiny">Tiny (1GB)</SelectItem>
+                <SelectItem value="base">Base (1GB)</SelectItem>
+                <SelectItem value="small">Small (2GB)</SelectItem>
+                <SelectItem value="medium">Medium (5GB)</SelectItem>
+                <SelectItem value="large">Large (10GB)</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+        )}
+        {mode === "api" && (
+          <div className="space-y-1">
+            <Label className="text-xs">API Model</Label>
+            <Input defaultValue="whisper-1" disabled className="h-8 text-xs bg-muted" />
+          </div>
+        )}
       </div>
 
-      {mode === "api" && (
-        <div className="space-y-2">
-          <Label>Model</Label>
-          <Select defaultValue="whisper-1">
-            <SelectTrigger>
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="whisper-1">whisper-1 (Latest)</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-      )}
-
-      {mode === "local" && (
-        <div className="space-y-2">
-          <Label>Model Size</Label>
-          <Select defaultValue="base">
-            <SelectTrigger>
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="tiny">Tiny (~1GB RAM, fastest)</SelectItem>
-              <SelectItem value="base">Base (~1GB RAM, recommended)</SelectItem>
-              <SelectItem value="small">Small (~2GB RAM, more accurate)</SelectItem>
-              <SelectItem value="medium">Medium (~5GB RAM, high accuracy)</SelectItem>
-              <SelectItem value="large">Large (~10GB RAM, best)</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-      )}
-
-      <div className="grid grid-cols-2 gap-4">
-        <div className="space-y-2">
-          <Label>Language</Label>
+      {/* Language & Temperature */}
+      <div className="grid grid-cols-2 gap-2">
+        <div className="space-y-1">
+          <Label className="text-xs">Language</Label>
           <Select defaultValue="tr">
-            <SelectTrigger>
+            <SelectTrigger className="h-8 text-xs">
               <SelectValue />
             </SelectTrigger>
-            <SelectContent>
+            <SelectContent className="z-[250]">
               <SelectItem value="tr">Turkish</SelectItem>
               <SelectItem value="en">English</SelectItem>
-              <SelectItem value="auto">Auto-detect</SelectItem>
+              <SelectItem value="auto">Auto</SelectItem>
             </SelectContent>
           </Select>
         </div>
-        <div className="space-y-2">
-          <Label>Temperature</Label>
-          <Input type="number" defaultValue="0.0" min="0" max="1" step="0.1" />
+        <div className="space-y-1">
+          <Label className="text-xs">Temperature</Label>
+          <Input type="number" defaultValue="0.0" min="0" max="1" step="0.1" className="h-8 text-xs" />
         </div>
       </div>
 
-      <div className="space-y-2">
-        <Label>Initial Prompt (Optional)</Label>
+      {/* Initial Prompt */}
+      <div className="space-y-1">
+        <Label className="text-xs">Initial Prompt</Label>
         <Textarea
-          placeholder="Vergi, muhasebe ve hukuk terimleri içerir..."
-          className="h-20 text-xs"
+          placeholder="Domain keywords..."
+          className="h-14 text-xs resize-none"
         />
-        <p className="text-xs text-muted-foreground">
-          Helps improve accuracy for domain-specific terminology
-        </p>
       </div>
 
-      <div className="space-y-2">
-        <div className="flex items-center justify-between">
-          <Label>Auto-send transcription</Label>
-          <Switch defaultChecked={false} />
+      {/* Auto-send */}
+      <div className="flex items-center justify-between py-1">
+        <div>
+          <Label className="text-xs">Auto-send</Label>
+          <p className="text-[10px] text-muted-foreground">Send to chat</p>
         </div>
-        <p className="text-xs text-muted-foreground">
-          Automatically send transcribed text to chat
-        </p>
+        <Switch defaultChecked={false} />
       </div>
 
-      <Button className="w-full">
-        <Terminal className="h-4 w-4 mr-2" />
-        Save Configuration
-      </Button>
+      <p className="text-[10px] text-muted-foreground">
+        {mode === "api" ? "Uses OpenAI API key ($0.006/min)" : "Free, GPU recommended"}
+      </p>
     </div>
   );
 }
