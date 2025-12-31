@@ -599,101 +599,86 @@ export default function Header() {
                     </div>
                   </Button>
                 </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="w-72 p-0">
-                  {/* Clean minimal status grid */}
-                  <div className="p-4 space-y-3">
+                <DropdownMenuContent align="end" className="w-[420px] p-0">
+                  {/* Horizontal status layout */}
+                  <div className="p-3 space-y-2">
                     {/* Title with overall status */}
-                    <div className="flex items-center justify-between">
+                    <div className="flex items-center justify-between pb-2 border-b">
                       <span className="text-sm font-medium">{t('header.systemStatus')}</span>
-                      <div className={`h-2 w-2 rounded-full ${getOverallStatus() === 'healthy' ? 'bg-green-500' :
-                        getOverallStatus() === 'degraded' ? 'bg-yellow-500' : 'bg-red-500'
-                        } animate-pulse`} />
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs text-muted-foreground capitalize">{getOverallStatus()}</span>
+                        <div className={`h-2 w-2 rounded-full ${getOverallStatus() === 'healthy' ? 'bg-green-500' :
+                          getOverallStatus() === 'degraded' ? 'bg-yellow-500' : 'bg-red-500'
+                          } animate-pulse`} />
+                      </div>
                     </div>
 
-                    {/* Services - comfortable 2x3 grid */}
-                    <div className="grid grid-cols-2 gap-3">
-                      {/* First Row - Database & Redis */}
-                      <div className={`p-3 rounded-lg border transition-all ${systemStatus?.database.connected
-                        ? 'bg-green-50/80 border-green-200 dark:bg-green-950/50 dark:border-green-800/60 shadow-sm'
-                        : 'bg-red-50/80 border-red-200 dark:bg-red-950/50 dark:border-red-800/60'
+                    {/* Services - horizontal 3x2 grid */}
+                    <div className="grid grid-cols-3 gap-2">
+                      {/* Database */}
+                      <div className={`p-2 rounded-lg border ${systemStatus?.database.connected
+                        ? 'bg-green-50/50 border-green-200/60 dark:bg-green-950/30 dark:border-green-800/40'
+                        : 'bg-red-50/50 border-red-200/60 dark:bg-red-950/30 dark:border-red-800/40'
                         }`}>
-                        <div className="flex items-center gap-2 mb-1.5">
-                          <div className={`w-2 h-2 rounded-full ${systemStatus?.database.connected ? 'bg-green-500' : 'bg-red-500'
-                            }`} />
-                          <p className="text-sm font-medium">{t('dashboard.systemInfo.database')}</p>
+                        <div className="flex items-center gap-1.5 mb-0.5">
+                          <div className={`w-1.5 h-1.5 rounded-full ${systemStatus?.database.connected ? 'bg-green-500' : 'bg-red-500'}`} />
+                          <p className="text-xs font-medium">{t('dashboard.systemInfo.database')}</p>
                         </div>
-                        <p className="text-sm text-muted-foreground">
-                          {systemStatus?.database.databaseName || '—'}
-                        </p>
+                        <p className="text-[10px] text-muted-foreground truncate">{systemStatus?.database.databaseName || '—'}</p>
                       </div>
 
-                      <div className={`p-3 rounded-lg border transition-all ${systemStatus?.redis.connected
-                        ? 'bg-green-50/80 border-green-200 dark:bg-green-950/50 dark:border-green-800/60 shadow-sm'
-                        : 'bg-red-50/80 border-red-200 dark:bg-red-950/50 dark:border-red-800/60'
+                      {/* Redis */}
+                      <div className={`p-2 rounded-lg border ${systemStatus?.redis.connected
+                        ? 'bg-green-50/50 border-green-200/60 dark:bg-green-950/30 dark:border-green-800/40'
+                        : 'bg-red-50/50 border-red-200/60 dark:bg-red-950/30 dark:border-red-800/40'
                         }`}>
-                        <div className="flex items-center gap-2 mb-1.5">
-                          <div className={`w-2 h-2 rounded-full ${systemStatus?.redis.connected ? 'bg-green-500' : 'bg-red-500'
-                            }`} />
-                          <p className="text-sm font-medium">{t('dashboard.systemInfo.redis')}</p>
+                        <div className="flex items-center gap-1.5 mb-0.5">
+                          <div className={`w-1.5 h-1.5 rounded-full ${systemStatus?.redis.connected ? 'bg-green-500' : 'bg-red-500'}`} />
+                          <p className="text-xs font-medium">{t('dashboard.systemInfo.redis')}</p>
                         </div>
-                        <p className="text-sm text-muted-foreground">
-                          {systemStatus?.redis.keyCount !== undefined ? `${systemStatus.redis.keyCount} keys` : '—'}
-                        </p>
+                        <p className="text-[10px] text-muted-foreground">{systemStatus?.redis.keyCount !== undefined ? `${systemStatus.redis.keyCount} keys` : '—'}</p>
                       </div>
 
-                      {/* Second Row - LLM & Embeddings */}
-                      <div className={`p-3 rounded-lg border transition-all ${systemStatus?.llmModel.active
-                        ? 'bg-green-50/80 border-green-200 dark:bg-green-950/50 dark:border-green-800/60 shadow-sm'
-                        : 'bg-red-50/80 border-red-200 dark:bg-red-950/50 dark:border-red-800/60'
+                      {/* LLM */}
+                      <div className={`p-2 rounded-lg border ${systemStatus?.llmModel.active
+                        ? 'bg-green-50/50 border-green-200/60 dark:bg-green-950/30 dark:border-green-800/40'
+                        : 'bg-red-50/50 border-red-200/60 dark:bg-red-950/30 dark:border-red-800/40'
                         }`}>
-                        <div className="flex items-center gap-2 mb-1.5">
-                          <div className={`w-2 h-2 rounded-full ${systemStatus?.llmModel.active ? 'bg-green-500' : 'bg-red-500'
-                            }`} />
-                          <p className="text-sm font-medium">{t('dashboard.systemInfo.llmModel')}</p>
+                        <div className="flex items-center gap-1.5 mb-0.5">
+                          <div className={`w-1.5 h-1.5 rounded-full ${systemStatus?.llmModel.active ? 'bg-green-500' : 'bg-red-500'}`} />
+                          <p className="text-xs font-medium">{t('dashboard.systemInfo.llmModel')}</p>
                         </div>
-                        <p className="text-sm text-muted-foreground truncate">
-                          {systemStatus?.llmModel.displayName || systemStatus?.llmModel.model?.split('/')?.[1]?.substring(0, 12) + '...' || 'Unknown'}
-                        </p>
+                        <p className="text-[10px] text-muted-foreground truncate">{systemStatus?.llmModel.displayName || 'Unknown'}</p>
                       </div>
 
-                      <div className={`p-3 rounded-lg border transition-all ${systemStatus?.embedder.active
-                        ? 'bg-green-50/80 border-green-200 dark:bg-green-950/50 dark:border-green-800/60 shadow-sm'
-                        : 'bg-red-50/80 border-red-200 dark:bg-red-950/50 dark:border-red-800/60'
+                      {/* Embeddings */}
+                      <div className={`p-2 rounded-lg border ${systemStatus?.embedder.active
+                        ? 'bg-green-50/50 border-green-200/60 dark:bg-green-950/30 dark:border-green-800/40'
+                        : 'bg-red-50/50 border-red-200/60 dark:bg-red-950/30 dark:border-red-800/40'
                         }`}>
-                        <div className="flex items-center gap-2 mb-1.5">
-                          <div className={`w-2 h-2 rounded-full ${systemStatus?.embedder.active ? 'bg-green-500' : 'bg-red-500'
-                            }`} />
-                          <p className="text-sm font-medium">{t('dashboard.embeddings.title')}</p>
+                        <div className="flex items-center gap-1.5 mb-0.5">
+                          <div className={`w-1.5 h-1.5 rounded-full ${systemStatus?.embedder.active ? 'bg-green-500' : 'bg-red-500'}`} />
+                          <p className="text-xs font-medium">{t('dashboard.embeddings.title')}</p>
                         </div>
-                        <p className="text-sm text-muted-foreground truncate">
-                          {systemStatus?.embedder.active ? (systemStatus?.embedder.model?.substring(0, 10) + '...' || 'Ready') : 'Offline'}
-                        </p>
+                        <p className="text-[10px] text-muted-foreground truncate">{systemStatus?.embedder.active ? 'Active' : 'Offline'}</p>
                       </div>
 
-                      {/* System Status */}
-                      <div className={`p-3 rounded-lg border transition-all ${getOverallStatus() === 'healthy'
-                        ? 'bg-emerald-50/80 border-emerald-200 dark:bg-emerald-950/50 dark:border-emerald-800/60 shadow-sm'
+                      {/* System Overall - spans 2 columns */}
+                      <div className={`col-span-2 p-2 rounded-lg border ${getOverallStatus() === 'healthy'
+                        ? 'bg-emerald-50/50 border-emerald-200/60 dark:bg-emerald-950/30 dark:border-emerald-800/40'
                         : getOverallStatus() === 'degraded'
-                          ? 'bg-amber-50/80 border-amber-200 dark:bg-amber-950/50 dark:border-amber-800/60 shadow-sm'
-                          : 'bg-red-50/80 border-red-200 dark:bg-red-950/50 dark:border-red-800/60'
+                          ? 'bg-amber-50/50 border-amber-200/60 dark:bg-amber-950/30 dark:border-amber-800/40'
+                          : 'bg-red-50/50 border-red-200/60 dark:bg-red-950/30 dark:border-red-800/40'
                         }`}>
-                        <div className="flex items-center gap-2 mb-1.5">
-                          <div className={`w-2 h-2 rounded-full ${getOverallStatus() === 'healthy' ? 'bg-emerald-500' :
-                            getOverallStatus() === 'degraded' ? 'bg-amber-500' : 'bg-red-500'
-                            } animate-pulse`} />
-                          <p className="text-sm font-medium">{t('dashboard.systemInfo.title')}</p>
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-1.5">
+                            <div className={`w-1.5 h-1.5 rounded-full ${getOverallStatus() === 'healthy' ? 'bg-emerald-500' :
+                              getOverallStatus() === 'degraded' ? 'bg-amber-500' : 'bg-red-500'} animate-pulse`} />
+                            <p className="text-xs font-medium">{t('dashboard.systemInfo.title')}</p>
+                          </div>
+                          <span className="text-[10px] text-muted-foreground">{new Date().toLocaleTimeString()}</span>
                         </div>
-                        <p className="text-sm text-muted-foreground capitalize">
-                          {getOverallStatus()}
-                        </p>
                       </div>
-                    </div>
-
-                    {/* Minimal footer */}
-                    <div className="pt-2 border-t flex items-center justify-between">
-                      <span className="text-xs text-muted-foreground">
-                        {new Date().toLocaleTimeString()}
-                      </span>
                     </div>
                   </div>
                 </DropdownMenuContent>
