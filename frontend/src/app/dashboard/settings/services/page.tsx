@@ -1656,20 +1656,75 @@ function DeploymentModal({ isOpen, onOpenChange }: { isOpen: boolean; onOpenChan
   };
 
   const handleGitStatus = async () => {
-    await runAction('git status', async () => {
+    setIsRunning(true);
+    addOutput('--- Git Status ---');
+    try {
       const response = await fetch('/api/v2/devops/status');
       const result = await response.json();
       if (result?.success !== false) {
-        addOutput('--- Git Status ---');
-        addOutput(`Branch:     ${result.branch || 'unknown'}`);
-        addOutput(`Commit:     ${result.commitHash?.slice(0, 7) || 'unknown'}`);
-        addOutput(`Status:     ${result.gitStatus || 'unknown'}`);
-        addOutput(`Last Deploy: ${result.lastDeploy ? new Date(result.lastDeploy).toLocaleString('tr-TR') : 'N/A'}`);
-        addOutput('--- End ---');
+        addOutput(`Branch:      ${result.branch || 'unknown'}`);
+        addOutput(`Commit:      ${result.commitHash?.slice(0, 7) || 'unknown'}`);
+        addOutput(`Status:      ${result.gitStatus || 'clean'}`);
+        if (result.tenantId) addOutput(`Tenant:      ${result.tenantId}`);
+        if (result.lastDeploy) addOutput(`Last Deploy: ${new Date(result.lastDeploy).toLocaleString('tr-TR')}`);
       } else {
-        addOutput(`FAILED: ${result?.error || 'Could not fetch git status'}`);
+        addOutput(`Error: ${result?.error || 'Could not fetch status'}`);
       }
-    });
+    } catch (err) {
+      addOutput(`Error: ${err instanceof Error ? err.message : 'Network error'}`);
+    }
+    addOutput('--- End ---');
+    setIsRunning(false);
+  };
+
+  // Local health check - works without SSH
+  const handleLocalHealth = async () => {
+    setIsRunning(true);
+    addOutput('--- Health Check ---');
+
+    // Check backend
+    try {
+      const backendRes = await fetch('/api/health');
+      if (backendRes.ok) {
+        const data = await backendRes.json();
+        addOutput(`✓ Backend API: ${data.status || 'OK'}`);
+      } else {
+        addOutput('✗ Backend API: Not responding');
+      }
+    } catch {
+      addOutput('✗ Backend API: Error connecting');
+    }
+
+    // Check Python service
+    try {
+      const pythonRes = await fetch('/api/python/health');
+      if (pythonRes.ok) {
+        addOutput('✓ Python Service: OK');
+      } else {
+        addOutput('✗ Python Service: Not responding');
+      }
+    } catch {
+      addOutput('✗ Python Service: Error connecting');
+    }
+
+    // Check DevOps service
+    try {
+      const devopsRes = await fetch('/api/v2/devops/health');
+      if (devopsRes.ok) {
+        const data = await devopsRes.json();
+        addOutput(`✓ DevOps Service: ${data.status || 'OK'}`);
+        if (data.ssh_configured !== undefined) {
+          addOutput(`  SSH: ${data.ssh_configured ? 'Configured' : 'Not configured'}`);
+        }
+      } else {
+        addOutput('✗ DevOps Service: Not responding');
+      }
+    } catch {
+      addOutput('✗ DevOps Service: Error connecting');
+    }
+
+    addOutput('--- End ---');
+    setIsRunning(false);
   };
 
   const handleLogStats = async () => {
@@ -1722,50 +1777,63 @@ function DeploymentModal({ isOpen, onOpenChange }: { isOpen: boolean; onOpenChan
     const cmd = commandInput.trim().toLowerCase();
     setCommandInput('');
 
+    // Show the command first
+    addOutput(`$ ${cmd}`);
+
     // Parse and execute command
     if (cmd === 'help') {
-      addOutput('$ help');
-      addOutput('Available commands:');
-      addOutput('  deploy [full|frontend|backend|python|hotfix] - Deploy application');
-      addOutput('  pm2 restart [all|backend|frontend|python] - Restart PM2 services');
-      addOutput('  pm2 status - Show PM2 service status');
-      addOutput('  nginx test - Test nginx configuration');
+      addOutput('');
+      addOutput('=== Available Commands ===');
+      addOutput('  health       - Check all services health');
+      addOutput('  git status   - Show git status');
+      addOutput('  pm2 status   - Show PM2 service status');
+      addOutput('  logs         - View system logs');
+      addOutput('  clear        - Clear terminal');
+      addOutput('');
+      addOutput('=== Deployment Commands ===');
+      addOutput('  deploy [full|frontend|backend|python]');
+      addOutput('  pm2 restart [all|backend|frontend|python]');
+      addOutput('  nginx test   - Test nginx config');
       addOutput('  nginx reload - Reload nginx');
-      addOutput('  git pull - Pull latest changes');
-      addOutput('  git status - Show git status');
-      addOutput('  logs [system|backend|frontend|python] - View logs');
-      addOutput('  metrics - Show system metrics');
-      addOutput('  clear - Clear terminal');
-      addOutput('  help - Show this help');
+      addOutput('  git pull     - Pull latest from git');
+      addOutput('');
     } else if (cmd === 'clear') {
       setOutput([]);
+    } else if (cmd === 'health') {
+      await handleLocalHealth();
+    } else if (cmd === 'status') {
+      await handlePM2Status();
     } else if (cmd.startsWith('deploy')) {
       const type = cmd.split(' ')[1] || 'full';
-      handleDeploy(type as any);
+      await handleDeploy(type as any);
     } else if (cmd.startsWith('pm2 restart')) {
       const service = cmd.split(' ')[2] || 'all';
-      handlePM2Restart(service as any);
-    } else if (cmd === 'pm2 status') {
-      handlePM2Status();
-    } else if (cmd === 'nginx test') {
-      handleNginxTest();
+      await handlePM2Restart(service as any);
+    } else if (cmd === 'pm2 status' || cmd === 'pm2') {
+      await handlePM2Status();
+    } else if (cmd === 'nginx test' || cmd === 'nginx') {
+      await handleNginxTest();
     } else if (cmd === 'nginx reload') {
-      handleNginxReload();
-    } else if (cmd === 'git pull') {
-      handleGitPull();
-    } else if (cmd === 'git status') {
-      handleGitStatus();
+      await handleNginxReload();
+    } else if (cmd === 'git pull' || cmd === 'pull') {
+      await handleGitPull();
+    } else if (cmd === 'git status' || cmd === 'git') {
+      await handleGitStatus();
     } else if (cmd.startsWith('logs')) {
       const type = cmd.split(' ')[1] || 'system';
-      if (type === 'system') handleViewSystemLogs(50);
-      else if (type === 'backend') handleViewPM2Logs('backend', 30);
-      else if (type === 'frontend') handleViewPM2Logs('frontend', 30);
-      else if (type === 'python') handleViewPM2Logs('python', 30);
-      else handleViewSystemLogs(50);
+      if (type === 'system') await handleViewSystemLogs(50);
+      else if (type === 'backend') await handleViewPM2Logs('backend', 30);
+      else if (type === 'frontend') await handleViewPM2Logs('frontend', 30);
+      else if (type === 'python') await handleViewPM2Logs('python', 30);
+      else if (type === 'errors') await handleViewErrorLogs();
+      else await handleViewSystemLogs(50);
     } else if (cmd === 'metrics') {
-      handleSystemMetrics();
+      await handleSystemMetrics();
+    } else if (cmd === 'history') {
+      await handleDeployHistory();
+    } else if (cmd === 'stats') {
+      await handleLogStats();
     } else {
-      addOutput(`$ ${cmd}`);
       addOutput(`Command not found: ${cmd}. Type 'help' for available commands.`);
     }
   };
@@ -1773,58 +1841,24 @@ function DeploymentModal({ isOpen, onOpenChange }: { isOpen: boolean; onOpenChan
   return (
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-4xl h-[85vh] p-0 gap-0 flex flex-col overflow-hidden [&>button]:hidden">
-        {/* Header with tabs - fixed layout */}
+        {/* Header - Simple title bar */}
         <div className="px-4 py-2 border-b bg-muted/30 flex-shrink-0">
-          <div className="flex items-center gap-4">
-            {/* Title */}
-            <div className="flex items-center gap-2 min-w-0">
-              <Terminal className="h-4 w-4 flex-shrink-0" />
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Terminal className="h-4 w-4" />
               <span className="font-semibold text-sm">DevOps Console</span>
               {(isRunning || deploying) && (
-                <Badge className="bg-green-500 text-[10px] flex-shrink-0">
+                <Badge className="bg-green-500 text-[10px]">
                   <Loader2 className="h-2.5 w-2.5 mr-1 animate-spin" />
                   Running
                 </Badge>
               )}
             </div>
-
-            {/* Tabs - centered */}
-            <div className="flex gap-1 flex-1 justify-center">
-              <Button
-                size="sm"
-                variant={activeTab === 'deploy' ? 'default' : 'ghost'}
-                onClick={() => setActiveTab('deploy')}
-                className="h-7 text-xs px-3"
-              >
-                <Rocket className="h-3 w-3 mr-1" />
-                Deploy
-              </Button>
-              <Button
-                size="sm"
-                variant={activeTab === 'logs' ? 'default' : 'ghost'}
-                onClick={() => setActiveTab('logs')}
-                className="h-7 text-xs px-3"
-              >
-                <Terminal className="h-3 w-3 mr-1" />
-                Logs
-              </Button>
-              <Button
-                size="sm"
-                variant={activeTab === 'metrics' ? 'default' : 'ghost'}
-                onClick={() => setActiveTab('metrics')}
-                className="h-7 text-xs px-3"
-              >
-                <Activity className="h-3 w-3 mr-1" />
-                Metrics
-              </Button>
-            </div>
-
-            {/* Close button - right side, separate from dialog's default */}
             <Button
               size="sm"
               variant="ghost"
               onClick={() => onOpenChange(false)}
-              className="h-7 w-7 p-0 flex-shrink-0"
+              className="h-7 w-7 p-0"
             >
               <X className="h-4 w-4" />
             </Button>
@@ -1839,8 +1873,8 @@ function DeploymentModal({ isOpen, onOpenChange }: { isOpen: boolean; onOpenChan
           {output.length === 0 ? (
             <div className="text-gray-500">
               <p># DevOps Console Ready</p>
-              <p># Use tabs above to switch between Deploy, Logs, and Metrics</p>
-              <p># Select an action from the buttons below</p>
+              <p># Type 'help' for commands or click buttons below</p>
+              <p># Quick: health, git, pm2, logs, deploy</p>
               <p>&nbsp;</p>
             </div>
           ) : (
@@ -1896,30 +1930,60 @@ function DeploymentModal({ isOpen, onOpenChange }: { isOpen: boolean; onOpenChan
           </form>
         </div>
 
-        {/* Action Buttons - Footer - Single row with scroll */}
+        {/* Footer - Tabs + Action Buttons */}
         <div className="border-t bg-muted/30 px-2 py-1.5 flex-shrink-0">
           <div className="flex items-center gap-1 overflow-x-auto scrollbar-hide">
+            {/* Tab Buttons - Left side */}
+            <div className="flex items-center gap-0.5 border-r pr-2 mr-2">
+              <Button
+                size="sm"
+                variant={activeTab === 'deploy' ? 'default' : 'ghost'}
+                onClick={() => setActiveTab('deploy')}
+                className="h-7 text-xs px-2"
+              >
+                <Rocket className="h-3 w-3 mr-1" />
+                Deploy
+              </Button>
+              <Button
+                size="sm"
+                variant={activeTab === 'logs' ? 'default' : 'ghost'}
+                onClick={() => setActiveTab('logs')}
+                className="h-7 text-xs px-2"
+              >
+                <Terminal className="h-3 w-3 mr-1" />
+                Logs
+              </Button>
+              <Button
+                size="sm"
+                variant={activeTab === 'metrics' ? 'default' : 'ghost'}
+                onClick={() => setActiveTab('metrics')}
+                className="h-7 text-xs px-2"
+              >
+                <Activity className="h-3 w-3 mr-1" />
+                Status
+              </Button>
+            </div>
+
+            {/* Action Buttons based on active tab */}
             {activeTab === 'deploy' && (
               <>
-                {/* Deploy Actions - Primary */}
-                <Button size="sm" onClick={() => handleDeploy('full')} disabled={isRunning || deploying} className="h-7 text-xs whitespace-nowrap" title="Full deployment: git pull + build + restart all">
+                <Button size="sm" variant="outline" onClick={() => handleDeploy('full')} disabled={isRunning || deploying} className="h-7 text-xs whitespace-nowrap" title="Full deployment: git pull + build + restart all">
                   <Rocket className="h-3 w-3 mr-1" />
-                  Full Deploy
+                  Full
                 </Button>
                 <Button size="sm" variant="outline" onClick={() => handleDeploy('frontend')} disabled={isRunning || deploying} className="h-7 text-xs whitespace-nowrap" title="Build and restart frontend only">
                   <Globe className="h-3 w-3 mr-1" />
-                  Frontend
+                  Front
                 </Button>
                 <Button size="sm" variant="outline" onClick={() => handleDeploy('backend')} disabled={isRunning || deploying} className="h-7 text-xs whitespace-nowrap" title="Restart backend only">
                   <Server className="h-3 w-3 mr-1" />
-                  Backend
+                  Back
                 </Button>
                 <Button size="sm" variant="outline" onClick={() => handleDeploy('python')} disabled={isRunning || deploying} className="h-7 text-xs whitespace-nowrap" title="Restart Python services">
                   <Code className="h-3 w-3 mr-1" />
-                  Python
+                  Py
                 </Button>
                 <div className="w-px h-5 bg-border mx-1" />
-                {/* Server Management - Secondary */}
                 <Button size="sm" variant="secondary" onClick={handleGitPull} disabled={isRunning || deploying} className="h-7 text-xs whitespace-nowrap" title="Pull latest from git">
                   <Download className="h-3 w-3 mr-1" />
                   Pull
@@ -1927,10 +1991,6 @@ function DeploymentModal({ isOpen, onOpenChange }: { isOpen: boolean; onOpenChan
                 <Button size="sm" variant="secondary" onClick={() => handlePM2Restart('all')} disabled={isRunning || deploying} className="h-7 text-xs whitespace-nowrap" title="Restart all PM2 services">
                   <RefreshCw className="h-3 w-3 mr-1" />
                   PM2
-                </Button>
-                <Button size="sm" variant="secondary" onClick={handleCacheClean} disabled={isRunning || deploying} className="h-7 text-xs whitespace-nowrap" title="Clear .next cache">
-                  <Trash2 className="h-3 w-3 mr-1" />
-                  Cache
                 </Button>
                 <Button size="sm" variant="secondary" onClick={handleNginxTest} disabled={isRunning || deploying} className="h-7 text-xs whitespace-nowrap" title="Test nginx config">
                   <Shield className="h-3 w-3 mr-1" />
@@ -1941,7 +2001,7 @@ function DeploymentModal({ isOpen, onOpenChange }: { isOpen: boolean; onOpenChan
 
             {activeTab === 'logs' && (
               <>
-                <Button size="sm" onClick={() => handleViewSystemLogs(50)} disabled={isRunning} className="h-7 text-xs whitespace-nowrap" title="View system logs">
+                <Button size="sm" variant="outline" onClick={() => handleViewSystemLogs(50)} disabled={isRunning} className="h-7 text-xs whitespace-nowrap" title="View system logs">
                   <Terminal className="h-3 w-3 mr-1" />
                   System
                 </Button>
@@ -1967,23 +2027,28 @@ function DeploymentModal({ isOpen, onOpenChange }: { isOpen: boolean; onOpenChan
 
             {activeTab === 'metrics' && (
               <>
-                <Button size="sm" onClick={handleSystemMetrics} disabled={isRunning} className="h-7 text-xs whitespace-nowrap" title="View CPU, RAM, Disk usage">
-                  <Activity className="h-3 w-3 mr-1" />
-                  System
-                </Button>
-                <Button size="sm" variant="outline" onClick={handlePM2Status} disabled={isRunning} className="h-7 text-xs whitespace-nowrap" title="View PM2 service status">
-                  <Server className="h-3 w-3 mr-1" />
-                  PM2
+                <Button size="sm" variant="outline" onClick={handleLocalHealth} disabled={isRunning} className="h-7 text-xs whitespace-nowrap" title="Check all services health">
+                  <CheckCircle2 className="h-3 w-3 mr-1" />
+                  Health
                 </Button>
                 <Button size="sm" variant="outline" onClick={handleGitStatus} disabled={isRunning} className="h-7 text-xs whitespace-nowrap" title="View git status">
                   <GitBranch className="h-3 w-3 mr-1" />
                   Git
                 </Button>
-                <Button size="sm" variant="outline" onClick={handleDeployHistory} disabled={isRunning} className="h-7 text-xs whitespace-nowrap" title="View deployment history">
+                <Button size="sm" variant="outline" onClick={handlePM2Status} disabled={isRunning} className="h-7 text-xs whitespace-nowrap" title="View PM2 service status">
+                  <Server className="h-3 w-3 mr-1" />
+                  PM2
+                </Button>
+                <div className="w-px h-5 bg-border mx-1" />
+                <Button size="sm" variant="secondary" onClick={handleSystemMetrics} disabled={isRunning} className="h-7 text-xs whitespace-nowrap" title="View CPU, RAM, Disk usage">
+                  <Activity className="h-3 w-3 mr-1" />
+                  Metrics
+                </Button>
+                <Button size="sm" variant="secondary" onClick={handleDeployHistory} disabled={isRunning} className="h-7 text-xs whitespace-nowrap" title="View deployment history">
                   <Rocket className="h-3 w-3 mr-1" />
                   History
                 </Button>
-                <Button size="sm" variant="outline" onClick={handleLogStats} disabled={isRunning} className="h-7 text-xs whitespace-nowrap" title="View log statistics">
+                <Button size="sm" variant="secondary" onClick={handleLogStats} disabled={isRunning} className="h-7 text-xs whitespace-nowrap" title="View log statistics">
                   <Activity className="h-3 w-3 mr-1" />
                   Stats
                 </Button>
