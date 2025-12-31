@@ -384,8 +384,42 @@ export default function ServicesPage() {
           );
           })}
           </div>
+        </div>
 
-          {/* Deployment - Compact */}
+        {/* Right Column - DevOps Tools (1/3) */}
+        <div className="space-y-4">
+          {/* Developer Tools */}
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm flex items-center gap-2">
+                <Bug className="h-4 w-4" />
+                Developer Tools
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              {/* Debug Mode */}
+              <div className="flex items-center justify-between gap-3">
+                <div className="flex-1 min-w-0">
+                  <Label className="text-xs font-medium block">Debug Mode</Label>
+                  <p className="text-[10px] text-muted-foreground">Console logging</p>
+                </div>
+                <DebugSettings />
+              </div>
+
+              {/* Console Button */}
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setConsoleOpen(true)}
+                className="w-full h-8 text-xs"
+              >
+                <Terminal className="h-3 w-3 mr-2" />
+                Open Console
+              </Button>
+            </CardContent>
+          </Card>
+
+          {/* Deployment */}
           <Card>
             <CardHeader className="pb-2">
               <CardTitle className="text-sm flex items-center gap-2">
@@ -394,51 +428,51 @@ export default function ServicesPage() {
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-3">
-              {/* Deploy Actions - Compact 2x2 grid */}
+              {/* Deploy Actions */}
               <div className="grid grid-cols-2 gap-2">
                 <Button
                   size="sm"
                   onClick={async () => {
                     try {
-                      toast.info('Starting full deploy...');
+                      toast.info('Full deploy...');
                       const result = await deploy('full');
-                      result?.success ? toast.success('Full deploy completed!') : toast.error(result?.error || 'Deploy failed');
+                      result?.success ? toast.success('Done!') : toast.error(result?.error || 'Failed');
                     } catch (e: any) { toast.error(e.message); }
                   }}
                   disabled={deploying}
-                  className="h-8 text-xs"
+                  className="h-7 text-[10px]"
                 >
                   {deploying ? <Loader2 className="h-3 w-3 mr-1 animate-spin" /> : <Rocket className="h-3 w-3 mr-1" />}
-                  Full Deploy
+                  Full
                 </Button>
                 <Button
                   size="sm"
                   variant="outline"
                   onClick={async () => {
                     try {
-                      toast.info('Hot fix deploying...');
+                      toast.info('Hot fix...');
                       const result = await deploy('hotfix');
-                      result?.success ? toast.success('Hot fix completed!') : toast.error(result?.error || 'Deploy failed');
+                      result?.success ? toast.success('Done!') : toast.error(result?.error || 'Failed');
                     } catch (e: any) { toast.error(e.message); }
                   }}
                   disabled={deploying}
-                  className="h-8 text-xs"
+                  className="h-7 text-[10px]"
                 >
                   <GitBranch className="h-3 w-3 mr-1" />
-                  Hot Fix
+                  HotFix
                 </Button>
                 <Button
                   size="sm"
                   variant="outline"
                   onClick={async () => {
                     try {
-                      toast.info('Building frontend...');
+                      toast.info('Frontend...');
                       const result = await deploy('frontend');
-                      result?.success ? toast.success('Frontend rebuilt!') : toast.error(result?.error || 'Build failed');
+                      result?.success ? toast.success('Done!') : toast.error(result?.error || 'Failed');
                     } catch (e: any) { toast.error(e.message); }
                   }}
                   disabled={deploying}
-                  className="h-8 text-xs"
+                  className="h-7 text-[10px]"
                 >
                   <Globe className="h-3 w-3 mr-1" />
                   Frontend
@@ -448,13 +482,13 @@ export default function ServicesPage() {
                   variant="outline"
                   onClick={async () => {
                     try {
-                      toast.info('Restarting backend...');
+                      toast.info('Backend...');
                       const result = await deploy('backend');
-                      result?.success ? toast.success('Backend restarted!') : toast.error(result?.error || 'Restart failed');
+                      result?.success ? toast.success('Done!') : toast.error(result?.error || 'Failed');
                     } catch (e: any) { toast.error(e.message); }
                   }}
                   disabled={deploying}
-                  className="h-8 text-xs"
+                  className="h-7 text-[10px]"
                 >
                   <Server className="h-3 w-3 mr-1" />
                   Backend
@@ -463,72 +497,20 @@ export default function ServicesPage() {
 
               {/* Quick Actions */}
               <div className="flex flex-wrap gap-1 pt-2 border-t">
-                <Button variant="ghost" size="sm" className="h-7 text-xs px-2" onClick={async () => { try { await restartService('all'); toast.success('All restarted'); } catch (e: any) { toast.error(e.message); } }}>
-                  <RefreshCw className="h-3 w-3 mr-1" />PM2 All
+                <Button variant="ghost" size="sm" className="h-6 text-[10px] px-2" onClick={async () => { try { await restartService('all'); toast.success('Restarted'); } catch (e: any) { toast.error(e.message); } }}>
+                  <RefreshCw className="h-2.5 w-2.5 mr-1" />PM2
                 </Button>
-                <Button variant="ghost" size="sm" className="h-7 text-xs px-2" onClick={async () => { try { const r = await testConfig(); r?.valid ? toast.success('Valid') : toast.error('Invalid'); } catch (e: any) { toast.error(e.message); } }} disabled={nginxLoading}>
-                  <CheckCircle2 className="h-3 w-3 mr-1" />Nginx Test
+                <Button variant="ghost" size="sm" className="h-6 text-[10px] px-2" onClick={async () => { try { const r = await testConfig(); r?.valid ? toast.success('OK') : toast.error('Invalid'); } catch (e: any) { toast.error(e.message); } }} disabled={nginxLoading}>
+                  <CheckCircle2 className="h-2.5 w-2.5 mr-1" />Nginx
                 </Button>
-                <Button variant="ghost" size="sm" className="h-7 text-xs px-2" onClick={async () => { try { await reloadNginx(); toast.success('Reloaded'); } catch (e: any) { toast.error(e.message); } }} disabled={nginxLoading}>
-                  <Globe className="h-3 w-3 mr-1" />Nginx Reload
+                <Button variant="ghost" size="sm" className="h-6 text-[10px] px-2" onClick={async () => { try { await reloadNginx(); toast.success('Reloaded'); } catch (e: any) { toast.error(e.message); } }} disabled={nginxLoading}>
+                  <Globe className="h-2.5 w-2.5 mr-1" />Reload
                 </Button>
               </div>
-
-              {/* PM2 Status Badges */}
-              {pm2Services.length > 0 && (
-                <div className="flex flex-wrap gap-1">
-                  {pm2Services.map((svc) => (
-                    <Badge
-                      key={svc.name}
-                      variant="outline"
-                      className={`text-[10px] cursor-pointer ${svc.status === 'online' ? 'border-green-500/50 text-green-600' : 'border-red-500/50 text-red-600'}`}
-                      onClick={() => { restartService(svc.name.includes('backend') ? 'backend' : svc.name.includes('frontend') ? 'frontend' : 'python'); toast.info(`Restarting ${svc.name}...`); }}
-                    >
-                      <span className={`w-1.5 h-1.5 rounded-full mr-1 ${svc.status === 'online' ? 'bg-green-500' : 'bg-red-500'}`} />
-                      {svc.name.replace('-backend', '-be').replace('-frontend', '-fe').replace('-python', '-py')}
-                    </Badge>
-                  ))}
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        </div>
-
-        {/* Right Column - Developer Tools (1/3) */}
-        <div className="space-y-4">
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm flex items-center gap-2">
-                <Bug className="h-4 w-4" />
-                Developer Tools
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              {/* Debug Mode */}
-              <div className="flex items-center justify-between gap-4 py-1">
-                <div className="flex-1 min-w-0">
-                  <Label className="text-xs font-medium block">Debug Mode</Label>
-                  <p className="text-[10px] text-muted-foreground mt-0.5">Console logging</p>
-                </div>
-                <div className="flex-shrink-0">
-                  <DebugSettings />
-                </div>
-              </div>
-
-              {/* Console Button */}
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setConsoleOpen(true)}
-                className="w-full h-9 text-xs"
-              >
-                <Terminal className="h-3.5 w-3.5 mr-2" />
-                Open Console
-              </Button>
             </CardContent>
           </Card>
 
-          {/* PM2 Quick Status */}
+          {/* PM2 Status */}
           {pm2Services.length > 0 && (
             <Card>
               <CardHeader className="pb-2">
@@ -543,10 +525,10 @@ export default function ServicesPage() {
               <CardContent className="pt-0">
                 <div className="space-y-1">
                   {pm2Services.map((svc) => (
-                    <div key={svc.name} className="flex items-center justify-between text-xs">
+                    <div key={svc.name} className="flex items-center justify-between text-[10px]">
                       <div className="flex items-center gap-1.5">
                         <span className={`w-1.5 h-1.5 rounded-full ${svc.status === 'online' ? 'bg-green-500' : 'bg-red-500'}`} />
-                        <span className="truncate max-w-[100px]">{svc.name}</span>
+                        <span className="truncate max-w-[90px]">{svc.name}</span>
                       </div>
                       <span className="text-muted-foreground">{svc.cpu}%</span>
                     </div>
