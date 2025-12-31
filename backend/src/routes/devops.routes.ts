@@ -219,41 +219,74 @@ router.post('/ssh/execute', async (req: Request, res: Response) => {
   const os = require('os');
   const { command } = req.body;
 
+  console.log(`[DevOps] SSH Execute request - Command: ${command?.substring(0, 100)}...`);
+
   if (!command) {
+    console.log('[DevOps] SSH Execute - No command provided');
     return res.status(400).json({ success: false, error: 'Command is required' });
   }
 
-  // Security: Block dangerous commands
-  const dangerousPatterns = [
-    /rm\s+-rf\s+\/(?!var\/www)/,  // rm -rf / (except /var/www)
-    /mkfs/,
-    /dd\s+if=/,
-    />\s*\/dev\//,
-    /chmod\s+777\s+\//,
-    /wget.*\|\s*sh/,
-    /curl.*\|\s*sh/
+  // Whitelist: Safe commands that should always be allowed
+  const safeCommandPatterns = [
+    /^tail\s+-n\s+\d+\s+\/root\/\.pm2\/logs\//,  // PM2 log reading
+    /^cat\s+\/root\/\.pm2\/logs\//,              // PM2 log cat
+    /^pm2\s+(list|jlist|status|logs)/,           // PM2 status commands
+    /^git\s+(status|log|branch|pull)/,           // Git read commands
+    /^df\s+-h/,                                   // Disk usage
+    /^free\s+-/,                                  // Memory usage
+    /^uptime/,                                    // Uptime
+    /^systemctl\s+status/,                        // Service status
+    /^nginx\s+-t/,                                // Nginx test config
   ];
 
-  for (const pattern of dangerousPatterns) {
-    if (pattern.test(command)) {
-      return res.status(403).json({
-        success: false,
-        error: 'Command blocked for security reasons'
-      });
+  // Check if command matches safe patterns (skip security check)
+  const isSafeCommand = safeCommandPatterns.some(pattern => pattern.test(command));
+
+  if (isSafeCommand) {
+    console.log('[DevOps] SSH Execute - Command whitelisted as safe');
+  } else {
+    // Security: Block dangerous commands (only for non-whitelisted commands)
+    const dangerousPatterns = [
+      /rm\s+-rf\s+\/(?!var\/www)/,  // rm -rf / (except /var/www)
+      /mkfs/,
+      /dd\s+if=/,
+      />\s*\/dev\//,
+      /chmod\s+777\s+\//,
+      /wget.*\|\s*sh/,
+      /curl.*\|\s*sh/
+    ];
+
+    for (const pattern of dangerousPatterns) {
+      if (pattern.test(command)) {
+        console.log(`[DevOps] SSH Execute - Command BLOCKED by pattern: ${pattern}`);
+        return res.status(403).json({
+          success: false,
+          error: 'Command blocked for security reasons'
+        });
+      }
     }
   }
 
   try {
     // First try Python service (for production/SSH)
+    console.log(`[DevOps] Trying Python service at ${DEVOPS_BASE}/ssh/execute`);
     const response = await axios.post(`${DEVOPS_BASE}/ssh/execute`, { command }, {
       timeout: 60000,
       headers: { 'X-API-Key': process.env.INTERNAL_API_KEY || '' }
     });
+    console.log('[DevOps] Python service responded successfully');
     res.json(response.data);
-  } catch (proxyError) {
+  } catch (proxyError: any) {
+    // Log the error from Python service
+    console.log(`[DevOps] Python service error: ${proxyError.code || proxyError.message}`);
+    if (proxyError.response) {
+      console.log(`[DevOps] Python response status: ${proxyError.response.status}`);
+    }
+
     // Fallback: Local execution (works in both dev and production)
     // This allows basic commands to work even without Python service
     const isWindows = os.platform() === 'win32';
+    console.log(`[DevOps] Falling back to local execution (platform: ${isWindows ? 'Windows' : 'Linux'})`);
 
     // Adapt command for platform
     let adaptedCommand = command;
@@ -269,6 +302,8 @@ router.post('/ssh/execute', async (req: Request, res: Response) => {
 
     try {
       // Execute locally as fallback
+      console.log(`[DevOps] Executing locally: ${adaptedCommand.substring(0, 80)}...`);
+
       const execOptions: any = {
         encoding: 'utf-8',
         timeout: 30000,
@@ -276,13 +311,16 @@ router.post('/ssh/execute', async (req: Request, res: Response) => {
         cwd: process.env.PROJECT_ROOT || process.cwd()
       };
 
-      // Use shell for Windows
-      if (isWindows) {
+      // Use shell for Linux commands
+      if (!isWindows) {
+        execOptions.shell = '/bin/bash';
+      } else {
         execOptions.shell = true;
       }
 
       const output = execSync(adaptedCommand, execOptions);
 
+      console.log(`[DevOps] Local execution successful, output length: ${output?.length || 0}`);
       res.json({
         success: true,
         output: output || '(no output)',
@@ -291,6 +329,7 @@ router.post('/ssh/execute', async (req: Request, res: Response) => {
       });
     } catch (execError: any) {
       // Command failed but executed
+      console.log(`[DevOps] Local execution failed: ${execError.message}`);
       res.json({
         success: false,
         output: execError.stdout || '',
