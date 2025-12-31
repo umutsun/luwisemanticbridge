@@ -1436,7 +1436,7 @@ function DevOpsCard() {
   );
 }
 
-// Copy Button Component
+// Copy Button Component - Navy blue glassmorphism style
 function CopyButton({ text }: { text: string }) {
   const [copied, setCopied] = useState(false);
 
@@ -1453,11 +1453,11 @@ function CopyButton({ text }: { text: string }) {
   return (
     <button
       onClick={handleCopy}
-      className="absolute top-2 right-2 p-1.5 rounded bg-[#2a2a2a] hover:bg-[#3a3a3a] text-gray-400 hover:text-gray-200 transition-colors z-10"
+      className="absolute top-2 right-2 p-1.5 rounded bg-[#1e3a5f]/60 hover:bg-cyan-600/50 text-cyan-300/70 hover:text-cyan-100 transition-colors z-20 backdrop-blur-sm border border-cyan-500/20"
       title="Copy to clipboard"
     >
       {copied ? (
-        <Check className="h-3.5 w-3.5 text-green-400" />
+        <Check className="h-3.5 w-3.5 text-emerald-400" />
       ) : (
         <Copy className="h-3.5 w-3.5" />
       )}
@@ -2000,22 +2000,129 @@ function DeploymentModal({ isOpen, onOpenChange }: { isOpen: boolean; onOpenChan
     }
   };
 
+  // Particles animation component
+  const ParticlesBackground = () => {
+    const canvasRef = useRef<HTMLCanvasElement>(null);
+
+    useEffect(() => {
+      const canvas = canvasRef.current;
+      if (!canvas) return;
+
+      const ctx = canvas.getContext('2d');
+      if (!ctx) return;
+
+      // Set canvas size
+      const resizeCanvas = () => {
+        canvas.width = canvas.offsetWidth;
+        canvas.height = canvas.offsetHeight;
+      };
+      resizeCanvas();
+
+      // Particle class
+      class Particle {
+        x: number;
+        y: number;
+        size: number;
+        speedX: number;
+        speedY: number;
+        opacity: number;
+
+        constructor() {
+          this.x = Math.random() * canvas!.width;
+          this.y = Math.random() * canvas!.height;
+          this.size = Math.random() * 2 + 0.5;
+          this.speedX = (Math.random() - 0.5) * 0.3;
+          this.speedY = (Math.random() - 0.5) * 0.3;
+          this.opacity = Math.random() * 0.5 + 0.1;
+        }
+
+        update() {
+          this.x += this.speedX;
+          this.y += this.speedY;
+
+          if (this.x < 0 || this.x > canvas!.width) this.speedX *= -1;
+          if (this.y < 0 || this.y > canvas!.height) this.speedY *= -1;
+        }
+
+        draw() {
+          ctx!.beginPath();
+          ctx!.arc(this.x, this.y, this.size, 0, Math.PI * 2);
+          ctx!.fillStyle = `rgba(100, 180, 255, ${this.opacity})`;
+          ctx!.fill();
+        }
+      }
+
+      // Create particles
+      const particles: Particle[] = [];
+      for (let i = 0; i < 50; i++) {
+        particles.push(new Particle());
+      }
+
+      // Animation loop
+      let animationId: number;
+      const animate = () => {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+        // Draw connections
+        particles.forEach((p1, i) => {
+          particles.slice(i + 1).forEach(p2 => {
+            const dx = p1.x - p2.x;
+            const dy = p1.y - p2.y;
+            const distance = Math.sqrt(dx * dx + dy * dy);
+
+            if (distance < 100) {
+              ctx.beginPath();
+              ctx.moveTo(p1.x, p1.y);
+              ctx.lineTo(p2.x, p2.y);
+              ctx.strokeStyle = `rgba(100, 180, 255, ${0.1 * (1 - distance / 100)})`;
+              ctx.lineWidth = 0.5;
+              ctx.stroke();
+            }
+          });
+        });
+
+        // Update and draw particles
+        particles.forEach(p => {
+          p.update();
+          p.draw();
+        });
+
+        animationId = requestAnimationFrame(animate);
+      };
+
+      animate();
+
+      // Cleanup
+      return () => {
+        cancelAnimationFrame(animationId);
+      };
+    }, []);
+
+    return (
+      <canvas
+        ref={canvasRef}
+        className="absolute inset-0 w-full h-full pointer-events-none"
+        style={{ opacity: 0.6 }}
+      />
+    );
+  };
+
   return (
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-4xl h-[85vh] p-0 gap-0 flex flex-col overflow-hidden [&>button]:hidden">
-        {/* Header - Simple title bar with tenant info */}
-        <div className="px-4 py-2 border-b bg-muted/30 flex-shrink-0">
+      <DialogContent className="max-w-4xl h-[85vh] p-0 gap-0 flex flex-col overflow-hidden [&>button]:hidden bg-gradient-to-br from-[#0a1628] via-[#0d1f3c] to-[#0a1628] border border-[#1e3a5f]/50 shadow-2xl shadow-blue-900/20">
+        {/* Header - Glassmorphism style with navy blue */}
+        <div className="px-4 py-2 border-b border-[#1e3a5f]/50 bg-[#0d1f3c]/80 backdrop-blur-md flex-shrink-0">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <Terminal className="h-4 w-4" />
-              <span className="font-semibold text-sm">DevOps Console</span>
+              <Terminal className="h-4 w-4 text-cyan-400" />
+              <span className="font-semibold text-sm text-cyan-100">DevOps Console</span>
               {tenantConfig && (
-                <Badge variant="outline" className="text-[10px] text-muted-foreground">
+                <Badge variant="outline" className="text-[10px] text-cyan-300/70 border-cyan-500/30 bg-cyan-500/10">
                   {tenantConfig.appName} ({tenantConfig.environment})
                 </Badge>
               )}
               {(isRunning || deploying) && (
-                <Badge className="bg-green-500 text-[10px]">
+                <Badge className="bg-emerald-500/80 text-[10px] border-0">
                   <Loader2 className="h-2.5 w-2.5 mr-1 animate-spin" />
                   Running
                 </Badge>
@@ -2025,15 +2132,18 @@ function DeploymentModal({ isOpen, onOpenChange }: { isOpen: boolean; onOpenChan
               size="sm"
               variant="ghost"
               onClick={() => onOpenChange(false)}
-              className="h-7 w-7 p-0"
+              className="h-7 w-7 p-0 text-cyan-300 hover:text-white hover:bg-cyan-500/20"
             >
               <X className="h-4 w-4" />
             </Button>
           </div>
         </div>
 
-        {/* Terminal Output - Main Body */}
-        <div className="flex-1 relative bg-[#1a1a1a] overflow-hidden">
+        {/* Terminal Output - Navy blue glassmorphism with particles */}
+        <div className="flex-1 relative bg-gradient-to-b from-[#0a1628]/95 to-[#061018]/98 overflow-hidden">
+          {/* Particles Animation */}
+          <ParticlesBackground />
+
           {/* Copy Button - Inline at top right */}
           {output.length > 0 && (
             <CopyButton text={output.join('\n')} />
@@ -2042,14 +2152,14 @@ function DeploymentModal({ isOpen, onOpenChange }: { isOpen: boolean; onOpenChan
           {/* Scrollable Output with custom scrollbar */}
           <div
             ref={outputRef}
-            className="h-full p-2 overflow-y-scroll font-mono text-[8px] leading-tight"
+            className="h-full p-3 overflow-y-scroll font-mono text-[11px] leading-relaxed relative z-10"
             style={{
               scrollbarWidth: 'thin',
-              scrollbarColor: '#555 #2a2a2a'
+              scrollbarColor: '#1e3a5f #0a1628'
             }}
           >
             {output.length === 0 ? (
-              <div className="text-gray-500">
+              <div className="text-cyan-500/60">
                 <p># DevOps Console Ready {tenantConfig ? `[${tenantConfig.tenantId}]` : ''}</p>
                 <p># Type 'help' for commands or click buttons below</p>
                 <p># Quick: info, health, git, pm2, logs, metrics, deploy</p>
@@ -2060,15 +2170,15 @@ function DeploymentModal({ isOpen, onOpenChange }: { isOpen: boolean; onOpenChan
                 <div
                   key={i}
                   className={`${
-                    line.includes('$') ? 'text-cyan-400 font-semibold mt-2' :
-                    line.includes('OK') || line.includes('✓') ? 'text-green-400' :
-                    line.includes('FAILED') || line.includes('ERROR') || line.includes('✗') ? 'text-red-400' :
-                    line.includes('---') ? 'text-blue-400 font-semibold' :
-                    line.includes('Commit:') || line.includes('completed') ? 'text-yellow-400' :
-                    line.includes('[WARN]') || line.includes('warn') ? 'text-yellow-400' :
-                    line.includes('[ERROR]') || line.includes('error') ? 'text-red-400' :
-                    line.includes('[INFO]') || line.includes('info') ? 'text-blue-300' :
-                    'text-gray-300'
+                    line.includes('$') ? 'text-cyan-300 font-semibold mt-2' :
+                    line.includes('OK') || line.includes('✓') ? 'text-emerald-400' :
+                    line.includes('FAILED') || line.includes('ERROR') || line.includes('✗') ? 'text-rose-400' :
+                    line.includes('---') ? 'text-blue-300 font-semibold' :
+                    line.includes('Commit:') || line.includes('completed') ? 'text-amber-300' :
+                    line.includes('[WARN]') || line.includes('warn') ? 'text-amber-400' :
+                    line.includes('[ERROR]') || line.includes('error') ? 'text-rose-400' :
+                    line.includes('[INFO]') || line.includes('info') ? 'text-sky-300' :
+                    'text-slate-300'
                   }`}
                 >
                   {line}
@@ -2076,7 +2186,7 @@ function DeploymentModal({ isOpen, onOpenChange }: { isOpen: boolean; onOpenChan
               ))
             )}
             {(isRunning || deploying) && (
-              <div className="flex items-center gap-2 text-gray-400 mt-1">
+              <div className="flex items-center gap-2 text-cyan-400/70 mt-1">
                 <Loader2 className="h-3 w-3 animate-spin" />
                 <span>Processing...</span>
               </div>
@@ -2084,8 +2194,8 @@ function DeploymentModal({ isOpen, onOpenChange }: { isOpen: boolean; onOpenChan
           </div>
         </div>
 
-        {/* Command Input - Prompt Bar */}
-        <div className="border-t bg-[#1a1a1a] px-3 py-2 flex-shrink-0">
+        {/* Command Input - Prompt Bar with glassmorphism */}
+        <div className="border-t border-[#1e3a5f]/50 bg-[#0d1f3c]/60 backdrop-blur-sm px-3 py-2 flex-shrink-0">
           <form onSubmit={handleCommandSubmit} className="flex items-center gap-2">
             <span className="text-cyan-400 font-mono text-sm">$</span>
             <Input
@@ -2094,7 +2204,7 @@ function DeploymentModal({ isOpen, onOpenChange }: { isOpen: boolean; onOpenChan
               onChange={(e) => setCommandInput(e.target.value)}
               placeholder="Type a command... (help for list)"
               disabled={isRunning || deploying}
-              className="flex-1 h-8 bg-transparent border-none text-gray-200 font-mono text-sm placeholder:text-gray-600 focus-visible:ring-0 focus-visible:ring-offset-0"
+              className="flex-1 h-8 bg-transparent border-none text-cyan-100 font-mono text-sm placeholder:text-cyan-600/50 focus-visible:ring-0 focus-visible:ring-offset-0"
               autoComplete="off"
               spellCheck={false}
             />
@@ -2102,41 +2212,41 @@ function DeploymentModal({ isOpen, onOpenChange }: { isOpen: boolean; onOpenChan
               type="submit"
               size="sm"
               disabled={isRunning || deploying || !commandInput.trim()}
-              className="h-7 text-xs"
+              className="h-7 text-xs bg-cyan-600 hover:bg-cyan-500 text-white border-0"
             >
               Run
             </Button>
           </form>
         </div>
 
-        {/* Footer - Tabs + Action Buttons */}
-        <div className="border-t bg-muted/30 px-2 py-1.5 flex-shrink-0">
+        {/* Footer - Tabs + Action Buttons with glassmorphism */}
+        <div className="border-t border-[#1e3a5f]/50 bg-[#0d1f3c]/80 backdrop-blur-md px-2 py-1.5 flex-shrink-0">
           <div className="flex items-center gap-1 overflow-x-auto scrollbar-hide">
             {/* Tab Buttons - Left side */}
-            <div className="flex items-center gap-0.5 border-r pr-2 mr-2">
+            <div className="flex items-center gap-0.5 border-r border-[#1e3a5f]/50 pr-2 mr-2">
               <Button
                 size="sm"
-                variant={activeTab === 'metrics' ? 'default' : 'ghost'}
+                variant="ghost"
                 onClick={() => setActiveTab('metrics')}
-                className="h-7 text-xs px-2"
+                className={`h-7 text-xs px-2 ${activeTab === 'metrics' ? 'bg-cyan-600/80 text-white hover:bg-cyan-500' : 'text-cyan-300/80 hover:text-cyan-100 hover:bg-cyan-600/30'}`}
               >
                 <Activity className="h-3 w-3 mr-1" />
                 Status
               </Button>
               <Button
                 size="sm"
-                variant={activeTab === 'logs' ? 'default' : 'ghost'}
+                variant="ghost"
                 onClick={() => setActiveTab('logs')}
-                className="h-7 text-xs px-2"
+                className={`h-7 text-xs px-2 ${activeTab === 'logs' ? 'bg-cyan-600/80 text-white hover:bg-cyan-500' : 'text-cyan-300/80 hover:text-cyan-100 hover:bg-cyan-600/30'}`}
               >
                 <Terminal className="h-3 w-3 mr-1" />
                 Logs
               </Button>
               <Button
                 size="sm"
-                variant={activeTab === 'deploy' ? 'default' : 'ghost'}
+                variant="ghost"
                 onClick={() => setActiveTab('deploy')}
-                className="h-7 text-xs px-2"
+                className={`h-7 text-xs px-2 ${activeTab === 'deploy' ? 'bg-cyan-600/80 text-white hover:bg-cyan-500' : 'text-cyan-300/80 hover:text-cyan-100 hover:bg-cyan-600/30'}`}
               >
                 <Rocket className="h-3 w-3 mr-1" />
                 Deploy
@@ -2146,32 +2256,32 @@ function DeploymentModal({ isOpen, onOpenChange }: { isOpen: boolean; onOpenChan
             {/* Action Buttons based on active tab */}
             {activeTab === 'deploy' && (
               <>
-                <Button size="sm" variant="outline" onClick={() => handleDeploy('full')} disabled={isRunning || deploying} className="h-7 text-xs whitespace-nowrap" title="Full deployment: git pull + build + restart all">
+                <Button size="sm" variant="ghost" onClick={() => handleDeploy('full')} disabled={isRunning || deploying} className="h-7 text-xs whitespace-nowrap text-cyan-200 border border-cyan-500/30 bg-cyan-500/10 hover:bg-cyan-500/30 hover:text-white" title="Full deployment: git pull + build + restart all">
                   <Rocket className="h-3 w-3 mr-1" />
                   Full
                 </Button>
-                <Button size="sm" variant="outline" onClick={() => handleDeploy('frontend')} disabled={isRunning || deploying} className="h-7 text-xs whitespace-nowrap" title="Build and restart frontend only">
+                <Button size="sm" variant="ghost" onClick={() => handleDeploy('frontend')} disabled={isRunning || deploying} className="h-7 text-xs whitespace-nowrap text-cyan-200 border border-cyan-500/30 bg-cyan-500/10 hover:bg-cyan-500/30 hover:text-white" title="Build and restart frontend only">
                   <Globe className="h-3 w-3 mr-1" />
                   Front
                 </Button>
-                <Button size="sm" variant="outline" onClick={() => handleDeploy('backend')} disabled={isRunning || deploying} className="h-7 text-xs whitespace-nowrap" title="Restart backend only">
+                <Button size="sm" variant="ghost" onClick={() => handleDeploy('backend')} disabled={isRunning || deploying} className="h-7 text-xs whitespace-nowrap text-cyan-200 border border-cyan-500/30 bg-cyan-500/10 hover:bg-cyan-500/30 hover:text-white" title="Restart backend only">
                   <Server className="h-3 w-3 mr-1" />
                   Back
                 </Button>
-                <Button size="sm" variant="outline" onClick={() => handleDeploy('python')} disabled={isRunning || deploying} className="h-7 text-xs whitespace-nowrap" title="Restart Python services">
+                <Button size="sm" variant="ghost" onClick={() => handleDeploy('python')} disabled={isRunning || deploying} className="h-7 text-xs whitespace-nowrap text-cyan-200 border border-cyan-500/30 bg-cyan-500/10 hover:bg-cyan-500/30 hover:text-white" title="Restart Python services">
                   <Code className="h-3 w-3 mr-1" />
                   Py
                 </Button>
-                <div className="w-px h-5 bg-border mx-1" />
-                <Button size="sm" variant="secondary" onClick={handleGitPull} disabled={isRunning || deploying} className="h-7 text-xs whitespace-nowrap" title="Pull latest from git">
+                <div className="w-px h-5 bg-[#1e3a5f]/50 mx-1" />
+                <Button size="sm" variant="ghost" onClick={handleGitPull} disabled={isRunning || deploying} className="h-7 text-xs whitespace-nowrap text-slate-300 hover:text-cyan-200 hover:bg-[#1e3a5f]/50" title="Pull latest from git">
                   <Download className="h-3 w-3 mr-1" />
                   Pull
                 </Button>
-                <Button size="sm" variant="secondary" onClick={() => handlePM2Restart('all')} disabled={isRunning || deploying} className="h-7 text-xs whitespace-nowrap" title="Restart all PM2 services">
+                <Button size="sm" variant="ghost" onClick={() => handlePM2Restart('all')} disabled={isRunning || deploying} className="h-7 text-xs whitespace-nowrap text-slate-300 hover:text-cyan-200 hover:bg-[#1e3a5f]/50" title="Restart all PM2 services">
                   <RefreshCw className="h-3 w-3 mr-1" />
                   PM2
                 </Button>
-                <Button size="sm" variant="secondary" onClick={handleNginxTest} disabled={isRunning || deploying} className="h-7 text-xs whitespace-nowrap" title="Test nginx config">
+                <Button size="sm" variant="ghost" onClick={handleNginxTest} disabled={isRunning || deploying} className="h-7 text-xs whitespace-nowrap text-slate-300 hover:text-cyan-200 hover:bg-[#1e3a5f]/50" title="Test nginx config">
                   <Shield className="h-3 w-3 mr-1" />
                   Nginx
                 </Button>
@@ -2180,24 +2290,24 @@ function DeploymentModal({ isOpen, onOpenChange }: { isOpen: boolean; onOpenChan
 
             {activeTab === 'logs' && (
               <>
-                <Button size="sm" variant="outline" onClick={() => handleViewSystemLogs(50)} disabled={isRunning} className="h-7 text-xs whitespace-nowrap" title="View system logs">
+                <Button size="sm" variant="ghost" onClick={() => handleViewSystemLogs(50)} disabled={isRunning} className="h-7 text-xs whitespace-nowrap text-cyan-200 border border-cyan-500/30 bg-cyan-500/10 hover:bg-cyan-500/30 hover:text-white" title="View system logs">
                   <Terminal className="h-3 w-3 mr-1" />
                   System
                 </Button>
-                <Button size="sm" variant="outline" onClick={handleViewErrorLogs} disabled={isRunning} className="h-7 text-xs whitespace-nowrap" title="View error logs only">
+                <Button size="sm" variant="ghost" onClick={handleViewErrorLogs} disabled={isRunning} className="h-7 text-xs whitespace-nowrap text-cyan-200 border border-cyan-500/30 bg-cyan-500/10 hover:bg-cyan-500/30 hover:text-white" title="View error logs only">
                   <XCircle className="h-3 w-3 mr-1" />
                   Errors
                 </Button>
-                <div className="w-px h-5 bg-border mx-1" />
-                <Button size="sm" variant="secondary" onClick={() => handleViewPM2Logs('backend', 30)} disabled={isRunning} className="h-7 text-xs whitespace-nowrap" title="View backend PM2 logs">
+                <div className="w-px h-5 bg-[#1e3a5f]/50 mx-1" />
+                <Button size="sm" variant="ghost" onClick={() => handleViewPM2Logs('backend', 30)} disabled={isRunning} className="h-7 text-xs whitespace-nowrap text-slate-300 hover:text-cyan-200 hover:bg-[#1e3a5f]/50" title="View backend PM2 logs">
                   <Server className="h-3 w-3 mr-1" />
                   Backend
                 </Button>
-                <Button size="sm" variant="secondary" onClick={() => handleViewPM2Logs('frontend', 30)} disabled={isRunning} className="h-7 text-xs whitespace-nowrap" title="View frontend PM2 logs">
+                <Button size="sm" variant="ghost" onClick={() => handleViewPM2Logs('frontend', 30)} disabled={isRunning} className="h-7 text-xs whitespace-nowrap text-slate-300 hover:text-cyan-200 hover:bg-[#1e3a5f]/50" title="View frontend PM2 logs">
                   <Globe className="h-3 w-3 mr-1" />
                   Frontend
                 </Button>
-                <Button size="sm" variant="secondary" onClick={() => handleViewPM2Logs('python', 30)} disabled={isRunning} className="h-7 text-xs whitespace-nowrap" title="View Python PM2 logs">
+                <Button size="sm" variant="ghost" onClick={() => handleViewPM2Logs('python', 30)} disabled={isRunning} className="h-7 text-xs whitespace-nowrap text-slate-300 hover:text-cyan-200 hover:bg-[#1e3a5f]/50" title="View Python PM2 logs">
                   <Code className="h-3 w-3 mr-1" />
                   Python
                 </Button>
@@ -2206,28 +2316,28 @@ function DeploymentModal({ isOpen, onOpenChange }: { isOpen: boolean; onOpenChan
 
             {activeTab === 'metrics' && (
               <>
-                <Button size="sm" variant="outline" onClick={handleLocalHealth} disabled={isRunning} className="h-7 text-xs whitespace-nowrap" title="Check all services health">
+                <Button size="sm" variant="ghost" onClick={handleLocalHealth} disabled={isRunning} className="h-7 text-xs whitespace-nowrap text-cyan-200 border border-cyan-500/30 bg-cyan-500/10 hover:bg-cyan-500/30 hover:text-white" title="Check all services health">
                   <CheckCircle2 className="h-3 w-3 mr-1" />
                   Health
                 </Button>
-                <Button size="sm" variant="outline" onClick={handleGitStatus} disabled={isRunning} className="h-7 text-xs whitespace-nowrap" title="View git status">
+                <Button size="sm" variant="ghost" onClick={handleGitStatus} disabled={isRunning} className="h-7 text-xs whitespace-nowrap text-cyan-200 border border-cyan-500/30 bg-cyan-500/10 hover:bg-cyan-500/30 hover:text-white" title="View git status">
                   <GitBranch className="h-3 w-3 mr-1" />
                   Git
                 </Button>
-                <Button size="sm" variant="outline" onClick={handlePM2Status} disabled={isRunning} className="h-7 text-xs whitespace-nowrap" title="View PM2 service status">
+                <Button size="sm" variant="ghost" onClick={handlePM2Status} disabled={isRunning} className="h-7 text-xs whitespace-nowrap text-cyan-200 border border-cyan-500/30 bg-cyan-500/10 hover:bg-cyan-500/30 hover:text-white" title="View PM2 service status">
                   <Server className="h-3 w-3 mr-1" />
                   PM2
                 </Button>
-                <div className="w-px h-5 bg-border mx-1" />
-                <Button size="sm" variant="secondary" onClick={handleSystemMetrics} disabled={isRunning} className="h-7 text-xs whitespace-nowrap" title="View CPU, RAM, Disk usage">
+                <div className="w-px h-5 bg-[#1e3a5f]/50 mx-1" />
+                <Button size="sm" variant="ghost" onClick={handleSystemMetrics} disabled={isRunning} className="h-7 text-xs whitespace-nowrap text-slate-300 hover:text-cyan-200 hover:bg-[#1e3a5f]/50" title="View CPU, RAM, Disk usage">
                   <Activity className="h-3 w-3 mr-1" />
                   Metrics
                 </Button>
-                <Button size="sm" variant="secondary" onClick={handleDeployHistory} disabled={isRunning} className="h-7 text-xs whitespace-nowrap" title="View deployment history">
+                <Button size="sm" variant="ghost" onClick={handleDeployHistory} disabled={isRunning} className="h-7 text-xs whitespace-nowrap text-slate-300 hover:text-cyan-200 hover:bg-[#1e3a5f]/50" title="View deployment history">
                   <Rocket className="h-3 w-3 mr-1" />
                   History
                 </Button>
-                <Button size="sm" variant="secondary" onClick={handleLogStats} disabled={isRunning} className="h-7 text-xs whitespace-nowrap" title="View log statistics">
+                <Button size="sm" variant="ghost" onClick={handleLogStats} disabled={isRunning} className="h-7 text-xs whitespace-nowrap text-slate-300 hover:text-cyan-200 hover:bg-[#1e3a5f]/50" title="View log statistics">
                   <Activity className="h-3 w-3 mr-1" />
                   Stats
                 </Button>
@@ -2236,7 +2346,7 @@ function DeploymentModal({ isOpen, onOpenChange }: { isOpen: boolean; onOpenChan
 
             {/* Clear button - always visible */}
             <div className="flex-1" />
-            <Button size="sm" variant="ghost" onClick={() => setOutput([])} className="h-7 text-xs whitespace-nowrap">
+            <Button size="sm" variant="ghost" onClick={() => setOutput([])} className="h-7 text-xs whitespace-nowrap text-slate-400 hover:text-cyan-200 hover:bg-[#1e3a5f]/50">
               Clear
             </Button>
           </div>
