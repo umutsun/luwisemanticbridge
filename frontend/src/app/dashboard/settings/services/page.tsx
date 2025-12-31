@@ -1482,7 +1482,7 @@ interface TenantConfig {
 function DeploymentModal({ isOpen, onOpenChange }: { isOpen: boolean; onOpenChange: (open: boolean) => void }) {
   const [output, setOutput] = useState<string[]>([]);
   const [isRunning, setIsRunning] = useState(false);
-  const [activeTab, setActiveTab] = useState<'deploy' | 'logs' | 'metrics'>('deploy');
+  const [activeTab, setActiveTab] = useState<'deploy' | 'logs' | 'metrics'>('metrics');
   const [commandInput, setCommandInput] = useState('');
   const [tenantConfig, setTenantConfig] = useState<TenantConfig | null>(null);
   const { deploy, deploying } = useSelfDeploy();
@@ -1832,29 +1832,21 @@ function DeploymentModal({ isOpen, onOpenChange }: { isOpen: boolean; onOpenChan
       addOutput('✗ Backend API: Error connecting');
     }
 
-    // Check Python service
-    try {
-      const pythonRes = await fetch('/api/python/health');
-      if (pythonRes.ok) {
-        addOutput('✓ Python Service: OK');
-      } else {
-        addOutput('✗ Python Service: Not responding');
-      }
-    } catch {
-      addOutput('✗ Python Service: Error connecting');
-    }
-
-    // Check DevOps service
+    // Check DevOps service (includes Python status)
     try {
       const devopsRes = await fetch('/api/v2/devops/health');
       if (devopsRes.ok) {
         const data = await devopsRes.json();
         addOutput(`✓ DevOps Service: ${data.status || 'OK'}`);
-        if (data.ssh_configured !== undefined) {
-          addOutput(`  SSH: ${data.ssh_configured ? 'Configured' : 'Not configured'}`);
+        // Python status from DevOps health check
+        if (data.python_service === 'online') {
+          addOutput('✓ Python Service: OK');
+        } else {
+          addOutput('✗ Python Service: Offline');
         }
       } else {
         addOutput('✗ DevOps Service: Not responding');
+        addOutput('✗ Python Service: Unknown');
       }
     } catch {
       addOutput('✗ DevOps Service: Error connecting');
@@ -2050,7 +2042,7 @@ function DeploymentModal({ isOpen, onOpenChange }: { isOpen: boolean; onOpenChan
           {/* Scrollable Output with custom scrollbar */}
           <div
             ref={outputRef}
-            className="h-full p-2 overflow-y-scroll font-mono text-[9px] leading-snug"
+            className="h-full p-2 overflow-y-scroll font-mono text-[8px] leading-tight"
             style={{
               scrollbarWidth: 'thin',
               scrollbarColor: '#555 #2a2a2a'
@@ -2124,12 +2116,12 @@ function DeploymentModal({ isOpen, onOpenChange }: { isOpen: boolean; onOpenChan
             <div className="flex items-center gap-0.5 border-r pr-2 mr-2">
               <Button
                 size="sm"
-                variant={activeTab === 'deploy' ? 'default' : 'ghost'}
-                onClick={() => setActiveTab('deploy')}
+                variant={activeTab === 'metrics' ? 'default' : 'ghost'}
+                onClick={() => setActiveTab('metrics')}
                 className="h-7 text-xs px-2"
               >
-                <Rocket className="h-3 w-3 mr-1" />
-                Deploy
+                <Activity className="h-3 w-3 mr-1" />
+                Status
               </Button>
               <Button
                 size="sm"
@@ -2142,12 +2134,12 @@ function DeploymentModal({ isOpen, onOpenChange }: { isOpen: boolean; onOpenChan
               </Button>
               <Button
                 size="sm"
-                variant={activeTab === 'metrics' ? 'default' : 'ghost'}
-                onClick={() => setActiveTab('metrics')}
+                variant={activeTab === 'deploy' ? 'default' : 'ghost'}
+                onClick={() => setActiveTab('deploy')}
                 className="h-7 text-xs px-2"
               >
-                <Activity className="h-3 w-3 mr-1" />
-                Status
+                <Rocket className="h-3 w-3 mr-1" />
+                Deploy
               </Button>
             </div>
 

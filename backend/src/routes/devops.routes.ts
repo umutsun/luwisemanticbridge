@@ -163,10 +163,26 @@ router.get('/status', async (req: Request, res: Response) => {
 
 /**
  * GET /api/v2/devops/health
- * DevOps service health check
+ * DevOps service health check - checks both local and Python service
  */
 router.get('/health', async (req: Request, res: Response) => {
-  await proxyToPython(req, res, '/health', 'GET');
+  const pythonUrl = process.env.PYTHON_SERVICE_URL || 'http://localhost:8003';
+
+  let pythonHealthy = false;
+  try {
+    const pythonRes = await axios.get(`${pythonUrl}/health`, { timeout: 3000 });
+    pythonHealthy = pythonRes.status === 200;
+  } catch {
+    pythonHealthy = false;
+  }
+
+  res.json({
+    status: 'ok',
+    python_service: pythonHealthy ? 'online' : 'offline',
+    python_url: pythonUrl,
+    tenant_id: process.env.TENANT_ID || 'lsemb',
+    timestamp: new Date().toISOString()
+  });
 });
 
 // ==========================================
