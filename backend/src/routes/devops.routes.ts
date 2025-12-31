@@ -63,6 +63,101 @@ async function proxyToPython(
 }
 
 // ==========================================
+// System Status (Local - No SSH Required)
+// ==========================================
+
+/**
+ * GET /api/v2/devops/status
+ * Get local system status (git info, last deploy time)
+ * This endpoint works without SSH configuration
+ */
+router.get('/status', async (req: Request, res: Response) => {
+  const { execSync } = require('child_process');
+  const path = require('path');
+
+  try {
+    // Get project root (backend/../)
+    const projectRoot = path.resolve(__dirname, '../../..');
+
+    // Get git info
+    let branch = 'unknown';
+    let commitHash = 'unknown';
+    let gitStatus: 'uptodate' | 'behind' | 'ahead' | 'unknown' = 'unknown';
+
+    try {
+      branch = execSync('git rev-parse --abbrev-ref HEAD', { cwd: projectRoot, encoding: 'utf-8' }).trim();
+      commitHash = execSync('git rev-parse HEAD', { cwd: projectRoot, encoding: 'utf-8' }).trim();
+
+      // Try to determine if ahead/behind (requires fetch first, may fail without network)
+      try {
+        execSync('git fetch origin --dry-run 2>&1', { cwd: projectRoot, encoding: 'utf-8', timeout: 5000 });
+        const status = execSync('git status -sb', { cwd: projectRoot, encoding: 'utf-8' });
+        if (status.includes('[ahead')) {
+          gitStatus = 'ahead';
+        } else if (status.includes('[behind')) {
+          gitStatus = 'behind';
+        } else if (!status.includes('[')) {
+          gitStatus = 'uptodate';
+        }
+      } catch {
+        // Network unavailable or timeout, check local status
+        const localStatus = execSync('git status -sb', { cwd: projectRoot, encoding: 'utf-8' });
+        if (localStatus.includes('[ahead')) {
+          gitStatus = 'ahead';
+        } else if (localStatus.includes('[behind')) {
+          gitStatus = 'behind';
+        } else {
+          gitStatus = 'uptodate'; // Assume up to date if no tracking info
+        }
+      }
+    } catch (gitError) {
+      console.error('[DevOps] Git status error:', gitError);
+    }
+
+    // Get last deploy time from deployment history (if available)
+    let lastDeploy: string | null = null;
+    try {
+      // Try to get from Python service
+      const tenantId = process.env.TENANT_ID || 'default';
+      const response = await axios.get(`${DEVOPS_BASE}/deployments/${tenantId}?limit=1`, {
+        timeout: 3000,
+        headers: { 'X-API-Key': process.env.INTERNAL_API_KEY || '' }
+      });
+      if (response.data?.deployments?.length > 0) {
+        lastDeploy = response.data.deployments[0].started_at || response.data.deployments[0].completed_at;
+      }
+    } catch {
+      // Python service unavailable, use git commit time as fallback
+      try {
+        const commitTime = execSync('git log -1 --format=%ci', { cwd: projectRoot, encoding: 'utf-8' }).trim();
+        lastDeploy = new Date(commitTime).toISOString();
+      } catch {
+        lastDeploy = null;
+      }
+    }
+
+    res.json({
+      success: true,
+      branch,
+      commitHash,
+      gitStatus,
+      lastDeploy,
+      tenantId: process.env.TENANT_ID || 'lsemb'
+    });
+  } catch (error) {
+    console.error('[DevOps] Status error:', error);
+    res.json({
+      success: false,
+      branch: 'unknown',
+      commitHash: 'unknown',
+      gitStatus: 'unknown',
+      lastDeploy: null,
+      error: String(error)
+    });
+  }
+});
+
+// ==========================================
 // Health Check
 // ==========================================
 

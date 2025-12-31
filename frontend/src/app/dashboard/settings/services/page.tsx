@@ -263,11 +263,9 @@ export default function ServicesPage() {
           return (
             <Card
               key={service.name}
-              className={`relative overflow-hidden transition-all hover:shadow-md cursor-pointer flex flex-col
+              className={`relative overflow-hidden transition-all hover:shadow-md cursor-pointer
                 ${activeService === service.name ? 'ring-2 ring-primary' : ''}
-                backdrop-blur-sm
-                dark:bg-card/80
-                bg-gray-50/50 border-gray-200/60
+                backdrop-blur-sm dark:bg-card/80 bg-gray-50/50 border-gray-200/60
               `}
               onClick={() => {
                 setActiveService(service.name);
@@ -308,75 +306,26 @@ export default function ServicesPage() {
                 </CardDescription>
               </CardHeader>
 
-              <CardContent className="flex flex-col flex-1">
-                {/* Service Info - grows to push buttons to bottom */}
-                <div className="space-y-2 flex-1">
+              <CardContent className="pt-0">
+                {/* Service Info */}
+                <div className="space-y-1.5">
                   {service.port && (
                     <div className="flex items-center justify-between text-xs">
                       <span className="text-muted-foreground">Port</span>
                       <span className="font-mono">{service.port}</span>
                     </div>
                   )}
-
                   {service.version && (
                     <div className="flex items-center justify-between text-xs">
                       <span className="text-muted-foreground">Version</span>
-                      <span className="text-xs">{service.version}</span>
+                      <span>{service.version}</span>
                     </div>
                   )}
-                </div>
-
-                {/* Action Buttons - always at bottom */}
-                <div className="flex gap-2 pt-3 mt-auto">
-                  {/* Database extensions cannot be managed like services */}
-                  {["pgai", "pgvectorscale"].includes(service.name) ? (
-                    <div className="flex-1 text-center">
-                      <Badge variant="outline" className="text-xs">
-                        Database Extension
-                      </Badge>
-                    </div>
-                  ) : service.status === "stopped" ? (
-                    <Button
-                      size="sm"
-                      className="flex-1 h-8"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleServiceAction(service.name, "start");
-                      }}
-                      disabled={loading || ["database", "nodejs", "python", "crawl4ai", "graphql", "pgvectorscale"].includes(service.name)}
-                    >
-                      <Play className="h-3 w-3 mr-1" />
-                      Start
-                    </Button>
-                  ) : (
-                    <>
-                      <Button
-                        size="sm"
-                        variant="destructive"
-                        className="flex-1 h-8"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleServiceAction(service.name, "stop");
-                        }}
-                        disabled={loading || ["database", "nodejs", "python", "crawl4ai", "graphql", "pgvectorscale"].includes(service.name)}
-                      >
-                        <Square className="h-3 w-3 mr-1" />
-                        Stop
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        className="flex-1 h-8"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleServiceAction(service.name, "restart");
-                        }}
-                        disabled={loading || ["database", "nodejs", "python", "crawl4ai", "graphql", "pgvectorscale"].includes(service.name)}
-                      >
-                        <RefreshCw className="h-3 w-3 mr-1" />
-                        Restart
-                      </Button>
-                    </>
+                  {/* Type badge for database extensions */}
+                  {["pgai", "pgvectorscale"].includes(service.name) && (
+                    <Badge variant="outline" className="text-[10px] mt-1">
+                      DB Extension
+                    </Badge>
                   )}
                 </div>
               </CardContent>
@@ -388,6 +337,9 @@ export default function ServicesPage() {
 
         {/* Right Column - DevOps Tools (1/3) */}
         <div className="space-y-4">
+          {/* System Status */}
+          <SystemStatusCard />
+
           {/* Developer Tools */}
           <Card>
             <CardHeader className="pb-2">
@@ -1471,5 +1423,119 @@ function WhisperTest() {
         </Button>
       </div>
     </div>
+  );
+}
+
+// System Status Card - shows last deploy time and uptodate status
+function SystemStatusCard() {
+  const [status, setStatus] = useState<{
+    lastDeploy?: string;
+    gitStatus?: 'uptodate' | 'behind' | 'ahead' | 'unknown';
+    commitHash?: string;
+    branch?: string;
+    loading: boolean;
+  }>({ loading: true });
+
+  const fetchStatus = async () => {
+    setStatus(prev => ({ ...prev, loading: true }));
+    try {
+      const response = await fetch('/api/v2/devops/status');
+      if (response.ok) {
+        const data = await response.json();
+        setStatus({
+          lastDeploy: data.lastDeploy,
+          gitStatus: data.gitStatus || 'unknown',
+          commitHash: data.commitHash,
+          branch: data.branch,
+          loading: false
+        });
+      } else {
+        setStatus({ loading: false, gitStatus: 'unknown' });
+      }
+    } catch (error) {
+      console.error('Failed to fetch system status:', error);
+      setStatus({ loading: false, gitStatus: 'unknown' });
+    }
+  };
+
+  useEffect(() => {
+    fetchStatus();
+  }, []);
+
+  const getGitStatusBadge = () => {
+    switch (status.gitStatus) {
+      case 'uptodate':
+        return <Badge className="bg-green-500 text-[10px]"><CheckCircle2 className="h-2.5 w-2.5 mr-1" />Up to date</Badge>;
+      case 'behind':
+        return <Badge className="bg-yellow-500 text-[10px]"><AlertTriangle className="h-2.5 w-2.5 mr-1" />Behind</Badge>;
+      case 'ahead':
+        return <Badge className="bg-blue-500 text-[10px]"><GitBranch className="h-2.5 w-2.5 mr-1" />Ahead</Badge>;
+      default:
+        return <Badge variant="outline" className="text-[10px]">Unknown</Badge>;
+    }
+  };
+
+  const formatTimeAgo = (dateStr?: string) => {
+    if (!dateStr) return 'Unknown';
+    const date = new Date(dateStr);
+    const now = new Date();
+    const diffMs = now.getTime() - date.getTime();
+    const diffMins = Math.floor(diffMs / 60000);
+    const diffHours = Math.floor(diffMins / 60);
+    const diffDays = Math.floor(diffHours / 24);
+
+    if (diffMins < 1) return 'Just now';
+    if (diffMins < 60) return `${diffMins}m ago`;
+    if (diffHours < 24) return `${diffHours}h ago`;
+    return `${diffDays}d ago`;
+  };
+
+  return (
+    <Card>
+      <CardHeader className="pb-2">
+        <CardTitle className="text-sm flex items-center gap-2">
+          <Server className="h-4 w-4" />
+          System Status
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-5 w-5 p-0 ml-auto"
+            onClick={fetchStatus}
+            disabled={status.loading}
+          >
+            {status.loading ? <Loader2 className="h-3 w-3 animate-spin" /> : <RefreshCw className="h-3 w-3" />}
+          </Button>
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-2 pt-0">
+        {/* Git Status */}
+        <div className="flex items-center justify-between">
+          <span className="text-xs text-muted-foreground">Git</span>
+          {getGitStatusBadge()}
+        </div>
+
+        {/* Last Deploy */}
+        <div className="flex items-center justify-between">
+          <span className="text-xs text-muted-foreground">Last Deploy</span>
+          <span className="text-xs font-medium">{formatTimeAgo(status.lastDeploy)}</span>
+        </div>
+
+        {/* Branch */}
+        {status.branch && (
+          <div className="flex items-center justify-between">
+            <span className="text-xs text-muted-foreground">Branch</span>
+            <span className="text-xs font-mono">{status.branch}</span>
+          </div>
+        )}
+
+        {/* Commit Hash */}
+        {status.commitHash && (
+          <div className="flex items-center justify-between">
+            <span className="text-xs text-muted-foreground">Commit</span>
+            <span className="text-[10px] font-mono bg-muted px-1.5 py-0.5 rounded">{status.commitHash.slice(0, 7)}</span>
+          </div>
+        )}
+      </CardContent>
+    </Card>
   );
 }
