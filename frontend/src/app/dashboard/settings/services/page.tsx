@@ -503,14 +503,16 @@ export default function ServicesPage() {
                 Developer Tools
               </CardTitle>
             </CardHeader>
-            <CardContent className="space-y-3">
+            <CardContent className="space-y-4">
               {/* Debug Mode */}
-              <div className="flex items-center justify-between">
-                <div>
-                  <Label className="text-xs font-medium">Debug Mode</Label>
-                  <p className="text-[10px] text-muted-foreground">Browser console logging</p>
+              <div className="flex items-center justify-between gap-4 py-1">
+                <div className="flex-1 min-w-0">
+                  <Label className="text-xs font-medium block">Debug Mode</Label>
+                  <p className="text-[10px] text-muted-foreground mt-0.5">Console logging</p>
                 </div>
-                <DebugSettings />
+                <div className="flex-shrink-0">
+                  <DebugSettings />
+                </div>
               </div>
 
               {/* Console Button */}
@@ -518,9 +520,9 @@ export default function ServicesPage() {
                 variant="outline"
                 size="sm"
                 onClick={() => setConsoleOpen(true)}
-                className="w-full h-8 text-xs"
+                className="w-full h-9 text-xs"
               >
-                <Terminal className="h-3 w-3 mr-2" />
+                <Terminal className="h-3.5 w-3.5 mr-2" />
                 Open Console
               </Button>
             </CardContent>
