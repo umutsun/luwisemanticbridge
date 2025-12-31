@@ -5,9 +5,14 @@ import React, { useRef, useEffect } from 'react';
 interface ParticlesBackgroundProps {
   variant?: 'dark' | 'light';
   className?: string;
+  density?: 'sparse' | 'normal' | 'dense';
 }
 
-export function ParticlesBackground({ variant = 'dark', className = '' }: ParticlesBackgroundProps) {
+export function ParticlesBackground({
+  variant = 'dark',
+  className = '',
+  density = 'sparse'  // Default: minimal zen particles
+}: ParticlesBackgroundProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
   useEffect(() => {
@@ -31,12 +36,12 @@ export function ParticlesBackground({ variant = 'dark', className = '' }: Partic
     resizeCanvas();
     window.addEventListener('resize', resizeCanvas);
 
-    // Color schemes based on variant
+    // Color schemes based on variant - more subtle
     const colors = variant === 'dark'
       ? { particle: 'rgba(100, 180, 255, ', line: 'rgba(100, 180, 255, ' }
-      : { particle: 'rgba(100, 140, 200, ', line: 'rgba(100, 140, 200, ' };
+      : { particle: 'rgba(120, 150, 180, ', line: 'rgba(120, 150, 180, ' };
 
-    // Particle class
+    // Particle class - slower, more zen-like
     class Particle {
       x: number;
       y: number;
@@ -48,12 +53,14 @@ export function ParticlesBackground({ variant = 'dark', className = '' }: Partic
       constructor() {
         this.x = Math.random() * canvas!.width;
         this.y = Math.random() * canvas!.height;
-        this.size = Math.random() * 2 + 0.5;
-        this.speedX = (Math.random() - 0.5) * 0.5;
-        this.speedY = (Math.random() - 0.5) * 0.5;
+        this.size = Math.random() * 1.5 + 0.5;  // Smaller particles
+        // Much slower movement - zen-like
+        this.speedX = (Math.random() - 0.5) * 0.15;
+        this.speedY = (Math.random() - 0.5) * 0.15;
+        // Lower opacity for subtlety
         this.opacity = variant === 'dark'
-          ? Math.random() * 0.4 + 0.1
-          : Math.random() * 0.3 + 0.05;
+          ? Math.random() * 0.25 + 0.05
+          : Math.random() * 0.15 + 0.03;
       }
 
       update() {
@@ -72,22 +79,25 @@ export function ParticlesBackground({ variant = 'dark', className = '' }: Partic
       }
     }
 
-    // Create particles - more particles for larger screens
-    const particleCount = Math.min(80, Math.floor((canvas.width * canvas.height) / 15000));
+    // Density-based particle count - much fewer by default
+    const densityMultiplier = density === 'sparse' ? 25000 : density === 'normal' ? 18000 : 12000;
+    const maxParticles = density === 'sparse' ? 35 : density === 'normal' ? 50 : 70;
+    const particleCount = Math.min(maxParticles, Math.floor((canvas.width * canvas.height) / densityMultiplier));
+
     const particles: Particle[] = [];
     for (let i = 0; i < particleCount; i++) {
       particles.push(new Particle());
     }
 
-    // Connection distance
-    const connectionDistance = 120;
+    // Connection distance - shorter for cleaner look
+    const connectionDistance = density === 'sparse' ? 80 : 100;
 
     // Animation loop
     let animationId: number;
     const animate = () => {
       ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-      // Draw connections between nearby particles
+      // Draw connections between nearby particles - more subtle
       particles.forEach((p1, i) => {
         particles.slice(i + 1).forEach(p2 => {
           const dx = p1.x - p2.x;
@@ -96,13 +106,13 @@ export function ParticlesBackground({ variant = 'dark', className = '' }: Partic
 
           if (distance < connectionDistance) {
             const opacity = variant === 'dark'
-              ? 0.15 * (1 - distance / connectionDistance)
-              : 0.08 * (1 - distance / connectionDistance);
+              ? 0.08 * (1 - distance / connectionDistance)
+              : 0.04 * (1 - distance / connectionDistance);
             ctx.beginPath();
             ctx.moveTo(p1.x, p1.y);
             ctx.lineTo(p2.x, p2.y);
             ctx.strokeStyle = `${colors.line}${opacity})`;
-            ctx.lineWidth = 0.5;
+            ctx.lineWidth = 0.3;  // Thinner lines
             ctx.stroke();
           }
         });
@@ -124,13 +134,13 @@ export function ParticlesBackground({ variant = 'dark', className = '' }: Partic
       cancelAnimationFrame(animationId);
       window.removeEventListener('resize', resizeCanvas);
     };
-  }, [variant]);
+  }, [variant, density]);
 
   return (
     <canvas
       ref={canvasRef}
       className={`absolute inset-0 w-full h-full pointer-events-none ${className}`}
-      style={{ opacity: variant === 'dark' ? 0.7 : 0.5 }}
+      style={{ opacity: variant === 'dark' ? 0.5 : 0.35 }}  // Lower overall opacity
     />
   );
 }

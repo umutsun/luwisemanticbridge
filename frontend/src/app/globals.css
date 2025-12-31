@@ -380,47 +380,202 @@ select {
   border: 1px solid rgba(255, 255, 255, 0.05);
 }
 
-/* Marker Effects */
-.marker-cyan {
-  background: linear-gradient(120deg, transparent 40%, rgba(6, 182, 212, 0.3) 40%, rgba(6, 182, 212, 0.3) 60%, transparent 60%);
-  padding: 0 4px;
-  animation: shimmer 3s infinite;
-  background-size: 200% 100%;
-}
+/* ============================================
+   Marker/Highlighter Effects - Pen-style
+   Realistic marker with angled edges (45deg)
+   ============================================ */
 
-.marker-yellow {
-  background: linear-gradient(120deg, transparent 40%, rgba(234, 179, 8, 0.3) 40%, rgba(234, 179, 8, 0.3) 60%, transparent 60%);
-  padding: 0 4px;
-  animation: shimmer 3s infinite;
-  background-size: 200% 100%;
-}
-
-.marker-pink {
-  background: linear-gradient(120deg, transparent 40%, rgba(236, 72, 153, 0.3) 40%, rgba(236, 72, 153, 0.3) 60%, transparent 60%);
-  padding: 0 4px;
-  animation: shimmer 3s infinite;
-  background-size: 200% 100%;
-}
-
-.marker-green {
+/* Base marker style - realistic pen highlight */
+.marker {
   position: relative;
-  display: inline-block;
+  display: inline;
+  padding: 0.1em 0;
 }
 
-.marker-green::after {
+.marker::before {
   content: '';
   position: absolute;
+  left: -4px;
+  right: -4px;
+  top: 0;
+  bottom: 0;
+  z-index: -1;
+  /* Angled edges using clip-path - like a real marker stroke */
+  clip-path: polygon(
+    8px 0%,           /* top-left angled */
+    100% 0%,          /* top-right */
+    calc(100% - 8px) 100%,  /* bottom-right angled */
+    0% 100%           /* bottom-left */
+  );
+}
+
+/* Cyan Marker */
+.marker-cyan {
+  position: relative;
+  display: inline;
+  padding: 0.1em 0;
+}
+
+.marker-cyan::before {
+  content: '';
+  position: absolute;
+  left: -4px;
+  right: -4px;
+  top: 0;
+  bottom: 0;
+  z-index: -1;
+  background: rgba(6, 182, 212, 0.25);
+  clip-path: polygon(8px 0%, 100% 0%, calc(100% - 8px) 100%, 0% 100%);
+}
+
+/* Yellow Marker */
+.marker-yellow {
+  position: relative;
+  display: inline;
+  padding: 0.1em 0;
+}
+
+.marker-yellow::before {
+  content: '';
+  position: absolute;
+  left: -4px;
+  right: -4px;
+  top: 0;
+  bottom: 0;
+  z-index: -1;
+  background: rgba(234, 179, 8, 0.3);
+  clip-path: polygon(8px 0%, 100% 0%, calc(100% - 8px) 100%, 0% 100%);
+}
+
+/* Pink Marker */
+.marker-pink {
+  position: relative;
+  display: inline;
+  padding: 0.1em 0;
+}
+
+.marker-pink::before {
+  content: '';
+  position: absolute;
+  left: -4px;
+  right: -4px;
+  top: 0;
+  bottom: 0;
+  z-index: -1;
+  background: rgba(236, 72, 153, 0.25);
+  clip-path: polygon(8px 0%, 100% 0%, calc(100% - 8px) 100%, 0% 100%);
+}
+
+/* Green Marker */
+.marker-green {
+  position: relative;
+  display: inline;
+  padding: 0.1em 0;
+}
+
+.marker-green::before {
+  content: '';
+  position: absolute;
+  left: -4px;
+  right: -4px;
+  top: 0;
+  bottom: 0;
+  z-index: -1;
+  background: rgba(34, 197, 94, 0.25);
+  clip-path: polygon(8px 0%, 100% 0%, calc(100% - 8px) 100%, 0% 100%);
+}
+
+/* Purple/Indigo Marker */
+.marker-purple {
+  position: relative;
+  display: inline;
+  padding: 0.1em 0;
+}
+
+.marker-purple::before {
+  content: '';
+  position: absolute;
+  left: -4px;
+  right: -4px;
+  top: 0;
+  bottom: 0;
+  z-index: -1;
+  background: rgba(139, 92, 246, 0.25);
+  clip-path: polygon(8px 0%, 100% 0%, calc(100% - 8px) 100%, 0% 100%);
+}
+
+/* Orange Marker */
+.marker-orange {
+  position: relative;
+  display: inline;
+  padding: 0.1em 0;
+}
+
+.marker-orange::before {
+  content: '';
+  position: absolute;
+  left: -4px;
+  right: -4px;
+  top: 0;
+  bottom: 0;
+  z-index: -1;
+  background: rgba(249, 115, 22, 0.25);
+  clip-path: polygon(8px 0%, 100% 0%, calc(100% - 8px) 100%, 0% 100%);
+}
+
+/* Dark mode - slightly more visible */
+.dark .marker-cyan::before { background: rgba(6, 182, 212, 0.35); }
+.dark .marker-yellow::before { background: rgba(234, 179, 8, 0.35); }
+.dark .marker-pink::before { background: rgba(236, 72, 153, 0.3); }
+.dark .marker-green::before { background: rgba(34, 197, 94, 0.3); }
+.dark .marker-purple::before { background: rgba(139, 92, 246, 0.3); }
+.dark .marker-orange::before { background: rgba(249, 115, 22, 0.3); }
+
+/* Heading variant - thicker marker for titles */
+.marker-heading {
+  position: relative;
+  display: inline;
+  padding: 0.15em 0;
+}
+
+.marker-heading::before {
+  content: '';
+  position: absolute;
+  left: -6px;
+  right: -6px;
+  top: -2px;
   bottom: -2px;
+  z-index: -1;
+  clip-path: polygon(10px 0%, 100% 0%, calc(100% - 10px) 100%, 0% 100%);
+}
+
+.marker-heading.marker-cyan::before { background: rgba(6, 182, 212, 0.2); }
+.marker-heading.marker-yellow::before { background: rgba(234, 179, 8, 0.25); }
+.marker-heading.marker-pink::before { background: rgba(236, 72, 153, 0.2); }
+.marker-heading.marker-green::before { background: rgba(34, 197, 94, 0.2); }
+.marker-heading.marker-purple::before { background: rgba(139, 92, 246, 0.2); }
+
+/* Subtle underline variant */
+.marker-underline {
+  position: relative;
+  display: inline;
+}
+
+.marker-underline::after {
+  content: '';
+  position: absolute;
   left: 0;
   right: 0;
-  height: 2px;
-  background: repeating-linear-gradient(90deg,
-      rgba(34, 197, 94, 0.8),
-      rgba(34, 197, 94, 0.8) 2px,
-      transparent 2px,
-      transparent 4px);
-  animation: shimmer 3s infinite;
+  bottom: -2px;
+  height: 3px;
+  z-index: -1;
+  clip-path: polygon(4px 0%, 100% 0%, calc(100% - 4px) 100%, 0% 100%);
 }
+
+.marker-underline.marker-cyan::after { background: rgba(6, 182, 212, 0.5); }
+.marker-underline.marker-yellow::after { background: rgba(234, 179, 8, 0.6); }
+.marker-underline.marker-pink::after { background: rgba(236, 72, 153, 0.5); }
+.marker-underline.marker-green::after { background: rgba(34, 197, 94, 0.5); }
 
 /* Typography Enhancements */
 .text-gradient {
