@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useEffect, useMemo, useRef, useCallback } from "react";
+import { useState, useEffect, useMemo } from "react";
+import dynamic from "next/dynamic";
 import * as LucideIcons from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -39,11 +40,17 @@ import {
   Shield,
   CheckCircle2,
   AlertTriangle,
-  Send,
-  RotateCcw
+  Bug
 } from "lucide-react";
 import { toast } from "sonner";
 import { usePM2Services, useNginx, useSelfDeploy } from "@/hooks/useDevOps";
+import { DebugSettings } from "@/components/settings/DebugSettings";
+
+// Dynamic import for ConsoleModal
+const ConsoleModal = dynamic(() => import("@/components/dashboard/ConsoleModal"), {
+  ssr: false,
+  loading: () => null
+});
 
 interface ServiceStatus {
   name: string;
@@ -83,100 +90,7 @@ export default function ServicesPage() {
   const [showPgaiModal, setShowPgaiModal] = useState(false);
   const [pgaiWorkers, setPgaiWorkers] = useState<Array<{id: number, name: string, status: string, table?: string}>>([]);
   const [vectorTables, setVectorTables] = useState<string[]>([]);
-
-  // Mini Console state
-  const [consoleCommand, setConsoleCommand] = useState('');
-  const [consoleLogs, setConsoleLogs] = useState<Array<{id: string, level: string, message: string, time: string}>>([]);
-  const [consoleLoading, setConsoleLoading] = useState(false);
-  const consoleEndRef = useRef<HTMLDivElement>(null);
-
-  // Console helper functions
-  const addConsoleLog = useCallback((level: string, message: string) => {
-    const newLog = {
-      id: `log_${Date.now()}`,
-      level,
-      message,
-      time: new Date().toLocaleTimeString()
-    };
-    setConsoleLogs(prev => [...prev.slice(-49), newLog]);
-    setTimeout(() => consoleEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 50);
-  }, []);
-
-  const executeConsoleCommand = useCallback(async (cmd: string) => {
-    if (!cmd.trim()) return;
-    setConsoleLoading(true);
-    addConsoleLog('info', `$ ${cmd}`);
-
-    const API_BASE = '/api/v2/devops';
-    const parts = cmd.split(' ');
-    const command = parts[0].toLowerCase().replace('/', '');
-    const args = parts.slice(1);
-
-    try {
-      switch (command) {
-        case 'help':
-          addConsoleLog('info', '═══ DevOps Commands ═══');
-          addConsoleLog('info', '/deploy [full|hotfix|frontend|backend]');
-          addConsoleLog('info', '/pm2 status | /pm2 restart [service]');
-          addConsoleLog('info', '/nginx test | /nginx reload');
-          addConsoleLog('info', '/clear - Clear console');
-          break;
-        case 'clear':
-          setConsoleLogs([]);
-          break;
-        case 'deploy':
-          const deployType = args[0] || 'hotfix';
-          addConsoleLog('info', `🚀 Starting ${deployType} deploy...`);
-          const deployRes = await fetch(`${API_BASE}/self/deploy?deploy_type=${deployType}`, { method: 'POST' });
-          const deployData = await deployRes.json();
-          if (deployData.success) {
-            addConsoleLog('success', `✅ Deploy completed! (${(deployData.duration_ms / 1000).toFixed(1)}s)`);
-          } else {
-            addConsoleLog('error', `❌ Deploy failed: ${deployData.error}`);
-          }
-          break;
-        case 'pm2':
-          if (args[0] === 'status') {
-            const pm2Res = await fetch(`${API_BASE}/self/pm2/status`);
-            const pm2Data = await pm2Res.json();
-            if (pm2Data.success && pm2Data.services) {
-              pm2Data.services.forEach((svc: any) => {
-                const status = svc.status === 'online' ? '🟢' : '🔴';
-                addConsoleLog('info', `${status} ${svc.name}: ${svc.status} (${svc.cpu}%)`);
-              });
-            }
-          } else if (args[0] === 'restart') {
-            const svc = args[1] || 'all';
-            addConsoleLog('info', `🔄 Restarting ${svc}...`);
-            const restartRes = await fetch(`${API_BASE}/self/pm2/restart/${svc}`, { method: 'POST' });
-            const restartData = await restartRes.json();
-            addConsoleLog(restartData.success ? 'success' : 'error',
-              restartData.success ? `✅ ${svc} restarted` : `❌ Failed: ${restartData.error}`);
-          }
-          break;
-        case 'nginx':
-          if (args[0] === 'test') {
-            const testRes = await fetch(`${API_BASE}/self/nginx/test`, { method: 'POST' });
-            const testData = await testRes.json();
-            addConsoleLog(testData.valid ? 'success' : 'error',
-              testData.valid ? '✅ Nginx config valid' : `❌ Config error: ${testData.output}`);
-          } else if (args[0] === 'reload') {
-            const reloadRes = await fetch(`${API_BASE}/self/nginx/reload`, { method: 'POST' });
-            const reloadData = await reloadRes.json();
-            addConsoleLog(reloadData.success ? 'success' : 'error',
-              reloadData.success ? '✅ Nginx reloaded' : `❌ Failed: ${reloadData.error}`);
-          }
-          break;
-        default:
-          addConsoleLog('warn', `Unknown command: ${command}. Type /help for available commands.`);
-      }
-    } catch (error: any) {
-      addConsoleLog('error', `❌ Error: ${error.message}`);
-    } finally {
-      setConsoleLoading(false);
-      setConsoleCommand('');
-    }
-  }, [addConsoleLog]);
+  const [consoleOpen, setConsoleOpen] = useState(false);
 
   // DevOps hooks
   const { services: pm2Services, loading: pm2Loading, loadServices: loadPM2, restartService } = usePM2Services();
@@ -333,13 +247,17 @@ export default function ServicesPage() {
         <div>
           <h1 className="text-3xl font-bold">Services</h1>
           <p className="text-muted-foreground mt-1">
-            Manage microservices and integrations
+            Manage microservices, deployment and developer tools
           </p>
         </div>
       </div>
 
-      {/* Services Grid - 3 columns */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+      {/* Two Column Layout */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* Left Column - Services (2/3) */}
+        <div className="lg:col-span-2 space-y-4">
+          {/* Services Grid */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
         {services.map((service) => {
           const Icon = service.icon;
           return (
@@ -464,301 +382,182 @@ export default function ServicesPage() {
               </CardContent>
             </Card>
           );
-        })}
+          })}
+          </div>
+
+          {/* Deployment - Compact */}
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm flex items-center gap-2">
+                <Rocket className="h-4 w-4" />
+                Deployment
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              {/* Deploy Actions - Compact 2x2 grid */}
+              <div className="grid grid-cols-2 gap-2">
+                <Button
+                  size="sm"
+                  onClick={async () => {
+                    try {
+                      toast.info('Starting full deploy...');
+                      const result = await deploy('full');
+                      result?.success ? toast.success('Full deploy completed!') : toast.error(result?.error || 'Deploy failed');
+                    } catch (e: any) { toast.error(e.message); }
+                  }}
+                  disabled={deploying}
+                  className="h-8 text-xs"
+                >
+                  {deploying ? <Loader2 className="h-3 w-3 mr-1 animate-spin" /> : <Rocket className="h-3 w-3 mr-1" />}
+                  Full Deploy
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={async () => {
+                    try {
+                      toast.info('Hot fix deploying...');
+                      const result = await deploy('hotfix');
+                      result?.success ? toast.success('Hot fix completed!') : toast.error(result?.error || 'Deploy failed');
+                    } catch (e: any) { toast.error(e.message); }
+                  }}
+                  disabled={deploying}
+                  className="h-8 text-xs"
+                >
+                  <GitBranch className="h-3 w-3 mr-1" />
+                  Hot Fix
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={async () => {
+                    try {
+                      toast.info('Building frontend...');
+                      const result = await deploy('frontend');
+                      result?.success ? toast.success('Frontend rebuilt!') : toast.error(result?.error || 'Build failed');
+                    } catch (e: any) { toast.error(e.message); }
+                  }}
+                  disabled={deploying}
+                  className="h-8 text-xs"
+                >
+                  <Globe className="h-3 w-3 mr-1" />
+                  Frontend
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={async () => {
+                    try {
+                      toast.info('Restarting backend...');
+                      const result = await deploy('backend');
+                      result?.success ? toast.success('Backend restarted!') : toast.error(result?.error || 'Restart failed');
+                    } catch (e: any) { toast.error(e.message); }
+                  }}
+                  disabled={deploying}
+                  className="h-8 text-xs"
+                >
+                  <Server className="h-3 w-3 mr-1" />
+                  Backend
+                </Button>
+              </div>
+
+              {/* Quick Actions */}
+              <div className="flex flex-wrap gap-1 pt-2 border-t">
+                <Button variant="ghost" size="sm" className="h-7 text-xs px-2" onClick={async () => { try { await restartService('all'); toast.success('All restarted'); } catch (e: any) { toast.error(e.message); } }}>
+                  <RefreshCw className="h-3 w-3 mr-1" />PM2 All
+                </Button>
+                <Button variant="ghost" size="sm" className="h-7 text-xs px-2" onClick={async () => { try { const r = await testConfig(); r?.valid ? toast.success('Valid') : toast.error('Invalid'); } catch (e: any) { toast.error(e.message); } }} disabled={nginxLoading}>
+                  <CheckCircle2 className="h-3 w-3 mr-1" />Nginx Test
+                </Button>
+                <Button variant="ghost" size="sm" className="h-7 text-xs px-2" onClick={async () => { try { await reloadNginx(); toast.success('Reloaded'); } catch (e: any) { toast.error(e.message); } }} disabled={nginxLoading}>
+                  <Globe className="h-3 w-3 mr-1" />Nginx Reload
+                </Button>
+              </div>
+
+              {/* PM2 Status Badges */}
+              {pm2Services.length > 0 && (
+                <div className="flex flex-wrap gap-1">
+                  {pm2Services.map((svc) => (
+                    <Badge
+                      key={svc.name}
+                      variant="outline"
+                      className={`text-[10px] cursor-pointer ${svc.status === 'online' ? 'border-green-500/50 text-green-600' : 'border-red-500/50 text-red-600'}`}
+                      onClick={() => { restartService(svc.name.includes('backend') ? 'backend' : svc.name.includes('frontend') ? 'frontend' : 'python'); toast.info(`Restarting ${svc.name}...`); }}
+                    >
+                      <span className={`w-1.5 h-1.5 rounded-full mr-1 ${svc.status === 'online' ? 'bg-green-500' : 'bg-red-500'}`} />
+                      {svc.name.replace('-backend', '-be').replace('-frontend', '-fe').replace('-python', '-py')}
+                    </Badge>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* Right Column - Developer Tools (1/3) */}
+        <div className="space-y-4">
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm flex items-center gap-2">
+                <Bug className="h-4 w-4" />
+                Developer Tools
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              {/* Debug Mode */}
+              <div className="flex items-center justify-between">
+                <div>
+                  <Label className="text-xs font-medium">Debug Mode</Label>
+                  <p className="text-[10px] text-muted-foreground">Browser console logging</p>
+                </div>
+                <DebugSettings />
+              </div>
+
+              {/* Console Button */}
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setConsoleOpen(true)}
+                className="w-full h-8 text-xs"
+              >
+                <Terminal className="h-3 w-3 mr-2" />
+                Open Console
+              </Button>
+            </CardContent>
+          </Card>
+
+          {/* PM2 Quick Status */}
+          {pm2Services.length > 0 && (
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-xs flex items-center gap-2">
+                  <Activity className="h-3 w-3" />
+                  PM2 Status
+                  <Button variant="ghost" size="sm" className="h-5 w-5 p-0 ml-auto" onClick={() => loadPM2()} disabled={pm2Loading}>
+                    {pm2Loading ? <Loader2 className="h-3 w-3 animate-spin" /> : <RefreshCw className="h-3 w-3" />}
+                  </Button>
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="pt-0">
+                <div className="space-y-1">
+                  {pm2Services.map((svc) => (
+                    <div key={svc.name} className="flex items-center justify-between text-xs">
+                      <div className="flex items-center gap-1.5">
+                        <span className={`w-1.5 h-1.5 rounded-full ${svc.status === 'online' ? 'bg-green-500' : 'bg-red-500'}`} />
+                        <span className="truncate max-w-[100px]">{svc.name}</span>
+                      </div>
+                      <span className="text-muted-foreground">{svc.cpu}%</span>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          )}
+        </div>
       </div>
 
-      {/* Deployment & Server Controls */}
-      <Card>
-        <CardHeader className="pb-3">
-          <CardTitle className="text-lg flex items-center gap-2">
-            <Rocket className="h-5 w-5" />
-            Deployment
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          {/* Deploy Actions - Main Row */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
-            <Button
-              onClick={async () => {
-                try {
-                  toast.info('Starting full deploy...');
-                  const result = await deploy('full');
-                  if (result?.success) {
-                    toast.success('Full deploy completed!');
-                  } else {
-                    toast.error(result?.error || 'Deploy failed');
-                  }
-                } catch (e: any) {
-                  toast.error(e.message);
-                }
-              }}
-              disabled={deploying}
-              className="h-auto py-3"
-            >
-              {deploying ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Rocket className="h-4 w-4 mr-2" />}
-              <div className="text-left">
-                <div className="font-medium">Full Deploy</div>
-                <div className="text-xs opacity-70">git pull + build + restart</div>
-              </div>
-            </Button>
-
-            <Button
-              variant="outline"
-              onClick={async () => {
-                try {
-                  toast.info('Hot fix deploying...');
-                  const result = await deploy('hotfix');
-                  if (result?.success) {
-                    toast.success('Hot fix completed!');
-                  } else {
-                    toast.error(result?.error || 'Deploy failed');
-                  }
-                } catch (e: any) {
-                  toast.error(e.message);
-                }
-              }}
-              disabled={deploying}
-              className="h-auto py-3"
-            >
-              <GitBranch className="h-4 w-4 mr-2" />
-              <div className="text-left">
-                <div className="font-medium">Hot Fix</div>
-                <div className="text-xs opacity-70">git pull + restart</div>
-              </div>
-            </Button>
-
-            <Button
-              variant="outline"
-              onClick={async () => {
-                try {
-                  toast.info('Building frontend...');
-                  const result = await deploy('frontend');
-                  if (result?.success) {
-                    toast.success('Frontend rebuilt!');
-                  } else {
-                    toast.error(result?.error || 'Build failed');
-                  }
-                } catch (e: any) {
-                  toast.error(e.message);
-                }
-              }}
-              disabled={deploying}
-              className="h-auto py-3"
-            >
-              <Globe className="h-4 w-4 mr-2" />
-              <div className="text-left">
-                <div className="font-medium">Frontend</div>
-                <div className="text-xs opacity-70">npm run build</div>
-              </div>
-            </Button>
-
-            <Button
-              variant="outline"
-              onClick={async () => {
-                try {
-                  toast.info('Restarting backend...');
-                  const result = await deploy('backend');
-                  if (result?.success) {
-                    toast.success('Backend restarted!');
-                  } else {
-                    toast.error(result?.error || 'Restart failed');
-                  }
-                } catch (e: any) {
-                  toast.error(e.message);
-                }
-              }}
-              disabled={deploying}
-              className="h-auto py-3"
-            >
-              <Server className="h-4 w-4 mr-2" />
-              <div className="text-left">
-                <div className="font-medium">Backend</div>
-                <div className="text-xs opacity-70">restart only</div>
-              </div>
-            </Button>
-          </div>
-
-          {/* Quick Actions Row */}
-          <div className="flex flex-wrap gap-2 pt-3 border-t">
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={async () => {
-                try {
-                  await restartService('all');
-                  toast.success('All services restarted');
-                } catch (e: any) {
-                  toast.error(e.message);
-                }
-              }}
-            >
-              <RefreshCw className="h-3 w-3 mr-1" />
-              Restart All PM2
-            </Button>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={async () => {
-                try {
-                  const result = await testConfig();
-                  if (result?.valid) {
-                    toast.success('Nginx config valid');
-                  } else {
-                    toast.error('Nginx config invalid');
-                  }
-                } catch (e: any) {
-                  toast.error(e.message);
-                }
-              }}
-              disabled={nginxLoading}
-            >
-              <CheckCircle2 className="h-3 w-3 mr-1" />
-              Test Nginx
-            </Button>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={async () => {
-                try {
-                  await reloadNginx();
-                  toast.success('Nginx reloaded');
-                } catch (e: any) {
-                  toast.error(e.message);
-                }
-              }}
-              disabled={nginxLoading}
-            >
-              <Globe className="h-3 w-3 mr-1" />
-              Reload Nginx
-            </Button>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => loadPM2()}
-              disabled={pm2Loading}
-            >
-              {pm2Loading ? <Loader2 className="h-3 w-3 mr-1 animate-spin" /> : <Activity className="h-3 w-3 mr-1" />}
-              Refresh Status
-            </Button>
-          </div>
-
-          {/* PM2 Status - Compact */}
-          {pm2Services.length > 0 && (
-            <div className="pt-3 border-t">
-              <div className="text-xs text-muted-foreground mb-2">PM2 Services</div>
-              <div className="flex flex-wrap gap-2">
-                {pm2Services.map((svc) => (
-                  <Badge
-                    key={svc.name}
-                    variant="outline"
-                    className={`cursor-pointer ${
-                      svc.status === 'online'
-                        ? 'border-green-500/50 text-green-600'
-                        : 'border-red-500/50 text-red-600'
-                    }`}
-                    onClick={() => {
-                      const serviceType = svc.name.includes('backend')
-                        ? 'backend'
-                        : svc.name.includes('frontend')
-                        ? 'frontend'
-                        : 'python';
-                      restartService(serviceType);
-                      toast.info(`Restarting ${svc.name}...`);
-                    }}
-                  >
-                    <span className={`w-1.5 h-1.5 rounded-full mr-1.5 ${
-                      svc.status === 'online' ? 'bg-green-500' : 'bg-red-500'
-                    }`} />
-                    {svc.name}
-                    <span className="ml-1 opacity-60">{svc.cpu}%</span>
-                  </Badge>
-                ))}
-              </div>
-            </div>
-          )}
-        </CardContent>
-      </Card>
-
-      {/* Mini Console */}
-      <Card>
-        <CardHeader className="pb-2">
-          <div className="flex items-center justify-between">
-            <CardTitle className="text-sm flex items-center gap-2">
-              <Terminal className="h-4 w-4" />
-              Quick Console
-            </CardTitle>
-            <div className="flex items-center gap-2">
-              <Badge variant="outline" className="text-xs">
-                Type /help
-              </Badge>
-              <Button
-                variant="ghost"
-                size="sm"
-                className="h-6 w-6 p-0"
-                onClick={() => setConsoleLogs([])}
-              >
-                <RotateCcw className="h-3 w-3" />
-              </Button>
-            </div>
-          </div>
-        </CardHeader>
-        <CardContent className="pt-0">
-          {/* Console Output */}
-          <div
-            className="h-32 overflow-auto rounded-md bg-black/90 dark:bg-black/70 p-2 font-mono text-xs mb-2"
-          >
-            {consoleLogs.length === 0 ? (
-              <div className="text-gray-500 text-center py-4">
-                Type /help for available commands
-              </div>
-            ) : (
-              consoleLogs.map((log) => (
-                <div
-                  key={log.id}
-                  className={`py-0.5 ${
-                    log.level === 'error' ? 'text-red-400' :
-                    log.level === 'warn' ? 'text-yellow-400' :
-                    log.level === 'success' ? 'text-green-400' :
-                    'text-gray-300'
-                  }`}
-                >
-                  <span className="text-gray-500 text-[10px]">[{log.time}]</span>{' '}
-                  {log.message}
-                </div>
-              ))
-            )}
-            <div ref={consoleEndRef} />
-          </div>
-
-          {/* Command Input */}
-          <div className="flex gap-2">
-            <Input
-              value={consoleCommand}
-              onChange={(e) => setConsoleCommand(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' && !consoleLoading) {
-                  executeConsoleCommand(consoleCommand);
-                }
-              }}
-              placeholder="/deploy hotfix"
-              className="font-mono text-sm h-8"
-              disabled={consoleLoading}
-            />
-            <Button
-              size="sm"
-              className="h-8 px-3"
-              onClick={() => executeConsoleCommand(consoleCommand)}
-              disabled={consoleLoading || !consoleCommand.trim()}
-            >
-              {consoleLoading ? (
-                <Loader2 className="h-3 w-3 animate-spin" />
-              ) : (
-                <Send className="h-3 w-3" />
-              )}
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
+      {/* Console Modal */}
+      <ConsoleModal isOpen={consoleOpen} onOpenChange={setConsoleOpen} />
 
       {/* Service Details Dialog */}
       <Dialog open={showServiceDialog} onOpenChange={setShowServiceDialog}>
