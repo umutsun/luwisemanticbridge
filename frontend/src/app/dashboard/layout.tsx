@@ -9,6 +9,7 @@ import { ConfigProvider, useConfig } from '@/contexts/ConfigContext';
 import config from '@/config/api.config';
 import { setStoredToken } from '@/lib/auth-fetch';
 import { Circle, AlertCircle, RefreshCw } from 'lucide-react';
+import { ParticlesBackground } from '@/components/ui/particles-background';
 
 interface User {
   id: string;
@@ -194,11 +195,24 @@ export default function DashboardLayout({
     <ProtectedRoute requireAdmin={true}>
       <ConfigProvider>
         <DashboardContent>
-          <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
-            <Header />
-            <main className="container mx-auto px-4">
-              {children}
-            </main>
+          <div className="min-h-screen relative bg-gradient-to-br from-slate-100 via-gray-100 to-slate-200 dark:from-[#0a1628] dark:via-[#0d1f3c] dark:to-[#0a1628]">
+            {/* Particles Background - different variant based on theme */}
+            <div className="fixed inset-0 overflow-hidden pointer-events-none z-0">
+              <div className="hidden dark:block w-full h-full">
+                <ParticlesBackground variant="dark" />
+              </div>
+              <div className="block dark:hidden w-full h-full">
+                <ParticlesBackground variant="light" />
+              </div>
+            </div>
+
+            {/* Main Content */}
+            <div className="relative z-10">
+              <Header />
+              <main className="container mx-auto px-4">
+                {children}
+              </main>
+            </div>
           </div>
         </DashboardContent>
       </ConfigProvider>

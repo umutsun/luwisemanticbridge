@@ -400,7 +400,7 @@ export default function Header() {
   };
 
   return (
-    <header className="sticky top-0 z-50 w-full border-b bg-white dark:bg-gray-900 shadow-sm">
+    <header className="sticky top-0 z-50 w-full border-b border-gray-200/60 dark:border-[#1e3a5f]/50 bg-white/80 dark:bg-[#0d1f3c]/80 backdrop-blur-md shadow-sm">
       <div className="container mx-auto px-4">
         <div className="flex h-16 items-center justify-between">
           {/* Mobile Menu Button */}
