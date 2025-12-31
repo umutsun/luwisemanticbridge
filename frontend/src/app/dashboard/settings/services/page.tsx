@@ -371,66 +371,195 @@ export default function ServicesPage() {
         })}
       </div>
 
-      {/* PM2 & Server Controls */}
+      {/* Deployment & Server Controls */}
       <Card>
         <CardHeader className="pb-3">
-          <div className="flex items-center justify-between">
-            <div>
-              <CardTitle className="text-lg flex items-center gap-2">
-                <Server className="h-5 w-5" />
-                Server Management
-              </CardTitle>
-              <CardDescription>PM2 services and server controls</CardDescription>
-            </div>
+          <CardTitle className="text-lg flex items-center gap-2">
+            <Rocket className="h-5 w-5" />
+            Deployment
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {/* Deploy Actions - Main Row */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+            <Button
+              onClick={async () => {
+                try {
+                  toast.info('Starting full deploy...');
+                  const result = await deploy('full');
+                  if (result?.success) {
+                    toast.success('Full deploy completed!');
+                  } else {
+                    toast.error(result?.error || 'Deploy failed');
+                  }
+                } catch (e: any) {
+                  toast.error(e.message);
+                }
+              }}
+              disabled={deploying}
+              className="h-auto py-3"
+            >
+              {deploying ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Rocket className="h-4 w-4 mr-2" />}
+              <div className="text-left">
+                <div className="font-medium">Full Deploy</div>
+                <div className="text-xs opacity-70">git pull + build + restart</div>
+              </div>
+            </Button>
+
             <Button
               variant="outline"
+              onClick={async () => {
+                try {
+                  toast.info('Hot fix deploying...');
+                  const result = await deploy('hotfix');
+                  if (result?.success) {
+                    toast.success('Hot fix completed!');
+                  } else {
+                    toast.error(result?.error || 'Deploy failed');
+                  }
+                } catch (e: any) {
+                  toast.error(e.message);
+                }
+              }}
+              disabled={deploying}
+              className="h-auto py-3"
+            >
+              <GitBranch className="h-4 w-4 mr-2" />
+              <div className="text-left">
+                <div className="font-medium">Hot Fix</div>
+                <div className="text-xs opacity-70">git pull + restart</div>
+              </div>
+            </Button>
+
+            <Button
+              variant="outline"
+              onClick={async () => {
+                try {
+                  toast.info('Building frontend...');
+                  const result = await deploy('frontend');
+                  if (result?.success) {
+                    toast.success('Frontend rebuilt!');
+                  } else {
+                    toast.error(result?.error || 'Build failed');
+                  }
+                } catch (e: any) {
+                  toast.error(e.message);
+                }
+              }}
+              disabled={deploying}
+              className="h-auto py-3"
+            >
+              <Globe className="h-4 w-4 mr-2" />
+              <div className="text-left">
+                <div className="font-medium">Frontend</div>
+                <div className="text-xs opacity-70">npm run build</div>
+              </div>
+            </Button>
+
+            <Button
+              variant="outline"
+              onClick={async () => {
+                try {
+                  toast.info('Restarting backend...');
+                  const result = await deploy('backend');
+                  if (result?.success) {
+                    toast.success('Backend restarted!');
+                  } else {
+                    toast.error(result?.error || 'Restart failed');
+                  }
+                } catch (e: any) {
+                  toast.error(e.message);
+                }
+              }}
+              disabled={deploying}
+              className="h-auto py-3"
+            >
+              <Server className="h-4 w-4 mr-2" />
+              <div className="text-left">
+                <div className="font-medium">Backend</div>
+                <div className="text-xs opacity-70">restart only</div>
+              </div>
+            </Button>
+          </div>
+
+          {/* Quick Actions Row */}
+          <div className="flex flex-wrap gap-2 pt-3 border-t">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={async () => {
+                try {
+                  await restartService('all');
+                  toast.success('All services restarted');
+                } catch (e: any) {
+                  toast.error(e.message);
+                }
+              }}
+            >
+              <RefreshCw className="h-3 w-3 mr-1" />
+              Restart All PM2
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={async () => {
+                try {
+                  const result = await testConfig();
+                  if (result?.valid) {
+                    toast.success('Nginx config valid');
+                  } else {
+                    toast.error('Nginx config invalid');
+                  }
+                } catch (e: any) {
+                  toast.error(e.message);
+                }
+              }}
+              disabled={nginxLoading}
+            >
+              <CheckCircle2 className="h-3 w-3 mr-1" />
+              Test Nginx
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={async () => {
+                try {
+                  await reloadNginx();
+                  toast.success('Nginx reloaded');
+                } catch (e: any) {
+                  toast.error(e.message);
+                }
+              }}
+              disabled={nginxLoading}
+            >
+              <Globe className="h-3 w-3 mr-1" />
+              Reload Nginx
+            </Button>
+            <Button
+              variant="ghost"
               size="sm"
               onClick={() => loadPM2()}
               disabled={pm2Loading}
             >
-              {pm2Loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+              {pm2Loading ? <Loader2 className="h-3 w-3 mr-1 animate-spin" /> : <Activity className="h-3 w-3 mr-1" />}
+              Refresh Status
             </Button>
           </div>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
-            {/* PM2 Services */}
-            {pm2Services.length > 0 ? (
-              pm2Services.map((svc) => (
-                <div
-                  key={svc.name}
-                  className={`p-3 rounded-lg border ${
-                    svc.status === 'online'
-                      ? 'bg-green-500/5 border-green-500/20'
-                      : 'bg-red-500/5 border-red-500/20'
-                  }`}
-                >
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="font-medium text-sm truncate">{svc.name}</span>
-                    <Badge
-                      className={
-                        svc.status === 'online'
-                          ? 'bg-green-500/10 text-green-600 text-xs'
-                          : 'bg-red-500/10 text-red-600 text-xs'
-                      }
-                    >
-                      {svc.status}
-                    </Badge>
-                  </div>
-                  <div className="text-xs text-muted-foreground space-y-1">
-                    <div className="flex justify-between">
-                      <span>CPU</span>
-                      <span>{svc.cpu}%</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span>Memory</span>
-                      <span>{(svc.memory / 1024 / 1024).toFixed(0)} MB</span>
-                    </div>
-                  </div>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="w-full mt-2 h-7 text-xs"
+
+          {/* PM2 Status - Compact */}
+          {pm2Services.length > 0 && (
+            <div className="pt-3 border-t">
+              <div className="text-xs text-muted-foreground mb-2">PM2 Services</div>
+              <div className="flex flex-wrap gap-2">
+                {pm2Services.map((svc) => (
+                  <Badge
+                    key={svc.name}
+                    variant="outline"
+                    className={`cursor-pointer ${
+                      svc.status === 'online'
+                        ? 'border-green-500/50 text-green-600'
+                        : 'border-red-500/50 text-red-600'
+                    }`}
                     onClick={() => {
                       const serviceType = svc.name.includes('backend')
                         ? 'backend'
@@ -438,151 +567,108 @@ export default function ServicesPage() {
                         ? 'frontend'
                         : 'python';
                       restartService(serviceType);
-                      toast.success(`Restarting ${svc.name}...`);
+                      toast.info(`Restarting ${svc.name}...`);
                     }}
                   >
-                    <RefreshCw className="h-3 w-3 mr-1" />
-                    Restart
-                  </Button>
-                </div>
-              ))
-            ) : (
-              <div className="col-span-full text-center py-4 text-muted-foreground text-sm">
-                <Server className="h-8 w-8 mx-auto mb-2 opacity-40" />
-                <p>No PM2 services loaded</p>
-                <Button variant="link" size="sm" onClick={() => loadPM2()}>
-                  Load PM2 Status
-                </Button>
+                    <span className={`w-1.5 h-1.5 rounded-full mr-1.5 ${
+                      svc.status === 'online' ? 'bg-green-500' : 'bg-red-500'
+                    }`} />
+                    {svc.name}
+                    <span className="ml-1 opacity-60">{svc.cpu}%</span>
+                  </Badge>
+                ))}
               </div>
-            )}
-          </div>
-
-          {/* Quick Actions */}
-          <div className="flex flex-wrap gap-2 mt-4 pt-4 border-t">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={async () => {
-                const result = await testConfig();
-                if (result?.valid) {
-                  toast.success('Nginx config is valid');
-                } else {
-                  toast.error('Nginx config has errors');
-                }
-              }}
-              disabled={nginxLoading}
-            >
-              {nginxLoading ? <Loader2 className="h-3 w-3 mr-1 animate-spin" /> : <Globe className="h-3 w-3 mr-1" />}
-              Test Nginx
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={async () => {
-                await reloadNginx();
-                toast.success('Nginx reloaded');
-              }}
-              disabled={nginxLoading}
-            >
-              <RefreshCw className="h-3 w-3 mr-1" />
-              Reload Nginx
-            </Button>
-            <Button
-              variant="default"
-              size="sm"
-              onClick={async () => {
-                await deploy('hotfix');
-                toast.success('Hot fix deployed');
-              }}
-              disabled={deploying}
-            >
-              {deploying ? <Loader2 className="h-3 w-3 mr-1 animate-spin" /> : <Rocket className="h-3 w-3 mr-1" />}
-              Hot Fix Deploy
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => restartService('all')}
-            >
-              <RefreshCw className="h-3 w-3 mr-1" />
-              Restart All PM2
-            </Button>
-          </div>
+            </div>
+          )}
         </CardContent>
       </Card>
 
       {/* Service Details Dialog */}
       <Dialog open={showServiceDialog} onOpenChange={setShowServiceDialog}>
-        <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+        <DialogContent className="max-w-lg">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <SettingsIcon className="h-5 w-5" />
-              {services.find(s => s.name === activeService)?.displayName} Configuration
+              {(() => {
+                const service = services.find(s => s.name === activeService);
+                const Icon = service?.icon || Activity;
+                return <Icon className="h-5 w-5" />;
+              })()}
+              {services.find(s => s.name === activeService)?.displayName}
             </DialogTitle>
+            <DialogDescription>
+              {services.find(s => s.name === activeService)?.description}
+            </DialogDescription>
           </DialogHeader>
 
           {activeService && (
-            <Tabs defaultValue="config" className="w-full">
-              <TabsList className="grid w-full grid-cols-3">
-                <TabsTrigger value="config">Configuration</TabsTrigger>
-                <TabsTrigger value="logs">Logs</TabsTrigger>
-                <TabsTrigger value="test">Test</TabsTrigger>
-              </TabsList>
-
-              <TabsContent value="config" className="space-y-4 mt-4">
-                {activeService === "graphql" && <GraphQLConfig />}
-                {activeService === "python" && <PythonConfig />}
-                {activeService === "crawl4ai" && <Crawl4AIConfig />}
-                {activeService === "whisper" && <WhisperConfig />}
-                {activeService === "pgai" && <PgaiConfig />}
-                {activeService === "pgvectorscale" && <PgvectorscaleConfig />}
-                {activeService === "n8n" && <N8NConfig />}
-                {!["graphql", "python", "crawl4ai", "whisper", "pgai", "pgvectorscale", "n8n"].includes(activeService) && (
-                  <Alert>
-                    <AlertDescription>
-                      No configuration available for this service.
-                    </AlertDescription>
-                  </Alert>
-                )}
-              </TabsContent>
-
-              <TabsContent value="logs" className="space-y-4 mt-4">
-                <div className="bg-black text-green-400 p-4 rounded-lg font-mono text-xs h-64 overflow-y-auto">
-                  <div className="space-y-1">
-                    {logs.length > 0 ? logs.map((log, i) => (
-                      <div key={i}>{log}</div>
-                    )) : (
-                      <>
-                        <div>[2024-10-29 19:15:00] INFO: Service started successfully</div>
-                        <div>[2024-10-29 19:15:01] INFO: Listening on port {services.find(s => s.name === activeService)?.port || "N/A"}</div>
-                        <div>[2024-10-29 19:15:02] INFO: Health check passed</div>
-                      </>
-                    )}
-                  </div>
+            <div className="space-y-4">
+              {/* Service Status */}
+              <div className="flex items-center justify-between p-3 bg-muted/50 rounded-lg">
+                <div className="flex items-center gap-2">
+                  {getStatusIcon(services.find(s => s.name === activeService)?.status || 'unknown')}
+                  <span className="text-sm font-medium capitalize">
+                    {services.find(s => s.name === activeService)?.status}
+                  </span>
                 </div>
-              </TabsContent>
-
-              <TabsContent value="test" className="space-y-4 mt-4">
-                {activeService === "graphql" && <GraphQLTest />}
-                {activeService === "python" && <PythonTest />}
-                {activeService === "crawl4ai" && <Crawl4AITest />}
-                {activeService === "whisper" && <WhisperTest />}
-                {!["graphql", "python", "crawl4ai", "whisper"].includes(activeService) && (
-                  <Alert>
-                    <AlertDescription>
-                      No test interface available for this service.
-                    </AlertDescription>
-                  </Alert>
+                {services.find(s => s.name === activeService)?.port && (
+                  <span className="text-sm text-muted-foreground">
+                    Port: {services.find(s => s.name === activeService)?.port}
+                  </span>
                 )}
-              </TabsContent>
-            </Tabs>
-          )}
+              </div>
 
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setShowServiceDialog(false)}>
-              Close
-            </Button>
-          </DialogFooter>
+              {/* Service-specific Config */}
+              {activeService === "graphql" && <GraphQLConfig />}
+              {activeService === "python" && <PythonConfig />}
+              {activeService === "crawl4ai" && <Crawl4AIConfig />}
+              {activeService === "whisper" && <WhisperConfig />}
+              {activeService === "pgai" && <PgaiConfig />}
+              {activeService === "pgvectorscale" && <PgvectorscaleConfig />}
+              {activeService === "n8n" && <N8NConfig />}
+
+              {/* Actions */}
+              {!["database", "pgai", "pgvectorscale"].includes(activeService) && (
+                <div className="flex gap-2 pt-2">
+                  {services.find(s => s.name === activeService)?.status === "stopped" ? (
+                    <Button
+                      className="flex-1"
+                      onClick={() => {
+                        handleServiceAction(activeService, "start");
+                        setShowServiceDialog(false);
+                      }}
+                    >
+                      <Play className="h-4 w-4 mr-2" />
+                      Start Service
+                    </Button>
+                  ) : (
+                    <>
+                      <Button
+                        variant="outline"
+                        className="flex-1"
+                        onClick={() => {
+                          handleServiceAction(activeService, "restart");
+                          setShowServiceDialog(false);
+                        }}
+                      >
+                        <RefreshCw className="h-4 w-4 mr-2" />
+                        Restart
+                      </Button>
+                      <Button
+                        variant="destructive"
+                        onClick={() => {
+                          handleServiceAction(activeService, "stop");
+                          setShowServiceDialog(false);
+                        }}
+                      >
+                        <Square className="h-4 w-4 mr-2" />
+                        Stop
+                      </Button>
+                    </>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
         </DialogContent>
       </Dialog>
 
