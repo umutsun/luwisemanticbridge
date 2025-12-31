@@ -212,10 +212,11 @@ router.post('/ssh/test', async (req: Request, res: Response) => {
 /**
  * POST /api/v2/devops/ssh/execute
  * Execute command on remote server
- * Falls back to local shell execution in development mode
+ * Falls back to local shell execution when Python service unavailable
  */
 router.post('/ssh/execute', async (req: Request, res: Response) => {
   const { execSync } = require('child_process');
+  const os = require('os');
   const { command } = req.body;
 
   if (!command) {
@@ -250,31 +251,43 @@ router.post('/ssh/execute', async (req: Request, res: Response) => {
     });
     res.json(response.data);
   } catch (proxyError) {
-    // Fallback: Local execution (for development)
-    const isDevelopment = process.env.NODE_ENV !== 'production';
+    // Fallback: Local execution (works in both dev and production)
+    // This allows basic commands to work even without Python service
+    const isWindows = os.platform() === 'win32';
 
-    if (!isDevelopment) {
-      return res.status(503).json({
-        success: false,
-        error: 'SSH service unavailable',
-        message: 'Python DevOps service is not running. Please start it for production SSH access.'
-      });
+    // Adapt command for platform
+    let adaptedCommand = command;
+    if (isWindows) {
+      // Convert Linux pipe commands to Windows-compatible versions
+      // Remove Linux-specific redirections that don't work on Windows
+      adaptedCommand = command
+        .replace(/\s+2>&1\s*/g, ' ')      // Remove stderr redirect
+        .replace(/\|\s*tail\s+-\d+/g, '')  // Remove tail pipe
+        .replace(/\|\s*head\s+-\d+/g, '')  // Remove head pipe
+        .replace(/--nostream\s*/g, '');    // Remove pm2 nostream (not needed locally)
     }
 
     try {
-      // Execute locally in development mode
-      const output = execSync(command, {
+      // Execute locally as fallback
+      const execOptions: any = {
         encoding: 'utf-8',
         timeout: 30000,
         maxBuffer: 10 * 1024 * 1024, // 10MB
         cwd: process.env.PROJECT_ROOT || process.cwd()
-      });
+      };
+
+      // Use shell for Windows
+      if (isWindows) {
+        execOptions.shell = true;
+      }
+
+      const output = execSync(adaptedCommand, execOptions);
 
       res.json({
         success: true,
         output: output || '(no output)',
         source: 'local',
-        warning: 'Executed locally (development mode). In production, this will use SSH.'
+        warning: 'Executed locally. Python DevOps service is not running.'
       });
     } catch (execError: any) {
       // Command failed but executed
@@ -490,6 +503,7 @@ router.post('/self/nginx/test', async (req: Request, res: Response) => {
  */
 router.get('/self/pm2/status', async (req: Request, res: Response) => {
   const { execSync } = require('child_process');
+  const os = require('os');
 
   try {
     // First try Python service
@@ -500,10 +514,15 @@ router.get('/self/pm2/status', async (req: Request, res: Response) => {
     res.json(response.data);
   } catch (proxyError) {
     // Fallback: Try local PM2 execution
+    const isWindows = os.platform() === 'win32';
+
     try {
-      const pm2Output = execSync('pm2 jlist 2>/dev/null || echo "[]"', {
+      // Platform-specific PM2 command
+      const pm2Command = isWindows ? 'pm2 jlist' : 'pm2 jlist 2>/dev/null || echo "[]"';
+      const pm2Output = execSync(pm2Command, {
         encoding: 'utf-8',
-        timeout: 10000
+        timeout: 10000,
+        shell: isWindows ? true : undefined
       });
 
       const processes = JSON.parse(pm2Output || '[]');
