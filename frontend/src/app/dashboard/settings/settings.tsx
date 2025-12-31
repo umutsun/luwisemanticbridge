@@ -71,8 +71,6 @@ import {
 } from '../../../lib/api/settings';
 import { API_CONFIG } from '../../../lib/config';
 import { chatTemplates } from '@/templates/registry';
-import { DebugSettings } from '../../../components/settings/DebugSettings';
-import ConsoleModal from '../../../components/dashboard/ConsoleModal';
 import debug from '../../../lib/debug';
 
 
@@ -3392,61 +3390,12 @@ function RAGSettings() {
   );
 }
 
-// Advanced Settings Component (Debug Mode + Console + Security)
+// Advanced Settings Component (Security only - Developer Tools moved to Services page)
 function AdvancedSettings() {
-  const [consoleOpen, setConsoleOpen] = useState(false);
-
   return (
     <div className="space-y-6">
-      {/* Developer Tools Card */}
-      <Card>
-        <CardHeader className="pb-3">
-          <CardTitle className="text-base flex items-center gap-2">
-            <Bug className="h-4 w-4" />
-            Developer Tools
-          </CardTitle>
-          <CardDescription className="text-xs">
-            Debug mode and console access for development
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          {/* Debug Mode Toggle */}
-          <div className="flex items-center justify-between p-3 rounded-lg bg-muted/50">
-            <div className="space-y-0.5">
-              <Label className="text-sm font-medium">Debug Mode</Label>
-              <p className="text-xs text-muted-foreground">
-                Enable browser console logging for debugging
-              </p>
-            </div>
-            <DebugSettings />
-          </div>
-
-          {/* Console Terminal Button */}
-          <div className="flex items-center justify-between p-3 rounded-lg bg-muted/50">
-            <div className="space-y-0.5">
-              <Label className="text-sm font-medium">System Console</Label>
-              <p className="text-xs text-muted-foreground">
-                View real-time system logs and run commands
-              </p>
-            </div>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setConsoleOpen(true)}
-              className="gap-2"
-            >
-              <Terminal className="h-4 w-4" />
-              Open Console
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
-
       {/* Security Settings */}
       <SecuritySettings />
-
-      {/* Console Modal */}
-      <ConsoleModal isOpen={consoleOpen} onOpenChange={setConsoleOpen} />
     </div>
   );
 }

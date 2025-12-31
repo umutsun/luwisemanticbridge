@@ -25,7 +25,7 @@ export default function ConsoleModal({ isOpen, onOpenChange }: ConsoleModalProps
 
   return (
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-5xl max-h-[90vh] overflow-hidden flex flex-col z-[100]">
+      <DialogContent className="max-w-5xl max-h-[90vh] overflow-hidden flex flex-col z-[1050]">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Terminal className="h-5 w-5" />
