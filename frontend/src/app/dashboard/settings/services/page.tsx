@@ -41,7 +41,9 @@ import {
   CheckCircle2,
   AlertTriangle,
   Bug,
-  Download
+  Download,
+  Copy,
+  Check
 } from "lucide-react";
 import { toast } from "sonner";
 import { usePM2Services, useNginx, useSelfDeploy } from "@/hooks/useDevOps";
@@ -1434,6 +1436,35 @@ function DevOpsCard() {
   );
 }
 
+// Copy Button Component
+function CopyButton({ text }: { text: string }) {
+  const [copied, setCopied] = useState(false);
+
+  const handleCopy = async () => {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch (err) {
+      console.error('Failed to copy:', err);
+    }
+  };
+
+  return (
+    <button
+      onClick={handleCopy}
+      className="absolute top-2 right-2 p-1.5 rounded bg-[#2a2a2a] hover:bg-[#3a3a3a] text-gray-400 hover:text-gray-200 transition-colors z-10"
+      title="Copy to clipboard"
+    >
+      {copied ? (
+        <Check className="h-3.5 w-3.5 text-green-400" />
+      ) : (
+        <Copy className="h-3.5 w-3.5" />
+      )}
+    </button>
+  );
+}
+
 // Deployment Modal - Full DevOps Console
 function DeploymentModal({ isOpen, onOpenChange }: { isOpen: boolean; onOpenChange: (open: boolean) => void }) {
   const [output, setOutput] = useState<string[]>([]);
@@ -1941,43 +1972,55 @@ function DeploymentModal({ isOpen, onOpenChange }: { isOpen: boolean; onOpenChan
         </div>
 
         {/* Terminal Output - Main Body */}
-        <div
-          ref={outputRef}
-          className="flex-1 bg-[#1a1a1a] p-2 overflow-y-auto font-mono text-[10px] leading-tight"
-        >
-          {output.length === 0 ? (
-            <div className="text-gray-500">
-              <p># DevOps Console Ready</p>
-              <p># Type 'help' for commands or click buttons below</p>
-              <p># Quick: health, git, pm2, logs, deploy</p>
-              <p>&nbsp;</p>
-            </div>
-          ) : (
-            output.map((line, i) => (
-              <div
-                key={i}
-                className={`${
-                  line.includes('$') ? 'text-cyan-400 font-semibold mt-2' :
-                  line.includes('OK') || line.includes('✓') ? 'text-green-400' :
-                  line.includes('FAILED') || line.includes('ERROR') || line.includes('✗') ? 'text-red-400' :
-                  line.includes('---') ? 'text-blue-400 font-semibold' :
-                  line.includes('Commit:') || line.includes('completed') ? 'text-yellow-400' :
-                  line.includes('[WARN]') || line.includes('warn') ? 'text-yellow-400' :
-                  line.includes('[ERROR]') || line.includes('error') ? 'text-red-400' :
-                  line.includes('[INFO]') || line.includes('info') ? 'text-blue-300' :
-                  'text-gray-300'
-                }`}
-              >
-                {line}
+        <div className="flex-1 relative bg-[#1a1a1a] overflow-hidden">
+          {/* Copy Button - Inline at top right */}
+          {output.length > 0 && (
+            <CopyButton text={output.join('\n')} />
+          )}
+
+          {/* Scrollable Output with custom scrollbar */}
+          <div
+            ref={outputRef}
+            className="h-full p-2 overflow-y-scroll font-mono text-[9px] leading-snug"
+            style={{
+              scrollbarWidth: 'thin',
+              scrollbarColor: '#555 #2a2a2a'
+            }}
+          >
+            {output.length === 0 ? (
+              <div className="text-gray-500">
+                <p># DevOps Console Ready</p>
+                <p># Type 'help' for commands or click buttons below</p>
+                <p># Quick: health, git, pm2, logs, deploy</p>
+                <p>&nbsp;</p>
               </div>
-            ))
-          )}
-          {(isRunning || deploying) && (
-            <div className="flex items-center gap-2 text-gray-400 mt-1">
-              <Loader2 className="h-3 w-3 animate-spin" />
-              <span>Processing...</span>
-            </div>
-          )}
+            ) : (
+              output.map((line, i) => (
+                <div
+                  key={i}
+                  className={`${
+                    line.includes('$') ? 'text-cyan-400 font-semibold mt-2' :
+                    line.includes('OK') || line.includes('✓') ? 'text-green-400' :
+                    line.includes('FAILED') || line.includes('ERROR') || line.includes('✗') ? 'text-red-400' :
+                    line.includes('---') ? 'text-blue-400 font-semibold' :
+                    line.includes('Commit:') || line.includes('completed') ? 'text-yellow-400' :
+                    line.includes('[WARN]') || line.includes('warn') ? 'text-yellow-400' :
+                    line.includes('[ERROR]') || line.includes('error') ? 'text-red-400' :
+                    line.includes('[INFO]') || line.includes('info') ? 'text-blue-300' :
+                    'text-gray-300'
+                  }`}
+                >
+                  {line}
+                </div>
+              ))
+            )}
+            {(isRunning || deploying) && (
+              <div className="flex items-center gap-2 text-gray-400 mt-1">
+                <Loader2 className="h-3 w-3 animate-spin" />
+                <span>Processing...</span>
+              </div>
+            )}
+          </div>
         </div>
 
         {/* Command Input - Prompt Bar */}
