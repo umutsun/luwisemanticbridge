@@ -1465,17 +1465,49 @@ function CopyButton({ text }: { text: string }) {
   );
 }
 
+// Tenant config interface
+interface TenantConfig {
+  tenantId: string;
+  appName: string;
+  services: { backend: string; frontend: string; python: string };
+  ports: { backend: number; frontend: number; python: number };
+  paths: { root: string; backend: string; frontend: string; python: string; logs: string };
+  urls: { frontend: string; backend: string; api: string };
+  environment: string;
+  redisDb: number;
+  pythonServiceUrl: string;
+}
+
 // Deployment Modal - Full DevOps Console
 function DeploymentModal({ isOpen, onOpenChange }: { isOpen: boolean; onOpenChange: (open: boolean) => void }) {
   const [output, setOutput] = useState<string[]>([]);
   const [isRunning, setIsRunning] = useState(false);
   const [activeTab, setActiveTab] = useState<'deploy' | 'logs' | 'metrics'>('deploy');
   const [commandInput, setCommandInput] = useState('');
+  const [tenantConfig, setTenantConfig] = useState<TenantConfig | null>(null);
   const { deploy, deploying } = useSelfDeploy();
   const { restartService } = usePM2Services();
   const { testConfig, reload: reloadNginx } = useNginx();
   const outputRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+
+  // Fetch tenant config on mount
+  useEffect(() => {
+    const fetchConfig = async () => {
+      try {
+        const response = await fetch('/api/v2/devops/config');
+        const result = await response.json();
+        if (result?.success && result?.config) {
+          setTenantConfig(result.config);
+        }
+      } catch (error) {
+        console.error('Failed to fetch tenant config:', error);
+      }
+    };
+    if (isOpen && !tenantConfig) {
+      fetchConfig();
+    }
+  }, [isOpen, tenantConfig]);
 
   const addOutput = (line: string, color?: string) => {
     const timestamp = new Date().toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
@@ -1620,18 +1652,17 @@ function DeploymentModal({ isOpen, onOpenChange }: { isOpen: boolean; onOpenChan
   };
 
   const handleViewPM2Logs = async (service: 'backend' | 'frontend' | 'python', lines: number = 30) => {
-    // Get tenant ID for log file path
-    const tenantId = process.env.NEXT_PUBLIC_TENANT_ID || 'vergilex';
-    const serviceName = `${tenantId}-${service}`;
+    // Get service name from config or fallback to default pattern
+    const serviceName = tenantConfig?.services?.[service] || `${tenantConfig?.tenantId || 'vergilex'}-${service}`;
+    const logsPath = tenantConfig?.paths?.logs || '/root/.pm2/logs';
 
     await runAction(`logs ${service} --lines ${lines}`, async () => {
       // Use tail to read PM2 log files directly (more reliable than pm2 logs --nostream)
-      // Use /root/.pm2/logs/ instead of ~/.pm2/logs/ for proper path resolution
       const response = await fetch('/api/v2/devops/ssh/execute', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          command: `tail -n ${lines} /root/.pm2/logs/${serviceName}-out.log 2>/dev/null || tail -n ${lines} /root/.pm2/logs/${serviceName}-error.log 2>/dev/null || echo "No logs found for ${serviceName}"`
+          command: `tail -n ${lines} ${logsPath}/${serviceName}-out.log 2>/dev/null || tail -n ${lines} ${logsPath}/${serviceName}-error.log 2>/dev/null || echo "No logs found for ${serviceName}"`
         })
       });
 
@@ -1854,7 +1885,7 @@ function DeploymentModal({ isOpen, onOpenChange }: { isOpen: boolean; onOpenChan
 
   const handleDeployHistory = async () => {
     await runAction('deploy history', async () => {
-      const tenantId = process.env.NEXT_PUBLIC_TENANT_ID || 'lsemb';
+      const tenantId = tenantConfig?.tenantId || 'lsemb';
       const response = await fetch(`/api/v2/devops/deployments/${tenantId}?limit=10`);
       const result = await response.json();
       if (result?.deployments) {
@@ -1875,6 +1906,35 @@ function DeploymentModal({ isOpen, onOpenChange }: { isOpen: boolean; onOpenChan
     });
   };
 
+  // Show tenant/environment info
+  const handleShowInfo = () => {
+    addOutput('--- Environment Info ---');
+    if (tenantConfig) {
+      addOutput(`Tenant ID:   ${tenantConfig.tenantId}`);
+      addOutput(`App Name:    ${tenantConfig.appName}`);
+      addOutput(`Environment: ${tenantConfig.environment}`);
+      addOutput('');
+      addOutput('Services:');
+      addOutput(`  Backend:   ${tenantConfig.services.backend} (port ${tenantConfig.ports.backend})`);
+      addOutput(`  Frontend:  ${tenantConfig.services.frontend} (port ${tenantConfig.ports.frontend})`);
+      addOutput(`  Python:    ${tenantConfig.services.python} (port ${tenantConfig.ports.python})`);
+      addOutput('');
+      addOutput('Paths:');
+      addOutput(`  Root:      ${tenantConfig.paths.root}`);
+      addOutput(`  Logs:      ${tenantConfig.paths.logs}`);
+      addOutput('');
+      addOutput('URLs:');
+      addOutput(`  Frontend:  ${tenantConfig.urls.frontend}`);
+      addOutput(`  API:       ${tenantConfig.urls.api}`);
+      addOutput('');
+      addOutput(`Redis DB:    ${tenantConfig.redisDb}`);
+      addOutput(`Python URL:  ${tenantConfig.pythonServiceUrl}`);
+    } else {
+      addOutput('Config not loaded. Please try again.');
+    }
+    addOutput('--- End ---');
+  };
+
   // Handle command input
   const handleCommandSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -1890,19 +1950,23 @@ function DeploymentModal({ isOpen, onOpenChange }: { isOpen: boolean; onOpenChan
     if (cmd === 'help') {
       addOutput('');
       addOutput('=== Available Commands ===');
+      addOutput('  info         - Show environment/tenant info');
       addOutput('  health       - Check all services health');
       addOutput('  git status   - Show git status');
       addOutput('  pm2 status   - Show PM2 service status');
-      addOutput('  logs         - View system logs');
+      addOutput('  logs [type]  - View logs (system|backend|frontend|python|errors)');
+      addOutput('  metrics      - Show system metrics');
       addOutput('  clear        - Clear terminal');
       addOutput('');
       addOutput('=== Deployment Commands ===');
-      addOutput('  deploy [full|frontend|backend|python]');
-      addOutput('  pm2 restart [all|backend|frontend|python]');
-      addOutput('  nginx test   - Test nginx config');
-      addOutput('  nginx reload - Reload nginx');
-      addOutput('  git pull     - Pull latest from git');
+      addOutput('  deploy [type]   - Deploy (full|frontend|backend|python)');
+      addOutput('  pm2 restart [s] - Restart PM2 (all|backend|frontend|python)');
+      addOutput('  nginx test      - Test nginx config');
+      addOutput('  nginx reload    - Reload nginx');
+      addOutput('  git pull        - Pull latest from git');
       addOutput('');
+    } else if (cmd === 'info') {
+      handleShowInfo();
     } else if (cmd === 'clear') {
       setOutput([]);
     } else if (cmd === 'health') {
@@ -1947,12 +2011,17 @@ function DeploymentModal({ isOpen, onOpenChange }: { isOpen: boolean; onOpenChan
   return (
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-4xl h-[85vh] p-0 gap-0 flex flex-col overflow-hidden [&>button]:hidden">
-        {/* Header - Simple title bar */}
+        {/* Header - Simple title bar with tenant info */}
         <div className="px-4 py-2 border-b bg-muted/30 flex-shrink-0">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <Terminal className="h-4 w-4" />
               <span className="font-semibold text-sm">DevOps Console</span>
+              {tenantConfig && (
+                <Badge variant="outline" className="text-[10px] text-muted-foreground">
+                  {tenantConfig.appName} ({tenantConfig.environment})
+                </Badge>
+              )}
               {(isRunning || deploying) && (
                 <Badge className="bg-green-500 text-[10px]">
                   <Loader2 className="h-2.5 w-2.5 mr-1 animate-spin" />
@@ -1989,9 +2058,9 @@ function DeploymentModal({ isOpen, onOpenChange }: { isOpen: boolean; onOpenChan
           >
             {output.length === 0 ? (
               <div className="text-gray-500">
-                <p># DevOps Console Ready</p>
+                <p># DevOps Console Ready {tenantConfig ? `[${tenantConfig.tenantId}]` : ''}</p>
                 <p># Type 'help' for commands or click buttons below</p>
-                <p># Quick: health, git, pm2, logs, deploy</p>
+                <p># Quick: info, health, git, pm2, logs, metrics, deploy</p>
                 <p>&nbsp;</p>
               </div>
             ) : (

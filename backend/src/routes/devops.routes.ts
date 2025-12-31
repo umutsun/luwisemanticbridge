@@ -504,10 +504,68 @@ router.post('/alerts/:alertId/acknowledge', async (req: Request, res: Response) 
 
 /**
  * GET /api/v2/devops/config
- * Get current tenant configuration
+ * Get current tenant configuration from environment
+ * Returns local config, doesn't require Python service
  */
 router.get('/config', async (req: Request, res: Response) => {
-  await proxyToPython(req, res, '/config', 'GET');
+  try {
+    const tenantId = process.env.TENANT_ID || 'lsemb';
+    const appName = process.env.APP_NAME || process.env.NEXT_PUBLIC_APP_NAME || tenantId;
+
+    // Build service names based on tenant ID
+    const services = {
+      backend: `${tenantId}-backend`,
+      frontend: `${tenantId}-frontend`,
+      python: `${tenantId}-python`
+    };
+
+    // Get ports from env or use defaults
+    const ports = {
+      backend: parseInt(process.env.PORT || '8087'),
+      frontend: parseInt(process.env.FRONTEND_PORT || '4003'),
+      python: parseInt(process.env.PYTHON_SERVICE_URL?.split(':').pop() || '8003')
+    };
+
+    // Build paths
+    const basePath = process.env.APP_PATH || `/var/www/${tenantId}`;
+    const paths = {
+      root: basePath,
+      backend: `${basePath}/backend`,
+      frontend: `${basePath}/frontend`,
+      python: `${basePath}/backend/python-services`,
+      logs: `/root/.pm2/logs`
+    };
+
+    // Get URLs
+    const domain = process.env.DOMAIN || process.env.NEXT_PUBLIC_API_URL?.replace(/https?:\/\//, '').replace(/\/.*$/, '') || `${tenantId}.luwi.dev`;
+    const urls = {
+      frontend: `https://${domain}`,
+      backend: `https://${domain}/api`,
+      api: process.env.NEXT_PUBLIC_API_URL || `https://${domain}`
+    };
+
+    res.json({
+      success: true,
+      config: {
+        tenantId,
+        appName,
+        services,
+        ports,
+        paths,
+        urls,
+        environment: process.env.NODE_ENV || 'development',
+        redisDb: parseInt(process.env.REDIS_DB || '0'),
+        pythonServiceUrl: process.env.PYTHON_SERVICE_URL || 'http://localhost:8003'
+      }
+    });
+  } catch (error) {
+    console.error('[DevOps] Config error:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to get configuration',
+      message: String(error)
+    });
+  }
 });
 
 /**
