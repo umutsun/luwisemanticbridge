@@ -51,8 +51,7 @@ import {
   Square,
   Server,
   CircuitBoard,
-  ListTodo,
-  Rocket
+  ListTodo
 } from 'lucide-react';
 import ThemeToggle from '@/components/ThemeToggle';
 import NotificationCenter from '@/components/NotificationCenter';
@@ -372,8 +371,7 @@ export default function Header() {
       { href: '/dashboard/documents', label: t('header.menu.documents'), icon: FileText },
       { href: '/dashboard/crawls', label: t('header.menu.crawls'), icon: Database },
       { href: '/dashboard/messages', label: t('header.menu.messages'), icon: MessageSquare },
-      { href: '/dashboard/settings', label: t('header.menu.systemSettings'), icon: Settings2 },
-      { href: '/dashboard/devops', label: 'DevOps', icon: Rocket }
+      { href: '/dashboard/settings', label: t('header.menu.systemSettings'), icon: Settings2 }
     ] : [])
   ];
 

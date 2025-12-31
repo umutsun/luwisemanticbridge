@@ -11,7 +11,7 @@ import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Textarea } from "@/components/ui/textarea";
 import {
@@ -34,9 +34,14 @@ import {
   Trash2,
   X,
   Mic,
-  RefreshCw
+  RefreshCw,
+  Rocket,
+  Shield,
+  CheckCircle2,
+  AlertTriangle
 } from "lucide-react";
 import { toast } from "sonner";
+import { usePM2Services, useNginx, useSelfDeploy } from "@/hooks/useDevOps";
 
 interface ServiceStatus {
   name: string;
@@ -71,10 +76,16 @@ export default function ServicesPage() {
   const [services, setServices] = useState<ServiceStatus[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeService, setActiveService] = useState<string | null>(null);
+  const [showServiceDialog, setShowServiceDialog] = useState(false);
   const [logs, setLogs] = useState<string[]>([]);
   const [showPgaiModal, setShowPgaiModal] = useState(false);
   const [pgaiWorkers, setPgaiWorkers] = useState<Array<{id: number, name: string, status: string, table?: string}>>([]);
   const [vectorTables, setVectorTables] = useState<string[]>([]);
+
+  // DevOps hooks
+  const { services: pm2Services, loading: pm2Loading, loadServices: loadPM2, restartService } = usePM2Services();
+  const { loading: nginxLoading, testConfig, reload: reloadNginx } = useNginx();
+  const { deploying, deploy } = useSelfDeploy();
 
   useEffect(() => {
     const fetchServices = async () => {
@@ -244,7 +255,10 @@ export default function ServicesPage() {
                 dark:bg-card/80
                 bg-gray-50/50 border-gray-200/60
               `}
-              onClick={() => setActiveService(service.name)}
+              onClick={() => {
+                setActiveService(service.name);
+                setShowServiceDialog(true);
+              }}
             >
               {/* Status indicator line */}
               <div className={`absolute top-0 left-0 right-0 h-1 ${getStatusColor(service.status)}`} />
@@ -357,16 +371,157 @@ export default function ServicesPage() {
         })}
       </div>
 
-      {/* Service Details Panel */}
-      {activeService && (
-        <Card className="mt-6">
-          <CardHeader>
-            <CardTitle className="text-lg flex items-center gap-2">
+      {/* PM2 & Server Controls */}
+      <Card>
+        <CardHeader className="pb-3">
+          <div className="flex items-center justify-between">
+            <div>
+              <CardTitle className="text-lg flex items-center gap-2">
+                <Server className="h-5 w-5" />
+                Server Management
+              </CardTitle>
+              <CardDescription>PM2 services and server controls</CardDescription>
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => loadPM2()}
+              disabled={pm2Loading}
+            >
+              {pm2Loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+            </Button>
+          </div>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
+            {/* PM2 Services */}
+            {pm2Services.length > 0 ? (
+              pm2Services.map((svc) => (
+                <div
+                  key={svc.name}
+                  className={`p-3 rounded-lg border ${
+                    svc.status === 'online'
+                      ? 'bg-green-500/5 border-green-500/20'
+                      : 'bg-red-500/5 border-red-500/20'
+                  }`}
+                >
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="font-medium text-sm truncate">{svc.name}</span>
+                    <Badge
+                      className={
+                        svc.status === 'online'
+                          ? 'bg-green-500/10 text-green-600 text-xs'
+                          : 'bg-red-500/10 text-red-600 text-xs'
+                      }
+                    >
+                      {svc.status}
+                    </Badge>
+                  </div>
+                  <div className="text-xs text-muted-foreground space-y-1">
+                    <div className="flex justify-between">
+                      <span>CPU</span>
+                      <span>{svc.cpu}%</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span>Memory</span>
+                      <span>{(svc.memory / 1024 / 1024).toFixed(0)} MB</span>
+                    </div>
+                  </div>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="w-full mt-2 h-7 text-xs"
+                    onClick={() => {
+                      const serviceType = svc.name.includes('backend')
+                        ? 'backend'
+                        : svc.name.includes('frontend')
+                        ? 'frontend'
+                        : 'python';
+                      restartService(serviceType);
+                      toast.success(`Restarting ${svc.name}...`);
+                    }}
+                  >
+                    <RefreshCw className="h-3 w-3 mr-1" />
+                    Restart
+                  </Button>
+                </div>
+              ))
+            ) : (
+              <div className="col-span-full text-center py-4 text-muted-foreground text-sm">
+                <Server className="h-8 w-8 mx-auto mb-2 opacity-40" />
+                <p>No PM2 services loaded</p>
+                <Button variant="link" size="sm" onClick={() => loadPM2()}>
+                  Load PM2 Status
+                </Button>
+              </div>
+            )}
+          </div>
+
+          {/* Quick Actions */}
+          <div className="flex flex-wrap gap-2 mt-4 pt-4 border-t">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={async () => {
+                const result = await testConfig();
+                if (result?.valid) {
+                  toast.success('Nginx config is valid');
+                } else {
+                  toast.error('Nginx config has errors');
+                }
+              }}
+              disabled={nginxLoading}
+            >
+              {nginxLoading ? <Loader2 className="h-3 w-3 mr-1 animate-spin" /> : <Globe className="h-3 w-3 mr-1" />}
+              Test Nginx
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={async () => {
+                await reloadNginx();
+                toast.success('Nginx reloaded');
+              }}
+              disabled={nginxLoading}
+            >
+              <RefreshCw className="h-3 w-3 mr-1" />
+              Reload Nginx
+            </Button>
+            <Button
+              variant="default"
+              size="sm"
+              onClick={async () => {
+                await deploy('hotfix');
+                toast.success('Hot fix deployed');
+              }}
+              disabled={deploying}
+            >
+              {deploying ? <Loader2 className="h-3 w-3 mr-1 animate-spin" /> : <Rocket className="h-3 w-3 mr-1" />}
+              Hot Fix Deploy
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => restartService('all')}
+            >
+              <RefreshCw className="h-3 w-3 mr-1" />
+              Restart All PM2
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Service Details Dialog */}
+      <Dialog open={showServiceDialog} onOpenChange={setShowServiceDialog}>
+        <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
               <SettingsIcon className="h-5 w-5" />
               {services.find(s => s.name === activeService)?.displayName} Configuration
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
+            </DialogTitle>
+          </DialogHeader>
+
+          {activeService && (
             <Tabs defaultValue="config" className="w-full">
               <TabsList className="grid w-full grid-cols-3">
                 <TabsTrigger value="config">Configuration</TabsTrigger>
@@ -374,7 +529,7 @@ export default function ServicesPage() {
                 <TabsTrigger value="test">Test</TabsTrigger>
               </TabsList>
 
-              <TabsContent value="config" className="space-y-4">
+              <TabsContent value="config" className="space-y-4 mt-4">
                 {activeService === "graphql" && <GraphQLConfig />}
                 {activeService === "python" && <PythonConfig />}
                 {activeService === "crawl4ai" && <Crawl4AIConfig />}
@@ -391,7 +546,7 @@ export default function ServicesPage() {
                 )}
               </TabsContent>
 
-              <TabsContent value="logs" className="space-y-4">
+              <TabsContent value="logs" className="space-y-4 mt-4">
                 <div className="bg-black text-green-400 p-4 rounded-lg font-mono text-xs h-64 overflow-y-auto">
                   <div className="space-y-1">
                     {logs.length > 0 ? logs.map((log, i) => (
@@ -407,7 +562,7 @@ export default function ServicesPage() {
                 </div>
               </TabsContent>
 
-              <TabsContent value="test" className="space-y-4">
+              <TabsContent value="test" className="space-y-4 mt-4">
                 {activeService === "graphql" && <GraphQLTest />}
                 {activeService === "python" && <PythonTest />}
                 {activeService === "crawl4ai" && <Crawl4AITest />}
@@ -421,9 +576,15 @@ export default function ServicesPage() {
                 )}
               </TabsContent>
             </Tabs>
-          </CardContent>
-        </Card>
-      )}
+          )}
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowServiceDialog(false)}>
+              Close
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* pgai Worker Configuration Modal */}
       <Dialog open={showPgaiModal} onOpenChange={setShowPgaiModal}>
