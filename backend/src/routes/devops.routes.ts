@@ -212,9 +212,81 @@ router.post('/ssh/test', async (req: Request, res: Response) => {
 /**
  * POST /api/v2/devops/ssh/execute
  * Execute command on remote server
+ * Falls back to local shell execution in development mode
  */
 router.post('/ssh/execute', async (req: Request, res: Response) => {
-  await proxyToPython(req, res, '/ssh/execute', 'POST');
+  const { execSync } = require('child_process');
+  const { command } = req.body;
+
+  if (!command) {
+    return res.status(400).json({ success: false, error: 'Command is required' });
+  }
+
+  // Security: Block dangerous commands
+  const dangerousPatterns = [
+    /rm\s+-rf\s+\/(?!var\/www)/,  // rm -rf / (except /var/www)
+    /mkfs/,
+    /dd\s+if=/,
+    />\s*\/dev\//,
+    /chmod\s+777\s+\//,
+    /wget.*\|\s*sh/,
+    /curl.*\|\s*sh/
+  ];
+
+  for (const pattern of dangerousPatterns) {
+    if (pattern.test(command)) {
+      return res.status(403).json({
+        success: false,
+        error: 'Command blocked for security reasons'
+      });
+    }
+  }
+
+  try {
+    // First try Python service (for production/SSH)
+    const response = await axios.post(`${DEVOPS_BASE}/ssh/execute`, { command }, {
+      timeout: 60000,
+      headers: { 'X-API-Key': process.env.INTERNAL_API_KEY || '' }
+    });
+    res.json(response.data);
+  } catch (proxyError) {
+    // Fallback: Local execution (for development)
+    const isDevelopment = process.env.NODE_ENV !== 'production';
+
+    if (!isDevelopment) {
+      return res.status(503).json({
+        success: false,
+        error: 'SSH service unavailable',
+        message: 'Python DevOps service is not running. Please start it for production SSH access.'
+      });
+    }
+
+    try {
+      // Execute locally in development mode
+      const output = execSync(command, {
+        encoding: 'utf-8',
+        timeout: 30000,
+        maxBuffer: 10 * 1024 * 1024, // 10MB
+        cwd: process.env.PROJECT_ROOT || process.cwd()
+      });
+
+      res.json({
+        success: true,
+        output: output || '(no output)',
+        source: 'local',
+        warning: 'Executed locally (development mode). In production, this will use SSH.'
+      });
+    } catch (execError: any) {
+      // Command failed but executed
+      res.json({
+        success: false,
+        output: execError.stdout || '',
+        error: execError.stderr || execError.message,
+        exitCode: execError.status,
+        source: 'local'
+      });
+    }
+  }
 });
 
 // ==========================================
@@ -414,9 +486,47 @@ router.post('/self/nginx/test', async (req: Request, res: Response) => {
 /**
  * GET /api/v2/devops/self/pm2/status
  * Get PM2 status for this tenant
+ * Falls back to local execution if Python service unavailable
  */
 router.get('/self/pm2/status', async (req: Request, res: Response) => {
-  await proxyToPython(req, res, '/self/pm2/status', 'GET');
+  const { execSync } = require('child_process');
+
+  try {
+    // First try Python service
+    const response = await axios.get(`${DEVOPS_BASE}/self/pm2/status`, {
+      timeout: 5000,
+      headers: { 'X-API-Key': process.env.INTERNAL_API_KEY || '' }
+    });
+    res.json(response.data);
+  } catch (proxyError) {
+    // Fallback: Try local PM2 execution
+    try {
+      const pm2Output = execSync('pm2 jlist 2>/dev/null || echo "[]"', {
+        encoding: 'utf-8',
+        timeout: 10000
+      });
+
+      const processes = JSON.parse(pm2Output || '[]');
+      const services = processes.map((proc: any) => ({
+        name: proc.name,
+        status: proc.pm2_env?.status || 'unknown',
+        cpu: proc.monit?.cpu || 0,
+        memory: proc.monit?.memory || 0,
+        restarts: proc.pm2_env?.restart_time || 0,
+        uptime: proc.pm2_env?.pm_uptime ? Date.now() - proc.pm2_env.pm_uptime : 0
+      }));
+
+      res.json({ success: true, services, source: 'local' });
+    } catch (localError) {
+      // PM2 not available or not running
+      res.json({
+        success: false,
+        services: [],
+        error: 'PM2 not available. Python service is not running and local PM2 is not accessible.',
+        hint: 'Start Python service with: cd backend/python-services && python main.py'
+      });
+    }
+  }
 });
 
 /**
@@ -431,9 +541,54 @@ router.post('/self/pm2/restart/:service', async (req: Request, res: Response) =>
 /**
  * GET /api/v2/devops/self/metrics
  * Get server metrics for this tenant
+ * Falls back to local Node.js metrics if Python service unavailable
  */
 router.get('/self/metrics', async (req: Request, res: Response) => {
-  await proxyToPython(req, res, '/self/metrics', 'GET');
+  const os = require('os');
+
+  try {
+    // First try Python service
+    const response = await axios.get(`${DEVOPS_BASE}/self/metrics`, {
+      timeout: 5000,
+      headers: { 'X-API-Key': process.env.INTERNAL_API_KEY || '' }
+    });
+    res.json(response.data);
+  } catch (proxyError) {
+    // Fallback: Use Node.js os module for basic metrics
+    try {
+      const cpus = os.cpus();
+      const totalMem = os.totalmem();
+      const freeMem = os.freemem();
+      const usedMem = totalMem - freeMem;
+      const loadAvg = os.loadavg();
+      const uptime = os.uptime();
+
+      // Calculate CPU usage (approximate)
+      const cpuUsage = cpus.reduce((acc, cpu) => {
+        const total = Object.values(cpu.times).reduce((a, b) => a + b, 0);
+        const idle = cpu.times.idle;
+        return acc + ((total - idle) / total) * 100;
+      }, 0) / cpus.length;
+
+      const metrics = {
+        cpu: `${cpuUsage.toFixed(1)}%`,
+        ram: `${(usedMem / 1024 / 1024 / 1024).toFixed(2)}GB / ${(totalMem / 1024 / 1024 / 1024).toFixed(2)}GB (${((usedMem / totalMem) * 100).toFixed(1)}%)`,
+        disk: 'N/A (local mode)',
+        load: loadAvg.map(l => l.toFixed(2)).join(', '),
+        uptime: `${Math.floor(uptime / 86400)}d ${Math.floor((uptime % 86400) / 3600)}h ${Math.floor((uptime % 3600) / 60)}m`,
+        platform: `${os.platform()} ${os.release()}`,
+        hostname: os.hostname()
+      };
+
+      res.json({ success: true, metrics, source: 'local' });
+    } catch (localError) {
+      res.status(500).json({
+        success: false,
+        error: 'Failed to get metrics',
+        message: String(localError)
+      });
+    }
+  }
 });
 
 /**

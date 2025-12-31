@@ -1558,15 +1558,29 @@ function DeploymentModal({ isOpen, onOpenChange }: { isOpen: boolean; onOpenChan
   const handleViewSystemLogs = async (limit: number = 50) => {
     await runAction(`system logs --limit=${limit}`, async () => {
       const response = await fetch(`/api/v2/system/logs/recent?limit=${limit}`);
+
+      if (!response.ok) {
+        if (response.status === 404) {
+          addOutput('FAILED: System logs endpoint not found. Backend may need restart.');
+        } else {
+          addOutput(`FAILED: HTTP ${response.status} - ${response.statusText}`);
+        }
+        return;
+      }
+
       const result = await response.json();
       if (result?.success && result?.data) {
         addOutput(`--- System Logs (${result.data.length} entries) ---`);
-        result.data.slice(0, limit).forEach((log: any) => {
-          const time = new Date(log.timestamp).toLocaleTimeString('tr-TR');
-          const level = log.level?.toUpperCase() || 'INFO';
-          const service = log.service || 'system';
-          addOutput(`[${time}] [${level}] [${service}] ${log.message}`);
-        });
+        if (result.data.length === 0) {
+          addOutput('No logs available.');
+        } else {
+          result.data.slice(0, limit).forEach((log: any) => {
+            const time = new Date(log.timestamp).toLocaleTimeString('tr-TR');
+            const level = log.level?.toUpperCase() || 'INFO';
+            const service = log.service || 'system';
+            addOutput(`[${time}] [${level}] [${service}] ${log.message}`);
+          });
+        }
         addOutput('--- End of logs ---');
       } else {
         addOutput(`FAILED: ${result?.error || 'Could not fetch logs'}`);
@@ -1583,15 +1597,35 @@ function DeploymentModal({ isOpen, onOpenChange }: { isOpen: boolean; onOpenChan
           command: `pm2 logs ${service} --lines ${lines} --nostream 2>&1 | tail -${lines}`
         })
       });
+
+      if (!response.ok) {
+        addOutput(`FAILED: HTTP ${response.status} - ${response.statusText}`);
+        return;
+      }
+
       const result = await response.json();
+
+      // Handle local mode (development)
+      if (result?.source === 'local' && result?.warning) {
+        addOutput(`[INFO] ${result.warning}`);
+      }
+
       if (result?.success && result?.output) {
         addOutput(`--- PM2 ${service} Logs ---`);
-        result.output.split('\n').forEach((line: string) => {
-          if (line.trim()) addOutput(line);
-        });
+        const outputLines = result.output.split('\n').filter((line: string) => line.trim());
+        if (outputLines.length === 0) {
+          addOutput('No logs available for this service.');
+        } else {
+          outputLines.forEach((line: string) => addOutput(line));
+        }
         addOutput('--- End of logs ---');
+      } else if (result?.error) {
+        addOutput(`FAILED: ${result.error}`);
+        if (result?.hint) {
+          addOutput(`HINT: ${result.hint}`);
+        }
       } else {
-        addOutput(`FAILED: ${result?.error || 'Could not fetch logs'}`);
+        addOutput('FAILED: Could not fetch logs. SSH/Python service may not be running.');
       }
     });
   };
@@ -1620,7 +1654,19 @@ function DeploymentModal({ isOpen, onOpenChange }: { isOpen: boolean; onOpenChan
   const handleSystemMetrics = async () => {
     await runAction('system metrics', async () => {
       const response = await fetch('/api/v2/devops/self/metrics');
+
+      if (!response.ok) {
+        addOutput(`FAILED: HTTP ${response.status} - ${response.statusText}`);
+        return;
+      }
+
       const result = await response.json();
+
+      // Show source info
+      if (result?.source === 'local') {
+        addOutput('[INFO] Using local metrics (Python service not running)');
+      }
+
       if (result?.success && result?.metrics) {
         const m = result.metrics;
         addOutput('--- System Metrics ---');
@@ -1629,6 +1675,8 @@ function DeploymentModal({ isOpen, onOpenChange }: { isOpen: boolean; onOpenChan
         addOutput(`Disk Usage:   ${m.disk || 'N/A'}`);
         addOutput(`Load Average: ${m.load || 'N/A'}`);
         addOutput(`Uptime:       ${m.uptime || 'N/A'}`);
+        if (m.platform) addOutput(`Platform:     ${m.platform}`);
+        if (m.hostname) addOutput(`Hostname:     ${m.hostname}`);
         addOutput('--- End ---');
       } else {
         addOutput(`FAILED: ${result?.error || 'Could not fetch metrics'}`);
@@ -1639,18 +1687,39 @@ function DeploymentModal({ isOpen, onOpenChange }: { isOpen: boolean; onOpenChan
   const handlePM2Status = async () => {
     await runAction('pm2 list', async () => {
       const response = await fetch('/api/v2/devops/self/pm2/status');
+
+      if (!response.ok) {
+        addOutput(`FAILED: HTTP ${response.status} - ${response.statusText}`);
+        return;
+      }
+
       const result = await response.json();
+
+      // Show source info
+      if (result?.source === 'local') {
+        addOutput('[INFO] Using local PM2 (Python service not running)');
+      }
+
       if (result?.success && result?.services) {
         addOutput('--- PM2 Service Status ---');
-        result.services.forEach((svc: any) => {
-          const status = svc.status === 'online' ? '✓' : '✗';
-          const memory = svc.memory ? `${Math.round(svc.memory / 1024 / 1024)}MB` : 'N/A';
-          const cpu = svc.cpu !== undefined ? `${svc.cpu}%` : 'N/A';
-          addOutput(`${status} ${svc.name.padEnd(20)} | CPU: ${cpu.padStart(5)} | MEM: ${memory.padStart(7)} | Restarts: ${svc.restarts || 0}`);
-        });
+        if (result.services.length === 0) {
+          addOutput('No PM2 services found.');
+        } else {
+          result.services.forEach((svc: any) => {
+            const status = svc.status === 'online' ? '✓' : '✗';
+            const memory = svc.memory ? `${Math.round(svc.memory / 1024 / 1024)}MB` : 'N/A';
+            const cpu = svc.cpu !== undefined ? `${svc.cpu}%` : 'N/A';
+            addOutput(`${status} ${svc.name.padEnd(20)} | CPU: ${cpu.padStart(5)} | MEM: ${memory.padStart(7)} | Restarts: ${svc.restarts || 0}`);
+          });
+        }
         addOutput('--- End ---');
+      } else if (result?.error) {
+        addOutput(`FAILED: ${result.error}`);
+        if (result?.hint) {
+          addOutput(`HINT: ${result.hint}`);
+        }
       } else {
-        addOutput(`FAILED: ${result?.error || 'Could not fetch PM2 status'}`);
+        addOutput('FAILED: Could not fetch PM2 status');
       }
     });
   };

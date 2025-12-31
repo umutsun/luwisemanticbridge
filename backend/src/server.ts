@@ -568,7 +568,7 @@ app.use("/api/v2/api-validation", apiValidationRoutes);
 app.use(messageEmbeddingsRoutes);
 app.use(messageAnalyticsRoutes);
 // app.use('/api/v2/debug', debugRoutes); // Commented out - debugRoutes doesn't exist
-app.use("/api/v2/system", systemLogsRoutes);
+app.use("/api/v2/system/logs", systemLogsRoutes);
 app.use("/api/v2/frontend", frontendLogsRoutes);
 app.use("/api/v2/document-processing", documentProcessingRoutes);
 app.use("/api/v2/ocr", ocrRoutes);
