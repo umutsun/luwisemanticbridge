@@ -40,17 +40,13 @@ import {
   Shield,
   CheckCircle2,
   AlertTriangle,
-  Bug
+  Bug,
+  Download
 } from "lucide-react";
 import { toast } from "sonner";
 import { usePM2Services, useNginx, useSelfDeploy } from "@/hooks/useDevOps";
 import { DebugSettings } from "@/components/settings/DebugSettings";
 
-// Dynamic import for ConsoleModal
-const ConsoleModal = dynamic(() => import("@/components/dashboard/ConsoleModal"), {
-  ssr: false,
-  loading: () => null
-});
 
 interface ServiceStatus {
   name: string;
@@ -90,7 +86,6 @@ export default function ServicesPage() {
   const [showPgaiModal, setShowPgaiModal] = useState(false);
   const [pgaiWorkers, setPgaiWorkers] = useState<Array<{id: number, name: string, status: string, table?: string}>>([]);
   const [vectorTables, setVectorTables] = useState<string[]>([]);
-  const [consoleOpen, setConsoleOpen] = useState(false);
 
   // DevOps hooks
   const { services: pm2Services, loading: pm2Loading, loadServices: loadPM2, restartService } = usePM2Services();
@@ -340,16 +335,10 @@ export default function ServicesPage() {
           {/* System Status */}
           <SystemStatusCard />
 
-          {/* Developer Tools Card */}
-          <DeveloperToolsCard onOpenConsole={() => setConsoleOpen(true)} />
-
-          {/* Deployment Card */}
-          <DeploymentCard />
+          {/* DevOps Card */}
+          <DevOpsCard />
         </div>
       </div>
-
-      {/* Console Modal */}
-      <ConsoleModal isOpen={consoleOpen} onOpenChange={setConsoleOpen} />
 
       {/* Service Details Dialog */}
       <Dialog open={showServiceDialog} onOpenChange={setShowServiceDialog}>
@@ -1396,50 +1385,8 @@ function SystemStatusCard() {
   );
 }
 
-// Developer Tools Card - Row-based, click to open console
-function DeveloperToolsCard({ onOpenConsole }: { onOpenConsole: () => void }) {
-  return (
-    <Card className="border-gray-200/60 dark:bg-card/80">
-      <CardHeader className="pb-2">
-        <CardTitle className="text-sm flex items-center gap-2">
-          <Terminal className="h-4 w-4" />
-          Developer Tools
-        </CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-2 pt-0">
-        {/* Debug Mode Row */}
-        <div className="flex items-center justify-between p-2 rounded-md bg-muted/50 hover:bg-muted/70 transition-colors">
-          <div className="flex items-center gap-2">
-            <Bug className="h-3.5 w-3.5 text-muted-foreground" />
-            <div>
-              <span className="text-xs font-medium">Debug Mode</span>
-              <p className="text-[10px] text-muted-foreground">Console logging</p>
-            </div>
-          </div>
-          <DebugSettings />
-        </div>
-
-        {/* Console Row - Clickable */}
-        <div
-          className="flex items-center justify-between p-2 rounded-md bg-muted/50 hover:bg-muted/70 transition-colors cursor-pointer"
-          onClick={onOpenConsole}
-        >
-          <div className="flex items-center gap-2">
-            <Terminal className="h-3.5 w-3.5 text-muted-foreground" />
-            <div>
-              <span className="text-xs font-medium">System Console</span>
-              <p className="text-[10px] text-muted-foreground">Logs & output</p>
-            </div>
-          </div>
-          <Badge variant="outline" className="text-[10px]">Open</Badge>
-        </div>
-      </CardContent>
-    </Card>
-  );
-}
-
-// Deployment Card - Single row, click to open DevOps terminal
-function DeploymentCard() {
+// DevOps Card - Debug Mode + DevOps Terminal
+function DevOpsCard() {
   const [showModal, setShowModal] = useState(false);
 
   return (
@@ -1451,7 +1398,19 @@ function DeploymentCard() {
             DevOps
           </CardTitle>
         </CardHeader>
-        <CardContent className="pt-0">
+        <CardContent className="space-y-2 pt-0">
+          {/* Debug Mode Row */}
+          <div className="flex items-center justify-between p-2 rounded-md bg-muted/50 hover:bg-muted/70 transition-colors">
+            <div className="flex items-center gap-2">
+              <Bug className="h-3.5 w-3.5 text-muted-foreground" />
+              <div>
+                <span className="text-xs font-medium">Debug Mode</span>
+                <p className="text-[10px] text-muted-foreground">Browser console logging</p>
+              </div>
+            </div>
+            <DebugSettings />
+          </div>
+
           {/* DevOps Terminal Row - Clickable */}
           <div
             className="flex items-center justify-between p-2 rounded-md bg-muted/50 hover:bg-muted/70 transition-colors cursor-pointer"
@@ -1461,7 +1420,7 @@ function DeploymentCard() {
               <Terminal className="h-3.5 w-3.5 text-muted-foreground" />
               <div>
                 <span className="text-xs font-medium">DevOps Terminal</span>
-                <p className="text-[10px] text-muted-foreground">Deploy, PM2, Nginx, Cache</p>
+                <p className="text-[10px] text-muted-foreground">Deploy, Git, PM2, Nginx</p>
               </div>
             </div>
             <Badge variant="outline" className="text-[10px]">Open</Badge>
@@ -1475,18 +1434,19 @@ function DeploymentCard() {
   );
 }
 
-// Deployment Modal - Terminal-style deployment interface
+// Deployment Modal - Full DevOps Console
 function DeploymentModal({ isOpen, onOpenChange }: { isOpen: boolean; onOpenChange: (open: boolean) => void }) {
   const [output, setOutput] = useState<string[]>([]);
   const [isRunning, setIsRunning] = useState(false);
+  const [activeTab, setActiveTab] = useState<'terminal' | 'logs' | 'metrics'>('terminal');
   const { deploy, deploying } = useSelfDeploy();
   const { restartService } = usePM2Services();
   const { testConfig, reload: reloadNginx } = useNginx();
   const outputRef = useRef<HTMLDivElement>(null);
 
-  const addOutput = (line: string) => {
+  const addOutput = (line: string, color?: string) => {
     const timestamp = new Date().toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
-    setOutput(prev => [...prev.slice(-100), `[${timestamp}] ${line}`]);
+    setOutput(prev => [...prev.slice(-200), `[${timestamp}] ${line}`]);
   };
 
   // Auto-scroll to bottom when output changes
@@ -1508,6 +1468,7 @@ function DeploymentModal({ isOpen, onOpenChange }: { isOpen: boolean; onOpenChan
     }
   };
 
+  // === DEPLOY ACTIONS ===
   const handleDeploy = async (type: 'full' | 'frontend' | 'backend' | 'hotfix' | 'python' | 'restart') => {
     await runAction(`deploy --type=${type}`, async () => {
       const result = await deploy(type);
@@ -1516,7 +1477,6 @@ function DeploymentModal({ isOpen, onOpenChange }: { isOpen: boolean; onOpenChan
         if (result.git_commit_after) {
           addOutput(`Commit: ${result.git_commit_after.slice(0, 7)}`);
         }
-        // Show logs
         if (result.logs) {
           result.logs.split('\n').forEach((line: string) => {
             if (line.trim()) addOutput(line);
@@ -1529,6 +1489,7 @@ function DeploymentModal({ isOpen, onOpenChange }: { isOpen: boolean; onOpenChan
     });
   };
 
+  // === SERVER MANAGEMENT ===
   const handlePM2Restart = async (service: 'all' | 'backend' | 'frontend' | 'python') => {
     await runAction(`pm2 restart ${service}`, async () => {
       await restartService(service);
@@ -1571,31 +1532,243 @@ function DeploymentModal({ isOpen, onOpenChange }: { isOpen: boolean; onOpenChan
     });
   };
 
+  const handleGitPull = async () => {
+    await runAction('git pull origin main', async () => {
+      const response = await fetch('/api/v2/devops/deploy/git-status', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' }
+      });
+      const result = await response.json();
+      if (result?.success) {
+        if (result.output) {
+          result.output.split('\n').forEach((line: string) => {
+            if (line.trim()) addOutput(line);
+          });
+        }
+        addOutput('OK');
+      } else {
+        addOutput(`FAILED: ${result?.error || 'Unknown error'}`);
+      }
+    });
+  };
+
+  // === LOG VIEWING ===
+  const handleViewSystemLogs = async (limit: number = 50) => {
+    await runAction(`system logs --limit=${limit}`, async () => {
+      const response = await fetch(`/api/v2/system/logs/recent?limit=${limit}`);
+      const result = await response.json();
+      if (result?.success && result?.data) {
+        addOutput(`--- System Logs (${result.data.length} entries) ---`);
+        result.data.slice(0, limit).forEach((log: any) => {
+          const time = new Date(log.timestamp).toLocaleTimeString('tr-TR');
+          const level = log.level?.toUpperCase() || 'INFO';
+          const service = log.service || 'system';
+          addOutput(`[${time}] [${level}] [${service}] ${log.message}`);
+        });
+        addOutput('--- End of logs ---');
+      } else {
+        addOutput(`FAILED: ${result?.error || 'Could not fetch logs'}`);
+      }
+    });
+  };
+
+  const handleViewPM2Logs = async (service: 'backend' | 'frontend' | 'python', lines: number = 30) => {
+    await runAction(`pm2 logs ${service} --lines ${lines}`, async () => {
+      const response = await fetch('/api/v2/devops/ssh/execute', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          command: `pm2 logs ${service} --lines ${lines} --nostream 2>&1 | tail -${lines}`
+        })
+      });
+      const result = await response.json();
+      if (result?.success && result?.output) {
+        addOutput(`--- PM2 ${service} Logs ---`);
+        result.output.split('\n').forEach((line: string) => {
+          if (line.trim()) addOutput(line);
+        });
+        addOutput('--- End of logs ---');
+      } else {
+        addOutput(`FAILED: ${result?.error || 'Could not fetch logs'}`);
+      }
+    });
+  };
+
+  const handleViewErrorLogs = async () => {
+    await runAction('error logs --level=error', async () => {
+      const response = await fetch('/api/v2/system/logs/recent?limit=50&level=error');
+      const result = await response.json();
+      if (result?.success && result?.data) {
+        addOutput(`--- Error Logs (${result.data.length} entries) ---`);
+        result.data.forEach((log: any) => {
+          const time = new Date(log.timestamp).toLocaleTimeString('tr-TR');
+          addOutput(`[${time}] [${log.service}] ${log.message}`);
+        });
+        if (result.data.length === 0) {
+          addOutput('No errors found.');
+        }
+        addOutput('--- End of logs ---');
+      } else {
+        addOutput(`FAILED: ${result?.error || 'Could not fetch logs'}`);
+      }
+    });
+  };
+
+  // === SYSTEM METRICS ===
+  const handleSystemMetrics = async () => {
+    await runAction('system metrics', async () => {
+      const response = await fetch('/api/v2/devops/self/metrics');
+      const result = await response.json();
+      if (result?.success && result?.metrics) {
+        const m = result.metrics;
+        addOutput('--- System Metrics ---');
+        addOutput(`CPU Usage:    ${m.cpu || 'N/A'}`);
+        addOutput(`Memory:       ${m.ram || 'N/A'}`);
+        addOutput(`Disk Usage:   ${m.disk || 'N/A'}`);
+        addOutput(`Load Average: ${m.load || 'N/A'}`);
+        addOutput(`Uptime:       ${m.uptime || 'N/A'}`);
+        addOutput('--- End ---');
+      } else {
+        addOutput(`FAILED: ${result?.error || 'Could not fetch metrics'}`);
+      }
+    });
+  };
+
+  const handlePM2Status = async () => {
+    await runAction('pm2 list', async () => {
+      const response = await fetch('/api/v2/devops/self/pm2/status');
+      const result = await response.json();
+      if (result?.success && result?.services) {
+        addOutput('--- PM2 Service Status ---');
+        result.services.forEach((svc: any) => {
+          const status = svc.status === 'online' ? '✓' : '✗';
+          const memory = svc.memory ? `${Math.round(svc.memory / 1024 / 1024)}MB` : 'N/A';
+          const cpu = svc.cpu !== undefined ? `${svc.cpu}%` : 'N/A';
+          addOutput(`${status} ${svc.name.padEnd(20)} | CPU: ${cpu.padStart(5)} | MEM: ${memory.padStart(7)} | Restarts: ${svc.restarts || 0}`);
+        });
+        addOutput('--- End ---');
+      } else {
+        addOutput(`FAILED: ${result?.error || 'Could not fetch PM2 status'}`);
+      }
+    });
+  };
+
+  const handleGitStatus = async () => {
+    await runAction('git status', async () => {
+      const response = await fetch('/api/v2/devops/status');
+      const result = await response.json();
+      if (result?.success !== false) {
+        addOutput('--- Git Status ---');
+        addOutput(`Branch:     ${result.branch || 'unknown'}`);
+        addOutput(`Commit:     ${result.commitHash?.slice(0, 7) || 'unknown'}`);
+        addOutput(`Status:     ${result.gitStatus || 'unknown'}`);
+        addOutput(`Last Deploy: ${result.lastDeploy ? new Date(result.lastDeploy).toLocaleString('tr-TR') : 'N/A'}`);
+        addOutput('--- End ---');
+      } else {
+        addOutput(`FAILED: ${result?.error || 'Could not fetch git status'}`);
+      }
+    });
+  };
+
+  const handleLogStats = async () => {
+    await runAction('log stats', async () => {
+      const response = await fetch('/api/v2/system/logs/stats');
+      const result = await response.json();
+      if (result?.success && result?.data) {
+        const d = result.data;
+        addOutput('--- Log Statistics ---');
+        addOutput(`Total Logs: ${d.total || 0}`);
+        addOutput(`Errors:     ${d.byLevel?.error || 0}`);
+        addOutput(`Warnings:   ${d.byLevel?.warn || 0}`);
+        addOutput(`Info:       ${d.byLevel?.info || 0}`);
+        addOutput(`Debug:      ${d.byLevel?.debug || 0}`);
+        addOutput('--- End ---');
+      } else {
+        addOutput(`FAILED: ${result?.error || 'Could not fetch stats'}`);
+      }
+    });
+  };
+
+  const handleDeployHistory = async () => {
+    await runAction('deploy history', async () => {
+      const tenantId = process.env.NEXT_PUBLIC_TENANT_ID || 'lsemb';
+      const response = await fetch(`/api/v2/devops/deployments/${tenantId}?limit=10`);
+      const result = await response.json();
+      if (result?.deployments) {
+        addOutput('--- Deployment History ---');
+        result.deployments.slice(0, 10).forEach((dep: any) => {
+          const time = new Date(dep.started_at || dep.completed_at).toLocaleString('tr-TR');
+          const status = dep.status === 'success' ? '✓' : '✗';
+          const duration = dep.duration_ms ? `${dep.duration_ms}ms` : 'N/A';
+          addOutput(`${status} [${time}] ${dep.deploy_type || 'full'} - ${duration}`);
+        });
+        if (result.deployments.length === 0) {
+          addOutput('No deployment history found.');
+        }
+        addOutput('--- End ---');
+      } else {
+        addOutput(`FAILED: ${result?.error || 'Could not fetch history'}`);
+      }
+    });
+  };
+
   return (
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-3xl h-[80vh] p-0 gap-0 flex flex-col">
-        {/* Header */}
-        <DialogHeader className="px-4 py-3 border-b bg-muted/30 flex-shrink-0">
-          <DialogTitle className="flex items-center gap-2 text-base">
-            <Terminal className="h-4 w-4" />
-            DevOps Terminal
-            {(isRunning || deploying) && (
-              <Badge className="ml-2 bg-green-500 text-[10px]">
-                <Loader2 className="h-2.5 w-2.5 mr-1 animate-spin" />
-                Running
-              </Badge>
-            )}
-          </DialogTitle>
+      <DialogContent className="max-w-4xl h-[85vh] p-0 gap-0 flex flex-col">
+        {/* Header with tabs */}
+        <DialogHeader className="px-4 py-2 border-b bg-muted/30 flex-shrink-0">
+          <div className="flex items-center justify-between">
+            <DialogTitle className="flex items-center gap-2 text-base">
+              <Terminal className="h-4 w-4" />
+              DevOps Console
+              {(isRunning || deploying) && (
+                <Badge className="ml-2 bg-green-500 text-[10px]">
+                  <Loader2 className="h-2.5 w-2.5 mr-1 animate-spin" />
+                  Running
+                </Badge>
+              )}
+            </DialogTitle>
+            <div className="flex gap-1">
+              <Button
+                size="sm"
+                variant={activeTab === 'terminal' ? 'default' : 'ghost'}
+                onClick={() => setActiveTab('terminal')}
+                className="h-6 text-[10px] px-2"
+              >
+                <Rocket className="h-3 w-3 mr-1" />
+                Deploy
+              </Button>
+              <Button
+                size="sm"
+                variant={activeTab === 'logs' ? 'default' : 'ghost'}
+                onClick={() => setActiveTab('logs')}
+                className="h-6 text-[10px] px-2"
+              >
+                <Terminal className="h-3 w-3 mr-1" />
+                Logs
+              </Button>
+              <Button
+                size="sm"
+                variant={activeTab === 'metrics' ? 'default' : 'ghost'}
+                onClick={() => setActiveTab('metrics')}
+                className="h-6 text-[10px] px-2"
+              >
+                <Activity className="h-3 w-3 mr-1" />
+                Metrics
+              </Button>
+            </div>
+          </div>
         </DialogHeader>
 
         {/* Terminal Output - Main Body */}
         <div
           ref={outputRef}
-          className="flex-1 bg-[#1e1e1e] p-4 overflow-y-auto font-mono text-sm"
+          className="flex-1 bg-[#1a1a1a] p-3 overflow-y-auto font-mono text-xs leading-relaxed"
         >
           {output.length === 0 ? (
             <div className="text-gray-500">
-              <p># DevOps Terminal Ready</p>
+              <p># DevOps Console Ready</p>
+              <p># Use tabs above to switch between Deploy, Logs, and Metrics</p>
               <p># Select an action from the buttons below</p>
               <p>&nbsp;</p>
             </div>
@@ -1603,11 +1776,15 @@ function DeploymentModal({ isOpen, onOpenChange }: { isOpen: boolean; onOpenChan
             output.map((line, i) => (
               <div
                 key={i}
-                className={`leading-relaxed ${
+                className={`${
                   line.includes('$') ? 'text-cyan-400 font-semibold mt-2' :
-                  line.includes('OK') ? 'text-green-400' :
-                  line.includes('FAILED') || line.includes('ERROR') ? 'text-red-400' :
+                  line.includes('OK') || line.includes('✓') ? 'text-green-400' :
+                  line.includes('FAILED') || line.includes('ERROR') || line.includes('✗') ? 'text-red-400' :
+                  line.includes('---') ? 'text-blue-400 font-semibold' :
                   line.includes('Commit:') || line.includes('completed') ? 'text-yellow-400' :
+                  line.includes('[WARN]') || line.includes('warn') ? 'text-yellow-400' :
+                  line.includes('[ERROR]') || line.includes('error') ? 'text-red-400' :
+                  line.includes('[INFO]') || line.includes('info') ? 'text-blue-300' :
                   'text-gray-300'
                 }`}
               >
@@ -1623,54 +1800,126 @@ function DeploymentModal({ isOpen, onOpenChange }: { isOpen: boolean; onOpenChan
           )}
         </div>
 
-        {/* Action Buttons - Footer */}
-        <div className="border-t bg-muted/30 p-3 flex-shrink-0 space-y-2">
-          {/* Deploy Actions */}
-          <div className="flex flex-wrap gap-1.5">
-            <Button size="sm" onClick={() => handleDeploy('full')} disabled={isRunning || deploying} className="h-7 text-xs">
-              <Rocket className="h-3 w-3 mr-1" />
-              Full Deploy
-            </Button>
-            <Button size="sm" variant="outline" onClick={() => handleDeploy('frontend')} disabled={isRunning || deploying} className="h-7 text-xs">
-              <Globe className="h-3 w-3 mr-1" />
-              Frontend
-            </Button>
-            <Button size="sm" variant="outline" onClick={() => handleDeploy('backend')} disabled={isRunning || deploying} className="h-7 text-xs">
-              <Server className="h-3 w-3 mr-1" />
-              Backend
-            </Button>
-            <Button size="sm" variant="outline" onClick={() => handleDeploy('python')} disabled={isRunning || deploying} className="h-7 text-xs">
-              <Code className="h-3 w-3 mr-1" />
-              Python
-            </Button>
-            <Button size="sm" variant="outline" onClick={() => handleDeploy('hotfix')} disabled={isRunning || deploying} className="h-7 text-xs">
-              <GitBranch className="h-3 w-3 mr-1" />
-              Hotfix
-            </Button>
-          </div>
+        {/* Action Buttons - Footer - Changes based on active tab */}
+        <div className="border-t bg-muted/30 p-2 flex-shrink-0 space-y-1.5">
+          {activeTab === 'terminal' && (
+            <>
+              {/* Deploy Actions */}
+              <div className="flex flex-wrap gap-1">
+                <Button size="sm" onClick={() => handleDeploy('full')} disabled={isRunning || deploying} className="h-6 text-[10px]">
+                  <Rocket className="h-3 w-3 mr-1" />
+                  Full Deploy
+                </Button>
+                <Button size="sm" variant="outline" onClick={() => handleDeploy('frontend')} disabled={isRunning || deploying} className="h-6 text-[10px]">
+                  <Globe className="h-3 w-3 mr-1" />
+                  Frontend
+                </Button>
+                <Button size="sm" variant="outline" onClick={() => handleDeploy('backend')} disabled={isRunning || deploying} className="h-6 text-[10px]">
+                  <Server className="h-3 w-3 mr-1" />
+                  Backend
+                </Button>
+                <Button size="sm" variant="outline" onClick={() => handleDeploy('python')} disabled={isRunning || deploying} className="h-6 text-[10px]">
+                  <Code className="h-3 w-3 mr-1" />
+                  Python
+                </Button>
+                <Button size="sm" variant="outline" onClick={() => handleDeploy('hotfix')} disabled={isRunning || deploying} className="h-6 text-[10px]">
+                  <Zap className="h-3 w-3 mr-1" />
+                  Hotfix
+                </Button>
+              </div>
+              {/* Server Management */}
+              <div className="flex flex-wrap gap-1">
+                <Button size="sm" variant="secondary" onClick={handleGitPull} disabled={isRunning || deploying} className="h-6 text-[10px]">
+                  <Download className="h-3 w-3 mr-1" />
+                  Git Pull
+                </Button>
+                <Button size="sm" variant="secondary" onClick={() => handlePM2Restart('all')} disabled={isRunning || deploying} className="h-6 text-[10px]">
+                  <RefreshCw className="h-3 w-3 mr-1" />
+                  PM2 All
+                </Button>
+                <Button size="sm" variant="secondary" onClick={handleCacheClean} disabled={isRunning || deploying} className="h-6 text-[10px]">
+                  <Trash2 className="h-3 w-3 mr-1" />
+                  Cache
+                </Button>
+                <Button size="sm" variant="secondary" onClick={handleNginxTest} disabled={isRunning || deploying} className="h-6 text-[10px]">
+                  <CheckCircle2 className="h-3 w-3 mr-1" />
+                  Nginx
+                </Button>
+                <Button size="sm" variant="secondary" onClick={handleNginxReload} disabled={isRunning || deploying} className="h-6 text-[10px]">
+                  <RefreshCw className="h-3 w-3 mr-1" />
+                  Reload
+                </Button>
+                <Button size="sm" variant="ghost" onClick={() => setOutput([])} className="h-6 text-[10px] ml-auto">
+                  Clear
+                </Button>
+              </div>
+            </>
+          )}
 
-          {/* Server Management */}
-          <div className="flex flex-wrap gap-1.5">
-            <Button size="sm" variant="secondary" onClick={() => handlePM2Restart('all')} disabled={isRunning || deploying} className="h-7 text-xs">
-              <RefreshCw className="h-3 w-3 mr-1" />
-              PM2 All
-            </Button>
-            <Button size="sm" variant="secondary" onClick={handleCacheClean} disabled={isRunning || deploying} className="h-7 text-xs">
-              <Trash2 className="h-3 w-3 mr-1" />
-              Clear Cache
-            </Button>
-            <Button size="sm" variant="secondary" onClick={handleNginxTest} disabled={isRunning || deploying} className="h-7 text-xs">
-              <CheckCircle2 className="h-3 w-3 mr-1" />
-              Nginx Test
-            </Button>
-            <Button size="sm" variant="secondary" onClick={handleNginxReload} disabled={isRunning || deploying} className="h-7 text-xs">
-              <Globe className="h-3 w-3 mr-1" />
-              Nginx Reload
-            </Button>
-            <Button size="sm" variant="ghost" onClick={() => setOutput([])} disabled={isRunning || deploying} className="h-7 text-xs ml-auto">
-              Clear
-            </Button>
-          </div>
+          {activeTab === 'logs' && (
+            <>
+              {/* System Logs */}
+              <div className="flex flex-wrap gap-1">
+                <Button size="sm" onClick={() => handleViewSystemLogs(50)} disabled={isRunning} className="h-6 text-[10px]">
+                  <Terminal className="h-3 w-3 mr-1" />
+                  System Logs
+                </Button>
+                <Button size="sm" variant="outline" onClick={handleViewErrorLogs} disabled={isRunning} className="h-6 text-[10px]">
+                  <XCircle className="h-3 w-3 mr-1" />
+                  Errors Only
+                </Button>
+                <Button size="sm" variant="outline" onClick={handleLogStats} disabled={isRunning} className="h-6 text-[10px]">
+                  <Activity className="h-3 w-3 mr-1" />
+                  Log Stats
+                </Button>
+              </div>
+              {/* PM2 Logs */}
+              <div className="flex flex-wrap gap-1">
+                <Button size="sm" variant="secondary" onClick={() => handleViewPM2Logs('backend')} disabled={isRunning} className="h-6 text-[10px]">
+                  <Server className="h-3 w-3 mr-1" />
+                  Backend Logs
+                </Button>
+                <Button size="sm" variant="secondary" onClick={() => handleViewPM2Logs('frontend')} disabled={isRunning} className="h-6 text-[10px]">
+                  <Globe className="h-3 w-3 mr-1" />
+                  Frontend Logs
+                </Button>
+                <Button size="sm" variant="secondary" onClick={() => handleViewPM2Logs('python')} disabled={isRunning} className="h-6 text-[10px]">
+                  <Code className="h-3 w-3 mr-1" />
+                  Python Logs
+                </Button>
+                <Button size="sm" variant="ghost" onClick={() => setOutput([])} className="h-6 text-[10px] ml-auto">
+                  Clear
+                </Button>
+              </div>
+            </>
+          )}
+
+          {activeTab === 'metrics' && (
+            <>
+              {/* System Metrics */}
+              <div className="flex flex-wrap gap-1">
+                <Button size="sm" onClick={handleSystemMetrics} disabled={isRunning} className="h-6 text-[10px]">
+                  <Activity className="h-3 w-3 mr-1" />
+                  System Metrics
+                </Button>
+                <Button size="sm" variant="outline" onClick={handlePM2Status} disabled={isRunning} className="h-6 text-[10px]">
+                  <Server className="h-3 w-3 mr-1" />
+                  PM2 Status
+                </Button>
+                <Button size="sm" variant="outline" onClick={handleGitStatus} disabled={isRunning} className="h-6 text-[10px]">
+                  <GitBranch className="h-3 w-3 mr-1" />
+                  Git Status
+                </Button>
+                <Button size="sm" variant="outline" onClick={handleDeployHistory} disabled={isRunning} className="h-6 text-[10px]">
+                  <Rocket className="h-3 w-3 mr-1" />
+                  Deploy History
+                </Button>
+                <Button size="sm" variant="ghost" onClick={() => setOutput([])} className="h-6 text-[10px] ml-auto">
+                  Clear
+                </Button>
+              </div>
+            </>
+          )}
         </div>
       </DialogContent>
     </Dialog>
