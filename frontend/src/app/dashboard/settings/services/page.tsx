@@ -1438,11 +1438,13 @@ function DevOpsCard() {
 function DeploymentModal({ isOpen, onOpenChange }: { isOpen: boolean; onOpenChange: (open: boolean) => void }) {
   const [output, setOutput] = useState<string[]>([]);
   const [isRunning, setIsRunning] = useState(false);
-  const [activeTab, setActiveTab] = useState<'terminal' | 'logs' | 'metrics'>('terminal');
+  const [activeTab, setActiveTab] = useState<'deploy' | 'logs' | 'metrics'>('deploy');
+  const [commandInput, setCommandInput] = useState('');
   const { deploy, deploying } = useSelfDeploy();
   const { restartService } = usePM2Services();
   const { testConfig, reload: reloadNginx } = useNginx();
   const outputRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
 
   const addOutput = (line: string, color?: string) => {
     const timestamp = new Date().toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
@@ -1712,28 +1714,87 @@ function DeploymentModal({ isOpen, onOpenChange }: { isOpen: boolean; onOpenChan
     });
   };
 
+  // Handle command input
+  const handleCommandSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!commandInput.trim() || isRunning) return;
+
+    const cmd = commandInput.trim().toLowerCase();
+    setCommandInput('');
+
+    // Parse and execute command
+    if (cmd === 'help') {
+      addOutput('$ help');
+      addOutput('Available commands:');
+      addOutput('  deploy [full|frontend|backend|python|hotfix] - Deploy application');
+      addOutput('  pm2 restart [all|backend|frontend|python] - Restart PM2 services');
+      addOutput('  pm2 status - Show PM2 service status');
+      addOutput('  nginx test - Test nginx configuration');
+      addOutput('  nginx reload - Reload nginx');
+      addOutput('  git pull - Pull latest changes');
+      addOutput('  git status - Show git status');
+      addOutput('  logs [system|backend|frontend|python] - View logs');
+      addOutput('  metrics - Show system metrics');
+      addOutput('  clear - Clear terminal');
+      addOutput('  help - Show this help');
+    } else if (cmd === 'clear') {
+      setOutput([]);
+    } else if (cmd.startsWith('deploy')) {
+      const type = cmd.split(' ')[1] || 'full';
+      handleDeploy(type as any);
+    } else if (cmd.startsWith('pm2 restart')) {
+      const service = cmd.split(' ')[2] || 'all';
+      handlePM2Restart(service as any);
+    } else if (cmd === 'pm2 status') {
+      handlePM2Status();
+    } else if (cmd === 'nginx test') {
+      handleNginxTest();
+    } else if (cmd === 'nginx reload') {
+      handleNginxReload();
+    } else if (cmd === 'git pull') {
+      handleGitPull();
+    } else if (cmd === 'git status') {
+      handleGitStatus();
+    } else if (cmd.startsWith('logs')) {
+      const type = cmd.split(' ')[1] || 'system';
+      if (type === 'system') handleViewSystemLogs(50);
+      else if (type === 'backend') handleViewPM2Logs('backend', 30);
+      else if (type === 'frontend') handleViewPM2Logs('frontend', 30);
+      else if (type === 'python') handleViewPM2Logs('python', 30);
+      else handleViewSystemLogs(50);
+    } else if (cmd === 'metrics') {
+      handleSystemMetrics();
+    } else {
+      addOutput(`$ ${cmd}`);
+      addOutput(`Command not found: ${cmd}. Type 'help' for available commands.`);
+    }
+  };
+
   return (
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-4xl h-[85vh] p-0 gap-0 flex flex-col">
-        {/* Header with tabs */}
-        <DialogHeader className="px-4 py-2 border-b bg-muted/30 flex-shrink-0">
-          <div className="flex items-center justify-between">
-            <DialogTitle className="flex items-center gap-2 text-base">
-              <Terminal className="h-4 w-4" />
-              DevOps Console
+      <DialogContent className="max-w-4xl h-[85vh] p-0 gap-0 flex flex-col overflow-hidden [&>button]:hidden">
+        {/* Header with tabs - fixed layout */}
+        <div className="px-4 py-2 border-b bg-muted/30 flex-shrink-0">
+          <div className="flex items-center gap-4">
+            {/* Title */}
+            <div className="flex items-center gap-2 min-w-0">
+              <Terminal className="h-4 w-4 flex-shrink-0" />
+              <span className="font-semibold text-sm">DevOps Console</span>
               {(isRunning || deploying) && (
-                <Badge className="ml-2 bg-green-500 text-[10px]">
+                <Badge className="bg-green-500 text-[10px] flex-shrink-0">
                   <Loader2 className="h-2.5 w-2.5 mr-1 animate-spin" />
                   Running
                 </Badge>
               )}
-            </DialogTitle>
-            <div className="flex gap-1">
+            </div>
+
+            {/* Tabs - centered */}
+            <div className="flex gap-1 flex-1 justify-center">
               <Button
                 size="sm"
-                variant={activeTab === 'terminal' ? 'default' : 'ghost'}
-                onClick={() => setActiveTab('terminal')}
-                className="h-6 text-[10px] px-2"
+                variant={activeTab === 'deploy' ? 'default' : 'ghost'}
+                onClick={() => setActiveTab('deploy')}
+                className="h-7 text-xs px-3"
               >
                 <Rocket className="h-3 w-3 mr-1" />
                 Deploy
@@ -1742,7 +1803,7 @@ function DeploymentModal({ isOpen, onOpenChange }: { isOpen: boolean; onOpenChan
                 size="sm"
                 variant={activeTab === 'logs' ? 'default' : 'ghost'}
                 onClick={() => setActiveTab('logs')}
-                className="h-6 text-[10px] px-2"
+                className="h-7 text-xs px-3"
               >
                 <Terminal className="h-3 w-3 mr-1" />
                 Logs
@@ -1751,14 +1812,24 @@ function DeploymentModal({ isOpen, onOpenChange }: { isOpen: boolean; onOpenChan
                 size="sm"
                 variant={activeTab === 'metrics' ? 'default' : 'ghost'}
                 onClick={() => setActiveTab('metrics')}
-                className="h-6 text-[10px] px-2"
+                className="h-7 text-xs px-3"
               >
                 <Activity className="h-3 w-3 mr-1" />
                 Metrics
               </Button>
             </div>
+
+            {/* Close button - right side, separate from dialog's default */}
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={() => onOpenChange(false)}
+              className="h-7 w-7 p-0 flex-shrink-0"
+            >
+              <X className="h-4 w-4" />
+            </Button>
           </div>
-        </DialogHeader>
+        </div>
 
         {/* Terminal Output - Main Body */}
         <div
@@ -1800,126 +1871,131 @@ function DeploymentModal({ isOpen, onOpenChange }: { isOpen: boolean; onOpenChan
           )}
         </div>
 
-        {/* Action Buttons - Footer - Changes based on active tab */}
-        <div className="border-t bg-muted/30 p-2 flex-shrink-0 space-y-1.5">
-          {activeTab === 'terminal' && (
-            <>
-              {/* Deploy Actions */}
-              <div className="flex flex-wrap gap-1">
-                <Button size="sm" onClick={() => handleDeploy('full')} disabled={isRunning || deploying} className="h-6 text-[10px]">
+        {/* Command Input - Prompt Bar */}
+        <div className="border-t bg-[#1a1a1a] px-3 py-2 flex-shrink-0">
+          <form onSubmit={handleCommandSubmit} className="flex items-center gap-2">
+            <span className="text-cyan-400 font-mono text-sm">$</span>
+            <Input
+              ref={inputRef}
+              value={commandInput}
+              onChange={(e) => setCommandInput(e.target.value)}
+              placeholder="Type a command... (help for list)"
+              disabled={isRunning || deploying}
+              className="flex-1 h-8 bg-transparent border-none text-gray-200 font-mono text-sm placeholder:text-gray-600 focus-visible:ring-0 focus-visible:ring-offset-0"
+              autoComplete="off"
+              spellCheck={false}
+            />
+            <Button
+              type="submit"
+              size="sm"
+              disabled={isRunning || deploying || !commandInput.trim()}
+              className="h-7 text-xs"
+            >
+              Run
+            </Button>
+          </form>
+        </div>
+
+        {/* Action Buttons - Footer - Single row with scroll */}
+        <div className="border-t bg-muted/30 px-2 py-1.5 flex-shrink-0">
+          <div className="flex items-center gap-1 overflow-x-auto scrollbar-hide">
+            {activeTab === 'deploy' && (
+              <>
+                {/* Deploy Actions - Primary */}
+                <Button size="sm" onClick={() => handleDeploy('full')} disabled={isRunning || deploying} className="h-7 text-xs whitespace-nowrap" title="Full deployment: git pull + build + restart all">
                   <Rocket className="h-3 w-3 mr-1" />
                   Full Deploy
                 </Button>
-                <Button size="sm" variant="outline" onClick={() => handleDeploy('frontend')} disabled={isRunning || deploying} className="h-6 text-[10px]">
+                <Button size="sm" variant="outline" onClick={() => handleDeploy('frontend')} disabled={isRunning || deploying} className="h-7 text-xs whitespace-nowrap" title="Build and restart frontend only">
                   <Globe className="h-3 w-3 mr-1" />
                   Frontend
                 </Button>
-                <Button size="sm" variant="outline" onClick={() => handleDeploy('backend')} disabled={isRunning || deploying} className="h-6 text-[10px]">
+                <Button size="sm" variant="outline" onClick={() => handleDeploy('backend')} disabled={isRunning || deploying} className="h-7 text-xs whitespace-nowrap" title="Restart backend only">
                   <Server className="h-3 w-3 mr-1" />
                   Backend
                 </Button>
-                <Button size="sm" variant="outline" onClick={() => handleDeploy('python')} disabled={isRunning || deploying} className="h-6 text-[10px]">
+                <Button size="sm" variant="outline" onClick={() => handleDeploy('python')} disabled={isRunning || deploying} className="h-7 text-xs whitespace-nowrap" title="Restart Python services">
                   <Code className="h-3 w-3 mr-1" />
                   Python
                 </Button>
-                <Button size="sm" variant="outline" onClick={() => handleDeploy('hotfix')} disabled={isRunning || deploying} className="h-6 text-[10px]">
-                  <Zap className="h-3 w-3 mr-1" />
-                  Hotfix
-                </Button>
-              </div>
-              {/* Server Management */}
-              <div className="flex flex-wrap gap-1">
-                <Button size="sm" variant="secondary" onClick={handleGitPull} disabled={isRunning || deploying} className="h-6 text-[10px]">
+                <div className="w-px h-5 bg-border mx-1" />
+                {/* Server Management - Secondary */}
+                <Button size="sm" variant="secondary" onClick={handleGitPull} disabled={isRunning || deploying} className="h-7 text-xs whitespace-nowrap" title="Pull latest from git">
                   <Download className="h-3 w-3 mr-1" />
-                  Git Pull
+                  Pull
                 </Button>
-                <Button size="sm" variant="secondary" onClick={() => handlePM2Restart('all')} disabled={isRunning || deploying} className="h-6 text-[10px]">
+                <Button size="sm" variant="secondary" onClick={() => handlePM2Restart('all')} disabled={isRunning || deploying} className="h-7 text-xs whitespace-nowrap" title="Restart all PM2 services">
                   <RefreshCw className="h-3 w-3 mr-1" />
-                  PM2 All
+                  PM2
                 </Button>
-                <Button size="sm" variant="secondary" onClick={handleCacheClean} disabled={isRunning || deploying} className="h-6 text-[10px]">
+                <Button size="sm" variant="secondary" onClick={handleCacheClean} disabled={isRunning || deploying} className="h-7 text-xs whitespace-nowrap" title="Clear .next cache">
                   <Trash2 className="h-3 w-3 mr-1" />
                   Cache
                 </Button>
-                <Button size="sm" variant="secondary" onClick={handleNginxTest} disabled={isRunning || deploying} className="h-6 text-[10px]">
-                  <CheckCircle2 className="h-3 w-3 mr-1" />
+                <Button size="sm" variant="secondary" onClick={handleNginxTest} disabled={isRunning || deploying} className="h-7 text-xs whitespace-nowrap" title="Test nginx config">
+                  <Shield className="h-3 w-3 mr-1" />
                   Nginx
                 </Button>
-                <Button size="sm" variant="secondary" onClick={handleNginxReload} disabled={isRunning || deploying} className="h-6 text-[10px]">
-                  <RefreshCw className="h-3 w-3 mr-1" />
-                  Reload
-                </Button>
-                <Button size="sm" variant="ghost" onClick={() => setOutput([])} className="h-6 text-[10px] ml-auto">
-                  Clear
-                </Button>
-              </div>
-            </>
-          )}
+              </>
+            )}
 
-          {activeTab === 'logs' && (
-            <>
-              {/* System Logs */}
-              <div className="flex flex-wrap gap-1">
-                <Button size="sm" onClick={() => handleViewSystemLogs(50)} disabled={isRunning} className="h-6 text-[10px]">
+            {activeTab === 'logs' && (
+              <>
+                <Button size="sm" onClick={() => handleViewSystemLogs(50)} disabled={isRunning} className="h-7 text-xs whitespace-nowrap" title="View system logs">
                   <Terminal className="h-3 w-3 mr-1" />
-                  System Logs
+                  System
                 </Button>
-                <Button size="sm" variant="outline" onClick={handleViewErrorLogs} disabled={isRunning} className="h-6 text-[10px]">
+                <Button size="sm" variant="outline" onClick={handleViewErrorLogs} disabled={isRunning} className="h-7 text-xs whitespace-nowrap" title="View error logs only">
                   <XCircle className="h-3 w-3 mr-1" />
-                  Errors Only
+                  Errors
                 </Button>
-                <Button size="sm" variant="outline" onClick={handleLogStats} disabled={isRunning} className="h-6 text-[10px]">
-                  <Activity className="h-3 w-3 mr-1" />
-                  Log Stats
-                </Button>
-              </div>
-              {/* PM2 Logs */}
-              <div className="flex flex-wrap gap-1">
-                <Button size="sm" variant="secondary" onClick={() => handleViewPM2Logs('backend')} disabled={isRunning} className="h-6 text-[10px]">
+                <div className="w-px h-5 bg-border mx-1" />
+                <Button size="sm" variant="secondary" onClick={() => handleViewPM2Logs('backend', 30)} disabled={isRunning} className="h-7 text-xs whitespace-nowrap" title="View backend PM2 logs">
                   <Server className="h-3 w-3 mr-1" />
-                  Backend Logs
+                  Backend
                 </Button>
-                <Button size="sm" variant="secondary" onClick={() => handleViewPM2Logs('frontend')} disabled={isRunning} className="h-6 text-[10px]">
+                <Button size="sm" variant="secondary" onClick={() => handleViewPM2Logs('frontend', 30)} disabled={isRunning} className="h-7 text-xs whitespace-nowrap" title="View frontend PM2 logs">
                   <Globe className="h-3 w-3 mr-1" />
-                  Frontend Logs
+                  Frontend
                 </Button>
-                <Button size="sm" variant="secondary" onClick={() => handleViewPM2Logs('python')} disabled={isRunning} className="h-6 text-[10px]">
+                <Button size="sm" variant="secondary" onClick={() => handleViewPM2Logs('python', 30)} disabled={isRunning} className="h-7 text-xs whitespace-nowrap" title="View Python PM2 logs">
                   <Code className="h-3 w-3 mr-1" />
-                  Python Logs
+                  Python
                 </Button>
-                <Button size="sm" variant="ghost" onClick={() => setOutput([])} className="h-6 text-[10px] ml-auto">
-                  Clear
-                </Button>
-              </div>
-            </>
-          )}
+              </>
+            )}
 
-          {activeTab === 'metrics' && (
-            <>
-              {/* System Metrics */}
-              <div className="flex flex-wrap gap-1">
-                <Button size="sm" onClick={handleSystemMetrics} disabled={isRunning} className="h-6 text-[10px]">
+            {activeTab === 'metrics' && (
+              <>
+                <Button size="sm" onClick={handleSystemMetrics} disabled={isRunning} className="h-7 text-xs whitespace-nowrap" title="View CPU, RAM, Disk usage">
                   <Activity className="h-3 w-3 mr-1" />
-                  System Metrics
+                  System
                 </Button>
-                <Button size="sm" variant="outline" onClick={handlePM2Status} disabled={isRunning} className="h-6 text-[10px]">
+                <Button size="sm" variant="outline" onClick={handlePM2Status} disabled={isRunning} className="h-7 text-xs whitespace-nowrap" title="View PM2 service status">
                   <Server className="h-3 w-3 mr-1" />
-                  PM2 Status
+                  PM2
                 </Button>
-                <Button size="sm" variant="outline" onClick={handleGitStatus} disabled={isRunning} className="h-6 text-[10px]">
+                <Button size="sm" variant="outline" onClick={handleGitStatus} disabled={isRunning} className="h-7 text-xs whitespace-nowrap" title="View git status">
                   <GitBranch className="h-3 w-3 mr-1" />
-                  Git Status
+                  Git
                 </Button>
-                <Button size="sm" variant="outline" onClick={handleDeployHistory} disabled={isRunning} className="h-6 text-[10px]">
+                <Button size="sm" variant="outline" onClick={handleDeployHistory} disabled={isRunning} className="h-7 text-xs whitespace-nowrap" title="View deployment history">
                   <Rocket className="h-3 w-3 mr-1" />
-                  Deploy History
+                  History
                 </Button>
-                <Button size="sm" variant="ghost" onClick={() => setOutput([])} className="h-6 text-[10px] ml-auto">
-                  Clear
+                <Button size="sm" variant="outline" onClick={handleLogStats} disabled={isRunning} className="h-7 text-xs whitespace-nowrap" title="View log statistics">
+                  <Activity className="h-3 w-3 mr-1" />
+                  Stats
                 </Button>
-              </div>
-            </>
-          )}
+              </>
+            )}
+
+            {/* Clear button - always visible */}
+            <div className="flex-1" />
+            <Button size="sm" variant="ghost" onClick={() => setOutput([])} className="h-7 text-xs whitespace-nowrap">
+              Clear
+            </Button>
+          </div>
         </div>
       </DialogContent>
     </Dialog>
