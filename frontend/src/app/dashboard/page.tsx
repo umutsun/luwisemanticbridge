@@ -119,43 +119,66 @@ interface ConsoleLog {
   source?: 'backend' | 'frontend' | 'system' | 'user';
 }
 
-// ✅ TEMİZLENMİŞ StatusCard - Icon olmadan
-const StatusCard = ({ title, value, status, description }: {
+// ✅ Glassmorphism StatusCard - UI Style Guide Compliant
+const GlassCard = ({ title, value, status, description, live, trend }: {
   title: string;
   value: string | number;
   status?: 'online' | 'offline' | 'warning';
   description?: string;
+  live?: boolean;
+  trend?: { value: number; label: string };
 }) => {
-  // Kart rengini status'e göre ayarla
-  const getCardStyle = () => {
-    if (!status) return 'border-gray-200 bg-white dark:bg-gray-900';
-
-    switch (status) {
-      case 'online':
-        return 'border-green-200 bg-green-50 dark:bg-green-950 dark:border-green-800';
-      case 'warning':
-        return 'border-yellow-200 bg-yellow-50 dark:bg-yellow-950 dark:border-yellow-800';
-      case 'offline':
-        return 'border-red-200 bg-red-50 dark:bg-red-950 dark:border-red-800';
-      default:
-        return 'border-gray-200 bg-white dark:bg-gray-900';
-    }
-  };
-
   return (
-    <Card className={getCardStyle()}>
+    <Card className="bg-white/80 dark:bg-[#0d1f3c]/60 backdrop-blur-sm border border-gray-200/60 dark:border-[#1e3a5f]/50 shadow-lg hover:shadow-xl transition-all duration-300">
       <CardContent className="p-6">
-        <div className="space-y-2">
-          <p className="text-sm font-medium text-muted-foreground">{title}</p>
-          <p className="text-3xl font-bold tracking-tight">{value}</p>
-          {description && (
-            <p className="text-xs text-muted-foreground">{description}</p>
+        <div className="flex items-start justify-between">
+          <div className="space-y-2">
+            <div className="flex items-center gap-2">
+              <p className="text-sm font-medium text-gray-600 dark:text-slate-400">{title}</p>
+              {live && (
+                <span className="flex items-center gap-1">
+                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                  <span className="text-[10px] text-emerald-500 font-medium">LIVE</span>
+                </span>
+              )}
+            </div>
+            <p className="text-3xl font-bold tracking-tight text-gray-900 dark:text-cyan-100">{value}</p>
+            {description && (
+              <p className="text-xs text-gray-500 dark:text-slate-500">{description}</p>
+            )}
+          </div>
+          {status && (
+            <div className={`h-2.5 w-2.5 rounded-full ${
+              status === 'online' ? 'bg-emerald-500 shadow-lg shadow-emerald-500/50' :
+              status === 'warning' ? 'bg-amber-500 shadow-lg shadow-amber-500/50' :
+              'bg-rose-500 shadow-lg shadow-rose-500/50'
+            }`} />
           )}
         </div>
+        {trend && (
+          <div className={`mt-3 flex items-center gap-1 text-xs ${trend.value >= 0 ? 'text-emerald-500' : 'text-rose-500'}`}>
+            <span>{trend.value >= 0 ? '↑' : '↓'}</span>
+            <span className="font-medium">{Math.abs(trend.value)}%</span>
+            <span className="text-gray-500 dark:text-slate-500">{trend.label}</span>
+          </div>
+        )}
       </CardContent>
     </Card>
   );
 };
+
+// Live indicator for real-time data
+const LiveIndicator = ({ connected, latency }: { connected: boolean; latency?: number }) => (
+  <div className="flex items-center gap-2">
+    <span className={`h-2 w-2 rounded-full ${connected ? 'bg-emerald-500 animate-pulse' : 'bg-rose-500'}`} />
+    <span className={`text-xs font-medium ${connected ? 'text-emerald-500' : 'text-rose-500'}`}>
+      {connected ? 'Live' : 'Offline'}
+    </span>
+    {connected && latency !== undefined && (
+      <span className="text-[10px] text-slate-500">{latency}ms</span>
+    )}
+  </div>
+);
 
 export default function DashboardPage() {
   const { t } = useTranslation();
@@ -1445,143 +1468,146 @@ export default function DashboardPage() {
   }
 
   return (
-    <div className="w-[90%] mx-auto p-8 space-y-10">
-
+    <div className="w-[90%] mx-auto p-8 space-y-8">
+      {/* Dashboard Header with Live Status */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-cyan-100">Dashboard</h1>
+          <p className="text-sm text-gray-500 dark:text-slate-400 mt-1">System overview and real-time metrics</p>
+        </div>
+        <div className="flex items-center gap-4">
+          <LiveIndicator connected={sseConnected} />
+          {metricsWsConnected && (
+            <Badge variant="outline" className="text-xs bg-cyan-500/10 text-cyan-600 dark:text-cyan-400 border-cyan-500/30">
+              WS: {metricsWsLatency}ms
+            </Badge>
+          )}
+        </div>
+      </div>
 
       {/* Single Page Dashboard - No Tabs */}
-      <div className="space-y-10">
-        {/* Session Metrics & Token Usage - Animated */}
-        <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
-          {/* Active Sessions */}
-          <Card className="border border-gray-100 dark:border-gray-800 shadow hover:shadow-md transition-shadow duration-300">
-            <CardContent className="p-6">
-              <div className="mb-2">
-                <span className="text-base font-medium text-gray-600 dark:text-gray-400">{t('dashboard.stats.activeSession')}</span>
-              </div>
-              <div className="text-3xl font-bold text-gray-900 dark:text-gray-100">
-                <AnimatedNumber value={chatStats?.overview?.total_conversations || 0} />
-              </div>
-              <div className="text-sm text-gray-500 dark:text-gray-400 mt-1">{t('dashboard.stats.currentlyActive')}</div>
-            </CardContent>
-          </Card>
+      <div className="space-y-8">
+        {/* Hero Stats Row - Unique Metrics Only */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+          {/* Total Conversations */}
+          <GlassCard
+            title={t('dashboard.stats.totalConversations')}
+            value={<AnimatedNumber value={chatStats?.overview?.total_conversations || 0} />}
+            description={`${t('dashboard.stats.today')}: ${chatStats?.daily_activity?.[0]?.conversations || 0}`}
+            live={true}
+            status="online"
+          />
 
-          {/* Total Sessions */}
-          <Card className="border border-gray-100 dark:border-gray-800 shadow hover:shadow-md transition-shadow duration-300">
-            <CardContent className="p-6">
-              <div className="mb-2">
-                <span className="text-base font-medium text-gray-600 dark:text-gray-400">{t('dashboard.stats.totalSession')}</span>
-              </div>
-              <div className="text-3xl font-bold text-gray-900 dark:text-gray-100">
-                <AnimatedNumber value={chatStats?.overview?.total_conversations || 0} />
-              </div>
-              <div className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-                {t('dashboard.stats.today')}: <AnimatedNumber value={chatStats?.daily_activity?.[0]?.conversations || 0} />
-              </div>
-            </CardContent>
-          </Card>
+          {/* Total Messages */}
+          <GlassCard
+            title={t('dashboard.stats.totalMessages')}
+            value={<AnimatedNumber value={chatStats?.overview?.total_messages || 0} />}
+            description={`${t('dashboard.stats.avgPerSession')}: ${chatStats?.avgMessagesPerConversation?.toFixed(1) || 0}`}
+            live={true}
+          />
 
           {/* Token Usage */}
-          <Card className="border border-gray-100 dark:border-gray-800 shadow hover:shadow-md transition-shadow duration-300">
-            <CardContent className="p-6">
-              <div className="mb-2">
-                <span className="text-base font-medium text-gray-600 dark:text-gray-400">{t('dashboard.stats.tokenUsage')}</span>
-              </div>
-              <div className="text-3xl font-bold text-gray-900 dark:text-gray-100">
-                <AnimatedNumber value={tokenStats.totalTokensUsed} />
-              </div>
-              <div className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-                {t('dashboard.stats.cost')}: ${tokenStats.totalCost.toFixed(4)}
-              </div>
-            </CardContent>
-          </Card>
+          <GlassCard
+            title={t('dashboard.stats.tokenUsage')}
+            value={<AnimatedNumber value={tokenStats.totalTokensUsed} />}
+            description={`${t('dashboard.stats.cost')}: $${tokenStats.totalCost.toFixed(4)}`}
+          />
 
-          {/* Avg Messages per Session */}
-          <Card className="border border-gray-100 dark:border-gray-800 shadow hover:shadow-md transition-shadow duration-300">
-            <CardContent className="p-6">
-              <div className="mb-2">
-                <span className="text-base font-medium text-gray-600 dark:text-gray-400">{t('dashboard.stats.avgMessagesPerSession')}</span>
-              </div>
-              <div className="text-3xl font-bold text-gray-900 dark:text-gray-100">
-                <AnimatedNumber value={chatStats?.avgMessagesPerConversation || 0} />
-              </div>
-              <div className="text-sm text-gray-500 dark:text-gray-400 mt-1">{t('dashboard.stats.performanceMetric')}</div>
-            </CardContent>
-          </Card>
+          {/* Total Embeddings */}
+          <GlassCard
+            title={t('dashboard.stats.totalEmbeddings')}
+            value={<AnimatedNumber value={embeddingStats?.total_embeddings || 0} />}
+            description={`${performanceMetrics.totalDocuments} documents indexed`}
+            status={embeddingStats?.total_embeddings ? 'online' : 'warning'}
+          />
         </div>
 
-        {/* Embeddings Kaynak Paneli */}
-        <Card className="border border-gray-100 dark:border-gray-800 shadow">
-          <CardHeader>
-            <div>
-              <h3 className="text-base font-semibold tracking-tight">{t('dashboard.embeddings.resources')}</h3>
+        {/* Knowledge Base Overview - Glassmorphism */}
+        <Card className="bg-white/80 dark:bg-[#0d1f3c]/60 backdrop-blur-sm border border-gray-200/60 dark:border-[#1e3a5f]/50 shadow-lg">
+          <CardHeader className="pb-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="h-8 w-1 bg-gradient-to-b from-cyan-500 to-blue-600 rounded-full" />
+                <div>
+                  <h3 className="text-base font-semibold text-gray-900 dark:text-cyan-100">{t('dashboard.embeddings.resources')}</h3>
+                  <p className="text-xs text-gray-500 dark:text-slate-400">Vector embeddings by source</p>
+                </div>
+              </div>
+              <Badge variant="outline" className="text-xs bg-cyan-500/10 text-cyan-600 dark:text-cyan-400 border-cyan-500/30">
+                {embeddingStats?.total_embeddings?.toLocaleString() || 0} vectors
+              </Badge>
             </div>
           </CardHeader>
           <CardContent>
-            <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
-              {/* Migrated Data */}
-              <div className="p-5 bg-blue-50 dark:bg-blue-950/20 border border-blue-100 dark:border-blue-900 rounded-lg">
-                <div className="mb-3">
-                  <h4 className="text-base font-medium">{t('dashboard.embeddings.migratedData')}</h4>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+              {/* Migrated Data - Cyan accent */}
+              <div className="group p-5 bg-gradient-to-br from-cyan-50/80 to-blue-50/80 dark:from-cyan-950/30 dark:to-blue-950/30 border border-cyan-200/60 dark:border-cyan-800/50 rounded-xl hover:shadow-lg hover:shadow-cyan-500/10 transition-all duration-300">
+                <div className="flex items-center gap-2 mb-3">
+                  <div className="h-2 w-2 rounded-full bg-cyan-500" />
+                  <h4 className="text-sm font-medium text-gray-700 dark:text-cyan-200">{t('dashboard.embeddings.migratedData')}</h4>
                 </div>
                 <div className="space-y-2">
                   <div className="flex justify-between text-sm">
-                    <span className="text-muted-foreground">{t('dashboard.embeddings.rows')}:</span>
-                    <span className="font-semibold">{embeddingStats?.by_category?.migrated?.rows?.toLocaleString() || '0'}</span>
+                    <span className="text-gray-500 dark:text-slate-400">{t('dashboard.embeddings.rows')}</span>
+                    <span className="font-semibold text-gray-900 dark:text-cyan-100">{embeddingStats?.by_category?.migrated?.rows?.toLocaleString() || '0'}</span>
                   </div>
                   <div className="flex justify-between text-sm">
-                    <span className="text-muted-foreground">{t('dashboard.embeddings.embeddings')}:</span>
-                    <span className="font-semibold">{embeddingStats?.by_category?.migrated?.embeddings?.toLocaleString() || '0'}</span>
+                    <span className="text-gray-500 dark:text-slate-400">Embeddings</span>
+                    <span className="font-semibold text-cyan-600 dark:text-cyan-400">{embeddingStats?.by_category?.migrated?.embeddings?.toLocaleString() || '0'}</span>
                   </div>
                 </div>
               </div>
 
-              {/* Documents Embeddings */}
-              <div className="p-5 bg-green-50 dark:bg-green-950/20 border border-green-100 dark:border-green-900 rounded-lg">
-                <div className="mb-3">
-                  <h4 className="text-base font-medium">{t('dashboard.embeddings.documents')}</h4>
+              {/* Documents - Emerald accent */}
+              <div className="group p-5 bg-gradient-to-br from-emerald-50/80 to-green-50/80 dark:from-emerald-950/30 dark:to-green-950/30 border border-emerald-200/60 dark:border-emerald-800/50 rounded-xl hover:shadow-lg hover:shadow-emerald-500/10 transition-all duration-300">
+                <div className="flex items-center gap-2 mb-3">
+                  <div className="h-2 w-2 rounded-full bg-emerald-500" />
+                  <h4 className="text-sm font-medium text-gray-700 dark:text-emerald-200">{t('dashboard.embeddings.documents')}</h4>
                 </div>
                 <div className="space-y-2">
                   <div className="flex justify-between text-sm">
-                    <span className="text-muted-foreground">{t('dashboard.embeddings.documents')}:</span>
-                    <span className="font-semibold">{embeddingStats?.by_category?.documents?.documents?.toLocaleString() || '0'}</span>
+                    <span className="text-gray-500 dark:text-slate-400">{t('dashboard.embeddings.documents')}</span>
+                    <span className="font-semibold text-gray-900 dark:text-emerald-100">{embeddingStats?.by_category?.documents?.documents?.toLocaleString() || '0'}</span>
                   </div>
                   <div className="flex justify-between text-sm">
-                    <span className="text-muted-foreground">Embeddings:</span>
-                    <span className="font-semibold">{embeddingStats?.by_category?.documents?.embeddings?.toLocaleString() || '0'}</span>
+                    <span className="text-gray-500 dark:text-slate-400">Embeddings</span>
+                    <span className="font-semibold text-emerald-600 dark:text-emerald-400">{embeddingStats?.by_category?.documents?.embeddings?.toLocaleString() || '0'}</span>
                   </div>
                 </div>
               </div>
 
-              {/* Scraped Embeddings */}
-              <div className="p-5 bg-purple-50 dark:bg-purple-950/20 border border-purple-100 dark:border-purple-900 rounded-lg">
-                <div className="mb-3">
-                  <h4 className="text-base font-medium">{t('dashboard.embeddings.scraped')}</h4>
+              {/* Scraped - Purple accent */}
+              <div className="group p-5 bg-gradient-to-br from-purple-50/80 to-violet-50/80 dark:from-purple-950/30 dark:to-violet-950/30 border border-purple-200/60 dark:border-purple-800/50 rounded-xl hover:shadow-lg hover:shadow-purple-500/10 transition-all duration-300">
+                <div className="flex items-center gap-2 mb-3">
+                  <div className="h-2 w-2 rounded-full bg-purple-500" />
+                  <h4 className="text-sm font-medium text-gray-700 dark:text-purple-200">{t('dashboard.embeddings.scraped')}</h4>
                 </div>
                 <div className="space-y-2">
                   <div className="flex justify-between text-sm">
-                    <span className="text-muted-foreground">{t('dashboard.embeddings.data')}:</span>
-                    <span className="font-semibold">{embeddingStats?.by_category?.scraped?.data?.toLocaleString() || '0'}</span>
+                    <span className="text-gray-500 dark:text-slate-400">{t('dashboard.embeddings.data')}</span>
+                    <span className="font-semibold text-gray-900 dark:text-purple-100">{embeddingStats?.by_category?.scraped?.data?.toLocaleString() || '0'}</span>
                   </div>
                   <div className="flex justify-between text-sm">
-                    <span className="text-muted-foreground">Embeddings:</span>
-                    <span className="font-semibold">{embeddingStats?.by_category?.scraped?.embeddings?.toLocaleString() || '0'}</span>
+                    <span className="text-gray-500 dark:text-slate-400">Embeddings</span>
+                    <span className="font-semibold text-purple-600 dark:text-purple-400">{embeddingStats?.by_category?.scraped?.embeddings?.toLocaleString() || '0'}</span>
                   </div>
                 </div>
               </div>
 
-              {/* Message History Embeddings */}
-              <div className="p-5 bg-orange-50 dark:bg-orange-950/20 border border-orange-100 dark:border-orange-900 rounded-lg">
-                <div className="mb-3">
-                  <h4 className="text-base font-medium">{t('dashboard.embeddings.messageHistory')}</h4>
+              {/* Messages - Amber accent */}
+              <div className="group p-5 bg-gradient-to-br from-amber-50/80 to-orange-50/80 dark:from-amber-950/30 dark:to-orange-950/30 border border-amber-200/60 dark:border-amber-800/50 rounded-xl hover:shadow-lg hover:shadow-amber-500/10 transition-all duration-300">
+                <div className="flex items-center gap-2 mb-3">
+                  <div className="h-2 w-2 rounded-full bg-amber-500" />
+                  <h4 className="text-sm font-medium text-gray-700 dark:text-amber-200">{t('dashboard.embeddings.messageHistory')}</h4>
                 </div>
                 <div className="space-y-2">
                   <div className="flex justify-between text-sm">
-                    <span className="text-muted-foreground">{t('dashboard.embeddings.messages')}:</span>
-                    <span className="font-semibold">{embeddingStats?.by_category?.messages?.messages?.toLocaleString() || '0'}</span>
+                    <span className="text-gray-500 dark:text-slate-400">{t('dashboard.embeddings.messages')}</span>
+                    <span className="font-semibold text-gray-900 dark:text-amber-100">{embeddingStats?.by_category?.messages?.messages?.toLocaleString() || '0'}</span>
                   </div>
                   <div className="flex justify-between text-sm">
-                    <span className="text-muted-foreground">Embeddings:</span>
-                    <span className="font-semibold">{embeddingStats?.by_category?.messages?.embeddings?.toLocaleString() || '0'}</span>
+                    <span className="text-gray-500 dark:text-slate-400">Embeddings</span>
+                    <span className="font-semibold text-amber-600 dark:text-amber-400">{embeddingStats?.by_category?.messages?.embeddings?.toLocaleString() || '0'}</span>
                   </div>
                 </div>
               </div>
@@ -1589,47 +1615,56 @@ export default function DashboardPage() {
           </CardContent>
         </Card>
 
-        {/* Performance & System Resources */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          {/* System Information - Real Data */}
-          <Card className="border border-gray-100 dark:border-gray-800 shadow">
+        {/* Performance & System Resources - 3 Column Grid */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          {/* System Information - Glassmorphism */}
+          <Card className="bg-white/80 dark:bg-[#0d1f3c]/60 backdrop-blur-sm border border-gray-200/60 dark:border-[#1e3a5f]/50 shadow-lg">
             <CardHeader className="pb-3">
               <div className="flex items-center gap-2">
-                <div className="w-2 h-2 bg-blue-500 rounded-full" />
-                <h3 className="text-sm font-semibold tracking-tight">{t('dashboard.system.information')}</h3>
+                <div className="w-2 h-2 bg-cyan-500 rounded-full" />
+                <h3 className="text-sm font-semibold text-gray-900 dark:text-cyan-100">{t('dashboard.system.information')}</h3>
               </div>
             </CardHeader>
             <CardContent className="pt-0">
-              <div className="space-y-4">
+              <div className="space-y-3">
                 {/* Database Information */}
-                <div className="p-4 bg-gray-50 dark:bg-gray-800/50 border border-gray-100 dark:border-gray-700 rounded min-w-0">
-                  <div className="text-gray-500 dark:text-gray-400 text-xs mb-2">{t('dashboard.system.database')}</div>
-                  <div className="font-semibold text-gray-700 dark:text-gray-200 text-xs break-words overflow-wrap-anywhere leading-relaxed">
+                <div className="p-4 bg-gradient-to-r from-slate-50 to-gray-50 dark:from-[#0a1628]/80 dark:to-[#0d1f3c]/80 border border-gray-200/50 dark:border-[#1e3a5f]/50 rounded-lg">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-xs text-gray-500 dark:text-slate-400">{t('dashboard.system.database')}</span>
+                    <div className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                  </div>
+                  <div className="font-semibold text-gray-900 dark:text-cyan-100 text-sm break-words leading-relaxed">
                     {databaseSettings?.name || t('dashboard.status.notConfigured')}
                   </div>
-                  <div className="text-xs text-gray-500 dark:text-gray-400 mt-2">
+                  <div className="text-xs text-gray-500 dark:text-slate-500 mt-1.5 font-mono">
                     {databaseSettings?.host}:{databaseSettings?.port}
                   </div>
                 </div>
 
                 {/* LLM Model */}
-                <div className="p-4 bg-gray-50 dark:bg-gray-800/50 border border-gray-100 dark:border-gray-700 rounded min-w-0">
-                  <div className="text-gray-500 dark:text-gray-400 text-xs mb-2">{t('dashboard.system.llmModel')}</div>
-                  <div className="font-semibold text-gray-700 dark:text-gray-200 text-xs break-words overflow-wrap-anywhere leading-relaxed">
-                    {llmSettings?.activeChatModel || <span className="text-orange-500">{t('dashboard.status.notConfigured')}</span>}
+                <div className="p-4 bg-gradient-to-r from-slate-50 to-gray-50 dark:from-[#0a1628]/80 dark:to-[#0d1f3c]/80 border border-gray-200/50 dark:border-[#1e3a5f]/50 rounded-lg">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-xs text-gray-500 dark:text-slate-400">{t('dashboard.system.llmModel')}</span>
+                    <div className={`h-1.5 w-1.5 rounded-full ${llmSettings?.activeChatModel ? 'bg-emerald-500' : 'bg-amber-500'}`} />
                   </div>
-                  <div className="text-xs text-gray-500 dark:text-gray-400 mt-2">
+                  <div className="font-semibold text-gray-900 dark:text-cyan-100 text-sm break-words leading-relaxed">
+                    {llmSettings?.activeChatModel || <span className="text-amber-500">{t('dashboard.status.notConfigured')}</span>}
+                  </div>
+                  <div className="text-xs text-gray-500 dark:text-slate-500 mt-1.5">
                     {t('dashboard.system.activeProvider')}
                   </div>
                 </div>
 
                 {/* Embedding Model */}
-                <div className="p-4 bg-gray-50 dark:bg-gray-800/50 border border-gray-100 dark:border-gray-700 rounded min-w-0">
-                  <div className="text-gray-500 dark:text-gray-400 text-xs mb-2">{t('dashboard.system.embeddingModel')}</div>
-                  <div className="font-semibold text-gray-700 dark:text-gray-200 text-xs break-words overflow-wrap-anywhere leading-relaxed">
-                    {llmSettings?.activeEmbeddingModel || llmSettings?.embeddingModel || <span className="text-orange-500">{t('dashboard.status.notConfigured')}</span>}
+                <div className="p-4 bg-gradient-to-r from-slate-50 to-gray-50 dark:from-[#0a1628]/80 dark:to-[#0d1f3c]/80 border border-gray-200/50 dark:border-[#1e3a5f]/50 rounded-lg">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-xs text-gray-500 dark:text-slate-400">{t('dashboard.system.embeddingModel')}</span>
+                    <div className={`h-1.5 w-1.5 rounded-full ${llmSettings?.activeEmbeddingModel || llmSettings?.embeddingModel ? 'bg-emerald-500' : 'bg-amber-500'}`} />
                   </div>
-                  <div className="text-xs text-gray-500 dark:text-gray-400 mt-2">
+                  <div className="font-semibold text-gray-900 dark:text-cyan-100 text-sm break-words leading-relaxed">
+                    {llmSettings?.activeEmbeddingModel || llmSettings?.embeddingModel || <span className="text-amber-500">{t('dashboard.status.notConfigured')}</span>}
+                  </div>
+                  <div className="text-xs text-gray-500 dark:text-slate-500 mt-1.5">
                     {t('dashboard.system.vectorGeneration')}
                   </div>
                 </div>
@@ -1637,39 +1672,45 @@ export default function DashboardPage() {
             </CardContent>
           </Card>
 
-          {/* Performance Metrics - Animated */}
-          <Card className="border border-gray-100 dark:border-gray-800 shadow">
+          {/* Performance Metrics - Glassmorphism with Live indicator */}
+          <Card className="bg-white/80 dark:bg-[#0d1f3c]/60 backdrop-blur-sm border border-gray-200/60 dark:border-[#1e3a5f]/50 shadow-lg">
             <CardHeader className="pb-3">
-              <div className="flex items-center gap-2">
-                <div className="w-2 h-2 bg-purple-500 rounded-full animate-pulse" />
-                <h3 className="text-sm font-semibold tracking-tight">{t('dashboard.performance.title')}</h3>
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <div className="w-2 h-2 bg-purple-500 rounded-full animate-pulse" />
+                  <h3 className="text-sm font-semibold text-gray-900 dark:text-cyan-100">{t('dashboard.performance.title')}</h3>
+                </div>
+                <span className="flex items-center gap-1 text-[10px] text-emerald-500">
+                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                  LIVE
+                </span>
               </div>
             </CardHeader>
             <CardContent className="pt-0">
-              <div className="grid grid-cols-2 gap-4 text-xs">
-                <div className="p-3 bg-gray-50 dark:bg-gray-800/50 border border-gray-100 dark:border-gray-700 rounded hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors">
-                  <div className="text-gray-500 dark:text-gray-400">{t('dashboard.performance.responseTime')}</div>
-                  <div className="font-semibold text-gray-700 dark:text-gray-200 text-lg tabular-nums">
+              <div className="grid grid-cols-2 gap-3 text-xs">
+                <div className="p-3 bg-gradient-to-br from-cyan-50/80 to-blue-50/50 dark:from-cyan-950/30 dark:to-blue-950/20 border border-cyan-200/50 dark:border-cyan-800/30 rounded-lg hover:shadow-md transition-all">
+                  <div className="text-gray-600 dark:text-slate-400">{t('dashboard.performance.responseTime')}</div>
+                  <div className="font-bold text-cyan-700 dark:text-cyan-300 text-lg tabular-nums mt-1">
                     {performanceMetrics.avgResponseTime > 1000
                       ? `${(performanceMetrics.avgResponseTime / 1000).toFixed(1)}s`
                       : <><AnimatedNumber value={performanceMetrics.avgResponseTime} formatLocale={false} />ms</>}
                   </div>
                 </div>
-                <div className="p-3 bg-gray-50 dark:bg-gray-800/50 border border-gray-100 dark:border-gray-700 rounded hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors">
-                  <div className="text-gray-500 dark:text-gray-400">{t('dashboard.performance.dailyQueries')}</div>
-                  <div className="font-semibold text-gray-700 dark:text-gray-200 text-lg">
+                <div className="p-3 bg-gradient-to-br from-emerald-50/80 to-green-50/50 dark:from-emerald-950/30 dark:to-green-950/20 border border-emerald-200/50 dark:border-emerald-800/30 rounded-lg hover:shadow-md transition-all">
+                  <div className="text-gray-600 dark:text-slate-400">{t('dashboard.performance.dailyQueries')}</div>
+                  <div className="font-bold text-emerald-700 dark:text-emerald-300 text-lg mt-1">
                     <AnimatedNumber value={performanceMetrics.dailyQueries} />
                   </div>
                 </div>
-                <div className="p-3 bg-gray-50 dark:bg-gray-800/50 border border-gray-100 dark:border-gray-700 rounded hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors">
-                  <div className="text-gray-500 dark:text-gray-400">{t('dashboard.performance.documents')}</div>
-                  <div className="font-semibold text-gray-700 dark:text-gray-200 text-lg">
+                <div className="p-3 bg-gradient-to-br from-purple-50/80 to-violet-50/50 dark:from-purple-950/30 dark:to-violet-950/20 border border-purple-200/50 dark:border-purple-800/30 rounded-lg hover:shadow-md transition-all">
+                  <div className="text-gray-600 dark:text-slate-400">{t('dashboard.performance.documents')}</div>
+                  <div className="font-bold text-purple-700 dark:text-purple-300 text-lg mt-1">
                     <AnimatedNumber value={performanceMetrics.totalDocuments} />
                   </div>
                 </div>
-                <div className="p-3 bg-gray-50 dark:bg-gray-800/50 border border-gray-100 dark:border-gray-700 rounded hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors">
-                  <div className="text-gray-500 dark:text-gray-400">{t('dashboard.performance.cacheHit')}</div>
-                  <div className="font-semibold text-gray-700 dark:text-gray-200 text-lg">
+                <div className="p-3 bg-gradient-to-br from-amber-50/80 to-orange-50/50 dark:from-amber-950/30 dark:to-orange-950/20 border border-amber-200/50 dark:border-amber-800/30 rounded-lg hover:shadow-md transition-all">
+                  <div className="text-gray-600 dark:text-slate-400">{t('dashboard.performance.cacheHit')}</div>
+                  <div className="font-bold text-amber-700 dark:text-amber-300 text-lg mt-1">
                     <AnimatedNumber value={performanceMetrics.cacheHitRate} formatLocale={false} />%
                   </div>
                 </div>
@@ -1677,17 +1718,17 @@ export default function DashboardPage() {
             </CardContent>
           </Card>
 
-          {/* System Resources - Circular Progress Design */}
-          <Card className="border border-gray-100 dark:border-gray-800 shadow">
+          {/* System Resources - Glassmorphism with Circular Progress */}
+          <Card className="bg-white/80 dark:bg-[#0d1f3c]/60 backdrop-blur-sm border border-gray-200/60 dark:border-[#1e3a5f]/50 shadow-lg">
             <CardHeader className="pb-2">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                  <div className={`w-2 h-2 rounded-full ${metricsWsConnected ? 'bg-green-500 animate-pulse' : 'bg-orange-500 animate-pulse'}`} />
-                  <h3 className="text-sm font-semibold tracking-tight">{t('dashboard.resources.title')}</h3>
+                  <div className={`w-2 h-2 rounded-full ${sseConnected ? 'bg-emerald-500 animate-pulse' : 'bg-amber-500 animate-pulse'}`} />
+                  <h3 className="text-sm font-semibold text-gray-900 dark:text-cyan-100">{t('dashboard.resources.title')}</h3>
                 </div>
-                {metricsWsConnected && (
-                  <Badge variant="outline" className="text-xs bg-green-50 dark:bg-green-950/30 text-green-700 dark:text-green-400 border-green-200 dark:border-green-800">
-                    {metricsWsLatency}ms
+                {sseConnected && (
+                  <Badge variant="outline" className="text-[10px] bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/30">
+                    3s polling
                   </Badge>
                 )}
               </div>
@@ -1699,13 +1740,13 @@ export default function DashboardPage() {
                 <div className="flex flex-col items-center">
                   <CircularProgress
                     value={wsMetrics?.cpu?.usage ?? realtimeResources.cpu}
-                    size={90}
-                    strokeWidth={8}
+                    size={80}
+                    strokeWidth={6}
                     label="CPU"
                     thresholds={{ warning: 60, danger: 80 }}
                   />
                   <div className="mt-2 text-center">
-                    <p className="text-[10px] text-gray-500 dark:text-gray-400">
+                    <p className="text-[10px] text-gray-500 dark:text-slate-500">
                       Load: {(wsMetrics?.cpu?.loadAvg?.[0] ?? realtimeResources.loadAvg[0])?.toFixed(1) || '0.0'}
                     </p>
                   </div>
@@ -1715,13 +1756,13 @@ export default function DashboardPage() {
                 <div className="flex flex-col items-center">
                   <CircularProgress
                     value={wsMetrics?.memory?.percentage ?? realtimeResources.memory}
-                    size={90}
-                    strokeWidth={8}
+                    size={80}
+                    strokeWidth={6}
                     label="RAM"
                     thresholds={{ warning: 70, danger: 85 }}
                   />
                   <div className="mt-2 text-center">
-                    <p className="text-[10px] text-gray-500 dark:text-gray-400">
+                    <p className="text-[10px] text-gray-500 dark:text-slate-500">
                       {((wsMetrics?.memory?.used ?? realtimeResources.memoryDetails.used) / 1024).toFixed(1)} / {((wsMetrics?.memory?.total ?? realtimeResources.memoryDetails.total) / 1024).toFixed(0)} GB
                     </p>
                   </div>
@@ -1731,13 +1772,13 @@ export default function DashboardPage() {
                 <div className="flex flex-col items-center">
                   <CircularProgress
                     value={wsMetrics?.disk?.percentage ?? realtimeResources.disk}
-                    size={90}
-                    strokeWidth={8}
+                    size={80}
+                    strokeWidth={6}
                     label="Disk"
                     thresholds={{ warning: 75, danger: 90 }}
                   />
                   <div className="mt-2 text-center">
-                    <p className="text-[10px] text-gray-500 dark:text-gray-400">
+                    <p className="text-[10px] text-gray-500 dark:text-slate-500">
                       {((wsMetrics?.disk?.used ?? realtimeResources.diskDetails.used) / 1024).toFixed(0)} / {((wsMetrics?.disk?.total ?? realtimeResources.diskDetails.total) / 1024).toFixed(0)} GB
                     </p>
                   </div>
@@ -1746,22 +1787,22 @@ export default function DashboardPage() {
 
               {/* CPU Info */}
               {(wsMetrics?.cpu?.model || realtimeResources.cpuModel) && (
-                <div className="text-center py-2 border-t border-gray-100 dark:border-gray-800">
-                  <p className="text-[10px] text-gray-400 dark:text-gray-500 truncate px-2">
+                <div className="text-center py-2 border-t border-gray-200/50 dark:border-[#1e3a5f]/50">
+                  <p className="text-[10px] text-gray-500 dark:text-slate-500 truncate px-2">
                     {wsMetrics?.cpu?.model || realtimeResources.cpuModel} ({wsMetrics?.cpu?.cores || realtimeResources.cpuCores} cores)
                   </p>
                 </div>
               )}
 
-              {/* Network I/O - Compact */}
-              <div className="pt-3 border-t border-gray-100 dark:border-gray-800">
+              {/* Network I/O - Glassmorphism style */}
+              <div className="pt-3 border-t border-gray-200/50 dark:border-[#1e3a5f]/50">
                 <div className="grid grid-cols-2 gap-2">
                   {/* Download */}
-                  <div className="flex items-center gap-2 bg-blue-50 dark:bg-blue-950/20 rounded-lg px-3 py-2">
-                    <span className="text-blue-500 text-sm">↓</span>
+                  <div className="flex items-center gap-2 bg-gradient-to-r from-cyan-50/80 to-blue-50/50 dark:from-cyan-950/30 dark:to-blue-950/20 rounded-lg px-3 py-2 border border-cyan-200/30 dark:border-cyan-800/30">
+                    <span className="text-cyan-500 text-sm font-bold">↓</span>
                     <div>
-                      <p className="text-xs text-gray-500 dark:text-gray-400">In</p>
-                      <p className="text-sm font-semibold text-blue-600 dark:text-blue-400">
+                      <p className="text-[10px] text-gray-500 dark:text-slate-400">Network In</p>
+                      <p className="text-sm font-semibold text-cyan-600 dark:text-cyan-400 tabular-nums">
                         {(() => {
                           const bytes = wsMetrics?.network?.bytesInPerSec ?? realtimeResources.network.bytesInPerSec;
                           if (bytes > 1048576) return `${(bytes / 1048576).toFixed(1)} MB/s`;
@@ -1772,11 +1813,11 @@ export default function DashboardPage() {
                     </div>
                   </div>
                   {/* Upload */}
-                  <div className="flex items-center gap-2 bg-green-50 dark:bg-green-950/20 rounded-lg px-3 py-2">
-                    <span className="text-green-500 text-sm">↑</span>
+                  <div className="flex items-center gap-2 bg-gradient-to-r from-emerald-50/80 to-green-50/50 dark:from-emerald-950/30 dark:to-green-950/20 rounded-lg px-3 py-2 border border-emerald-200/30 dark:border-emerald-800/30">
+                    <span className="text-emerald-500 text-sm font-bold">↑</span>
                     <div>
-                      <p className="text-xs text-gray-500 dark:text-gray-400">Out</p>
-                      <p className="text-sm font-semibold text-green-600 dark:text-green-400">
+                      <p className="text-[10px] text-gray-500 dark:text-slate-400">Network Out</p>
+                      <p className="text-sm font-semibold text-emerald-600 dark:text-emerald-400 tabular-nums">
                         {(() => {
                           const bytes = wsMetrics?.network?.bytesOutPerSec ?? realtimeResources.network.bytesOutPerSec;
                           if (bytes > 1048576) return `${(bytes / 1048576).toFixed(1)} MB/s`;
@@ -1792,140 +1833,159 @@ export default function DashboardPage() {
           </Card>
         </div>
 
-        {/* Pipeline Timeline */}
-        <div className="mt-8">
-          {/* Scheduler Timeline */}
-          <Card className="border border-gray-100 dark:border-gray-800 shadow">
-            <CardHeader className="pb-3">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <div className={`w-2 h-2 rounded-full ${pipelines.some(p => p.status === 'running') ? 'bg-green-500 animate-pulse' : 'bg-gray-400'}`} />
-                  <h3 className="text-sm font-semibold tracking-tight">Scheduler Timeline</h3>
+        {/* Pipeline Timeline - Glassmorphism */}
+        <Card className="bg-white/80 dark:bg-[#0d1f3c]/60 backdrop-blur-sm border border-gray-200/60 dark:border-[#1e3a5f]/50 shadow-lg">
+          <CardHeader className="pb-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="h-8 w-1 bg-gradient-to-b from-purple-500 to-violet-600 rounded-full" />
+                <div>
+                  <h3 className="text-base font-semibold text-gray-900 dark:text-cyan-100">Scheduler Timeline</h3>
+                  <p className="text-xs text-gray-500 dark:text-slate-400">Active processes and scheduled tasks</p>
                 </div>
-                <Badge variant={sseConnected ? "default" : "secondary"} className="text-xs">
+              </div>
+              <div className="flex items-center gap-2">
+                <div className={`h-2 w-2 rounded-full ${pipelines.some(p => p.status === 'running') ? 'bg-emerald-500 animate-pulse' : 'bg-slate-400'}`} />
+                <Badge variant="outline" className={`text-xs ${sseConnected ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/30' : 'bg-slate-500/10 text-slate-600 dark:text-slate-400 border-slate-500/30'}`}>
                   {sseConnected ? 'Live' : 'Offline'}
                 </Badge>
               </div>
-            </CardHeader>
-            <CardContent className="pt-0">
-              {pipelines.length === 0 || pipelines.every(p => p.status === 'idle') ? (
-                <div className="text-center py-8 text-gray-500 dark:text-gray-400">
-                  <div className="text-2xl mb-2">✓</div>
-                  <p className="text-sm">No scheduled tasks today</p>
+            </div>
+          </CardHeader>
+          <CardContent className="pt-0">
+            {pipelines.length === 0 || pipelines.every(p => p.status === 'idle') ? (
+              <div className="text-center py-12">
+                <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-emerald-500/10 mb-4">
+                  <CheckCircle className="w-8 h-8 text-emerald-500" />
                 </div>
-              ) : (
-                <div className="relative">
-                  {/* Horizontal Timeline */}
-                  <div className="overflow-x-auto pb-4">
-                    <div className="relative min-w-[600px]">
-                      {/* Timeline line */}
-                      <div className="absolute top-8 left-0 right-0 h-0.5 bg-gray-200 dark:bg-gray-700" />
+                <p className="text-sm font-medium text-gray-600 dark:text-slate-400">All systems operational</p>
+                <p className="text-xs text-gray-500 dark:text-slate-500 mt-1">No active tasks at the moment</p>
+              </div>
+            ) : (
+              <div className="relative">
+                {/* Horizontal Timeline */}
+                <div className="overflow-x-auto pb-4">
+                  <div className="relative min-w-[600px]">
+                    {/* Timeline line */}
+                    <div className="absolute top-8 left-0 right-0 h-0.5 bg-gradient-to-r from-cyan-500/30 via-purple-500/30 to-violet-500/30 dark:from-cyan-500/20 dark:via-purple-500/20 dark:to-violet-500/20" />
 
-                      {/* Timeline nodes */}
-                      <div className="flex justify-between items-start relative">
-                        {pipelines.filter(p => p.status !== 'idle').map((pipeline, idx) => (
-                          <div key={idx} className="flex flex-col items-center relative" style={{ width: `${100 / Math.max(pipelines.filter(p => p.status !== 'idle').length, 3)}%` }}>
-                            {/* Node */}
-                            <div className={`relative z-10 flex items-center justify-center w-4 h-4 rounded-full mb-3 ${
-                              pipeline.status === 'running' ? 'bg-blue-500 ring-4 ring-blue-100 dark:ring-blue-900 animate-pulse' :
-                              pipeline.status === 'completed' ? 'bg-green-500 ring-4 ring-green-100 dark:ring-green-900' :
-                              pipeline.status === 'error' ? 'bg-red-500 ring-4 ring-red-100 dark:ring-red-900' :
-                              pipeline.status === 'paused' ? 'bg-yellow-500 ring-4 ring-yellow-100 dark:ring-yellow-900' :
-                              'bg-gray-400 ring-4 ring-gray-100 dark:ring-gray-800'
-                            }`}>
-                              {pipeline.status === 'running' && <Loader2 className="w-2 h-2 text-white animate-spin" />}
-                              {pipeline.status === 'completed' && <CheckCircle className="w-2 h-2 text-white" />}
-                              {pipeline.status === 'error' && <AlertTriangle className="w-2 h-2 text-white" />}
-                            </div>
-
-                            {/* Info Card */}
-                            <div className={`px-3 py-2 rounded-lg border text-center min-w-[120px] ${
-                              pipeline.status === 'running' ? 'bg-blue-50 dark:bg-blue-950/20 border-blue-200 dark:border-blue-800' :
-                              pipeline.status === 'completed' ? 'bg-green-50 dark:bg-green-950/20 border-green-200 dark:border-green-800' :
-                              pipeline.status === 'error' ? 'bg-red-50 dark:bg-red-950/20 border-red-200 dark:border-red-800' :
-                              pipeline.status === 'paused' ? 'bg-yellow-50 dark:bg-yellow-950/20 border-yellow-200 dark:border-yellow-800' :
-                              'bg-gray-50 dark:bg-gray-800/50 border-gray-200 dark:border-gray-700'
-                            }`}>
-                              {/* Time */}
-                              <div className="text-[10px] text-gray-500 dark:text-gray-400 mb-1">
-                                {new Date().toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' })}
-                              </div>
-
-                              {/* Pipeline name */}
-                              <div className="font-medium text-xs mb-1 truncate" title={pipeline.name}>
-                                {pipeline.name.length > 15 ? pipeline.name.substring(0, 15) + '...' : pipeline.name}
-                              </div>
-
-                              {/* Type */}
-                              <div className="text-[10px] text-gray-500 dark:text-gray-400 capitalize mb-1">
-                                {pipeline.type}
-                              </div>
-
-                              {/* Progress */}
-                              {pipeline.progress !== undefined && (
-                                <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-1 mb-1">
-                                  <div
-                                    className={`h-full rounded-full transition-all duration-500 ${
-                                      pipeline.status === 'error' ? 'bg-red-500' :
-                                      pipeline.status === 'paused' ? 'bg-yellow-500' :
-                                      pipeline.status === 'completed' ? 'bg-green-500' :
-                                      'bg-blue-500'
-                                    }`}
-                                    style={{ width: `${pipeline.progress}%` }}
-                                  />
-                                </div>
-                              )}
-
-                              {/* Status badge */}
-                              <Badge variant="outline" className="text-[10px] px-1 py-0 h-4 capitalize">
-                                {pipeline.status}
-                              </Badge>
-                            </div>
+                    {/* Timeline nodes */}
+                    <div className="flex justify-between items-start relative">
+                      {pipelines.filter(p => p.status !== 'idle').map((pipeline, idx) => (
+                        <div key={idx} className="flex flex-col items-center relative" style={{ width: `${100 / Math.max(pipelines.filter(p => p.status !== 'idle').length, 3)}%` }}>
+                          {/* Node */}
+                          <div className={`relative z-10 flex items-center justify-center w-5 h-5 rounded-full mb-3 shadow-lg ${
+                            pipeline.status === 'running' ? 'bg-cyan-500 ring-4 ring-cyan-500/20 animate-pulse shadow-cyan-500/50' :
+                            pipeline.status === 'completed' ? 'bg-emerald-500 ring-4 ring-emerald-500/20 shadow-emerald-500/50' :
+                            pipeline.status === 'error' ? 'bg-rose-500 ring-4 ring-rose-500/20 shadow-rose-500/50' :
+                            pipeline.status === 'paused' ? 'bg-amber-500 ring-4 ring-amber-500/20 shadow-amber-500/50' :
+                            'bg-slate-400 ring-4 ring-slate-400/20'
+                          }`}>
+                            {pipeline.status === 'running' && <Loader2 className="w-2.5 h-2.5 text-white animate-spin" />}
+                            {pipeline.status === 'completed' && <CheckCircle className="w-2.5 h-2.5 text-white" />}
+                            {pipeline.status === 'error' && <AlertTriangle className="w-2.5 h-2.5 text-white" />}
                           </div>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
 
-                  {/* Legend */}
-                  <div className="flex flex-wrap gap-3 pt-3 border-t border-gray-100 dark:border-gray-800 mt-2">
-                    <div className="flex items-center gap-1.5 text-xs">
-                      <div className="w-2 h-2 rounded-full bg-blue-500" />
-                      <span className="text-gray-600 dark:text-gray-400">Running</span>
-                    </div>
-                    <div className="flex items-center gap-1.5 text-xs">
-                      <div className="w-2 h-2 rounded-full bg-green-500" />
-                      <span className="text-gray-600 dark:text-gray-400">Completed</span>
-                    </div>
-                    <div className="flex items-center gap-1.5 text-xs">
-                      <div className="w-2 h-2 rounded-full bg-red-500" />
-                      <span className="text-gray-600 dark:text-gray-400">Error</span>
-                    </div>
-                    <div className="flex items-center gap-1.5 text-xs">
-                      <div className="w-2 h-2 rounded-full bg-yellow-500" />
-                      <span className="text-gray-600 dark:text-gray-400">Paused</span>
+                          {/* Info Card - Glassmorphism */}
+                          <div className={`px-4 py-3 rounded-xl border text-center min-w-[140px] backdrop-blur-sm transition-all hover:shadow-lg ${
+                            pipeline.status === 'running' ? 'bg-cyan-50/80 dark:bg-cyan-950/40 border-cyan-200/60 dark:border-cyan-800/50 hover:shadow-cyan-500/10' :
+                            pipeline.status === 'completed' ? 'bg-emerald-50/80 dark:bg-emerald-950/40 border-emerald-200/60 dark:border-emerald-800/50 hover:shadow-emerald-500/10' :
+                            pipeline.status === 'error' ? 'bg-rose-50/80 dark:bg-rose-950/40 border-rose-200/60 dark:border-rose-800/50 hover:shadow-rose-500/10' :
+                            pipeline.status === 'paused' ? 'bg-amber-50/80 dark:bg-amber-950/40 border-amber-200/60 dark:border-amber-800/50 hover:shadow-amber-500/10' :
+                            'bg-slate-50/80 dark:bg-slate-800/40 border-slate-200/60 dark:border-slate-700/50'
+                          }`}>
+                            {/* Time */}
+                            <div className="text-[10px] text-gray-500 dark:text-slate-400 mb-1 font-mono">
+                              {new Date().toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' })}
+                            </div>
+
+                            {/* Pipeline name */}
+                            <div className="font-semibold text-xs mb-1 truncate text-gray-900 dark:text-cyan-100" title={pipeline.name}>
+                              {pipeline.name.length > 15 ? pipeline.name.substring(0, 15) + '...' : pipeline.name}
+                            </div>
+
+                            {/* Type */}
+                            <div className="text-[10px] text-gray-500 dark:text-slate-400 capitalize mb-2">
+                              {pipeline.type}
+                            </div>
+
+                            {/* Progress Circle instead of bar */}
+                            {pipeline.progress !== undefined && (
+                              <div className="flex justify-center mb-2">
+                                <div className="relative w-10 h-10">
+                                  <svg className="w-full h-full -rotate-90" viewBox="0 0 36 36">
+                                    <circle cx="18" cy="18" r="14" fill="none" stroke="currentColor" strokeWidth="3" className="text-gray-200 dark:text-gray-700" />
+                                    <circle cx="18" cy="18" r="14" fill="none" strokeWidth="3" strokeLinecap="round"
+                                      strokeDasharray={`${pipeline.progress * 0.88} 88`}
+                                      className={`transition-all duration-500 ${
+                                        pipeline.status === 'error' ? 'stroke-rose-500' :
+                                        pipeline.status === 'paused' ? 'stroke-amber-500' :
+                                        pipeline.status === 'completed' ? 'stroke-emerald-500' :
+                                        'stroke-cyan-500'
+                                      }`}
+                                    />
+                                  </svg>
+                                  <span className="absolute inset-0 flex items-center justify-center text-[8px] font-bold">
+                                    {pipeline.progress}%
+                                  </span>
+                                </div>
+                              </div>
+                            )}
+
+                            {/* Status badge */}
+                            <Badge variant="outline" className={`text-[10px] px-2 py-0.5 capitalize ${
+                              pipeline.status === 'running' ? 'border-cyan-500/50 text-cyan-600 dark:text-cyan-400' :
+                              pipeline.status === 'completed' ? 'border-emerald-500/50 text-emerald-600 dark:text-emerald-400' :
+                              pipeline.status === 'error' ? 'border-rose-500/50 text-rose-600 dark:text-rose-400' :
+                              pipeline.status === 'paused' ? 'border-amber-500/50 text-amber-600 dark:text-amber-400' :
+                              'border-slate-500/50 text-slate-600 dark:text-slate-400'
+                            }`}>
+                              {pipeline.status}
+                            </Badge>
+                          </div>
+                        </div>
+                      ))}
                     </div>
                   </div>
                 </div>
-              )}
-            </CardContent>
-          </Card>
 
-        </div>
+                {/* Legend */}
+                <div className="flex flex-wrap gap-4 pt-4 border-t border-gray-200/50 dark:border-[#1e3a5f]/50 mt-2">
+                  <div className="flex items-center gap-2 text-xs">
+                    <div className="w-2 h-2 rounded-full bg-cyan-500 shadow-lg shadow-cyan-500/50" />
+                    <span className="text-gray-600 dark:text-slate-400">Running</span>
+                  </div>
+                  <div className="flex items-center gap-2 text-xs">
+                    <div className="w-2 h-2 rounded-full bg-emerald-500 shadow-lg shadow-emerald-500/50" />
+                    <span className="text-gray-600 dark:text-slate-400">Completed</span>
+                  </div>
+                  <div className="flex items-center gap-2 text-xs">
+                    <div className="w-2 h-2 rounded-full bg-rose-500 shadow-lg shadow-rose-500/50" />
+                    <span className="text-gray-600 dark:text-slate-400">Error</span>
+                  </div>
+                  <div className="flex items-center gap-2 text-xs">
+                    <div className="w-2 h-2 rounded-full bg-amber-500 shadow-lg shadow-amber-500/50" />
+                    <span className="text-gray-600 dark:text-slate-400">Paused</span>
+                  </div>
+                </div>
+              </div>
+            )}
+          </CardContent>
+        </Card>
       </div>
 
       {/* Debug Console - Only visible when debug mode is enabled */}
       {debugModeEnabled && (
         <div className="mt-8">
-          <Card className="border-0 shadow-sm bg-gray-900 text-gray-100">
-            <CardHeader className="pb-2 border-b border-gray-800">
+          <Card className="bg-[#0a1628]/95 backdrop-blur-lg border border-[#1e3a5f]/50 shadow-2xl shadow-cyan-900/20">
+            <CardHeader className="pb-2 border-b border-[#1e3a5f]/50">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
                   <div className="flex items-center gap-2">
-                    <div className={`w-2 h-2 rounded-full ${metricsWsConnected ? 'bg-green-500 animate-pulse' : 'bg-orange-500'}`} />
-                    <h3 className="text-sm font-mono font-semibold text-gray-100">Debug Console</h3>
+                    <div className={`w-2 h-2 rounded-full ${sseConnected ? 'bg-emerald-500 animate-pulse shadow-lg shadow-emerald-500/50' : 'bg-amber-500'}`} />
+                    <h3 className="text-sm font-mono font-semibold text-cyan-100">Debug Console</h3>
                   </div>
-                  <Badge variant="outline" className="text-xs bg-yellow-500/20 text-yellow-400 border-yellow-600">
+                  <Badge variant="outline" className="text-xs bg-amber-500/10 text-amber-400 border-amber-500/30">
                     Debug Mode
                   </Badge>
                 </div>
@@ -1937,7 +1997,7 @@ export default function DashboardPage() {
                         key={filter}
                         variant={consoleFilter === filter ? 'default' : 'ghost'}
                         size="sm"
-                        className={`h-6 px-2 text-xs ${consoleFilter === filter ? 'bg-blue-600' : 'text-gray-400 hover:text-gray-100'}`}
+                        className={`h-6 px-2 text-xs ${consoleFilter === filter ? 'bg-cyan-600 text-white' : 'text-slate-400 hover:text-cyan-200 hover:bg-[#1e3a5f]/50'}`}
                         onClick={() => setConsoleFilter(filter)}
                       >
                         {filter}
@@ -1947,7 +2007,7 @@ export default function DashboardPage() {
                   <Button
                     variant="ghost"
                     size="sm"
-                    className="h-6 px-2 text-xs text-gray-400 hover:text-gray-100"
+                    className="h-6 px-2 text-xs text-slate-400 hover:text-cyan-200 hover:bg-[#1e3a5f]/50"
                     onClick={() => setConsoleLog([])}
                   >
                     Clear
@@ -1955,7 +2015,7 @@ export default function DashboardPage() {
                   <Button
                     variant="ghost"
                     size="sm"
-                    className={`h-6 px-2 text-xs ${isConsolePaused ? 'text-yellow-400' : 'text-gray-400 hover:text-gray-100'}`}
+                    className={`h-6 px-2 text-xs ${isConsolePaused ? 'text-amber-400' : 'text-slate-400 hover:text-cyan-200 hover:bg-[#1e3a5f]/50'}`}
                     onClick={() => setIsConsolePaused(!isConsolePaused)}
                   >
                     {isConsolePaused ? 'Resume' : 'Pause'}
@@ -1966,40 +2026,40 @@ export default function DashboardPage() {
             <CardContent className="p-0">
               {/* Console output */}
               <div
-                className="overflow-y-auto font-mono text-xs p-3 space-y-1"
+                className="overflow-y-auto font-mono text-xs p-4 space-y-1 bg-[#0a1628]/50"
                 style={{ height: consoleHeight, maxHeight: 500 }}
               >
                 {filteredConsoleLogs.length === 0 ? (
-                  <div className="text-gray-500 text-center py-8">No logs yet. Type /help for commands.</div>
+                  <div className="text-slate-500 text-center py-8">No logs yet. Type /help for commands.</div>
                 ) : (
                   filteredConsoleLogs.map((log) => (
                     <div
                       key={log.id}
-                      className={`flex gap-2 hover:bg-gray-800/50 px-1 py-0.5 rounded ${
-                        log.type === 'error' ? 'text-red-400' :
-                        log.type === 'warn' ? 'text-yellow-400' :
-                        log.type === 'success' ? 'text-green-400' :
-                        log.source === 'backend' ? 'text-blue-300' :
+                      className={`flex gap-2 hover:bg-[#1e3a5f]/30 px-2 py-0.5 rounded transition-colors ${
+                        log.type === 'error' ? 'text-rose-400' :
+                        log.type === 'warn' ? 'text-amber-400' :
+                        log.type === 'success' ? 'text-emerald-400' :
+                        log.source === 'backend' ? 'text-cyan-300' :
                         log.source === 'frontend' ? 'text-purple-300' :
-                        log.source === 'user' ? 'text-cyan-300' :
-                        'text-gray-300'
+                        log.source === 'user' ? 'text-sky-300' :
+                        'text-slate-300'
                       }`}
                     >
-                      <span className="text-gray-500 shrink-0">[{log.timestamp}]</span>
+                      <span className="text-slate-500 shrink-0">[{log.timestamp}]</span>
                       <span className="break-all">{log.message}</span>
                     </div>
                   ))
                 )}
               </div>
               {/* Command input */}
-              <div className="border-t border-gray-800 p-2 flex gap-2">
-                <span className="text-green-400 font-mono text-sm">$</span>
+              <div className="border-t border-[#1e3a5f]/50 p-3 flex gap-2 bg-[#0d1f3c]/50">
+                <span className="text-cyan-400 font-mono text-sm">$</span>
                 <Input
                   value={consoleCommand}
                   onChange={(e) => setConsoleCommand(e.target.value)}
                   onKeyDown={handleConsoleKeyDown}
                   placeholder="Type /help for commands..."
-                  className="flex-1 bg-transparent border-0 text-gray-100 placeholder-gray-500 font-mono text-sm h-7 focus-visible:ring-0 focus-visible:ring-offset-0"
+                  className="flex-1 bg-transparent border-0 text-cyan-100 placeholder-slate-500 font-mono text-sm h-7 focus-visible:ring-0 focus-visible:ring-offset-0"
                 />
               </div>
             </CardContent>

@@ -1,0 +1,80 @@
+{
+  "id": "zen01",
+  "name": "Zen 01",
+  "description": "Navy blue glassmorphism theme with zen-like animations, marker highlights, particles background, and dark/light mode support",
+  "version": "1.0.0",
+  "author": "LSEMB Team",
+  "theme": {
+    "supportedModes": ["dark", "light"],
+    "defaultMode": "dark",
+    "colors": {
+      "dark": {
+        "primary": "#06b6d4",
+        "secondary": "#8b5cf6",
+        "background": {
+          "deep": "#0a1628",
+          "mid": "#0d1f3c",
+          "light": "#1e3a5f"
+        },
+        "text": {
+          "primary": "#f1f5f9",
+          "secondary": "rgba(148, 163, 184, 0.8)",
+          "muted": "rgba(100, 116, 139, 0.6)"
+        },
+        "accent": {
+          "cyan": "#06b6d4",
+          "emerald": "#10b981",
+          "amber": "#f59e0b",
+          "rose": "#f43f5e",
+          "purple": "#8b5cf6"
+        }
+      },
+      "light": {
+        "primary": "#0891b2",
+        "secondary": "#7c3aed",
+        "background": {
+          "deep": "#f8fafc",
+          "mid": "#f1f5f9",
+          "light": "#e2e8f0"
+        },
+        "text": {
+          "primary": "#0f172a",
+          "secondary": "#475569",
+          "muted": "#94a3b8"
+        },
+        "accent": {
+          "cyan": "#0891b2",
+          "emerald": "#059669",
+          "amber": "#d97706",
+          "rose": "#e11d48",
+          "purple": "#7c3aed"
+        }
+      }
+    },
+    "effects": {
+      "glassmorphism": true,
+      "particles": true,
+      "markerHighlights": true,
+      "progressCircles": true,
+      "themeToggle": true
+    }
+  },
+  "features": {
+    "enableSourcesSection": true,
+    "enableKeywordHighlighting": true,
+    "enableSourceExpansion": true,
+    "sourceDisplayStyle": "minimal",
+    "enableResponseTime": true,
+    "enableTokenCount": false,
+    "enableConfidenceScore": false,
+    "inputStyle": "floating",
+    "messageStyle": "glassmorphism"
+  },
+  "animations": {
+    "messageEntry": "fadeSlide",
+    "typingIndicator": "pulse",
+    "particlesDensity": "sparse",
+    "transitionDuration": "300ms",
+    "themeTransition": "200ms"
+  }
+}

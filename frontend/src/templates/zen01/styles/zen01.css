@@ -1,0 +1,688 @@
+/**
+ * Zen01 Template Styles
+ * Navy blue glassmorphism with zen-like aesthetics
+ * Supports both Dark and Light modes
+ * UI Style Guide compliant
+ */
+
+/* ============================================
+   Base Theme Variables - Dark Mode (Default)
+   ============================================ */
+[data-theme="zen01"] {
+  /* Dark Mode Colors */
+  --zen-deep: #0a1628;
+  --zen-mid: #0d1f3c;
+  --zen-border: #1e3a5f;
+  --zen-surface: rgba(13, 31, 60, 0.6);
+  --zen-surface-hover: rgba(13, 31, 60, 0.8);
+
+  /* Accent Colors */
+  --zen-cyan: #06b6d4;
+  --zen-emerald: #10b981;
+  --zen-amber: #f59e0b;
+  --zen-rose: #f43f5e;
+  --zen-purple: #8b5cf6;
+
+  /* Text Colors */
+  --zen-text-primary: #f1f5f9;
+  --zen-text-secondary: rgba(148, 163, 184, 0.8);
+  --zen-text-muted: rgba(100, 116, 139, 0.6);
+
+  /* Glassmorphism */
+  --zen-glass-bg: rgba(13, 31, 60, 0.6);
+  --zen-glass-border: rgba(30, 58, 95, 0.5);
+  --zen-glass-blur: blur(12px);
+}
+
+/* ============================================
+   Light Mode Variables
+   ============================================ */
+[data-theme="zen01"].light,
+[data-theme="zen01"][data-mode="light"],
+.light [data-theme="zen01"] {
+  /* Light Mode Colors */
+  --zen-deep: #f8fafc;
+  --zen-mid: #f1f5f9;
+  --zen-border: #cbd5e1;
+  --zen-surface: rgba(255, 255, 255, 0.8);
+  --zen-surface-hover: rgba(255, 255, 255, 0.95);
+
+  /* Accent Colors - Slightly darker for light mode */
+  --zen-cyan: #0891b2;
+  --zen-emerald: #059669;
+  --zen-amber: #d97706;
+  --zen-rose: #e11d48;
+  --zen-purple: #7c3aed;
+
+  /* Text Colors */
+  --zen-text-primary: #0f172a;
+  --zen-text-secondary: #475569;
+  --zen-text-muted: #94a3b8;
+
+  /* Glassmorphism */
+  --zen-glass-bg: rgba(255, 255, 255, 0.8);
+  --zen-glass-border: rgba(203, 213, 225, 0.6);
+  --zen-glass-blur: blur(12px);
+}
+
+/* ============================================
+   Main Container
+   ============================================ */
+.zen01-container {
+  min-height: 100vh;
+  background: linear-gradient(135deg, var(--zen-deep) 0%, var(--zen-mid) 50%, var(--zen-deep) 100%);
+  position: relative;
+  overflow: hidden;
+  color: var(--zen-text-primary);
+}
+
+/* Light mode container background */
+.light .zen01-container,
+[data-mode="light"] .zen01-container {
+  background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 50%, #f8fafc 100%);
+}
+
+/* ============================================
+   Glassmorphism Cards
+   ============================================ */
+.zen01-glass {
+  background: var(--zen-glass-bg);
+  backdrop-filter: var(--zen-glass-blur);
+  -webkit-backdrop-filter: var(--zen-glass-blur);
+  border: 1px solid var(--zen-glass-border);
+  border-radius: 1rem;
+}
+
+.zen01-glass-light {
+  background: rgba(255, 255, 255, 0.05);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.light .zen01-glass-light,
+[data-mode="light"] .zen01-glass-light {
+  background: rgba(0, 0, 0, 0.03);
+  border: 1px solid rgba(0, 0, 0, 0.08);
+}
+
+/* ============================================
+   Message Bubbles - Dark Mode
+   ============================================ */
+.zen01-message-user {
+  background: linear-gradient(135deg, rgba(6, 182, 212, 0.15) 0%, rgba(139, 92, 246, 0.15) 100%);
+  border: 1px solid rgba(6, 182, 212, 0.3);
+  backdrop-filter: blur(8px);
+  border-radius: 1.25rem 1.25rem 0.25rem 1.25rem;
+}
+
+.zen01-message-assistant {
+  background: var(--zen-glass-bg);
+  border: 1px solid var(--zen-glass-border);
+  backdrop-filter: blur(12px);
+  border-radius: 1.25rem 1.25rem 1.25rem 0.25rem;
+}
+
+/* Message Bubbles - Light Mode */
+.light .zen01-message-user,
+[data-mode="light"] .zen01-message-user {
+  background: linear-gradient(135deg, rgba(8, 145, 178, 0.12) 0%, rgba(124, 58, 237, 0.12) 100%);
+  border: 1px solid rgba(8, 145, 178, 0.25);
+}
+
+.light .zen01-message-assistant,
+[data-mode="light"] .zen01-message-assistant {
+  background: rgba(255, 255, 255, 0.9);
+  border: 1px solid rgba(203, 213, 225, 0.6);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+}
+
+/* Message text colors */
+.zen01-message-user p,
+.zen01-message-assistant p,
+.zen01-message-user div,
+.zen01-message-assistant div {
+  color: var(--zen-text-primary);
+}
+
+/* ============================================
+   Input Area
+   ============================================ */
+.zen01-input-container {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  padding: 1.5rem;
+  background: linear-gradient(to top, var(--zen-deep) 0%, transparent 100%);
+  z-index: 50;
+}
+
+.light .zen01-input-container,
+[data-mode="light"] .zen01-input-container {
+  background: linear-gradient(to top, #f8fafc 0%, transparent 100%);
+}
+
+.zen01-input {
+  background: var(--zen-surface-hover);
+  backdrop-filter: blur(16px);
+  border: 1px solid rgba(6, 182, 212, 0.3);
+  border-radius: 1.5rem;
+  transition: all 0.3s ease;
+}
+
+.light .zen01-input,
+[data-mode="light"] .zen01-input {
+  background: rgba(255, 255, 255, 0.95);
+  border: 1px solid rgba(8, 145, 178, 0.3);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+}
+
+.zen01-input:focus-within {
+  border-color: rgba(6, 182, 212, 0.6);
+  box-shadow: 0 0 20px rgba(6, 182, 212, 0.15);
+}
+
+.light .zen01-input:focus-within,
+[data-mode="light"] .zen01-input:focus-within {
+  border-color: rgba(8, 145, 178, 0.5);
+  box-shadow: 0 4px 25px rgba(8, 145, 178, 0.15);
+}
+
+.zen01-input textarea {
+  background: transparent;
+  border: none;
+  color: var(--zen-cyan);
+  resize: none;
+}
+
+.light .zen01-input textarea,
+[data-mode="light"] .zen01-input textarea {
+  color: var(--zen-text-primary);
+}
+
+.zen01-input textarea::placeholder {
+  color: var(--zen-text-muted);
+}
+
+.zen01-input textarea:focus {
+  outline: none;
+  box-shadow: none;
+}
+
+/* ============================================
+   Send Button
+   ============================================ */
+.zen01-send-btn {
+  background: linear-gradient(135deg, var(--zen-cyan) 0%, var(--zen-purple) 100%);
+  border: none;
+  border-radius: 50%;
+  width: 2.75rem;
+  height: 2.75rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  box-shadow: 0 4px 15px rgba(6, 182, 212, 0.3);
+}
+
+.zen01-send-btn:hover {
+  transform: scale(1.05);
+  box-shadow: 0 6px 20px rgba(6, 182, 212, 0.4);
+}
+
+.zen01-send-btn:active {
+  transform: scale(0.95);
+}
+
+.zen01-send-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  transform: none;
+}
+
+/* ============================================
+   Header
+   ============================================ */
+.zen01-header {
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  background: var(--zen-surface-hover);
+  backdrop-filter: blur(16px);
+  border-bottom: 1px solid var(--zen-glass-border);
+}
+
+.light .zen01-header,
+[data-mode="light"] .zen01-header {
+  background: rgba(255, 255, 255, 0.9);
+  border-bottom: 1px solid rgba(203, 213, 225, 0.6);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+}
+
+/* Header text colors */
+.zen01-header h1 {
+  color: var(--zen-text-primary);
+}
+
+.zen01-header p {
+  color: var(--zen-text-secondary);
+}
+
+/* ============================================
+   Welcome Screen
+   ============================================ */
+.zen01-welcome {
+  text-align: center;
+  padding: 3rem 1rem;
+}
+
+.zen01-welcome-title {
+  font-size: 2.5rem;
+  font-weight: 700;
+  background: linear-gradient(135deg, var(--zen-cyan) 0%, var(--zen-purple) 50%, var(--zen-cyan) 100%);
+  background-size: 200% 200%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  animation: zen-gradient 8s ease infinite;
+}
+
+@keyframes zen-gradient {
+  0%, 100% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+}
+
+.zen01-welcome-subtitle {
+  color: var(--zen-text-secondary);
+  font-size: 1.125rem;
+  margin-top: 0.5rem;
+}
+
+/* ============================================
+   Suggestion Pills
+   ============================================ */
+.zen01-suggestion {
+  background: rgba(6, 182, 212, 0.1);
+  border: 1px solid rgba(6, 182, 212, 0.3);
+  border-radius: 9999px;
+  padding: 0.625rem 1.25rem;
+  color: var(--zen-cyan);
+  font-size: 0.875rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.light .zen01-suggestion,
+[data-mode="light"] .zen01-suggestion {
+  background: rgba(8, 145, 178, 0.08);
+  border: 1px solid rgba(8, 145, 178, 0.25);
+}
+
+.zen01-suggestion:hover {
+  background: rgba(6, 182, 212, 0.2);
+  border-color: rgba(6, 182, 212, 0.5);
+  transform: translateY(-2px);
+}
+
+.light .zen01-suggestion:hover,
+[data-mode="light"] .zen01-suggestion:hover {
+  background: rgba(8, 145, 178, 0.15);
+  border-color: rgba(8, 145, 178, 0.4);
+}
+
+/* ============================================
+   Sources Section
+   ============================================ */
+.zen01-sources {
+  margin-top: 1rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--zen-glass-border);
+}
+
+.zen01-source-item {
+  background: rgba(6, 182, 212, 0.05);
+  border: 1px solid rgba(6, 182, 212, 0.2);
+  border-radius: 0.75rem;
+  padding: 0.75rem 1rem;
+  margin-bottom: 0.5rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.light .zen01-source-item,
+[data-mode="light"] .zen01-source-item {
+  background: rgba(8, 145, 178, 0.04);
+  border: 1px solid rgba(8, 145, 178, 0.15);
+}
+
+.zen01-source-item:hover {
+  background: rgba(6, 182, 212, 0.1);
+  border-color: rgba(6, 182, 212, 0.4);
+}
+
+.light .zen01-source-item:hover,
+[data-mode="light"] .zen01-source-item:hover {
+  background: rgba(8, 145, 178, 0.08);
+  border-color: rgba(8, 145, 178, 0.3);
+}
+
+/* Source text colors */
+.zen01-source-item p {
+  color: var(--zen-text-primary);
+}
+
+.zen01-source-item .text-cyan-300\/90 {
+  color: var(--zen-cyan);
+}
+
+/* ============================================
+   Typing Indicator
+   ============================================ */
+.zen01-typing {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 1rem;
+}
+
+.zen01-typing-dot {
+  width: 0.5rem;
+  height: 0.5rem;
+  background: var(--zen-cyan);
+  border-radius: 50%;
+  animation: zen-pulse 1.4s ease-in-out infinite;
+}
+
+.zen01-typing-dot:nth-child(2) {
+  animation-delay: 0.2s;
+}
+
+.zen01-typing-dot:nth-child(3) {
+  animation-delay: 0.4s;
+}
+
+@keyframes zen-pulse {
+  0%, 60%, 100% {
+    opacity: 0.3;
+    transform: scale(0.8);
+  }
+  30% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+/* ============================================
+   Scrollbar - Dark Mode
+   ============================================ */
+.zen01-scroll::-webkit-scrollbar {
+  width: 6px;
+}
+
+.zen01-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.zen01-scroll::-webkit-scrollbar-thumb {
+  background: rgba(6, 182, 212, 0.3);
+  border-radius: 3px;
+}
+
+.zen01-scroll::-webkit-scrollbar-thumb:hover {
+  background: rgba(6, 182, 212, 0.5);
+}
+
+/* Scrollbar - Light Mode */
+.light .zen01-scroll::-webkit-scrollbar-thumb,
+[data-mode="light"] .zen01-scroll::-webkit-scrollbar-thumb {
+  background: rgba(8, 145, 178, 0.25);
+}
+
+.light .zen01-scroll::-webkit-scrollbar-thumb:hover,
+[data-mode="light"] .zen01-scroll::-webkit-scrollbar-thumb:hover {
+  background: rgba(8, 145, 178, 0.4);
+}
+
+/* ============================================
+   Marker Highlight for Keywords
+   ============================================ */
+.zen01-marker {
+  position: relative;
+  display: inline;
+  padding: 0.1em 0;
+}
+
+.zen01-marker::before {
+  content: '';
+  position: absolute;
+  left: -4px;
+  right: -4px;
+  top: 0;
+  bottom: 0;
+  z-index: -1;
+  background: rgba(6, 182, 212, 0.25);
+  clip-path: polygon(8px 0%, 100% 0%, calc(100% - 8px) 100%, 0% 100%);
+}
+
+.light .zen01-marker::before,
+[data-mode="light"] .zen01-marker::before {
+  background: rgba(8, 145, 178, 0.2);
+}
+
+/* ============================================
+   Live Indicator
+   ============================================ */
+.zen01-live {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+}
+
+.zen01-live-dot {
+  width: 0.5rem;
+  height: 0.5rem;
+  background: var(--zen-emerald);
+  border-radius: 50%;
+  animation: zen-live-pulse 2s ease-in-out infinite;
+}
+
+@keyframes zen-live-pulse {
+  0%, 100% {
+    opacity: 1;
+    box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.4);
+  }
+  50% {
+    opacity: 0.8;
+    box-shadow: 0 0 0 4px rgba(16, 185, 129, 0);
+  }
+}
+
+/* ============================================
+   Response Time Badge
+   ============================================ */
+.zen01-response-time {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.25rem 0.5rem;
+  background: rgba(16, 185, 129, 0.1);
+  border: 1px solid rgba(16, 185, 129, 0.3);
+  border-radius: 9999px;
+  font-size: 0.75rem;
+  color: var(--zen-emerald);
+}
+
+/* ============================================
+   Avatar
+   ============================================ */
+.zen01-avatar {
+  width: 2.25rem;
+  height: 2.25rem;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 600;
+  font-size: 0.875rem;
+}
+
+.zen01-avatar-user {
+  background: linear-gradient(135deg, var(--zen-cyan) 0%, var(--zen-purple) 100%);
+  color: white;
+}
+
+.zen01-avatar-assistant {
+  background: rgba(6, 182, 212, 0.2);
+  border: 1px solid rgba(6, 182, 212, 0.4);
+  color: var(--zen-cyan);
+}
+
+.light .zen01-avatar-assistant,
+[data-mode="light"] .zen01-avatar-assistant {
+  background: rgba(8, 145, 178, 0.1);
+  border: 1px solid rgba(8, 145, 178, 0.3);
+}
+
+/* ============================================
+   Theme Toggle Button
+   ============================================ */
+.zen01-theme-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.25rem;
+  height: 2.25rem;
+  border-radius: 0.5rem;
+  background: rgba(6, 182, 212, 0.1);
+  border: 1px solid rgba(6, 182, 212, 0.2);
+  color: var(--zen-cyan);
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.zen01-theme-toggle:hover {
+  background: rgba(6, 182, 212, 0.2);
+  border-color: rgba(6, 182, 212, 0.4);
+}
+
+.light .zen01-theme-toggle,
+[data-mode="light"] .zen01-theme-toggle {
+  background: rgba(8, 145, 178, 0.08);
+  border: 1px solid rgba(8, 145, 178, 0.15);
+}
+
+.light .zen01-theme-toggle:hover,
+[data-mode="light"] .zen01-theme-toggle:hover {
+  background: rgba(8, 145, 178, 0.15);
+  border-color: rgba(8, 145, 178, 0.3);
+}
+
+/* ============================================
+   Animations
+   ============================================ */
+.zen01-fade-in {
+  animation: zen-fade-in 0.3s ease-out;
+}
+
+@keyframes zen-fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.zen01-slide-up {
+  animation: zen-slide-up 0.4s ease-out;
+}
+
+@keyframes zen-slide-up {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* ============================================
+   Dropdown Menu Styles
+   ============================================ */
+.zen01-dropdown {
+  background: var(--zen-surface-hover);
+  backdrop-filter: blur(16px);
+  border: 1px solid var(--zen-glass-border);
+  border-radius: 0.75rem;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
+}
+
+.light .zen01-dropdown,
+[data-mode="light"] .zen01-dropdown {
+  background: rgba(255, 255, 255, 0.98);
+  border: 1px solid rgba(203, 213, 225, 0.6);
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.1);
+}
+
+.zen01-dropdown-item {
+  color: var(--zen-text-primary);
+  transition: background 0.15s ease;
+}
+
+.zen01-dropdown-item:hover {
+  background: rgba(6, 182, 212, 0.1);
+}
+
+.light .zen01-dropdown-item:hover,
+[data-mode="light"] .zen01-dropdown-item:hover {
+  background: rgba(8, 145, 178, 0.08);
+}
+
+/* ============================================
+   Error State
+   ============================================ */
+.zen01-error {
+  background: rgba(244, 63, 94, 0.1);
+  border: 1px solid rgba(244, 63, 94, 0.3);
+  color: var(--zen-rose);
+}
+
+.light .zen01-error,
+[data-mode="light"] .zen01-error {
+  background: rgba(225, 29, 72, 0.08);
+  border: 1px solid rgba(225, 29, 72, 0.25);
+}
+
+/* ============================================
+   Loading Skeleton
+   ============================================ */
+.zen01-skeleton {
+  background: linear-gradient(90deg,
+    rgba(6, 182, 212, 0.1) 25%,
+    rgba(6, 182, 212, 0.2) 50%,
+    rgba(6, 182, 212, 0.1) 75%
+  );
+  background-size: 200% 100%;
+  animation: zen-skeleton 1.5s ease-in-out infinite;
+}
+
+.light .zen01-skeleton,
+[data-mode="light"] .zen01-skeleton {
+  background: linear-gradient(90deg,
+    rgba(8, 145, 178, 0.08) 25%,
+    rgba(8, 145, 178, 0.15) 50%,
+    rgba(8, 145, 178, 0.08) 75%
+  );
+  background-size: 200% 100%;
+}
+
+@keyframes zen-skeleton {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}

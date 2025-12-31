@@ -44,6 +44,15 @@ export const chatTemplates: Record<string, TemplateConfig> = {
     config: () => import('./spark/config.json')
   },
 
+  'zen01': {
+    id: 'zen01',
+    name: 'Zen 01',
+    description: 'Navy blue glassmorphism with zen-like animations, particles background, and dark/light mode support',
+    version: '1.0.0',
+    ChatInterface: () => import('./zen01/ChatInterface'),
+    config: () => import('./zen01/config.json')
+  },
+
   // Example: Add custom templates here
   // 'custom1': {
   //   id: 'custom1',
