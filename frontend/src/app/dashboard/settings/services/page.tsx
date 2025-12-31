@@ -1084,48 +1084,27 @@ function PythonConfig() {
 function Crawl4AIConfig() {
   return (
     <div className="space-y-4">
+      <Alert>
+        <AlertDescription className="text-xs">
+          LLM model is configured in Settings &gt; API. Crawl4AI uses the selected provider automatically.
+        </AlertDescription>
+      </Alert>
       <div className="grid grid-cols-2 gap-4">
         <div className="space-y-2">
-          <Label>Model</Label>
-          <Select defaultValue="gpt-4">
-            <SelectTrigger>
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="gpt-4">GPT-4</SelectItem>
-              <SelectItem value="gpt-3.5-turbo">GPT-3.5 Turbo</SelectItem>
-              <SelectItem value="claude-3">Claude 3</SelectItem>
-            </SelectContent>
-          </Select>
+          <Label className="text-xs">Max Workers</Label>
+          <Input type="number" defaultValue="5" className="h-8" />
         </div>
         <div className="space-y-2">
-          <Label>Provider</Label>
-          <Select defaultValue="openai">
-            <SelectTrigger>
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="openai">OpenAI</SelectItem>
-              <SelectItem value="anthropic">Anthropic</SelectItem>
-              <SelectItem value="local">Local LLM</SelectItem>
-            </SelectContent>
-          </Select>
+          <Label className="text-xs">Timeout (s)</Label>
+          <Input type="number" defaultValue="30" className="h-8" />
         </div>
       </div>
-      <div className="grid grid-cols-2 gap-4">
-        <div className="space-y-2">
-          <Label>Max Workers</Label>
-          <Input type="number" defaultValue="5" />
+      <div className="flex items-center justify-between">
+        <div>
+          <Label className="text-xs">Use Cache</Label>
+          <p className="text-[10px] text-muted-foreground">Cache results in Redis</p>
         </div>
-        <div className="space-y-2">
-          <Label>Timeout (s)</Label>
-          <Input type="number" defaultValue="30" />
-        </div>
-      </div>
-      <div className="space-y-2">
-        <Label>Use Cache</Label>
         <Switch defaultChecked />
-        <p className="text-xs text-muted-foreground">Cache scraping results in Redis</p>
       </div>
     </div>
   );
