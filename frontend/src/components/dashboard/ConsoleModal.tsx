@@ -43,7 +43,7 @@ export default function ConsoleModal({ isOpen, onOpenChange }: ConsoleModalProps
               <Console
                 height={500}
                 maxHeight={600}
-                showHeader={true}
+                showHeader={false}
                 showControls={true}
                 showFilters={true}
                 showBookmarks={true}

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useMemo, useRef } from "react";
 import dynamic from "next/dynamic";
 import * as LucideIcons from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -1438,7 +1438,7 @@ function DeveloperToolsCard({ onOpenConsole }: { onOpenConsole: () => void }) {
   );
 }
 
-// Deployment Card - Row-based, click to open modal
+// Deployment Card - Single row, click to open DevOps terminal
 function DeploymentCard() {
   const [showModal, setShowModal] = useState(false);
 
@@ -1448,35 +1448,20 @@ function DeploymentCard() {
         <CardHeader className="pb-2">
           <CardTitle className="text-sm flex items-center gap-2">
             <Rocket className="h-4 w-4" />
-            Deployment
+            DevOps
           </CardTitle>
         </CardHeader>
-        <CardContent className="space-y-2 pt-0">
-          {/* Deploy Row - Clickable */}
+        <CardContent className="pt-0">
+          {/* DevOps Terminal Row - Clickable */}
           <div
             className="flex items-center justify-between p-2 rounded-md bg-muted/50 hover:bg-muted/70 transition-colors cursor-pointer"
             onClick={() => setShowModal(true)}
           >
             <div className="flex items-center gap-2">
-              <Rocket className="h-3.5 w-3.5 text-muted-foreground" />
+              <Terminal className="h-3.5 w-3.5 text-muted-foreground" />
               <div>
-                <span className="text-xs font-medium">Deploy Application</span>
-                <p className="text-[10px] text-muted-foreground">Full, Frontend, Backend, Hotfix</p>
-              </div>
-            </div>
-            <Badge variant="outline" className="text-[10px]">Open</Badge>
-          </div>
-
-          {/* Server Management Row - Clickable */}
-          <div
-            className="flex items-center justify-between p-2 rounded-md bg-muted/50 hover:bg-muted/70 transition-colors cursor-pointer"
-            onClick={() => setShowModal(true)}
-          >
-            <div className="flex items-center gap-2">
-              <Server className="h-3.5 w-3.5 text-muted-foreground" />
-              <div>
-                <span className="text-xs font-medium">Server Management</span>
-                <p className="text-[10px] text-muted-foreground">PM2, Nginx, Cache</p>
+                <span className="text-xs font-medium">DevOps Terminal</span>
+                <p className="text-[10px] text-muted-foreground">Deploy, PM2, Nginx, Cache</p>
               </div>
             </div>
             <Badge variant="outline" className="text-[10px]">Open</Badge>
@@ -1484,239 +1469,209 @@ function DeploymentCard() {
         </CardContent>
       </Card>
 
-      {/* Deployment Modal */}
+      {/* DevOps Terminal Modal */}
       <DeploymentModal isOpen={showModal} onOpenChange={setShowModal} />
     </>
   );
 }
 
-// Deployment Modal - Full deployment interface
+// Deployment Modal - Terminal-style deployment interface
 function DeploymentModal({ isOpen, onOpenChange }: { isOpen: boolean; onOpenChange: (open: boolean) => void }) {
   const [output, setOutput] = useState<string[]>([]);
-  const [isDeploying, setIsDeploying] = useState(false);
-  const [activeAction, setActiveAction] = useState<string | null>(null);
-  const { deploy } = useSelfDeploy();
-  const { services: pm2Services, loading: pm2Loading, loadServices: loadPM2, restartService } = usePM2Services();
-  const { loading: nginxLoading, testConfig, reload: reloadNginx } = useNginx();
+  const [isRunning, setIsRunning] = useState(false);
+  const { deploy, deploying } = useSelfDeploy();
+  const { restartService } = usePM2Services();
+  const { testConfig, reload: reloadNginx } = useNginx();
+  const outputRef = useRef<HTMLDivElement>(null);
 
   const addOutput = (line: string) => {
-    setOutput(prev => [...prev.slice(-50), `[${new Date().toLocaleTimeString()}] ${line}`]);
+    const timestamp = new Date().toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    setOutput(prev => [...prev.slice(-100), `[${timestamp}] ${line}`]);
   };
 
-  const clearOutput = () => setOutput([]);
+  // Auto-scroll to bottom when output changes
+  useEffect(() => {
+    if (outputRef.current) {
+      outputRef.current.scrollTop = outputRef.current.scrollHeight;
+    }
+  }, [output]);
 
   const runAction = async (name: string, action: () => Promise<void>) => {
-    setIsDeploying(true);
-    setActiveAction(name);
-    addOutput(`Starting ${name}...`);
+    setIsRunning(true);
+    addOutput(`$ ${name}`);
     try {
       await action();
+    } catch (e: any) {
+      addOutput(`ERROR: ${e.message}`);
     } finally {
-      setIsDeploying(false);
-      setActiveAction(null);
+      setIsRunning(false);
     }
   };
 
-  const handleDeploy = async (type: string) => {
-    await runAction(`${type} deploy`, async () => {
-      try {
-        const result = await deploy(type);
-        if (result?.success) {
-          addOutput(`✅ ${type} deployment completed`);
-          if (result.output) {
-            result.output.split('\n').slice(-10).forEach((line: string) => {
-              if (line.trim()) addOutput(line);
-            });
-          }
-        } else {
-          addOutput(`❌ Failed: ${result?.error || 'Unknown error'}`);
+  const handleDeploy = async (type: 'full' | 'frontend' | 'backend' | 'hotfix' | 'python' | 'restart') => {
+    await runAction(`deploy --type=${type}`, async () => {
+      const result = await deploy(type);
+      if (result?.success) {
+        addOutput(`Deployment completed in ${result.duration_ms}ms`);
+        if (result.git_commit_after) {
+          addOutput(`Commit: ${result.git_commit_after.slice(0, 7)}`);
         }
-      } catch (e: any) {
-        addOutput(`❌ Error: ${e.message}`);
+        // Show logs
+        if (result.logs) {
+          result.logs.split('\n').forEach((line: string) => {
+            if (line.trim()) addOutput(line);
+          });
+        }
+        addOutput('OK');
+      } else {
+        addOutput(`FAILED: ${result?.error || 'Unknown error'}`);
       }
     });
   };
 
-  const handlePM2 = async (action: string) => {
-    await runAction(`PM2 ${action}`, async () => {
-      try {
-        await restartService(action);
-        addOutput(`✅ PM2 ${action} completed`);
-      } catch (e: any) {
-        addOutput(`❌ PM2 ${action} failed: ${e.message}`);
-      }
+  const handlePM2Restart = async (service: 'all' | 'backend' | 'frontend' | 'python') => {
+    await runAction(`pm2 restart ${service}`, async () => {
+      await restartService(service);
+      addOutput('OK');
     });
   };
 
   const handleNginxTest = async () => {
-    await runAction('Nginx test', async () => {
-      try {
-        const result = await testConfig();
-        if (result?.valid) {
-          addOutput('✅ Nginx config is valid');
-        } else {
-          addOutput(`❌ Invalid: ${result?.output || 'Unknown error'}`);
-        }
-      } catch (e: any) {
-        addOutput(`❌ Test failed: ${e.message}`);
+    await runAction('nginx -t', async () => {
+      const result = await testConfig();
+      if (result?.valid) {
+        addOutput('nginx: configuration file syntax is ok');
+        addOutput('nginx: configuration file test is successful');
+      } else {
+        addOutput(`FAILED: ${result?.output || 'Invalid config'}`);
       }
     });
   };
 
   const handleNginxReload = async () => {
-    await runAction('Nginx reload', async () => {
-      try {
-        await reloadNginx();
-        addOutput('✅ Nginx reloaded');
-      } catch (e: any) {
-        addOutput(`❌ Reload failed: ${e.message}`);
-      }
+    await runAction('systemctl reload nginx', async () => {
+      await reloadNginx();
+      addOutput('OK');
     });
   };
 
   const handleCacheClean = async () => {
-    await runAction('Cache clean', async () => {
-      try {
-        const response = await fetch('/api/v2/devops/deploy/clear-cache', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' }
-        });
-        const result = await response.json();
-        if (result?.success) {
-          addOutput('✅ Next.js cache cleared (.next)');
-        } else {
-          addOutput(`❌ Cache clean failed: ${result?.error || 'Unknown error'}`);
-        }
-      } catch (e: any) {
-        addOutput(`❌ Cache clean failed: ${e.message}`);
+    await runAction('rm -rf .next && npm run build', async () => {
+      const response = await fetch('/api/v2/devops/deploy/clear-cache', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' }
+      });
+      const result = await response.json();
+      if (result?.success) {
+        addOutput('.next cache cleared');
+        addOutput('OK');
+      } else {
+        addOutput(`FAILED: ${result?.error || 'Unknown error'}`);
       }
     });
   };
 
   return (
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl max-h-[80vh] overflow-hidden flex flex-col">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <Rocket className="h-5 w-5" />
-            Deployment & Server Management
-            {isDeploying && (
-              <Badge className="ml-2 bg-blue-500">
-                <Loader2 className="h-3 w-3 mr-1 animate-spin" />
-                {activeAction}
+      <DialogContent className="max-w-3xl h-[80vh] p-0 gap-0 flex flex-col">
+        {/* Header */}
+        <DialogHeader className="px-4 py-3 border-b bg-muted/30 flex-shrink-0">
+          <DialogTitle className="flex items-center gap-2 text-base">
+            <Terminal className="h-4 w-4" />
+            DevOps Terminal
+            {(isRunning || deploying) && (
+              <Badge className="ml-2 bg-green-500 text-[10px]">
+                <Loader2 className="h-2.5 w-2.5 mr-1 animate-spin" />
+                Running
               </Badge>
             )}
           </DialogTitle>
-          <DialogDescription>
-            Deploy application and manage server services
-          </DialogDescription>
         </DialogHeader>
 
-        <div className="flex-1 overflow-auto space-y-4">
-          {/* Deploy Actions */}
-          <div>
-            <Label className="text-xs font-medium mb-2 block">Deploy</Label>
-            <div className="grid grid-cols-4 gap-2">
-              <Button size="sm" onClick={() => handleDeploy('full')} disabled={isDeploying}>
-                <Rocket className="h-3 w-3 mr-1" />
-                Full
-              </Button>
-              <Button size="sm" variant="outline" onClick={() => handleDeploy('frontend')} disabled={isDeploying}>
-                <Globe className="h-3 w-3 mr-1" />
-                Frontend
-              </Button>
-              <Button size="sm" variant="outline" onClick={() => handleDeploy('backend')} disabled={isDeploying}>
-                <Server className="h-3 w-3 mr-1" />
-                Backend
-              </Button>
-              <Button size="sm" variant="outline" onClick={() => handleDeploy('hotfix')} disabled={isDeploying}>
-                <GitBranch className="h-3 w-3 mr-1" />
-                Hotfix
-              </Button>
+        {/* Terminal Output - Main Body */}
+        <div
+          ref={outputRef}
+          className="flex-1 bg-[#1e1e1e] p-4 overflow-y-auto font-mono text-sm"
+        >
+          {output.length === 0 ? (
+            <div className="text-gray-500">
+              <p># DevOps Terminal Ready</p>
+              <p># Select an action from the buttons below</p>
+              <p>&nbsp;</p>
             </div>
+          ) : (
+            output.map((line, i) => (
+              <div
+                key={i}
+                className={`leading-relaxed ${
+                  line.includes('$') ? 'text-cyan-400 font-semibold mt-2' :
+                  line.includes('OK') ? 'text-green-400' :
+                  line.includes('FAILED') || line.includes('ERROR') ? 'text-red-400' :
+                  line.includes('Commit:') || line.includes('completed') ? 'text-yellow-400' :
+                  'text-gray-300'
+                }`}
+              >
+                {line}
+              </div>
+            ))
+          )}
+          {(isRunning || deploying) && (
+            <div className="flex items-center gap-2 text-gray-400 mt-1">
+              <Loader2 className="h-3 w-3 animate-spin" />
+              <span>Processing...</span>
+            </div>
+          )}
+        </div>
+
+        {/* Action Buttons - Footer */}
+        <div className="border-t bg-muted/30 p-3 flex-shrink-0 space-y-2">
+          {/* Deploy Actions */}
+          <div className="flex flex-wrap gap-1.5">
+            <Button size="sm" onClick={() => handleDeploy('full')} disabled={isRunning || deploying} className="h-7 text-xs">
+              <Rocket className="h-3 w-3 mr-1" />
+              Full Deploy
+            </Button>
+            <Button size="sm" variant="outline" onClick={() => handleDeploy('frontend')} disabled={isRunning || deploying} className="h-7 text-xs">
+              <Globe className="h-3 w-3 mr-1" />
+              Frontend
+            </Button>
+            <Button size="sm" variant="outline" onClick={() => handleDeploy('backend')} disabled={isRunning || deploying} className="h-7 text-xs">
+              <Server className="h-3 w-3 mr-1" />
+              Backend
+            </Button>
+            <Button size="sm" variant="outline" onClick={() => handleDeploy('python')} disabled={isRunning || deploying} className="h-7 text-xs">
+              <Code className="h-3 w-3 mr-1" />
+              Python
+            </Button>
+            <Button size="sm" variant="outline" onClick={() => handleDeploy('hotfix')} disabled={isRunning || deploying} className="h-7 text-xs">
+              <GitBranch className="h-3 w-3 mr-1" />
+              Hotfix
+            </Button>
           </div>
 
           {/* Server Management */}
-          <div>
-            <Label className="text-xs font-medium mb-2 block">Server Management</Label>
-            <div className="grid grid-cols-2 gap-2">
-              <Button size="sm" variant="outline" onClick={() => handlePM2('all')} disabled={isDeploying}>
-                <RefreshCw className="h-3 w-3 mr-1" />
-                PM2 Restart All
-              </Button>
-              <Button size="sm" variant="outline" onClick={handleCacheClean} disabled={isDeploying}>
-                <Trash2 className="h-3 w-3 mr-1" />
-                Clean .next Cache
-              </Button>
-              <Button size="sm" variant="outline" onClick={handleNginxTest} disabled={isDeploying || nginxLoading}>
-                <CheckCircle2 className="h-3 w-3 mr-1" />
-                Nginx Test
-              </Button>
-              <Button size="sm" variant="outline" onClick={handleNginxReload} disabled={isDeploying || nginxLoading}>
-                <Globe className="h-3 w-3 mr-1" />
-                Nginx Reload
-              </Button>
-            </div>
-          </div>
-
-          {/* PM2 Services Status */}
-          {pm2Services.length > 0 && (
-            <div>
-              <div className="flex items-center justify-between mb-2">
-                <Label className="text-xs font-medium">PM2 Services</Label>
-                <Button variant="ghost" size="sm" className="h-6 px-2" onClick={loadPM2} disabled={pm2Loading}>
-                  {pm2Loading ? <Loader2 className="h-3 w-3 animate-spin" /> : <RefreshCw className="h-3 w-3" />}
-                </Button>
-              </div>
-              <div className="flex flex-wrap gap-1.5">
-                {pm2Services.map((svc) => (
-                  <Badge
-                    key={svc.name}
-                    variant={svc.status === 'online' ? 'default' : 'destructive'}
-                    className="text-xs"
-                  >
-                    {svc.name} ({svc.cpu}%)
-                  </Badge>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* Output Console */}
-          <div>
-            <div className="flex items-center justify-between mb-2">
-              <Label className="text-xs font-medium">Output</Label>
-              <Button variant="ghost" size="sm" className="h-6 px-2 text-xs" onClick={clearOutput}>
-                Clear
-              </Button>
-            </div>
-            <div className="bg-black rounded-md p-3 h-48 overflow-y-auto font-mono text-xs">
-              {output.length === 0 ? (
-                <span className="text-gray-500">No output yet. Click an action to start.</span>
-              ) : (
-                output.map((line, i) => (
-                  <div
-                    key={i}
-                    className={`${
-                      line.includes('✅') ? 'text-green-400' :
-                      line.includes('❌') ? 'text-red-400' :
-                      line.includes('Starting') ? 'text-blue-400' :
-                      'text-gray-300'
-                    }`}
-                  >
-                    {line}
-                  </div>
-                ))
-              )}
-            </div>
+          <div className="flex flex-wrap gap-1.5">
+            <Button size="sm" variant="secondary" onClick={() => handlePM2Restart('all')} disabled={isRunning || deploying} className="h-7 text-xs">
+              <RefreshCw className="h-3 w-3 mr-1" />
+              PM2 All
+            </Button>
+            <Button size="sm" variant="secondary" onClick={handleCacheClean} disabled={isRunning || deploying} className="h-7 text-xs">
+              <Trash2 className="h-3 w-3 mr-1" />
+              Clear Cache
+            </Button>
+            <Button size="sm" variant="secondary" onClick={handleNginxTest} disabled={isRunning || deploying} className="h-7 text-xs">
+              <CheckCircle2 className="h-3 w-3 mr-1" />
+              Nginx Test
+            </Button>
+            <Button size="sm" variant="secondary" onClick={handleNginxReload} disabled={isRunning || deploying} className="h-7 text-xs">
+              <Globe className="h-3 w-3 mr-1" />
+              Nginx Reload
+            </Button>
+            <Button size="sm" variant="ghost" onClick={() => setOutput([])} disabled={isRunning || deploying} className="h-7 text-xs ml-auto">
+              Clear
+            </Button>
           </div>
         </div>
-
-        <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)}>
-            Close
-          </Button>
-        </DialogFooter>
       </DialogContent>
     </Dialog>
   );
