@@ -1396,256 +1396,328 @@ function SystemStatusCard() {
   );
 }
 
-// Developer Tools Card - Debug toggle and Console access
+// Developer Tools Card - Row-based, click to open console
 function DeveloperToolsCard({ onOpenConsole }: { onOpenConsole: () => void }) {
   return (
-    <Card
-      className="cursor-pointer hover:shadow-md transition-all border-gray-200/60 dark:bg-card/80"
-      onClick={onOpenConsole}
-    >
+    <Card className="border-gray-200/60 dark:bg-card/80">
       <CardHeader className="pb-2">
         <CardTitle className="text-sm flex items-center gap-2">
           <Terminal className="h-4 w-4" />
           Developer Tools
-          <Badge variant="outline" className="ml-auto text-[10px]">Click to open</Badge>
         </CardTitle>
-        <CardDescription className="text-xs">Console, logs & debugging</CardDescription>
       </CardHeader>
-      <CardContent className="pt-0">
-        {/* Debug Toggle - stop propagation to prevent card click */}
-        <div
-          className="flex items-center justify-between p-2 rounded-md bg-muted/50"
-          onClick={(e) => e.stopPropagation()}
-        >
+      <CardContent className="space-y-2 pt-0">
+        {/* Debug Mode Row */}
+        <div className="flex items-center justify-between p-2 rounded-md bg-muted/50 hover:bg-muted/70 transition-colors">
           <div className="flex items-center gap-2">
             <Bug className="h-3.5 w-3.5 text-muted-foreground" />
             <div>
-              <Label className="text-xs font-medium">Debug Mode</Label>
-              <p className="text-[10px] text-muted-foreground">Enable console logging</p>
+              <span className="text-xs font-medium">Debug Mode</span>
+              <p className="text-[10px] text-muted-foreground">Console logging</p>
             </div>
           </div>
           <DebugSettings />
+        </div>
+
+        {/* Console Row - Clickable */}
+        <div
+          className="flex items-center justify-between p-2 rounded-md bg-muted/50 hover:bg-muted/70 transition-colors cursor-pointer"
+          onClick={onOpenConsole}
+        >
+          <div className="flex items-center gap-2">
+            <Terminal className="h-3.5 w-3.5 text-muted-foreground" />
+            <div>
+              <span className="text-xs font-medium">System Console</span>
+              <p className="text-[10px] text-muted-foreground">Logs & output</p>
+            </div>
+          </div>
+          <Badge variant="outline" className="text-[10px]">Open</Badge>
         </div>
       </CardContent>
     </Card>
   );
 }
 
-// Deployment Card - Shows deploy actions with output
+// Deployment Card - Row-based, click to open modal
 function DeploymentCard() {
+  const [showModal, setShowModal] = useState(false);
+
+  return (
+    <>
+      <Card className="border-gray-200/60 dark:bg-card/80">
+        <CardHeader className="pb-2">
+          <CardTitle className="text-sm flex items-center gap-2">
+            <Rocket className="h-4 w-4" />
+            Deployment
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-2 pt-0">
+          {/* Deploy Row - Clickable */}
+          <div
+            className="flex items-center justify-between p-2 rounded-md bg-muted/50 hover:bg-muted/70 transition-colors cursor-pointer"
+            onClick={() => setShowModal(true)}
+          >
+            <div className="flex items-center gap-2">
+              <Rocket className="h-3.5 w-3.5 text-muted-foreground" />
+              <div>
+                <span className="text-xs font-medium">Deploy Application</span>
+                <p className="text-[10px] text-muted-foreground">Full, Frontend, Backend, Hotfix</p>
+              </div>
+            </div>
+            <Badge variant="outline" className="text-[10px]">Open</Badge>
+          </div>
+
+          {/* Server Management Row - Clickable */}
+          <div
+            className="flex items-center justify-between p-2 rounded-md bg-muted/50 hover:bg-muted/70 transition-colors cursor-pointer"
+            onClick={() => setShowModal(true)}
+          >
+            <div className="flex items-center gap-2">
+              <Server className="h-3.5 w-3.5 text-muted-foreground" />
+              <div>
+                <span className="text-xs font-medium">Server Management</span>
+                <p className="text-[10px] text-muted-foreground">PM2, Nginx, Cache</p>
+              </div>
+            </div>
+            <Badge variant="outline" className="text-[10px]">Open</Badge>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Deployment Modal */}
+      <DeploymentModal isOpen={showModal} onOpenChange={setShowModal} />
+    </>
+  );
+}
+
+// Deployment Modal - Full deployment interface
+function DeploymentModal({ isOpen, onOpenChange }: { isOpen: boolean; onOpenChange: (open: boolean) => void }) {
   const [output, setOutput] = useState<string[]>([]);
   const [isDeploying, setIsDeploying] = useState(false);
-  const [deployType, setDeployType] = useState<string | null>(null);
+  const [activeAction, setActiveAction] = useState<string | null>(null);
   const { deploy } = useSelfDeploy();
   const { services: pm2Services, loading: pm2Loading, loadServices: loadPM2, restartService } = usePM2Services();
   const { loading: nginxLoading, testConfig, reload: reloadNginx } = useNginx();
 
   const addOutput = (line: string) => {
-    setOutput(prev => [...prev.slice(-20), `[${new Date().toLocaleTimeString()}] ${line}`]);
+    setOutput(prev => [...prev.slice(-50), `[${new Date().toLocaleTimeString()}] ${line}`]);
+  };
+
+  const clearOutput = () => setOutput([]);
+
+  const runAction = async (name: string, action: () => Promise<void>) => {
+    setIsDeploying(true);
+    setActiveAction(name);
+    addOutput(`Starting ${name}...`);
+    try {
+      await action();
+    } finally {
+      setIsDeploying(false);
+      setActiveAction(null);
+    }
   };
 
   const handleDeploy = async (type: string) => {
-    setIsDeploying(true);
-    setDeployType(type);
-    setOutput([]);
-    addOutput(`Starting ${type} deployment...`);
-
-    try {
-      const result = await deploy(type);
-      if (result?.success) {
-        addOutput(`✅ ${type} deployment completed successfully`);
-        if (result.output) {
-          result.output.split('\n').slice(-5).forEach((line: string) => {
-            if (line.trim()) addOutput(line);
-          });
+    await runAction(`${type} deploy`, async () => {
+      try {
+        const result = await deploy(type);
+        if (result?.success) {
+          addOutput(`✅ ${type} deployment completed`);
+          if (result.output) {
+            result.output.split('\n').slice(-10).forEach((line: string) => {
+              if (line.trim()) addOutput(line);
+            });
+          }
+        } else {
+          addOutput(`❌ Failed: ${result?.error || 'Unknown error'}`);
         }
-      } else {
-        addOutput(`❌ Deployment failed: ${result?.error || 'Unknown error'}`);
+      } catch (e: any) {
+        addOutput(`❌ Error: ${e.message}`);
       }
-    } catch (e: any) {
-      addOutput(`❌ Error: ${e.message}`);
-    } finally {
-      setIsDeploying(false);
-      setDeployType(null);
-    }
+    });
   };
 
-  const handlePM2Restart = async () => {
-    addOutput('Restarting PM2 services...');
-    try {
-      await restartService('all');
-      addOutput('✅ PM2 services restarted');
-    } catch (e: any) {
-      addOutput(`❌ PM2 restart failed: ${e.message}`);
-    }
+  const handlePM2 = async (action: string) => {
+    await runAction(`PM2 ${action}`, async () => {
+      try {
+        await restartService(action);
+        addOutput(`✅ PM2 ${action} completed`);
+      } catch (e: any) {
+        addOutput(`❌ PM2 ${action} failed: ${e.message}`);
+      }
+    });
   };
 
   const handleNginxTest = async () => {
-    addOutput('Testing Nginx config...');
-    try {
-      const result = await testConfig();
-      if (result?.valid) {
-        addOutput('✅ Nginx config is valid');
-      } else {
-        addOutput(`❌ Nginx config invalid: ${result?.output || 'Unknown error'}`);
+    await runAction('Nginx test', async () => {
+      try {
+        const result = await testConfig();
+        if (result?.valid) {
+          addOutput('✅ Nginx config is valid');
+        } else {
+          addOutput(`❌ Invalid: ${result?.output || 'Unknown error'}`);
+        }
+      } catch (e: any) {
+        addOutput(`❌ Test failed: ${e.message}`);
       }
-    } catch (e: any) {
-      addOutput(`❌ Nginx test failed: ${e.message}`);
-    }
+    });
   };
 
   const handleNginxReload = async () => {
-    addOutput('Reloading Nginx...');
-    try {
-      await reloadNginx();
-      addOutput('✅ Nginx reloaded');
-    } catch (e: any) {
-      addOutput(`❌ Nginx reload failed: ${e.message}`);
-    }
+    await runAction('Nginx reload', async () => {
+      try {
+        await reloadNginx();
+        addOutput('✅ Nginx reloaded');
+      } catch (e: any) {
+        addOutput(`❌ Reload failed: ${e.message}`);
+      }
+    });
+  };
+
+  const handleCacheClean = async () => {
+    await runAction('Cache clean', async () => {
+      try {
+        const response = await fetch('/api/v2/devops/deploy/clear-cache', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' }
+        });
+        const result = await response.json();
+        if (result?.success) {
+          addOutput('✅ Next.js cache cleared (.next)');
+        } else {
+          addOutput(`❌ Cache clean failed: ${result?.error || 'Unknown error'}`);
+        }
+      } catch (e: any) {
+        addOutput(`❌ Cache clean failed: ${e.message}`);
+      }
+    });
   };
 
   return (
-    <Card className="border-gray-200/60 dark:bg-card/80">
-      <CardHeader className="pb-2">
-        <CardTitle className="text-sm flex items-center gap-2">
-          <Rocket className="h-4 w-4" />
-          Deployment
-          {isDeploying && (
-            <Badge className="ml-auto bg-blue-500 text-[10px]">
-              <Loader2 className="h-2.5 w-2.5 mr-1 animate-spin" />
-              {deployType}
-            </Badge>
-          )}
-        </CardTitle>
-        <CardDescription className="text-xs">Deploy & server management</CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-3 pt-0">
-        {/* Deploy Buttons */}
-        <div className="grid grid-cols-4 gap-1.5">
-          <Button
-            size="sm"
-            onClick={() => handleDeploy('full')}
-            disabled={isDeploying}
-            className="h-7 text-[10px]"
-          >
-            <Rocket className="h-3 w-3 mr-1" />
-            Full
-          </Button>
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={() => handleDeploy('frontend')}
-            disabled={isDeploying}
-            className="h-7 text-[10px]"
-          >
-            <Globe className="h-3 w-3 mr-1" />
-            FE
-          </Button>
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={() => handleDeploy('backend')}
-            disabled={isDeploying}
-            className="h-7 text-[10px]"
-          >
-            <Server className="h-3 w-3 mr-1" />
-            BE
-          </Button>
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={() => handleDeploy('hotfix')}
-            disabled={isDeploying}
-            className="h-7 text-[10px]"
-          >
-            <GitBranch className="h-3 w-3 mr-1" />
-            Hot
-          </Button>
-        </div>
+    <Dialog open={isOpen} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-2xl max-h-[80vh] overflow-hidden flex flex-col">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <Rocket className="h-5 w-5" />
+            Deployment & Server Management
+            {isDeploying && (
+              <Badge className="ml-2 bg-blue-500">
+                <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+                {activeAction}
+              </Badge>
+            )}
+          </DialogTitle>
+          <DialogDescription>
+            Deploy application and manage server services
+          </DialogDescription>
+        </DialogHeader>
 
-        {/* Quick Actions */}
-        <div className="flex gap-1 pt-1 border-t">
-          <Button
-            variant="ghost"
-            size="sm"
-            className="h-6 text-[10px] px-2 flex-1"
-            onClick={handlePM2Restart}
-            disabled={isDeploying}
-          >
-            <RefreshCw className="h-2.5 w-2.5 mr-1" />
-            PM2
-          </Button>
-          <Button
-            variant="ghost"
-            size="sm"
-            className="h-6 text-[10px] px-2 flex-1"
-            onClick={handleNginxTest}
-            disabled={isDeploying || nginxLoading}
-          >
-            <CheckCircle2 className="h-2.5 w-2.5 mr-1" />
-            Test
-          </Button>
-          <Button
-            variant="ghost"
-            size="sm"
-            className="h-6 text-[10px] px-2 flex-1"
-            onClick={handleNginxReload}
-            disabled={isDeploying || nginxLoading}
-          >
-            <Globe className="h-2.5 w-2.5 mr-1" />
-            Reload
-          </Button>
-        </div>
-
-        {/* Output Console */}
-        {output.length > 0 && (
-          <div className="bg-black/90 rounded-md p-2 max-h-32 overflow-y-auto">
-            <div className="font-mono text-[10px] space-y-0.5">
-              {output.map((line, i) => (
-                <div
-                  key={i}
-                  className={`${
-                    line.includes('✅') ? 'text-green-400' :
-                    line.includes('❌') ? 'text-red-400' :
-                    'text-gray-300'
-                  }`}
-                >
-                  {line}
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* PM2 Status (collapsed) */}
-        {pm2Services.length > 0 && (
-          <div className="pt-2 border-t">
-            <div className="flex items-center justify-between mb-1">
-              <span className="text-[10px] text-muted-foreground">PM2 Services</span>
-              <Button
-                variant="ghost"
-                size="sm"
-                className="h-4 w-4 p-0"
-                onClick={loadPM2}
-                disabled={pm2Loading}
-              >
-                {pm2Loading ? <Loader2 className="h-2.5 w-2.5 animate-spin" /> : <RefreshCw className="h-2.5 w-2.5" />}
+        <div className="flex-1 overflow-auto space-y-4">
+          {/* Deploy Actions */}
+          <div>
+            <Label className="text-xs font-medium mb-2 block">Deploy</Label>
+            <div className="grid grid-cols-4 gap-2">
+              <Button size="sm" onClick={() => handleDeploy('full')} disabled={isDeploying}>
+                <Rocket className="h-3 w-3 mr-1" />
+                Full
+              </Button>
+              <Button size="sm" variant="outline" onClick={() => handleDeploy('frontend')} disabled={isDeploying}>
+                <Globe className="h-3 w-3 mr-1" />
+                Frontend
+              </Button>
+              <Button size="sm" variant="outline" onClick={() => handleDeploy('backend')} disabled={isDeploying}>
+                <Server className="h-3 w-3 mr-1" />
+                Backend
+              </Button>
+              <Button size="sm" variant="outline" onClick={() => handleDeploy('hotfix')} disabled={isDeploying}>
+                <GitBranch className="h-3 w-3 mr-1" />
+                Hotfix
               </Button>
             </div>
-            <div className="flex flex-wrap gap-1">
-              {pm2Services.map((svc) => (
-                <Badge
-                  key={svc.name}
-                  variant={svc.status === 'online' ? 'default' : 'destructive'}
-                  className="text-[9px] py-0 px-1.5"
-                >
-                  {svc.name.replace(/-/g, ' ').slice(0, 10)}
-                </Badge>
-              ))}
+          </div>
+
+          {/* Server Management */}
+          <div>
+            <Label className="text-xs font-medium mb-2 block">Server Management</Label>
+            <div className="grid grid-cols-2 gap-2">
+              <Button size="sm" variant="outline" onClick={() => handlePM2('all')} disabled={isDeploying}>
+                <RefreshCw className="h-3 w-3 mr-1" />
+                PM2 Restart All
+              </Button>
+              <Button size="sm" variant="outline" onClick={handleCacheClean} disabled={isDeploying}>
+                <Trash2 className="h-3 w-3 mr-1" />
+                Clean .next Cache
+              </Button>
+              <Button size="sm" variant="outline" onClick={handleNginxTest} disabled={isDeploying || nginxLoading}>
+                <CheckCircle2 className="h-3 w-3 mr-1" />
+                Nginx Test
+              </Button>
+              <Button size="sm" variant="outline" onClick={handleNginxReload} disabled={isDeploying || nginxLoading}>
+                <Globe className="h-3 w-3 mr-1" />
+                Nginx Reload
+              </Button>
             </div>
           </div>
-        )}
-      </CardContent>
-    </Card>
+
+          {/* PM2 Services Status */}
+          {pm2Services.length > 0 && (
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <Label className="text-xs font-medium">PM2 Services</Label>
+                <Button variant="ghost" size="sm" className="h-6 px-2" onClick={loadPM2} disabled={pm2Loading}>
+                  {pm2Loading ? <Loader2 className="h-3 w-3 animate-spin" /> : <RefreshCw className="h-3 w-3" />}
+                </Button>
+              </div>
+              <div className="flex flex-wrap gap-1.5">
+                {pm2Services.map((svc) => (
+                  <Badge
+                    key={svc.name}
+                    variant={svc.status === 'online' ? 'default' : 'destructive'}
+                    className="text-xs"
+                  >
+                    {svc.name} ({svc.cpu}%)
+                  </Badge>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Output Console */}
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <Label className="text-xs font-medium">Output</Label>
+              <Button variant="ghost" size="sm" className="h-6 px-2 text-xs" onClick={clearOutput}>
+                Clear
+              </Button>
+            </div>
+            <div className="bg-black rounded-md p-3 h-48 overflow-y-auto font-mono text-xs">
+              {output.length === 0 ? (
+                <span className="text-gray-500">No output yet. Click an action to start.</span>
+              ) : (
+                output.map((line, i) => (
+                  <div
+                    key={i}
+                    className={`${
+                      line.includes('✅') ? 'text-green-400' :
+                      line.includes('❌') ? 'text-red-400' :
+                      line.includes('Starting') ? 'text-blue-400' :
+                      'text-gray-300'
+                    }`}
+                  >
+                    {line}
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+        </div>
+
+        <DialogFooter>
+          <Button variant="outline" onClick={() => onOpenChange(false)}>
+            Close
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
