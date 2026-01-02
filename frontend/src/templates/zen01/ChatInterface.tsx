@@ -192,21 +192,6 @@ export default function ChatInterface() {
 
     loadSuggestions();
 
-    // Fetch PDF settings
-    fetch('/api/v2/chat/pdf-settings')
-      .then(res => res.json())
-      .then(data => {
-        setPdfSettings({
-          enabled: data.enabled || false,
-          maxSizeMB: data.maxSizeMB || 10,
-          maxPages: data.maxPages || 30
-        });
-        console.log('[Zen01] PDF settings loaded:', data);
-      })
-      .catch(err => {
-        console.error('[Zen01] Failed to fetch PDF settings:', err);
-      });
-
     Promise.all([
       fetch('/api/v2/chatbot/settings'),
       fetch('/api/v2/settings?category=llm'),
@@ -290,6 +275,31 @@ export default function ChatInterface() {
       });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Fetch PDF settings when token is available
+  useEffect(() => {
+    if (!token) return;
+
+    fetch('/api/v2/chat/pdf-settings', {
+      headers: {
+        'Authorization': `Bearer ${token}`
+      }
+    })
+      .then(res => res.json())
+      .then(data => {
+        if (!data.error) {
+          setPdfSettings({
+            enabled: data.enabled || false,
+            maxSizeMB: data.maxSizeMB || 10,
+            maxPages: data.maxPages || 30
+          });
+          console.log('[Zen01] PDF settings loaded:', data);
+        }
+      })
+      .catch(err => {
+        console.error('[Zen01] Failed to fetch PDF settings:', err);
+      });
+  }, [token]);
 
   // Streaming timer
   useEffect(() => {
