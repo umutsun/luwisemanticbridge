@@ -794,13 +794,15 @@ class SemanticSearchService:
         """
         Fallback keyword search when embedding fails
 
-        Uses PostgreSQL ILIKE for text matching
+        Uses PostgreSQL ILIKE for text matching across ALL sources
         """
         try:
             pool = await get_db()
+            results = []
+            per_source_limit = max(5, limit // 3)
 
-            # Keyword search query
-            search_query = """
+            # 1. Search unified_embeddings
+            unified_query = """
                 SELECT
                     id::text as id,
                     CASE
@@ -834,33 +836,158 @@ class SemanticSearchService:
                 LIMIT $2
             """
 
-            rows = await pool.fetch(search_query, query, limit)
+            try:
+                rows = await pool.fetch(unified_query, query, per_source_limit)
+                for row in rows:
+                    metadata = {}
+                    if row['metadata']:
+                        try:
+                            metadata = json.loads(row['metadata']) if isinstance(row['metadata'], str) else dict(row['metadata'])
+                        except (json.JSONDecodeError, TypeError):
+                            metadata = {}
 
-            results = []
-            for row in rows:
-                metadata = {}
-                if row['metadata']:
-                    try:
-                        metadata = json.loads(row['metadata']) if isinstance(row['metadata'], str) else dict(row['metadata'])
-                    except (json.JSONDecodeError, TypeError):
-                        metadata = {}
+                    results.append({
+                        "id": str(row['id']),
+                        "content": row['content'],
+                        "title": row['title'],
+                        "source_table": row['source_table'],
+                        "source_id": str(row['source_id']) if row['source_id'] else None,
+                        "similarity_score": float(row['similarity_score']),
+                        "metadata": metadata,
+                        "search_source": "keyword"
+                    })
+            except Exception as e:
+                logger.debug(f"unified_embeddings keyword search skipped: {e}")
 
-                results.append({
-                    "id": str(row['id']),
-                    "content": row['content'],
-                    "title": row['title'],
-                    "source_table": row['source_table'],
-                    "source_id": str(row['source_id']) if row['source_id'] else None,
-                    "similarity_score": float(row['similarity_score']),
-                    "metadata": metadata,
-                    "search_source": "keyword"
-                })
+            # 2. Search document_embeddings (PDFs, Word docs)
+            doc_query = """
+                SELECT
+                    id::text as id,
+                    LEFT(chunk_text, 150) as title,
+                    'document_embeddings' as source_table,
+                    document_id::text as source_id,
+                    LEFT(chunk_text, 500) as content,
+                    metadata,
+                    0.92 as similarity_score  -- High score for exact keyword match in documents
+                FROM document_embeddings
+                WHERE chunk_text ILIKE '%' || $1 || '%'
+                LIMIT $2
+            """
+
+            try:
+                rows = await pool.fetch(doc_query, query, per_source_limit)
+                for row in rows:
+                    metadata = {}
+                    if row['metadata']:
+                        try:
+                            metadata = json.loads(row['metadata']) if isinstance(row['metadata'], str) else dict(row['metadata'])
+                        except (json.JSONDecodeError, TypeError):
+                            metadata = {}
+
+                    results.append({
+                        "id": str(row['id']),
+                        "content": row['content'],
+                        "title": row['title'],
+                        "source_table": 'document_embeddings',
+                        "source_id": str(row['source_id']) if row['source_id'] else None,
+                        "similarity_score": float(row['similarity_score']),
+                        "metadata": metadata,
+                        "search_source": "keyword"
+                    })
+            except Exception as e:
+                logger.debug(f"document_embeddings keyword search skipped: {e}")
 
             logger.info(f"Keyword search: {len(results)} results for '{query[:30]}...'")
             return results
 
         except Exception as e:
             logger.error(f"Keyword search error: {e}")
+            return []
+
+    async def keyword_augment_search(
+        self,
+        query: str,
+        limit: int = 10
+    ) -> List[Dict[str, Any]]:
+        """
+        Find additional results via keyword matching to augment vector search.
+
+        Called during hybrid search to ensure keyword-relevant results
+        are included even if they don't rank high in vector similarity.
+        """
+        try:
+            pool = await get_db()
+            results = []
+
+            # Extract significant keywords (>3 chars, not stopwords)
+            turkish_stopwords = {'ve', 'ile', 'bu', 'bir', 'için', 'da', 'de', 'mi', 'ne', 'var', 'yok', 'ise', 'gibi', 'kadar', 'daha', 'olan', 'olan', 'veya', 'çok', 'sonra', 'önce'}
+            keywords = [w for w in query.lower().split() if len(w) > 3 and w not in turkish_stopwords]
+
+            if not keywords:
+                return []
+
+            # Build keyword pattern for ILIKE
+            # Try exact phrase first, then individual keywords
+            patterns = [query]  # Full phrase
+            if len(keywords) >= 2:
+                patterns.append(' '.join(keywords[:3]))  # First 3 keywords
+            patterns.extend(keywords[:5])  # Individual keywords (max 5)
+
+            seen_ids = set()
+
+            for pattern in patterns:
+                if len(results) >= limit:
+                    break
+
+                # Search document_embeddings
+                doc_query = """
+                    SELECT
+                        id::text as id,
+                        LEFT(chunk_text, 150) as title,
+                        'document_embeddings' as source_table,
+                        'document' as source_type,
+                        document_id::text as source_id,
+                        LEFT(chunk_text, 500) as content,
+                        metadata,
+                        0.85 as similarity_score
+                    FROM document_embeddings
+                    WHERE chunk_text ILIKE '%' || $1 || '%'
+                    LIMIT $2
+                """
+
+                try:
+                    rows = await pool.fetch(doc_query, pattern, limit - len(results))
+                    for row in rows:
+                        if row['id'] in seen_ids:
+                            continue
+                        seen_ids.add(row['id'])
+
+                        metadata = {}
+                        if row['metadata']:
+                            try:
+                                metadata = json.loads(row['metadata']) if isinstance(row['metadata'], str) else dict(row['metadata'])
+                            except (json.JSONDecodeError, TypeError):
+                                metadata = {}
+
+                        results.append({
+                            "id": str(row['id']),
+                            "content": row['content'],
+                            "title": row['title'],
+                            "source_table": 'document_embeddings',
+                            "source_type": 'document',
+                            "source_id": str(row['source_id']) if row['source_id'] else None,
+                            "similarity_score": 0.85,  # Good base score for keyword match
+                            "metadata": metadata,
+                            "search_source": "keyword_augment"
+                        })
+                except Exception as e:
+                    logger.debug(f"document_embeddings keyword augment skipped: {e}")
+
+            logger.info(f"Keyword augment: {len(results)} results for '{query[:30]}...'")
+            return results
+
+        except Exception as e:
+            logger.error(f"Keyword augment error: {e}")
             return []
 
     def _calculate_keyword_boost(
@@ -1223,6 +1350,21 @@ class SemanticSearchService:
                     settings=settings
                 )
                 timings["vector_search_ms"] = (datetime.now() - search_start).total_seconds() * 1000
+
+                # HYBRID SEARCH: Augment vector results with keyword matches
+                # This ensures exact keyword matches are included even if vector similarity is low
+                if settings.enable_hybrid_search:
+                    augment_start = datetime.now()
+                    keyword_results = await self.keyword_augment_search(query, limit=5)
+                    timings["keyword_augment_ms"] = (datetime.now() - augment_start).total_seconds() * 1000
+
+                    # Merge keyword results, avoiding duplicates
+                    existing_ids = {r["id"] for r in raw_results}
+                    for kr in keyword_results:
+                        if kr["id"] not in existing_ids:
+                            raw_results.append(kr)
+                            existing_ids.add(kr["id"])
+                    logger.info(f"Hybrid search: {len(keyword_results)} keyword augment results added")
 
             # Apply hybrid scoring with table weights
             score_start = datetime.now()
