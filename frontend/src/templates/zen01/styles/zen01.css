@@ -712,6 +712,13 @@
   font-weight: 600;
 }
 
+/* Section headers - Bold text at start of paragraph acting as headers */
+.zen01-markdown p > strong:first-child {
+  display: block;
+  margin-bottom: 0.5rem;
+  font-size: 1.05em;
+}
+
 .light .zen01-markdown strong,
 [data-mode="light"] .zen01-markdown strong {
   color: #0891b2; /* cyan-600 - readable against light bg */

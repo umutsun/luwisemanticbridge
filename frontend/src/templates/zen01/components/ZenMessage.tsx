@@ -54,6 +54,8 @@ export const ZenMessage: React.FC<ZenMessageProps> = ({
                 <ReactMarkdown
                   remarkPlugins={[remarkGfm]}
                   components={{
+                    // Custom wrapper to detect bold-started paragraphs (section headers)
+                    // LLM often uses **Header:** format instead of proper markdown headings
                     // Headings
                     h1: ({ children }) => (
                       <h1 className="text-lg font-bold text-cyan-200 mt-4 mb-2 pb-1 border-b border-cyan-500/30">
@@ -70,15 +72,28 @@ export const ZenMessage: React.FC<ZenMessageProps> = ({
                         {children}
                       </h3>
                     ),
-                    // Paragraphs - Better spacing for readability
-                    p: ({ children }) => (
-                      <p className="text-slate-200 my-4 leading-relaxed first:mt-0 last:mb-0">
-                        {children}
-                      </p>
-                    ),
-                    // Bold - Darker cyan for better readability
+                    // Paragraphs - Detect if starts with bold (section header pattern)
+                    p: ({ children }) => {
+                      // Check if first child is a strong element (bold header pattern)
+                      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                      const childArray = React.Children.toArray(children);
+                      const firstChild = childArray[0] as any;
+                      const isSectionHeader = firstChild?.type === 'strong' ||
+                        firstChild?.type?.displayName === 'strong' ||
+                        (typeof firstChild === 'object' && firstChild?.type?.name === 'strong');
+
+                      // Add extra top margin for section headers
+                      return (
+                        <p className={`text-slate-200 leading-relaxed first:mt-0 last:mb-0 ${
+                          isSectionHeader ? 'mt-6 mb-3' : 'my-4'
+                        }`}>
+                          {children}
+                        </p>
+                      );
+                    },
+                    // Bold - Style as section header when at start of paragraph
                     strong: ({ children }) => (
-                      <strong className="font-semibold text-cyan-300">
+                      <strong className="font-semibold text-cyan-300 inline-block">
                         {children}
                       </strong>
                     ),
