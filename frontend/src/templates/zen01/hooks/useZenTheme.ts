@@ -10,22 +10,27 @@ const STORAGE_KEY = 'zen01-theme-mode';
  * Persists preference to localStorage
  */
 export function useZenTheme(defaultMode: ZenThemeMode = 'dark'): ZenThemeContext {
-  const [isDark, setIsDark] = useState<boolean>(() => {
-    // Check localStorage on initial load (client-side only)
-    if (typeof window !== 'undefined') {
-      const stored = localStorage.getItem(STORAGE_KEY);
-      if (stored === 'light') return false;
-      if (stored === 'dark') return true;
+  // Start with default mode to avoid hydration mismatch
+  const [isDark, setIsDark] = useState<boolean>(defaultMode === 'dark');
+  const [isHydrated, setIsHydrated] = useState(false);
+
+  // Hydrate from localStorage after mount
+  useEffect(() => {
+    const stored = localStorage.getItem(STORAGE_KEY);
+    if (stored === 'light') {
+      setIsDark(false);
+    } else if (stored === 'dark') {
+      setIsDark(true);
     }
-    return defaultMode === 'dark';
-  });
+    setIsHydrated(true);
+  }, []);
 
   // Persist preference to localStorage
   useEffect(() => {
-    if (typeof window !== 'undefined') {
+    if (isHydrated) {
       localStorage.setItem(STORAGE_KEY, isDark ? 'dark' : 'light');
     }
-  }, [isDark]);
+  }, [isDark, isHydrated]);
 
   const toggle = useCallback(() => {
     setIsDark(prev => !prev);

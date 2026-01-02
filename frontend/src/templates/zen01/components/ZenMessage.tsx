@@ -223,11 +223,6 @@ export const ZenMessage: React.FC<ZenMessageProps> = ({
                         </p>
                       )}
                     </div>
-                    {source.score && (
-                      <span className="text-[10px] text-cyan-400/50 flex-shrink-0">
-                        {Math.round(source.score * 100)}%
-                      </span>
-                    )}
                   </div>
                 </div>
               ))}
