@@ -914,74 +914,95 @@ class SemanticSearchService:
 
         Called during hybrid search to ensure keyword-relevant results
         are included even if they don't rank high in vector similarity.
+
+        OPTIMIZED: Uses single query with OR conditions instead of multiple queries.
         """
         try:
             pool = await get_db()
             results = []
 
             # Extract significant keywords (>3 chars, not stopwords)
-            turkish_stopwords = {'ve', 'ile', 'bu', 'bir', 'için', 'da', 'de', 'mi', 'ne', 'var', 'yok', 'ise', 'gibi', 'kadar', 'daha', 'olan', 'olan', 'veya', 'çok', 'sonra', 'önce'}
+            turkish_stopwords = {'ve', 'ile', 'bu', 'bir', 'için', 'da', 'de', 'mi', 'ne', 'var', 'yok', 'ise', 'gibi', 'kadar', 'daha', 'olan', 'veya', 'çok', 'sonra', 'önce'}
             keywords = [w for w in query.lower().split() if len(w) > 3 and w not in turkish_stopwords]
 
             if not keywords:
                 return []
 
-            # Build keyword pattern for ILIKE
-            # Try exact phrase first, then individual keywords
-            patterns = [query]  # Full phrase
+            # Build patterns for single optimized query
+            # Priority: full phrase > first 2 keywords > longest individual keyword
+            patterns = []
+            patterns.append(query.strip())  # Full phrase (highest priority)
             if len(keywords) >= 2:
-                patterns.append(' '.join(keywords[:3]))  # First 3 keywords
-            patterns.extend(keywords[:5])  # Individual keywords (max 5)
+                patterns.append(' '.join(keywords[:2]))  # First 2 keywords
+            # Add the longest keyword (most specific)
+            if keywords:
+                longest_keyword = max(keywords, key=len)
+                if longest_keyword not in patterns:
+                    patterns.append(longest_keyword)
 
-            seen_ids = set()
+            # Build single optimized query with OR conditions
+            # Uses CASE to score matches by priority
+            conditions = []
+            params = []
+            for i, pattern in enumerate(patterns[:3]):  # Max 3 patterns for performance
+                conditions.append(f"chunk_text ILIKE '%' || ${i+1} || '%'")
+                params.append(pattern)
 
-            for pattern in patterns:
-                if len(results) >= limit:
-                    break
+            if not conditions:
+                return []
 
-                # Search document_embeddings
-                doc_query = """
-                    SELECT
-                        id::text as id,
-                        LEFT(chunk_text, 150) as title,
-                        'document_embeddings' as source_table,
-                        'document' as source_type,
-                        document_id::text as source_id,
-                        LEFT(chunk_text, 500) as content,
-                        metadata,
-                        0.85 as similarity_score
-                    FROM document_embeddings
-                    WHERE chunk_text ILIKE '%' || $1 || '%'
-                    LIMIT $2
-                """
+            where_clause = " OR ".join(conditions)
 
-                try:
-                    rows = await pool.fetch(doc_query, pattern, limit - len(results))
-                    for row in rows:
-                        if row['id'] in seen_ids:
-                            continue
-                        seen_ids.add(row['id'])
+            # Single query with scoring based on match type
+            doc_query = f"""
+                SELECT
+                    id::text as id,
+                    LEFT(chunk_text, 150) as title,
+                    'document_embeddings' as source_table,
+                    'document' as source_type,
+                    document_id::text as source_id,
+                    LEFT(chunk_text, 500) as content,
+                    metadata,
+                    CASE
+                        WHEN chunk_text ILIKE '%' || $1 || '%' THEN 0.92  -- Full phrase match
+                        WHEN {len(params) >= 2 and "chunk_text ILIKE '%' || $2 || '%'" or 'FALSE'} THEN 0.88  -- Partial match
+                        ELSE 0.85  -- Keyword match
+                    END as similarity_score
+                FROM document_embeddings
+                WHERE {where_clause}
+                ORDER BY
+                    CASE
+                        WHEN chunk_text ILIKE '%' || $1 || '%' THEN 1
+                        WHEN {len(params) >= 2 and "chunk_text ILIKE '%' || $2 || '%'" or 'FALSE'} THEN 2
+                        ELSE 3
+                    END
+                LIMIT ${len(params) + 1}
+            """
+            params.append(limit)
 
-                        metadata = {}
-                        if row['metadata']:
-                            try:
-                                metadata = json.loads(row['metadata']) if isinstance(row['metadata'], str) else dict(row['metadata'])
-                            except (json.JSONDecodeError, TypeError):
-                                metadata = {}
+            try:
+                rows = await pool.fetch(doc_query, *params)
+                for row in rows:
+                    metadata = {}
+                    if row['metadata']:
+                        try:
+                            metadata = json.loads(row['metadata']) if isinstance(row['metadata'], str) else dict(row['metadata'])
+                        except (json.JSONDecodeError, TypeError):
+                            metadata = {}
 
-                        results.append({
-                            "id": str(row['id']),
-                            "content": row['content'],
-                            "title": row['title'],
-                            "source_table": 'document_embeddings',
-                            "source_type": 'document',
-                            "source_id": str(row['source_id']) if row['source_id'] else None,
-                            "similarity_score": 0.85,  # Good base score for keyword match
-                            "metadata": metadata,
-                            "search_source": "keyword_augment"
-                        })
-                except Exception as e:
-                    logger.debug(f"document_embeddings keyword augment skipped: {e}")
+                    results.append({
+                        "id": str(row['id']),
+                        "content": row['content'],
+                        "title": row['title'],
+                        "source_table": 'document_embeddings',
+                        "source_type": 'document',
+                        "source_id": str(row['source_id']) if row['source_id'] else None,
+                        "similarity_score": float(row['similarity_score']),
+                        "metadata": metadata,
+                        "search_source": "keyword_augment"
+                    })
+            except Exception as e:
+                logger.debug(f"document_embeddings keyword augment skipped: {e}")
 
             logger.info(f"Keyword augment: {len(results)} results for '{query[:30]}...'")
             return results
