@@ -96,20 +96,20 @@ export const ZenInput: React.FC<ZenInputProps> = ({
         {/* PDF Preview Chip */}
         {pdfFile && (
           <div className="mb-3 px-3">
-            <div className="inline-flex items-center gap-2 px-3 py-2 bg-cyan-500/20 border border-cyan-500/30 rounded-lg">
-              <FileText className="h-4 w-4 text-cyan-400" />
-              <span className="text-sm text-cyan-300 max-w-[200px] truncate">
+            <div className="zen01-pdf-chip inline-flex items-center gap-2 px-3 py-2 rounded-lg">
+              <FileText className="h-4 w-4" />
+              <span className="text-sm max-w-[200px] truncate font-medium">
                 {pdfFile.name}
               </span>
-              <span className="text-xs text-cyan-400/60">
+              <span className="text-xs opacity-70">
                 ({formatFileSize(pdfFile.size)})
               </span>
               <button
                 onClick={handleRemovePdf}
-                className="p-1 hover:bg-cyan-500/30 rounded transition-colors"
+                className="p-1 hover:bg-black/10 dark:hover:bg-white/10 rounded transition-colors"
                 title="PDF'i kaldır"
               >
-                <X className="h-3.5 w-3.5 text-cyan-400" />
+                <X className="h-3.5 w-3.5" />
               </button>
             </div>
           </div>
