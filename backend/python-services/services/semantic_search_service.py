@@ -869,33 +869,84 @@ class SemanticSearchService:
         content: str,
         title: Optional[str] = None
     ) -> float:
-        """Calculate keyword boost for hybrid search"""
-        boost = 0.0
-        query_lower = query.lower()
-        query_words = set(query_lower.split())
+        """
+        Calculate enhanced keyword boost for hybrid search.
 
-        # Content match
+        Enhanced boost algorithm:
+        1. Exact phrase match gets highest boost
+        2. Consecutive word sequences (n-grams) get medium boost
+        3. Individual word matches get base boost weighted by match count
+        4. Title matches weighted higher than content
+        """
+        boost = 0.0
+        query_lower = query.lower().strip()
+
+        # Filter meaningful words (>2 chars, not common stopwords)
+        turkish_stopwords = {'ve', 'ile', 'bu', 'bir', 'için', 'da', 'de', 'mi', 'ne', 'var', 'yok', 'ise', 'gibi', 'kadar', 'daha'}
+        query_words = [w for w in query_lower.split() if len(w) > 2 and w not in turkish_stopwords]
+
+        if not query_words:
+            return 0.0
+
+        # Content matching
         if content:
             content_lower = content.lower()
-            if query_lower in content_lower:
-                boost += 0.15  # Exact phrase match
-            else:
-                # Word overlap
-                content_words = set(content_lower.split())
-                overlap = len(query_words & content_words) / len(query_words) if query_words else 0
-                boost += overlap * 0.1
 
-        # Title match (higher weight)
+            # 1. Exact phrase match - HIGHEST PRIORITY
+            if query_lower in content_lower:
+                boost += 0.35  # Strong boost for exact phrase
+            else:
+                # 2. Check for consecutive word sequences (bigrams/trigrams)
+                if len(query_words) >= 2:
+                    # Check bigrams (2-word sequences)
+                    for i in range(len(query_words) - 1):
+                        bigram = f"{query_words[i]} {query_words[i+1]}"
+                        if bigram in content_lower:
+                            boost += 0.15  # Medium boost for partial phrase match
+                            break  # Only count once
+
+                    # Check trigrams (3-word sequences)
+                    if len(query_words) >= 3:
+                        for i in range(len(query_words) - 2):
+                            trigram = f"{query_words[i]} {query_words[i+1]} {query_words[i+2]}"
+                            if trigram in content_lower:
+                                boost += 0.20  # Higher boost for longer sequence
+                                break
+
+                # 3. Individual word matches with weighted scoring
+                content_words_set = set(content_lower.split())
+                matched_words = [w for w in query_words if w in content_words_set]
+                match_ratio = len(matched_words) / len(query_words)
+
+                # Progressive boost: more matches = higher boost
+                if match_ratio >= 0.8:  # 80%+ words match
+                    boost += 0.20
+                elif match_ratio >= 0.6:  # 60-80% words match
+                    boost += 0.15
+                elif match_ratio >= 0.4:  # 40-60% words match
+                    boost += 0.10
+                elif match_ratio > 0:  # Any match
+                    boost += match_ratio * 0.08
+
+        # Title matching (higher weight than content)
         if title:
             title_lower = title.lower()
-            if query_lower in title_lower:
-                boost += 0.1  # Exact phrase in title
-            else:
-                title_words = set(title_lower.split())
-                overlap = len(query_words & title_words) / len(query_words) if query_words else 0
-                boost += overlap * 0.05
 
-        return min(boost, 0.25)  # Cap at 0.25
+            # Exact phrase in title - very high value
+            if query_lower in title_lower:
+                boost += 0.25
+            else:
+                # Word overlap in title
+                title_words_set = set(title_lower.split())
+                matched_title_words = [w for w in query_words if w in title_words_set]
+                title_match_ratio = len(matched_title_words) / len(query_words)
+
+                if title_match_ratio >= 0.5:  # Half or more words in title
+                    boost += 0.15
+                elif title_match_ratio > 0:
+                    boost += title_match_ratio * 0.10
+
+        return min(boost, 0.50)  # Increased cap to 0.50 for stronger keyword influence
 
     def _get_source_priority(self, source_table: str, settings: RAGSettings) -> float:
         """Get priority multiplier for source table"""
