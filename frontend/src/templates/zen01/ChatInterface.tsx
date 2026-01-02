@@ -29,6 +29,7 @@ import type {
   ZenLlmSettings,
   ZenActivePrompt,
   ZenSource,
+  ZenPdfSettings,
   DEFAULT_CHATBOT_SETTINGS,
   DEFAULT_RAG_SETTINGS,
   DEFAULT_LLM_SETTINGS,
@@ -126,6 +127,14 @@ export default function ChatInterface() {
     tone: 'professional'
   });
 
+  // PDF upload state
+  const [pdfFile, setPdfFile] = useState<File | null>(null);
+  const [pdfSettings, setPdfSettings] = useState<ZenPdfSettings>({
+    enabled: false,
+    maxSizeMB: 10,
+    maxPages: 30
+  });
+
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -182,6 +191,21 @@ export default function ChatInterface() {
     };
 
     loadSuggestions();
+
+    // Fetch PDF settings
+    fetch('/api/v2/chat/pdf-settings')
+      .then(res => res.json())
+      .then(data => {
+        setPdfSettings({
+          enabled: data.enabled || false,
+          maxSizeMB: data.maxSizeMB || 10,
+          maxPages: data.maxPages || 30
+        });
+        console.log('[Zen01] PDF settings loaded:', data);
+      })
+      .catch(err => {
+        console.error('[Zen01] Failed to fetch PDF settings:', err);
+      });
 
     Promise.all([
       fetch('/api/v2/chatbot/settings'),
@@ -300,13 +324,13 @@ export default function ChatInterface() {
   }, []);
 
   // Send message handler
-  const handleSendMessage = async (fromSource: boolean = false) => {
-    if (!inputText.trim() || isLoading || isStreaming) return;
+  const handleSendMessage = async (fromSource: boolean = false, uploadedPdf?: File) => {
+    if ((!inputText.trim() && !uploadedPdf) || isLoading || isStreaming) return;
 
     const userMessage: ZenMessageType = {
       id: Date.now().toString(),
       role: 'user',
-      content: inputText,
+      content: uploadedPdf ? `📎 ${uploadedPdf.name}\n\n${inputText}` : inputText,
       timestamp: new Date(),
       isFromSource: fromSource,
     };
@@ -315,6 +339,7 @@ export default function ChatInterface() {
     const messageContent = inputText;
     setLastUserQuery(inputText);
     setInputText('');
+    setPdfFile(null); // Clear PDF after send
     setIsLoading(true);
     setShowSuggestions(false);
 
@@ -609,10 +634,13 @@ export default function ChatInterface() {
         <ZenInput
           value={inputText}
           onChange={setInputText}
-          onSend={() => handleSendMessage(false)}
+          onSend={(pdf) => handleSendMessage(false, pdf)}
           placeholder={chatbotSettings.placeholder}
           isLoading={isLoading}
           textareaRef={textareaRef}
+          pdfSettings={pdfSettings}
+          pdfFile={pdfFile}
+          onPdfSelect={setPdfFile}
         />
       </div>
     </ProtectedRoute>

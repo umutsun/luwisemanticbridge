@@ -122,13 +122,23 @@ export interface ZenMessageProps {
   lastUserQuery?: string;
 }
 
+// PDF Settings Interface
+export interface ZenPdfSettings {
+  enabled: boolean;
+  maxSizeMB: number;
+  maxPages: number;
+}
+
 export interface ZenInputProps {
   value: string;
   onChange: (value: string) => void;
-  onSend: () => void;
+  onSend: (pdfFile?: File) => void;
   placeholder: string;
   isLoading: boolean;
-  textareaRef: React.RefObject<HTMLTextAreaElement>;
+  textareaRef: React.RefObject<HTMLTextAreaElement | null>;
+  pdfSettings?: ZenPdfSettings;
+  pdfFile?: File | null;
+  onPdfSelect?: (file: File | null) => void;
 }
 
 // Default Settings
