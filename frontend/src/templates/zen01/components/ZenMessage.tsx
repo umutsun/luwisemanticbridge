@@ -10,19 +10,47 @@ import type { ZenMessageProps, ZenSource } from '../types';
 
 /**
  * Preprocess markdown content to ensure proper paragraph breaks
- * LLM often outputs **Header:** inline instead of on new lines
+ * LLM often outputs **Header:** or **Header** inline instead of on new lines
  */
 function preprocessMarkdown(content: string): string {
-  // Add line breaks before bold section headers that aren't at the start
-  // Pattern: non-start bold text followed by colon (e.g., "text **Header:** more text")
-  return content
-    // First, normalize multiple spaces to single space
-    .replace(/  +/g, ' ')
-    // Add double newline before **Header:** patterns that aren't at line start
-    // This regex matches: (not line start)(space)(**SomeText:**)
-    .replace(/([^\n])(\s)(\*\*[^*]+:\*\*)/g, '$1\n\n$3')
-    // Ensure proper spacing after headers
-    .replace(/(\*\*[^*]+:\*\*)(\s*)([^\n])/g, '$1\n$3');
+  // Known section header patterns in Turkish legal/tax documents
+  const sectionHeaders = [
+    'Hukuki Değerlendirme',
+    'Varsayımlar',
+    'İlgili Mevzuat ve Dayanaklar',
+    'Haklar ve Riskler',
+    'Yapılacaklar',
+    'Senaryolar',
+    'Özet',
+    'Sonuç',
+    'Tavsiyeler',
+    'Öneriler',
+    'Dikkat Edilmesi Gerekenler',
+    'Yasal Dayanak',
+    'Kanuni Düzenleme',
+    'Uygulama',
+    'Değerlendirme',
+    'Açıklama',
+    'Genel Bilgi',
+    'Detaylar',
+    'Önemli Notlar',
+    'Uyarı',
+  ];
+
+  let result = content;
+
+  // Add line breaks before each known section header
+  sectionHeaders.forEach(header => {
+    // Match **Header** or **Header:** that's not at start of line
+    const pattern = new RegExp(`([^\\n])(\\s)(\\*\\*${header}:?\\*\\*)`, 'g');
+    result = result.replace(pattern, '$1\n\n$3');
+  });
+
+  // Also handle generic bold text followed by colon as headers
+  // Pattern: space followed by **AnyText:** (with colon)
+  result = result.replace(/([^\n])(\s)(\*\*[^*]{2,30}:\*\*)/g, '$1\n\n$3');
+
+  return result;
 }
 
 /**
