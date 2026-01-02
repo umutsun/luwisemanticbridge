@@ -70,15 +70,15 @@ export const ZenMessage: React.FC<ZenMessageProps> = ({
                         {children}
                       </h3>
                     ),
-                    // Paragraphs
+                    // Paragraphs - Better spacing for readability
                     p: ({ children }) => (
-                      <p className="text-slate-200 my-2 leading-relaxed">
+                      <p className="text-slate-200 my-4 leading-relaxed first:mt-0 last:mb-0">
                         {children}
                       </p>
                     ),
-                    // Bold
+                    // Bold - Darker cyan for better readability
                     strong: ({ children }) => (
-                      <strong className="font-semibold text-cyan-100">
+                      <strong className="font-semibold text-cyan-300">
                         {children}
                       </strong>
                     ),
