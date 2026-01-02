@@ -2079,9 +2079,16 @@ router.post('/bulk-embed', authenticateToken, async (req: AuthenticatedRequest, 
           continue;
         }
 
-        // ===== SMART EMBED: Check for empty content and try auto-extraction =====
-        if (!document.content || document.content.trim().length === 0) {
-          console.log(`[Bulk Embed] Document ${docId} has no content, attempting auto-extraction...`);
+        // ===== SMART EMBED: Check for empty/placeholder content and try auto-extraction =====
+        // Also check for placeholder content that indicates extraction wasn't done
+        const isPlaceholderContent = document.content && (
+          document.content.includes('Content extraction pending') ||
+          document.content.includes('[PDF Document:') ||
+          document.content.trim().length < 200
+        );
+
+        if (!document.content || document.content.trim().length === 0 || isPlaceholderContent) {
+          console.log(`[Bulk Embed] Document ${docId} has no/placeholder content (len=${document.content?.length || 0}), attempting auto-extraction...`);
 
           const fileType = (document.file_type || '').toLowerCase();
           const fs = require('fs');
@@ -2112,14 +2119,20 @@ router.post('/bulk-embed', authenticateToken, async (req: AuthenticatedRequest, 
             }
           }
 
-          // If still no content, report error with helpful message
-          if (!document.content || document.content.trim().length === 0) {
-            errors.push(`Document ${docId} (${document.title}): No content available. Use "Analyze" button first to extract text.`);
+          // If still no content or placeholder content, report error with helpful message
+          const stillPlaceholder = !document.content ||
+            document.content.trim().length < 200 ||
+            document.content.includes('Content extraction pending') ||
+            document.content.includes('[PDF Document:');
+
+          if (stillPlaceholder) {
+            console.log(`[Bulk Embed] ❌ Document ${docId} still has placeholder/insufficient content after extraction attempt`);
+            errors.push(`Document ${docId} (${document.title}): No content available. Use "Analyze" button first to extract text from PDF.`);
             results.push({
               id: docId,
               title: document.title,
               status: 'error',
-              error: 'No content - needs analysis first'
+              error: 'No content - use Analyze button first'
             });
             continue;
           }
