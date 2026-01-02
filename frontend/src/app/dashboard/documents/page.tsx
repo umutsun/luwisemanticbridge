@@ -3413,7 +3413,7 @@ export default function DocumentManagerPage() {
         </div>
 
         {/* Stats Cards - Pipeline Flow: Total → Pending → Analyzed → Embedded */}
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2 mb-6">
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-2 mb-6">
           {/* Total Documents - Blue */}
           <Card className="bg-gradient-to-br from-blue-50 to-cyan-50 dark:from-blue-950/20 dark:to-cyan-950/20 border-blue-200 dark:border-blue-800">
             <CardContent className="p-3">
