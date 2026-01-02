@@ -378,110 +378,240 @@ function extractKeywords(text: string): string[] {
 /**
  * Generate content-specific question from source title and content
  * Creates questions specific to the actual content, avoiding generic questions
- * Does NOT use "bu/şu/o" pronouns - directly references the content
+ * Extracts the REAL topic from content and generates meaningful questions
  */
 async function generateContentSpecificQuestion(title: string, content: string, category: string, sourceTable: string, keywords: string[]): Promise<string> {
-  // Clean title and extract first meaningful sentence from content
+  // Clean title and content
   const cleanTitle = cleanSourceTitle(title);
   const contentLower = content.toLowerCase();
+  const titleLower = cleanTitle.toLowerCase();
 
-  // Extract first 1-2 sentences as summary (up to 200 chars)
-  let summary = content.trim();
-  const firstSentenceEnd = summary.search(/[.!?]\s/);
-  if (firstSentenceEnd > 0 && firstSentenceEnd < 200) {
-    summary = summary.substring(0, firstSentenceEnd + 1).trim();
-  } else {
-    summary = summary.substring(0, 200).trim();
-    // Try to end at word boundary
-    const lastSpace = summary.lastIndexOf(' ');
-    if (lastSpace > 100) {
-      summary = summary.substring(0, lastSpace) + '...';
+  // ==== STEP 1: Extract the MAIN TOPIC from content ====
+  // Look for specific entity mentions, legal terms, case subjects
+  const mainTopic = extractMainTopic(cleanTitle, content);
+
+  // ==== STEP 2: Identify content TYPE (question, case, ruling, article) ====
+  const contentType = identifyContentType(content, sourceTable);
+
+  // ==== STEP 3: Extract KEY ENTITIES (law numbers, dates, amounts, parties) ====
+  const entities = extractEntities(content);
+
+  // ==== STEP 4: Generate SMART question based on extracted info ====
+
+  // If we found a clear main topic, use it
+  if (mainTopic && mainTopic.length > 5) {
+    // Check what aspect of the topic is being discussed
+    if (contentType === 'soru-cevap') {
+      // For Q&A content, ask about similar situations
+      return `${mainTopic} durumunda nasıl bir yol izlenmeli?`;
     }
-  }
 
-  // Analyze content to determine main topic/question type
-  const hasStopaj = /stopaj|tevkifat/i.test(contentLower);
-  const hasKDV = /kdv|katma değer/i.test(contentLower);
-  const hasGelir = /gelir vergisi/i.test(contentLower);
-  const hasBeyanname = /beyanname/i.test(contentLower);
-  const hasMuafiyet = /muafiyet|istisna/i.test(contentLower);
-  const hasOran = /oran|yüzde|%/i.test(contentLower);
-  const hasSure = /süre|tarih|son gün/i.test(contentLower);
-  const hasCeza = /ceza|yaptırım|idari/i.test(contentLower);
-  const hasBasvuru = /başvuru|talep|dilekçe/i.test(contentLower);
-  const hasHesaplama = /hesap|hesaplama|ödeme|tutar/i.test(contentLower);
-
-  // Extract specific numbers/rates if present
-  const percentMatch = content.match(/(%\s*\d+|\d+\s*%)/);
-  const numberMatch = content.match(/(\d+)\s*(gün|ay|yıl|TL|lira)/);
-
-  // Generate specific question based on content analysis
-  // Avoid "bu/şu/o" - directly reference the topic
-
-  // Rate/percentage questions
-  if (hasOran && percentMatch) {
-    if (hasStopaj) {
-      return `Stopaj oranları hangi durumlarda ${percentMatch[0]} olarak uygulanır?`;
+    if (contentType === 'danistay') {
+      // For court decisions, ask about the ruling's implications
+      if (entities.lawNumber) {
+        return `${entities.lawNumber} kapsamında ${mainTopic} konusunda Danıştay ne diyor?`;
+      }
+      return `${mainTopic} konusundaki içtihat nedir?`;
     }
-    if (hasKDV) {
-      return `KDV oranı ${percentMatch[0]} hangi mal ve hizmetler için geçerlidir?`;
+
+    if (contentType === 'ozelge') {
+      // For tax rulings, ask about applicability
+      return `${mainTopic} için özelge kapsamında hangi şartlar aranır?`;
     }
-    return `${percentMatch[0]} oranı hangi hallerde uygulanır?`;
-  }
 
-  // Exemption/exception questions
-  if (hasMuafiyet) {
-    if (hasKDV) {
-      return `KDV muafiyetinden yararlanmak için hangi şartlar aranır?`;
+    if (contentType === 'makale') {
+      // For articles, ask about practical implications
+      return `${mainTopic} uygulamasında dikkat edilmesi gereken noktalar nelerdir?`;
     }
-    if (hasGelir) {
-      return `Gelir vergisi muafiyeti hangi gelirler için uygulanır?`;
+
+    // Generic but topic-specific question
+    return `${mainTopic} hakkında ayrıntılı bilgi verir misin?`;
+  }
+
+  // ==== FALLBACK: Use extracted entities for more specific questions ====
+
+  // If we found a law/article reference
+  if (entities.lawNumber && entities.articleNumber) {
+    return `${entities.lawNumber} ${entities.articleNumber}. madde nasıl uygulanır?`;
+  }
+
+  if (entities.lawNumber) {
+    return `${entities.lawNumber} kapsamında bu durumda ne yapılmalı?`;
+  }
+
+  // If we found specific amounts or rates
+  if (entities.amount) {
+    return `${entities.amount} tutarı/oranı hangi hallerde geçerlidir?`;
+  }
+
+  // If we found a specific date/period
+  if (entities.period) {
+    return `${entities.period} süresi için geçerli kurallar nelerdir?`;
+  }
+
+  // ==== LAST RESORT: Use title intelligently ====
+  if (cleanTitle.length > 10 && cleanTitle.length < 100) {
+    // Check if title is a question
+    if (/\?$/.test(cleanTitle)) {
+      return cleanTitle; // Use the title itself as the question
     }
-    return `İstisna/muafiyet uygulaması için gerekli şartlar nelerdir?`;
-  }
 
-  // Time period questions
-  if (hasSure && numberMatch) {
-    return `${numberMatch[0]} içinde yapılması gereken işlemler nelerdir?`;
-  }
-  if (hasSure && hasBeyanname) {
-    return `Beyanname verme süreleri hangi tarihler arasındadır?`;
-  }
-
-  // Application/procedure questions
-  if (hasBasvuru) {
-    return `Başvuru yapmak için hangi belgeler gereklidir?`;
-  }
-
-  // Calculation questions
-  if (hasHesaplama) {
-    if (hasStopaj) {
-      return `Stopaj hesaplaması nasıl yapılır ve hangi tutarlar üzerinden hesaplanır?`;
+    // Check if title describes a specific topic
+    if (/hakkında|ilgili|dair|kapsamında/.test(titleLower)) {
+      return `${cleanTitle} detaylarını açıklar mısın?`;
     }
-    if (hasKDV) {
-      return `KDV matrahı nasıl hesaplanır ve hangi indirimler yapılabilir?`;
+
+    // Check if title mentions a specific case/situation
+    if (/durumunda|halinde|olması/.test(titleLower)) {
+      return `${cleanTitle} - bu durumda nasıl hareket edilmeli?`;
     }
-    return `Hesaplama yaparken dikkat edilmesi gereken hususlar nelerdir?`;
+
+    return `${cleanTitle} konusunu açıklar mısın?`;
   }
 
-  // Penalty questions
-  if (hasCeza) {
-    return `Hangi durumlarda vergi cezası uygulanır ve ceza tutarı nasıl hesaplanır?`;
-  }
-
-  // Use keywords to generate specific question
+  // Absolute fallback - use keywords
   if (keywords.length > 0) {
-    const mainKeyword = keywords[0];
-    return `${mainKeyword} ile ilgili hangi düzenlemeler ve şartlar geçerlidir?`;
+    return `${keywords.slice(0, 2).join(' ve ')} konusunda bilgi verir misin?`;
   }
 
-  // Fallback: Extract main topic from title
-  if (cleanTitle.length > 10) {
-    return `${cleanTitle} konusunda hangi hükümler ve uygulamalar vardır?`;
+  return `Bu konuda detaylı bilgi verir misin?`;
+}
+
+/**
+ * Extract the main topic from content - looks for subject matter
+ */
+function extractMainTopic(title: string, content: string): string {
+  const text = title + ' ' + content;
+  const textLower = text.toLowerCase();
+
+  // Pattern 1: Look for "X hakkında" or "X ile ilgili" patterns
+  const aboutMatch = text.match(/([^.,:;!?\n]{5,60})\s+(?:hakkında|hakkındaki|ilgili|dair|kapsamında)/i);
+  if (aboutMatch) {
+    return aboutMatch[1].trim();
   }
 
-  // Last resort: Use content's main idea
-  return `${summary.substring(0, 60)}... ile ilgili detaylı bilgi nedir?`;
+  // Pattern 2: Look for specific tax/legal terms with context
+  const taxTerms = [
+    { pattern: /(\w+\s+)?stopaj(ı|ın|a)?\s+(\w+\s+)?/i, extract: (m: RegExpMatchArray) => m[0].trim() },
+    { pattern: /KDV\s+(?:oranı|istisnası|muafiyeti|iadesi|matrahı)/i, extract: (m: RegExpMatchArray) => m[0].trim() },
+    { pattern: /gelir\s+vergisi\s+(?:beyannamesi|matrahı|istisnası|oranı)/i, extract: (m: RegExpMatchArray) => m[0].trim() },
+    { pattern: /kurumlar\s+vergisi\s+(?:beyannamesi|matrahı|istisnası)/i, extract: (m: RegExpMatchArray) => m[0].trim() },
+    { pattern: /damga\s+vergisi\s+(?:oranı|istisnası|tutarı)/i, extract: (m: RegExpMatchArray) => m[0].trim() },
+    { pattern: /(?:kıdem|ihbar)\s+tazminatı/i, extract: (m: RegExpMatchArray) => m[0].trim() },
+    { pattern: /(?:fatura|e-fatura|irsaliye)/i, extract: (m: RegExpMatchArray) => m[0].trim() },
+  ];
+
+  for (const term of taxTerms) {
+    const match = text.match(term.pattern);
+    if (match) {
+      return term.extract(match);
+    }
+  }
+
+  // Pattern 3: Look for question content (Soru: ... )
+  const questionMatch = content.match(/(?:Soru|SORU)[:\s]+([^?]+\?)/i);
+  if (questionMatch) {
+    const question = questionMatch[1].trim();
+    if (question.length < 100) {
+      return question;
+    }
+  }
+
+  // Pattern 4: Look for subject in title (before " - " or ":")
+  const titleParts = title.split(/\s*[-:]\s*/);
+  if (titleParts.length > 0 && titleParts[0].length > 5 && titleParts[0].length < 80) {
+    return titleParts[0].trim();
+  }
+
+  // Pattern 5: First sentence if it's descriptive (not too long)
+  const firstSentence = content.match(/^[^.!?]+[.!?]/);
+  if (firstSentence && firstSentence[0].length < 100 && firstSentence[0].length > 20) {
+    // Check if it's not just a generic introduction
+    if (!/merhaba|sayın|tarafından|tarihinde/i.test(firstSentence[0])) {
+      return firstSentence[0].replace(/[.!?]$/, '').trim();
+    }
+  }
+
+  return '';
+}
+
+/**
+ * Identify the type of content (for generating appropriate questions)
+ */
+function identifyContentType(content: string, sourceTable: string): string {
+  const contentLower = content.toLowerCase();
+  const tableLower = sourceTable.toLowerCase();
+
+  if (tableLower.includes('danistay') || tableLower.includes('içtihat')) {
+    return 'danistay';
+  }
+  if (tableLower.includes('ozelge') || contentLower.includes('özelge')) {
+    return 'ozelge';
+  }
+  if (tableLower.includes('sorucevap') || tableLower.includes('soru') ||
+      /soru[:\s]/i.test(content) || /cevap[:\s]/i.test(content)) {
+    return 'soru-cevap';
+  }
+  if (tableLower.includes('makale') || tableLower.includes('yazi')) {
+    return 'makale';
+  }
+  if (tableLower.includes('mevzuat') || /kanun|yönetmelik|tebliğ/i.test(content)) {
+    return 'mevzuat';
+  }
+
+  return 'generic';
+}
+
+/**
+ * Extract specific entities from content (law numbers, dates, amounts)
+ */
+function extractEntities(content: string): {
+  lawNumber?: string;
+  articleNumber?: string;
+  amount?: string;
+  period?: string;
+  date?: string;
+} {
+  const entities: {
+    lawNumber?: string;
+    articleNumber?: string;
+    amount?: string;
+    period?: string;
+    date?: string;
+  } = {};
+
+  // Extract law number (e.g., "193 sayılı Kanun", "5520 sayılı KVK")
+  const lawMatch = content.match(/(\d{3,4})\s+sayılı\s+(?:Gelir Vergisi |Kurumlar Vergisi |Katma Değer Vergisi |)?(?:Kanun|KVK|GVK|KDVK)/i);
+  if (lawMatch) {
+    entities.lawNumber = lawMatch[0].trim();
+  }
+
+  // Extract article number (e.g., "94. madde", "madde 94")
+  const articleMatch = content.match(/(?:(\d+)(?:\s*[./]\s*\d+)?\s*\.?\s*(?:üncü|inci|nci|ncı|uncu)?\s*madde|madde\s*(\d+))/i);
+  if (articleMatch) {
+    const num = articleMatch[1] || articleMatch[2];
+    entities.articleNumber = num;
+  }
+
+  // Extract percentage/rate
+  const rateMatch = content.match(/%\s*(\d+(?:[.,]\d+)?)|(\d+(?:[.,]\d+)?)\s*%/);
+  if (rateMatch) {
+    entities.amount = rateMatch[0].trim();
+  }
+
+  // Extract time period
+  const periodMatch = content.match(/(\d+)\s*(gün|ay|yıl|hafta)\s*(?:içinde|süre)/i);
+  if (periodMatch) {
+    entities.period = periodMatch[0].trim();
+  }
+
+  // Extract specific date
+  const dateMatch = content.match(/(\d{1,2})[./](\d{1,2})[./](\d{4})/);
+  if (dateMatch) {
+    entities.date = dateMatch[0];
+  }
+
+  return entities;
 }
 
 /**
