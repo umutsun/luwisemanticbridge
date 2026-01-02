@@ -2610,11 +2610,18 @@ ${selectedArray.map(f => `  ${f.replace(/\./g, '_')} = EXCLUDED.${f.replace(/\./
                 </ScrollArea>
               </div>
             ) : (
-              <div className="flex-1 flex flex-col items-center justify-center gap-3 text-muted-foreground">
-                <FileText className="w-12 h-12 opacity-50" />
-                <div className="text-center space-y-1">
-                  <p className="text-sm font-medium">No Content Available</p>
-                  <p className="text-xs">Document is waiting to be processed</p>
+              <div className="flex-1 flex flex-col items-center justify-center gap-4 text-muted-foreground p-6">
+                <div className="w-16 h-16 rounded-full bg-orange-100 dark:bg-orange-900/20 flex items-center justify-center">
+                  <FileText className="w-8 h-8 text-orange-500" />
+                </div>
+                <div className="text-center space-y-2">
+                  <p className="text-base font-semibold text-foreground">İçerik Çıkarılamadı</p>
+                  <p className="text-sm text-muted-foreground max-w-xs">
+                    Bu PDF'den otomatik metin çıkarılamadı. Taranmış görüntü veya karmaşık yapı içeriyor olabilir.
+                  </p>
+                  <p className="text-xs text-orange-600 dark:text-orange-400 font-medium mt-2">
+                    → "Analyze" butonuna tıklayarak Gemini Vision OCR ile yeniden deneyin
+                  </p>
                 </div>
               </div>
             )}

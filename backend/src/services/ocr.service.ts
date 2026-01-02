@@ -52,20 +52,21 @@ export class OCRService {
         console.log(`[OCR] pdf-parse failed: ${pdfParseError.message}`);
       }
 
-      // If pdf-parse fails, return placeholder text for now to avoid blocking import
+      // If pdf-parse fails, return empty content - document needs manual OCR analysis
       const fileName = path.basename(filePath);
-      console.log(`[OCR] Returning placeholder text for ${fileName} - OCR will be processed later`);
+      console.log(`[OCR] pdf-parse returned no text for ${fileName} - requires Gemini Vision OCR`);
 
       return {
-        text: `[PDF Document: ${fileName}]\n\n[Content extraction pending - file imported successfully]`,
+        text: '', // Empty content - will show as "pending" not "embedded"
         confidence: 0
       };
-    } catch (error) {
+    } catch (error: any) {
       console.error('PDF OCR error:', error);
-      // Don't throw - return placeholder so import can continue
+      // Don't throw - return empty content so import can continue
       const fileName = path.basename(filePath);
+      console.log(`[OCR] Failed to extract from ${fileName}: ${error.message}`);
       return {
-        text: `[PDF Document: ${fileName}]\n\n[OCR processing will be completed in background]`,
+        text: '', // Empty content - document needs manual analysis
         confidence: 0
       };
     }
