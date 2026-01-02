@@ -16,11 +16,16 @@ export function useZenTheme(defaultMode: ZenThemeMode = 'dark'): ZenThemeContext
 
   // Hydrate from localStorage after mount
   useEffect(() => {
-    const stored = localStorage.getItem(STORAGE_KEY);
-    if (stored === 'light') {
-      setIsDark(false);
-    } else if (stored === 'dark') {
-      setIsDark(true);
+    try {
+      const stored = localStorage.getItem(STORAGE_KEY);
+      if (stored === 'light') {
+        setIsDark(false);
+      } else if (stored === 'dark') {
+        setIsDark(true);
+      }
+      // If no stored value, keep default (dark)
+    } catch (e) {
+      console.warn('localStorage not available:', e);
     }
     setIsHydrated(true);
   }, []);
@@ -33,7 +38,11 @@ export function useZenTheme(defaultMode: ZenThemeMode = 'dark'): ZenThemeContext
   }, [isDark, isHydrated]);
 
   const toggle = useCallback(() => {
-    setIsDark(prev => !prev);
+    setIsDark(prev => {
+      const newValue = !prev;
+      console.log('[ZenTheme] Toggle:', prev, '->', newValue);
+      return newValue;
+    });
   }, []);
 
   const mode: ZenThemeMode = isDark ? 'dark' : 'light';
