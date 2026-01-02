@@ -1121,7 +1121,15 @@ export class SemanticSearchService {
       const queryEmbedding = await this.generateEmbedding(query);
       console.timeEnd(embeddingId);
 
+      // Enhanced keyword matching: split query into words for better matching
+      const queryWords = query.toLowerCase()
+        .split(/\s+/)
+        .filter(word => word.length > 2) // Skip very short words
+        .slice(0, 10); // Limit to 10 keywords max
+
       const keywordPattern = `%${query}%`;
+      const keywordPatterns = queryWords.map(w => `%${w}%`);
+      const keywordPatternsJSON = JSON.stringify(keywordPatterns);
 
       // Refresh record types cache if needed
       await this.refreshUnifiedRecordTypes();
@@ -1269,36 +1277,27 @@ export class SemanticSearchService {
           rr.id::text as id,
           LEFT(COALESCE(rr.metadata->>'title', rr.content::text), 200) as title,
           LEFT(COALESCE(rr.content, rr.metadata->>'content', rr.metadata->>'text', ''), 1500) as excerpt,
+          COALESCE(rr.content, rr.metadata->>'content', rr.metadata->>'text', '') as full_content,
           COALESCE(rr.record_type, 'unknown') as source_table,
           rr.source_id,
           rr.metadata,
           rr.record_type,
           rr.similarity_score,
+          -- Basic keyword boost (exact phrase match) - kept simple for SQL performance
           CASE
-            WHEN $5::boolean AND (rr.content ILIKE $3 OR rr.metadata->>'content' ILIKE $3 OR rr.metadata->>'text' ILIKE $3) THEN 0.15
-            WHEN $5::boolean AND rr.metadata->>'title' ILIKE $3 THEN 0.1
+            WHEN $5::boolean AND (rr.content ILIKE $3 OR rr.metadata->>'content' ILIKE $3 OR rr.metadata->>'text' ILIKE $3) THEN 0.10
+            WHEN $5::boolean AND rr.metadata->>'title' ILIKE $3 THEN 0.05
             ELSE 0
           END as keyword_boost,
           CASE
             WHEN rr.record_type IN (${unifiedTypesSQL})
             THEN ${this.unifiedEmbeddingsPriority} * 0.1
             ELSE 0
-          END as priority_boost,
-          rr.similarity_score +
-          CASE
-            WHEN $5::boolean AND (rr.content ILIKE $3 OR rr.metadata->>'content' ILIKE $3 OR rr.metadata->>'text' ILIKE $3) THEN 0.15
-            WHEN $5::boolean AND rr.metadata->>'title' ILIKE $3 THEN 0.1
-            ELSE 0
-          END +
-          CASE
-            WHEN rr.record_type IN (${unifiedTypesSQL})
-            THEN ${this.unifiedEmbeddingsPriority} * 0.1
-            ELSE 0
-          END as final_score
+          END as priority_boost
         FROM ranked_results rr
         WHERE rr.similarity_score >= $2
-        ORDER BY final_score DESC
-        LIMIT $4
+        ORDER BY rr.similarity_score DESC
+        LIMIT $4 * 2
       `;
 
       console.time(queryId);

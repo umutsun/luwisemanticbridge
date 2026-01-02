@@ -672,7 +672,9 @@ class SemanticSearchService:
                         ORDER BY embedding <=> $1::vector
                         LIMIT $2
                     """
-                    rows = await pool.fetch(unified_query, embedding_str, limit)
+                    # Fetch minimum 15 results to ensure good coverage across sources
+                    unified_limit = max(15, limit)
+                    rows = await pool.fetch(unified_query, embedding_str, unified_limit)
                     for row in rows:
                         if float(row['similarity_score']) >= similarity_threshold:
                             all_results.append(dict(row))
@@ -695,7 +697,10 @@ class SemanticSearchService:
                         ORDER BY embedding <=> $1::vector
                         LIMIT $2
                     """
-                    rows = await pool.fetch(doc_query, embedding_str, limit // 2 + 5)
+                    # Fetch more document embeddings to ensure good coverage
+                    # Minimum 15 results to capture relevant documents even with low limit
+                    doc_limit = max(15, limit)
+                    rows = await pool.fetch(doc_query, embedding_str, doc_limit)
                     for row in rows:
                         if float(row['similarity_score']) >= similarity_threshold:
                             all_results.append(dict(row))
