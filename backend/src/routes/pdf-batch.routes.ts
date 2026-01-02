@@ -3068,45 +3068,55 @@ async function processBatchAnalyzeQueue(jobId: string, documentIds: string[]): P
       let extractedText = '';
       let method = 'none';
       const fileType = (doc.file_type || '').toLowerCase();
+      const fs = require('fs');
 
-      // Only process PDFs
-      if (fileType !== 'pdf') {
-        // For non-PDF files, try to read content directly
-        if (['txt', 'md', 'text'].includes(fileType) && doc.file_path) {
-          try {
-            const fs = require('fs');
-            if (fs.existsSync(doc.file_path)) {
-              extractedText = fs.readFileSync(doc.file_path, 'utf-8');
-              method = 'direct-read';
-            }
-          } catch (readError) {
-            console.warn(`[Batch Analyze] Could not read file ${doc.file_path}:`, readError);
+      // Check if file exists
+      if (!doc.file_path || !fs.existsSync(doc.file_path)) {
+        errorCount++;
+        results.push({ id: docId, status: 'error', error: 'File not found on disk' });
+        await lsembPool.query(
+          `UPDATE documents SET processing_status = 'failed', updated_at = NOW() WHERE id = $1`,
+          [docId]
+        );
+        continue;
+      }
+
+      // Process based on file type
+      if (['txt', 'md', 'text'].includes(fileType)) {
+        // Plain text files - direct read
+        try {
+          extractedText = fs.readFileSync(doc.file_path, 'utf-8');
+          method = 'direct-read';
+        } catch (readError) {
+          console.warn(`[Batch Analyze] Could not read file ${doc.file_path}:`, readError);
+        }
+      } else if (['word', 'docx', 'doc'].includes(fileType)) {
+        // Word documents - use mammoth
+        try {
+          const mammoth = require('mammoth');
+          const buffer = fs.readFileSync(doc.file_path);
+          const result = await mammoth.extractRawText({ buffer });
+          if (result.value && result.value.trim().length > 0) {
+            extractedText = result.value.trim();
+            method = 'mammoth';
+            console.log(`[Batch Analyze] Extracted ${extractedText.length} chars via mammoth for ${docId}`);
           }
+        } catch (wordError) {
+          console.warn(`[Batch Analyze] Mammoth failed for ${docId}:`, wordError);
         }
+      } else if (fileType !== 'pdf') {
+        // Unsupported file type
+        errorCount++;
+        results.push({ id: docId, status: 'error', error: `Unsupported file type: ${fileType}` });
+        await lsembPool.query(
+          `UPDATE documents SET processing_status = 'failed', updated_at = NOW() WHERE id = $1`,
+          [docId]
+        );
+        continue;
+      }
 
-        if (!extractedText) {
-          errorCount++;
-          results.push({ id: docId, status: 'error', error: `Unsupported file type: ${fileType}` });
-          await lsembPool.query(
-            `UPDATE documents SET processing_status = 'failed', updated_at = NOW() WHERE id = $1`,
-            [docId]
-          );
-          continue;
-        }
-      } else {
-        // PDF Processing
-        const fs = require('fs');
-
-        if (!doc.file_path || !fs.existsSync(doc.file_path)) {
-          errorCount++;
-          results.push({ id: docId, status: 'error', error: 'File not found on disk' });
-          await lsembPool.query(
-            `UPDATE documents SET processing_status = 'failed', updated_at = NOW() WHERE id = $1`,
-            [docId]
-          );
-          continue;
-        }
-
+      // PDF Processing
+      if (fileType === 'pdf') {
         // Step 1: Analyze PDF to detect if OCR needed
         let needsOCR = false;
         let analysisResult: any = null;

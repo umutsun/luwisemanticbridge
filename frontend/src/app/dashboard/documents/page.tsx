@@ -3134,21 +3134,23 @@ export default function DocumentManagerPage() {
     }
   };
 
-  // Batch Analyze - Extract text from PDFs before embedding
+  // Batch Analyze - Extract text from documents (PDF, Word, etc.) before embedding
   const handleBatchAnalyze = async (docsToAnalyze?: any[]) => {
     const selectedDocs = docsToAnalyze || Array.from(selectedRows).map(id =>
       documents.find(d => d.id === id)
     ).filter(Boolean);
 
-    // Filter PDF documents that need analysis (no content or insufficient content)
-    const pdfDocs = selectedDocs.filter((doc: any) =>
-      (doc.type || doc.file_type)?.toLowerCase() === 'pdf'
-    );
+    // Filter supported document types that need analysis
+    const supportedTypes = ['pdf', 'word', 'docx', 'doc', 'txt', 'md', 'text'];
+    const analyzableDocs = selectedDocs.filter((doc: any) => {
+      const fileType = (doc.type || doc.file_type)?.toLowerCase();
+      return supportedTypes.includes(fileType);
+    });
 
-    if (pdfDocs.length === 0) {
+    if (analyzableDocs.length === 0) {
       toast({
-        title: t('documents.batch.noPdfDocuments') || 'No PDF documents',
-        description: t('documents.batch.selectPdfToAnalyze') || 'Select PDF documents to analyze',
+        title: t('documents.batch.noSupportedDocuments') || 'No supported documents',
+        description: t('documents.batch.selectDocumentsToAnalyze') || 'Select PDF, Word, or text documents to analyze',
         variant: "destructive"
       });
       return;
@@ -3157,11 +3159,11 @@ export default function DocumentManagerPage() {
     setBatchProcessing(true);
     setBatchProgress(0);
     setBatchCurrent(0);
-    setBatchTotal(pdfDocs.length);
+    setBatchTotal(analyzableDocs.length);
     setBatchStatus(t('documents.batch.analyzing') || 'Analyzing...');
 
     // Initialize analyze queue
-    const initialQueue = pdfDocs.map(doc => ({
+    const initialQueue = analyzableDocs.map(doc => ({
       id: doc.id,
       title: doc.title,
       status: 'pending' as const
@@ -3176,7 +3178,7 @@ export default function DocumentManagerPage() {
           'Authorization': `Bearer ${localStorage.getItem('accessToken')}`,
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify({ documentIds: pdfDocs.map(d => d.id) })
+        body: JSON.stringify({ documentIds: analyzableDocs.map(d => d.id) })
       });
 
       if (!response.ok) {
