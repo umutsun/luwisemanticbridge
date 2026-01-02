@@ -3459,26 +3459,28 @@ export default function DocumentManagerPage() {
             </CardContent>
           </Card>
 
-          {/* Failed - Red (failed extractions) */}
-          {(stats.documents?.failed || 0) > 0 && (
-            <Card
-              className="bg-gradient-to-br from-red-50 to-orange-50 dark:from-red-950/20 dark:to-orange-950/20 border-red-200 dark:border-red-800 cursor-pointer hover:shadow-md transition-shadow"
-              onClick={() => { fetchFailedDocuments(); setShowFailedModal(true); }}
-            >
-              <CardContent className="p-3">
-                <div className="text-xs text-red-700 dark:text-red-300 font-medium mb-1 flex items-center gap-1">
-                  Başarısız
-                  <AlertCircle className="w-3 h-3 text-red-500" />
-                </div>
-                <div className="text-xl font-bold text-red-900 dark:text-red-100">
-                  {(stats.documents?.failed || 0).toLocaleString()}
-                </div>
-                <div className="text-xs text-red-600 dark:text-red-400 mt-0.5">
+          {/* Failed - Red (failed extractions) - Always show for consistent grid */}
+          <Card
+            className={`bg-gradient-to-br from-red-50 to-orange-50 dark:from-red-950/20 dark:to-orange-950/20 border-red-200 dark:border-red-800 ${(stats.documents?.failed || 0) > 0 ? 'cursor-pointer hover:shadow-md transition-shadow' : 'opacity-60'}`}
+            onClick={(stats.documents?.failed || 0) > 0 ? () => { fetchFailedDocuments(); setShowFailedModal(true); } : undefined}
+          >
+            <CardContent className="p-3">
+              <div className="text-xs text-red-700 dark:text-red-300 font-medium mb-1 flex items-center gap-1">
+                {t('documents.stats.failed') || 'Başarısız'}
+                {(stats.documents?.failed || 0) > 0 && <AlertCircle className="w-3 h-3 text-red-500" />}
+              </div>
+              <div className="text-xl font-bold text-red-900 dark:text-red-100">
+                {(stats.documents?.failed || 0).toLocaleString()}
+              </div>
+              <div className="text-xs text-red-600 dark:text-red-400 mt-0.5">
+                {(stats.documents?.failed || 0) > 0 ? (
                   <span className="opacity-75 text-xs">Tıkla → detaylar</span>
-                </div>
-              </CardContent>
-            </Card>
-          )}
+                ) : (
+                  <span className="opacity-75 text-xs">✓ Hata yok</span>
+                )}
+              </div>
+            </CardContent>
+          </Card>
 
           {/* Embedded - Violet (embedded + skipped combined) */}
           <Card className={`bg-gradient-to-br from-violet-50 to-purple-50 dark:from-violet-950/20 dark:to-purple-950/20 border-violet-200 dark:border-violet-800 ${skippedCount > 0 ? 'cursor-pointer hover:shadow-md transition-shadow' : ''}`}
