@@ -9,6 +9,23 @@ import { ZenTypingIndicator } from './ZenTypingIndicator';
 import type { ZenMessageProps, ZenSource } from '../types';
 
 /**
+ * Preprocess markdown content to ensure proper paragraph breaks
+ * LLM often outputs **Header:** inline instead of on new lines
+ */
+function preprocessMarkdown(content: string): string {
+  // Add line breaks before bold section headers that aren't at the start
+  // Pattern: non-start bold text followed by colon (e.g., "text **Header:** more text")
+  return content
+    // First, normalize multiple spaces to single space
+    .replace(/  +/g, ' ')
+    // Add double newline before **Header:** patterns that aren't at line start
+    // This regex matches: (not line start)(space)(**SomeText:**)
+    .replace(/([^\n])(\s)(\*\*[^*]+:\*\*)/g, '$1\n\n$3')
+    // Ensure proper spacing after headers
+    .replace(/(\*\*[^*]+:\*\*)(\s*)([^\n])/g, '$1\n$3');
+}
+
+/**
  * Zen01 Message Component
  * Renders user and assistant messages with glassmorphism styling
  */
@@ -54,8 +71,6 @@ export const ZenMessage: React.FC<ZenMessageProps> = ({
                 <ReactMarkdown
                   remarkPlugins={[remarkGfm]}
                   components={{
-                    // Custom wrapper to detect bold-started paragraphs (section headers)
-                    // LLM often uses **Header:** format instead of proper markdown headings
                     // Headings
                     h1: ({ children }) => (
                       <h1 className="text-lg font-bold text-cyan-200 mt-4 mb-2 pb-1 border-b border-cyan-500/30">
@@ -72,25 +87,12 @@ export const ZenMessage: React.FC<ZenMessageProps> = ({
                         {children}
                       </h3>
                     ),
-                    // Paragraphs - Detect if starts with bold (section header pattern)
-                    p: ({ children }) => {
-                      // Check if first child is a strong element (bold header pattern)
-                      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                      const childArray = React.Children.toArray(children);
-                      const firstChild = childArray[0] as any;
-                      const isSectionHeader = firstChild?.type === 'strong' ||
-                        firstChild?.type?.displayName === 'strong' ||
-                        (typeof firstChild === 'object' && firstChild?.type?.name === 'strong');
-
-                      // Add extra top margin for section headers
-                      return (
-                        <p className={`text-slate-200 leading-relaxed first:mt-0 last:mb-0 ${
-                          isSectionHeader ? 'mt-6 mb-3' : 'my-4'
-                        }`}>
-                          {children}
-                        </p>
-                      );
-                    },
+                    // Paragraphs with proper spacing
+                    p: ({ children }) => (
+                      <p className="text-slate-200 leading-relaxed my-4 first:mt-0 last:mb-0">
+                        {children}
+                      </p>
+                    ),
                     // Bold - Style as section header when at start of paragraph
                     strong: ({ children }) => (
                       <strong className="font-semibold text-cyan-300 inline-block">
@@ -176,7 +178,7 @@ export const ZenMessage: React.FC<ZenMessageProps> = ({
                     ),
                   }}
                 >
-                  {message.content}
+                  {preprocessMarkdown(message.content)}
                 </ReactMarkdown>
               </div>
             )}
