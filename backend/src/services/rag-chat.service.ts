@@ -807,14 +807,30 @@ ${questionLabel}: ${message}`;
       }
 
       // Get system prompt from database or use default
-      const systemPrompt = options.systemPrompt || await this.getSystemPrompt();
+      let systemPrompt = options.systemPrompt || await this.getSystemPrompt();
       console.log(` System Prompt loaded (length: ${systemPrompt?.length || 0} chars)`);
 
       // PDF MODE: If user uploaded a PDF, process with optional RAG hybrid mode
       // Hybrid mode can be enabled via ragSettings.pdfEnableRag = 'true'
-      if (options.pdfContext && options.pdfContext.extractedText) {
+      const hasPdfContext = options.pdfContext && options.pdfContext.extractedText;
+
+      if (hasPdfContext) {
         console.log(`[PDF Mode] User uploaded PDF: ${options.pdfContext.filename}`);
         return this.processPdfMessage(message, convId, userId, systemPrompt, options);
+      }
+
+      // NO PDF: Remove PDF-related instructions from system prompt
+      // This prevents the AI from mentioning PDF when no PDF was uploaded
+      if (!hasPdfContext && systemPrompt) {
+        // Remove PDF KURALI section and any PDF-related instructions
+        systemPrompt = systemPrompt
+          .replace(/🔴\s*PDF\s*KURALI:.*?(?=\n\n|\n\*\*|$)/gis, '')
+          .replace(/PDF yükle[^.]*\./gi, '')
+          .replace(/Eğer kullanıcı PDF yüklemişse[^.]*\./gi, '')
+          .replace(/PDF yüklenmemişse bu kuralı atla\.?/gi, '')
+          .replace(/\n{3,}/g, '\n\n')
+          .trim();
+        console.log(`[NO PDF] Removed PDF instructions from system prompt`);
       }
 
       // 2. Search for relevant documents using configured source
