@@ -515,6 +515,22 @@ export default function DashboardPage() {
               totalDocuments: data.performance.totalDocuments || 0
             });
           }
+
+          // Update live stats (tokens, messages, conversations)
+          if (data.liveStats) {
+            setTokenStats({
+              totalTokensUsed: data.liveStats.totalTokensUsed || 0,
+              totalCost: data.liveStats.totalCost || 0
+            });
+            setChatStats(prev => ({
+              ...prev,
+              overview: {
+                total_conversations: data.liveStats.totalConversations || 0,
+                total_messages: data.liveStats.totalMessages || 0,
+                total_users: data.liveStats.totalUsers || 0
+              }
+            }));
+          }
         } else {
           setSseConnected(false);
         }
@@ -1511,6 +1527,8 @@ export default function DashboardPage() {
             title={t('dashboard.stats.tokenUsage')}
             value={<AnimatedNumber value={tokenStats.totalTokensUsed} />}
             description={`${t('dashboard.stats.cost')}: $${tokenStats.totalCost.toFixed(4)}`}
+            live={true}
+            status={tokenStats.totalTokensUsed > 0 ? 'online' : 'warning'}
           />
 
           {/* Total Embeddings */}

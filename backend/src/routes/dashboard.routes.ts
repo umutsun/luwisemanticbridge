@@ -9,6 +9,17 @@ import { SystemMetricsService } from '../services/system-metrics.service';
 const router = Router();
 const ragAnythingRouter = Router();
 
+// Singleton metrics service instance for accurate per-second calculations
+let metricsServiceInstance: SystemMetricsService | null = null;
+
+function getMetricsService(): SystemMetricsService {
+  if (!metricsServiceInstance) {
+    const { pgPool, redis } = require('../server');
+    metricsServiceInstance = new SystemMetricsService(pgPool, redis);
+  }
+  return metricsServiceInstance;
+}
+
 // Dashboard stats endpoint
 router.get('/stats', authenticateToken, async (req: AuthenticatedRequest, res: Response) => {
   try {
@@ -1396,8 +1407,8 @@ router.get('/', authenticateToken, async (req: AuthenticatedRequest, res: Respon
 // Dashboard metrics endpoint - polling-based alternative to SSE
 router.get('/metrics', async (req: Request, res: Response) => {
   try {
-    const { pgPool, redis } = require('../server');
-    const metricsService = new SystemMetricsService(pgPool, redis);
+    const { redis } = require('../server');
+    const metricsService = getMetricsService(); // Use singleton for accurate per-second calculations
 
     // Get all system metrics
     const metrics = await metricsService.getAllMetrics();
@@ -1410,6 +1421,37 @@ router.get('/metrics', async (req: Request, res: Response) => {
         embeddingProgress = JSON.parse(progressData);
       }
     } catch (err) { /* ignore */ }
+
+    // Get live token usage and chat stats
+    let liveStats = {
+      totalTokensUsed: 0,
+      totalCost: 0,
+      totalMessages: 0,
+      totalConversations: 0,
+      totalUsers: 0
+    };
+    try {
+      const [tokenResult, msgResult, convResult, userResult] = await Promise.all([
+        lsembPool.query(`
+          WITH token_summary AS (
+            SELECT COALESCE(SUM(tokens_used), 0) as tokens, 0 as cost FROM unified_embeddings WHERE tokens_used IS NOT NULL
+            UNION ALL
+            SELECT COALESCE(SUM(tokens_used), 0), COALESCE(SUM(cost_usd), 0) FROM documents WHERE tokens_used IS NOT NULL
+          )
+          SELECT SUM(tokens) as total_tokens, SUM(cost) as total_cost FROM token_summary
+        `),
+        lsembPool.query('SELECT COUNT(*) as count FROM messages'),
+        lsembPool.query('SELECT COUNT(*) as count FROM conversations'),
+        lsembPool.query('SELECT COUNT(*) as count FROM users')
+      ]);
+      liveStats = {
+        totalTokensUsed: parseInt(tokenResult.rows[0]?.total_tokens || 0),
+        totalCost: parseFloat(tokenResult.rows[0]?.total_cost || 0),
+        totalMessages: parseInt(msgResult.rows[0]?.count || 0),
+        totalConversations: parseInt(convResult.rows[0]?.count || 0),
+        totalUsers: parseInt(userResult.rows[0]?.count || 0)
+      };
+    } catch (err) { /* ignore - tables might not exist */ }
 
     const dashboardData = {
       systemMetrics: {
@@ -1462,6 +1504,14 @@ router.get('/metrics', async (req: Request, res: Response) => {
         cacheHitRate: metrics.performance.cacheHitRate,
         totalDocuments: metrics.performance.totalDocuments
       },
+      // Live usage stats - updated in real-time
+      liveStats: {
+        totalTokensUsed: liveStats.totalTokensUsed,
+        totalCost: liveStats.totalCost,
+        totalMessages: liveStats.totalMessages,
+        totalConversations: liveStats.totalConversations,
+        totalUsers: liveStats.totalUsers
+      },
       services: metrics.services,
       pipelines: metrics.pipelines,
       embeddingProgress
@@ -1499,8 +1549,8 @@ router.get('/stream', async (req: Request, res: Response) => {
   try {
     const { pgPool, redis } = require('../server');
 
-    // Initialize metrics service
-    const metricsService = new SystemMetricsService(pgPool, redis);
+    // Use singleton metrics service for accurate per-second calculations
+    const metricsService = getMetricsService();
 
     const sendDashboardData = async () => {
       if (isConnectionClosed) return;
