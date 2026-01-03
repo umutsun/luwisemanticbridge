@@ -966,7 +966,12 @@ export class LLMManager {
             content: content,
             provider: 'Claude',
             model: prov!.model,
-            fallbackUsed: provider !== preferredProvider || activeProviderFailed || activeProviderFailed
+            fallbackUsed: provider !== preferredProvider || activeProviderFailed || activeProviderFailed,
+            usage: claudeResponse.usage ? {
+              promptTokens: claudeResponse.usage.input_tokens || 0,
+              completionTokens: claudeResponse.usage.output_tokens || 0,
+              totalTokens: (claudeResponse.usage.input_tokens || 0) + (claudeResponse.usage.output_tokens || 0)
+            } : undefined
           };
 
         case 'openai':
@@ -1002,7 +1007,12 @@ export class LLMManager {
             content: openaiResponse.choices[0].message.content || '',
             provider: 'OpenAI',
             model: prov!.model,
-            fallbackUsed: provider !== preferredProvider || activeProviderFailed
+            fallbackUsed: provider !== preferredProvider || activeProviderFailed,
+            usage: openaiResponse.usage ? {
+              promptTokens: openaiResponse.usage.prompt_tokens || 0,
+              completionTokens: openaiResponse.usage.completion_tokens || 0,
+              totalTokens: openaiResponse.usage.total_tokens || 0
+            } : undefined
           };
 
         case 'gemini':
@@ -1045,11 +1055,18 @@ export class LLMManager {
             contents: [{ parts }]
           });
           
+          // Gemini usageMetadata contains token counts
+          const geminiUsage = geminiResponse.response.usageMetadata;
           return {
             content: geminiResponse.response.text() || '',
             provider: 'Gemini',
             model: geminiModelName,
-            fallbackUsed: provider !== preferredProvider || activeProviderFailed
+            fallbackUsed: provider !== preferredProvider || activeProviderFailed,
+            usage: geminiUsage ? {
+              promptTokens: geminiUsage.promptTokenCount || 0,
+              completionTokens: geminiUsage.candidatesTokenCount || 0,
+              totalTokens: geminiUsage.totalTokenCount || 0
+            } : undefined
           };
 
         case 'deepseek':
@@ -1087,7 +1104,12 @@ export class LLMManager {
             content: deepseekResponse.choices[0].message.content || '',
             provider: 'DeepSeek',
             model: deepseekModel,
-            fallbackUsed: provider !== preferredProvider || activeProviderFailed
+            fallbackUsed: provider !== preferredProvider || activeProviderFailed,
+            usage: deepseekResponse.usage ? {
+              promptTokens: deepseekResponse.usage.prompt_tokens || 0,
+              completionTokens: deepseekResponse.usage.completion_tokens || 0,
+              totalTokens: deepseekResponse.usage.total_tokens || 0
+            } : undefined
           };
 
         case 'openrouter':
@@ -1125,7 +1147,12 @@ export class LLMManager {
             content: openrouterResponse.choices[0].message.content || '',
             provider: 'OpenRouter',
             model: openrouterModel,
-            fallbackUsed: provider !== preferredProvider || activeProviderFailed
+            fallbackUsed: provider !== preferredProvider || activeProviderFailed,
+            usage: openrouterResponse.usage ? {
+              promptTokens: openrouterResponse.usage.prompt_tokens || 0,
+              completionTokens: openrouterResponse.usage.completion_tokens || 0,
+              totalTokens: openrouterResponse.usage.total_tokens || 0
+            } : undefined
           };
 
         default:

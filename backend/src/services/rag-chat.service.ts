@@ -1290,7 +1290,8 @@ ${questionLabel}: ${message}`;
           fallbackUsed: response.fallbackUsed || false,
           originalModel: activeModel,
           actualProvider: response.provider,
-          fastMode: true // Flag for frontend
+          fastMode: true, // Flag for frontend
+          usage: response.usage // Token usage from LLM
         };
       }
 
@@ -1341,7 +1342,8 @@ ${questionLabel}: ${message}`;
         fallbackUsed: response.fallbackUsed || false,
         originalModel: activeModel,
         actualProvider: response.provider,
-        fastMode: false
+        fastMode: false,
+        usage: response.usage // Token usage from LLM
       };
     } catch (error) {
       console.error('RAG chat error:', error);

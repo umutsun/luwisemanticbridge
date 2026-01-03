@@ -179,6 +179,7 @@ router.post('/api/v2/chat', authenticateToken, async (req: AuthenticatedRequest,
           );
 
           // Also save to basic storage for backward compatibility
+          // Now includes token usage for dashboard live stats
           await MessageStorageService.saveQAPair(
             conversationId || uuidv4(),
             message,
@@ -188,7 +189,8 @@ router.post('/api/v2/chat', authenticateToken, async (req: AuthenticatedRequest,
               model: model || 'default',
               sourcesCount: result.sources?.length || 0,
               processingTime: (result as any).processingTime,
-              confidence: (result as any).confidence
+              confidence: (result as any).confidence,
+              usage: (result as any).usage // Token usage from LLM response
             }
           );
 

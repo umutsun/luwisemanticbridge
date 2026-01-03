@@ -410,26 +410,49 @@ export class MessageStorageService {
 
       // Note: messages table doesn't have user_id column, it uses conversation_id instead
       // user_id is stored in the conversations table
-      const query = `
-        INSERT INTO messages (conversation_id, content, role, metadata, created_at)
-        VALUES ($1, $2, $3, $4, NOW())
+      // Token columns: prompt_tokens, completion_tokens, total_tokens, cost_usd
+      const userQuery = `
+        INSERT INTO messages (conversation_id, content, role, metadata, created_at, prompt_tokens, completion_tokens, total_tokens, cost_usd)
+        VALUES ($1, $2, $3, $4, NOW(), 0, 0, 0, 0)
       `;
 
-      await lsembPool.query(query, [
+      // Extract token usage from metadata if available
+      const usage = metadata.usage || {};
+      const promptTokens = usage.promptTokens || 0;
+      const completionTokens = usage.completionTokens || 0;
+      const totalTokens = usage.totalTokens || (promptTokens + completionTokens);
+
+      // Calculate cost (approximate: $0.002 per 1K tokens for average models)
+      const costUsd = metadata.costUsd || (totalTokens * 0.000002);
+
+      const assistantQuery = `
+        INSERT INTO messages (conversation_id, content, role, metadata, created_at, prompt_tokens, completion_tokens, total_tokens, cost_usd)
+        VALUES ($1, $2, $3, $4, NOW(), $5, $6, $7, $8)
+      `;
+
+      await lsembPool.query(userQuery, [
         sessionId,
         question,
         'user',
         { ...metadata, userId, timestamp: new Date().toISOString() }
       ]);
 
-      await lsembPool.query(query, [
+      await lsembPool.query(assistantQuery, [
         sessionId,
         answer,
         'assistant',
-        { ...metadata, userId, timestamp: new Date().toISOString() }
+        { ...metadata, userId, timestamp: new Date().toISOString() },
+        promptTokens,
+        completionTokens,
+        totalTokens,
+        costUsd
       ]);
 
-      logger.info(`Basic Q&A pair saved for session: ${sessionId}`);
+      if (totalTokens > 0) {
+        logger.info(`Q&A pair saved with tokens: ${totalTokens} (prompt: ${promptTokens}, completion: ${completionTokens}, cost: $${costUsd.toFixed(6)})`);
+      } else {
+        logger.info(`Basic Q&A pair saved for session: ${sessionId}`);
+      }
     } catch (error) {
       logger.error('Error saving Q&A pair:', error);
       throw error;

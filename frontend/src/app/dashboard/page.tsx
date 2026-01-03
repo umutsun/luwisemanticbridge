@@ -138,7 +138,6 @@ const GlassCard = ({ title, value, status, description, live, trend }: {
               {live && (
                 <span className="flex items-center gap-1">
                   <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                  <span className="text-[10px] text-emerald-500 font-medium">LIVE</span>
                 </span>
               )}
             </div>
@@ -167,13 +166,10 @@ const GlassCard = ({ title, value, status, description, live, trend }: {
   );
 };
 
-// Live indicator for real-time data
+// Connection status indicator for real-time data
 const LiveIndicator = ({ connected, latency }: { connected: boolean; latency?: number }) => (
   <div className="flex items-center gap-2">
     <span className={`h-2 w-2 rounded-full ${connected ? 'bg-emerald-500 animate-pulse' : 'bg-rose-500'}`} />
-    <span className={`text-xs font-medium ${connected ? 'text-emerald-500' : 'text-rose-500'}`}>
-      {connected ? 'Live' : 'Offline'}
-    </span>
     {connected && latency !== undefined && (
       <span className="text-[10px] text-slate-500">{latency}ms</span>
     )}
@@ -1700,7 +1696,6 @@ export default function DashboardPage() {
                 </div>
                 <span className="flex items-center gap-1 text-[10px] text-emerald-500">
                   <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                  LIVE
                 </span>
               </div>
             </CardHeader>
@@ -1864,9 +1859,6 @@ export default function DashboardPage() {
               </div>
               <div className="flex items-center gap-2">
                 <div className={`h-2 w-2 rounded-full ${pipelines.some(p => p.status === 'running') ? 'bg-emerald-500 animate-pulse' : 'bg-slate-400'}`} />
-                <Badge variant="outline" className={`text-xs ${sseConnected ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/30' : 'bg-slate-500/10 text-slate-600 dark:text-slate-400 border-slate-500/30'}`}>
-                  {sseConnected ? 'Live' : 'Offline'}
-                </Badge>
               </div>
             </div>
           </CardHeader>
