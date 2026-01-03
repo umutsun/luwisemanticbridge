@@ -1,7 +1,6 @@
-{
-  "name": "@alice/semantic-bridge-n8n",
+  "name": "n8n-nodes-luwi-semantic-bridge",
   "version": "1.0.0",
-  "description": "N8N node for semantic search operations",
+  "description": "N8N node for Luwi Semantic Bridge operations",
   "main": "index.js",
   "scripts": {
     "dev": "npm run watch",
@@ -18,10 +17,10 @@
   "n8n": {
     "n8nNodesApiVersion": 1,
     "credentials": [
-      "dist/credentials/AliceSemanticBridgeApi.credentials.js"
+      "dist/credentials/LuwiSemanticBridgeApi.credentials.js"
     ],
     "nodes": [
-      "dist/nodes/AliceSemanticBridge.node.js"
+      "dist/nodes/LuwiSemanticBridge.node.js"
     ]
   },
   "devDependencies": {

@@ -19,111 +19,127 @@ const execAsync = promisify(exec);
 let pythonProcess: ChildProcess | null = null;
 
 /**
- * Services list configuration
+ * Get Python service URL and port from env
  */
-const servicesList = [
-  {
-    name: 'graphql',
-    displayName: 'GraphQL Server',
-    description: 'Query API with type safety',
-    status: 'stopped',
-    port: 4000,
-    url: 'http://localhost:4000/graphql',
-    version: 'Apollo Server 4.0',
-    icon: 'GitBranch'
-  },
-  {
-    name: 'python',
-    displayName: 'Python Services',
-    description: 'AI & ML microservices',
-    status: 'stopped',
-    port: parseInt(process.env.PYTHON_SERVICE_PORT || '8002'),
-    url: process.env.PYTHON_SERVICE_URL || 'http://localhost:8002',
-    version: 'FastAPI 0.104.1',
-    icon: 'Code'
-  },
-  {
-    name: 'crawl4ai',
-    displayName: 'Crawl4AI',
-    description: 'AI-powered web scraping',
-    status: 'stopped',
-    port: 8001,
-    url: 'http://localhost:8001/api/python/crawl',
-    icon: 'Globe'
-  },
-  {
-    name: 'whisper',
-    displayName: 'Whisper STT',
-    description: 'Speech-to-text (OpenAI API)',
-    status: 'stopped',
-    port: 8001,
-    url: 'http://localhost:8001/api/python/whisper',
-    version: 'API + Self-hosted',
-    icon: 'Mic'
-  },
-  {
-    name: 'pgai',
-    displayName: 'pgai Worker',
-    description: 'Automatic embeddings',
-    status: 'stopped',
-    icon: 'Brain'
-  },
-  {
-    name: 'pgvectorscale',
-    displayName: 'pgvectorscale',
-    description: 'Performance optimizer (Not installed)',
-    status: 'stopped',
-    icon: 'Zap'
-  },
-  {
-    name: 'nodejs',
-    displayName: 'Node.js Backend',
-    description: 'Main API gateway',
-    status: 'running',
-    port: parseInt(process.env.PORT || '8083'),
-    url: `http://localhost:${process.env.PORT || '8083'}`,
-    version: 'Express 4.18',
-    icon: 'Server'
-  },
-  {
-    name: 'database',
-    displayName: 'PostgreSQL',
-    description: 'Vector database',
-    status: 'running',
-    port: parseInt(process.env.POSTGRES_PORT || '5432'),
-    host: process.env.POSTGRES_HOST || 'localhost',
-    database: process.env.POSTGRES_DB || 'lsemb',
-    version: '15.13 + pgvector',
-    icon: 'Database'
-  },
-  {
-    name: 'redis',
-    displayName: 'Redis Cache',
-    description: 'Cache server',
-    status: 'running',
-    port: parseInt(process.env.REDIS_PORT || '6379'),
-    host: process.env.REDIS_HOST || 'localhost',
-    version: '7.0+',
-    icon: 'Server'
-  },
-  {
-    name: 'n8n',
-    displayName: 'n8n Workflow',
-    description: 'Automation & workflow orchestration',
-    status: 'stopped',
-    port: 5678,
-    url: 'http://localhost:5678',
-    version: 'n8n 1.0+',
-    icon: 'Zap'
-  }
-];
+function getPythonServiceConfig() {
+  const url = process.env.PYTHON_SERVICE_URL || 'http://localhost:8001';
+  const portMatch = url.match(/:(\d+)/);
+  const port = portMatch ? parseInt(portMatch[1]) : 8001;
+  return { url, port };
+}
+
+/**
+ * Services list configuration - uses env variables
+ */
+function getServicesList() {
+  const pythonConfig = getPythonServiceConfig();
+  const backendPort = parseInt(process.env.PORT || '8084');
+  const n8nUrl = process.env.N8N_URL || 'http://localhost:5678';
+
+  return [
+    {
+      name: 'graphql',
+      displayName: 'GraphQL Server',
+      description: 'Query API with type safety',
+      status: 'stopped',
+      port: backendPort,
+      url: `http://localhost:${backendPort}/graphql`,
+      version: 'Apollo Server 4.0',
+      icon: 'GitBranch'
+    },
+    {
+      name: 'python',
+      displayName: 'Python Services',
+      description: 'AI & ML microservices',
+      status: 'stopped',
+      port: pythonConfig.port,
+      url: pythonConfig.url,
+      version: 'FastAPI 0.104.1',
+      icon: 'Code'
+    },
+    {
+      name: 'crawl4ai',
+      displayName: 'Crawl4AI',
+      description: 'AI-powered web scraping',
+      status: 'stopped',
+      port: pythonConfig.port,
+      url: `${pythonConfig.url}/api/python/crawl`,
+      icon: 'Globe'
+    },
+    {
+      name: 'whisper',
+      displayName: 'Whisper STT',
+      description: 'Speech-to-text (OpenAI API)',
+      status: 'stopped',
+      port: pythonConfig.port,
+      url: `${pythonConfig.url}/api/python/whisper`,
+      version: 'API + Self-hosted',
+      icon: 'Mic'
+    },
+    {
+      name: 'pgai',
+      displayName: 'pgai Worker',
+      description: 'Automatic embeddings',
+      status: 'stopped',
+      icon: 'Brain'
+    },
+    {
+      name: 'pgvectorscale',
+      displayName: 'pgvectorscale',
+      description: 'Performance optimizer (Not installed)',
+      status: 'stopped',
+      icon: 'Zap'
+    },
+    {
+      name: 'nodejs',
+      displayName: 'Node.js Backend',
+      description: 'Main API gateway',
+      status: 'running',
+      port: backendPort,
+      url: `http://localhost:${backendPort}`,
+      version: 'Express 4.18',
+      icon: 'Server'
+    },
+    {
+      name: 'database',
+      displayName: 'PostgreSQL',
+      description: 'Vector database',
+      status: 'running',
+      port: parseInt(process.env.POSTGRES_PORT || '5432'),
+      host: process.env.POSTGRES_HOST || 'localhost',
+      database: process.env.POSTGRES_DB || 'lsemb',
+      version: '15.13 + pgvector',
+      icon: 'Database'
+    },
+    {
+      name: 'redis',
+      displayName: 'Redis Cache',
+      description: 'Cache server',
+      status: 'running',
+      port: parseInt(process.env.REDIS_PORT || '6379'),
+      host: process.env.REDIS_HOST || 'localhost',
+      version: '7.0+',
+      icon: 'Server'
+    },
+    {
+      name: 'n8n',
+      displayName: 'n8n Workflow',
+      description: 'Automation & workflow orchestration',
+      status: 'stopped',
+      port: 5678,
+      url: n8nUrl,
+      version: 'n8n 1.0+',
+      icon: 'Zap'
+    }
+  ];
+}
 
 /**
  * GET /api/v2/integrations/services
  * Get list of all available services
  */
 router.get('/services', (req: Request, res: Response) => {
-  res.json(servicesList);
+  res.json(getServicesList());
 });
 
 /**
@@ -131,24 +147,32 @@ router.get('/services', (req: Request, res: Response) => {
  */
 router.get('/status', async (req: Request, res: Response) => {
   try {
+    // Get Python service port from env
+    const pythonPort = parseInt(process.env.PYTHON_SERVICE_PORT || '8001');
+    const backendPort = parseInt(process.env.PORT || '8084');
+
     // Check Python service status
     const pythonAvailable = await pythonService.isPythonServiceAvailable();
 
     // GraphQL is part of Node.js server on /graphql endpoint
-    const graphqlRunning = true; // Always running with Node.js on port 8083
+    const graphqlRunning = true; // Always running with Node.js
 
-    const status = {
+    const status: Record<string, any> = {
       graphql: {
         status: graphqlRunning ? 'running' : 'stopped',
-        port: 8083, // Same as Node.js port, runs on /graphql endpoint
+        port: backendPort, // Same as Node.js port, runs on /graphql endpoint
       },
       python: {
         status: pythonAvailable ? 'running' : 'stopped',
-        port: 8001
+        port: pythonPort
       },
       crawl4ai: {
         status: pythonAvailable ? 'running' : 'stopped',
-        port: 8001
+        port: pythonPort
+      },
+      whisper: {
+        status: pythonAvailable ? 'running' : 'stopped',
+        port: pythonPort
       },
       pgai: {
         status: 'stopped', // Will be updated below
@@ -159,11 +183,19 @@ router.get('/status', async (req: Request, res: Response) => {
       },
       nodejs: {
         status: 'running', // Always running if this endpoint is reached
-        port: 8083
+        port: backendPort
       },
       database: {
         status: 'running', // Check if needed
-        port: 5432
+        port: parseInt(process.env.POSTGRES_PORT || '5432')
+      },
+      redis: {
+        status: 'running', // Assume running if backend is up
+        port: parseInt(process.env.REDIS_PORT || '6379')
+      },
+      n8n: {
+        status: 'stopped', // Will need health check
+        port: 5678
       }
     };
 
@@ -180,6 +212,14 @@ router.get('/status', async (req: Request, res: Response) => {
       } catch (error) {
         logger.error('Error checking pgai worker status:', error);
       }
+    }
+
+    // Whisper is available if Python service is running (it's part of the same service)
+    if (pythonAvailable) {
+      status.whisper = {
+        status: 'running',
+        port: pythonPort
+      };
     }
 
     // Check pgvectorscale (database extension)

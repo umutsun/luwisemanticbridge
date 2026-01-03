@@ -620,28 +620,85 @@ export default function ServicesPage() {
 
 // Configuration Components
 function GraphQLConfig() {
+  const [playgroundEnabled, setPlaygroundEnabled] = useState(true);
+  const [introspectionEnabled, setIntrospectionEnabled] = useState(true);
+  const [maxDepth, setMaxDepth] = useState("10");
+  const [timeout, setTimeout] = useState("30000");
+  const [saving, setSaving] = useState(false);
+
+  // Load settings from backend
+  useEffect(() => {
+    fetch('/api/v2/settings?category=graphql')
+      .then(res => res.json())
+      .then(data => {
+        const gql = data.graphqlSettings || data.graphql || {};
+        setPlaygroundEnabled(gql.playgroundEnabled !== false);
+        setIntrospectionEnabled(gql.introspectionEnabled !== false);
+        setMaxDepth(gql.maxDepth?.toString() || "10");
+        setTimeout(gql.timeout?.toString() || "30000");
+      })
+      .catch(err => console.error('Failed to load graphql settings:', err));
+  }, []);
+
+  const handleSave = async () => {
+    setSaving(true);
+    try {
+      const response = await fetch('/api/v2/settings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          'graphqlSettings.playgroundEnabled': playgroundEnabled,
+          'graphqlSettings.introspectionEnabled': introspectionEnabled,
+          'graphqlSettings.maxDepth': parseInt(maxDepth),
+          'graphqlSettings.timeout': parseInt(timeout)
+        })
+      });
+
+      if (!response.ok) throw new Error('Failed to save settings');
+      toast.success('GraphQL settings saved!');
+    } catch (error: any) {
+      console.error('Failed to save graphql settings:', error);
+      toast.error(error.message || 'Failed to save settings');
+    } finally {
+      setSaving(false);
+    }
+  };
+
   return (
     <div className="space-y-4">
       <div className="grid grid-cols-2 gap-4">
         <div className="space-y-2">
           <Label>Playground</Label>
-          <Switch defaultChecked />
+          <Switch checked={playgroundEnabled} onCheckedChange={setPlaygroundEnabled} />
           <p className="text-xs text-muted-foreground">Enable GraphQL Playground UI</p>
         </div>
         <div className="space-y-2">
           <Label>Introspection</Label>
-          <Switch defaultChecked />
+          <Switch checked={introspectionEnabled} onCheckedChange={setIntrospectionEnabled} />
           <p className="text-xs text-muted-foreground">Allow schema introspection</p>
         </div>
       </div>
       <div className="space-y-2">
         <Label>Max Query Depth</Label>
-        <Input type="number" defaultValue="10" />
+        <Input type="number" value={maxDepth} onChange={(e) => setMaxDepth(e.target.value)} />
       </div>
       <div className="space-y-2">
         <Label>Query Timeout (ms)</Label>
-        <Input type="number" defaultValue="30000" />
+        <Input type="number" value={timeout} onChange={(e) => setTimeout(e.target.value)} />
       </div>
+      <Button className="w-full" onClick={handleSave} disabled={saving}>
+        {saving ? (
+          <>
+            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+            Saving...
+          </>
+        ) : (
+          <>
+            <SettingsIcon className="h-4 w-4 mr-2" />
+            Save Configuration
+          </>
+        )}
+      </Button>
     </div>
   );
 }
@@ -863,6 +920,49 @@ function PythonConfig() {
 }
 
 function Crawl4AIConfig() {
+  const [maxWorkers, setMaxWorkers] = useState("5");
+  const [timeout, setTimeout] = useState("30");
+  const [useCache, setUseCache] = useState(true);
+  const [saving, setSaving] = useState(false);
+
+  // Load settings from backend
+  useEffect(() => {
+    fetch('/api/v2/integrations/config/crawl4ai')
+      .then(res => res.json())
+      .then(data => {
+        setMaxWorkers(data.maxWorkers?.toString() || "5");
+        setTimeout(data.timeout?.toString() || "30");
+        setUseCache(data.useCache !== false);
+      })
+      .catch(err => console.error('Failed to load crawl4ai settings:', err));
+  }, []);
+
+  const handleSave = async () => {
+    setSaving(true);
+    try {
+      const response = await fetch('/api/v2/integrations/config', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          integration: 'crawl4ai',
+          config: {
+            maxWorkers: parseInt(maxWorkers),
+            timeout: parseInt(timeout),
+            useCache
+          }
+        })
+      });
+
+      if (!response.ok) throw new Error('Failed to save settings');
+      toast.success('Crawl4AI settings saved!');
+    } catch (error: any) {
+      console.error('Failed to save crawl4ai settings:', error);
+      toast.error(error.message || 'Failed to save settings');
+    } finally {
+      setSaving(false);
+    }
+  };
+
   return (
     <div className="space-y-4">
       <Alert>
@@ -873,11 +973,11 @@ function Crawl4AIConfig() {
       <div className="grid grid-cols-2 gap-4">
         <div className="space-y-2">
           <Label className="text-xs">Max Workers</Label>
-          <Input type="number" defaultValue="5" className="h-8" />
+          <Input type="number" value={maxWorkers} onChange={(e) => setMaxWorkers(e.target.value)} className="h-8" />
         </div>
         <div className="space-y-2">
           <Label className="text-xs">Timeout (s)</Label>
-          <Input type="number" defaultValue="30" className="h-8" />
+          <Input type="number" value={timeout} onChange={(e) => setTimeout(e.target.value)} className="h-8" />
         </div>
       </div>
       <div className="flex items-center justify-between">
@@ -885,8 +985,21 @@ function Crawl4AIConfig() {
           <Label className="text-xs">Use Cache</Label>
           <p className="text-[10px] text-muted-foreground">Cache results in Redis</p>
         </div>
-        <Switch defaultChecked />
+        <Switch checked={useCache} onCheckedChange={setUseCache} />
       </div>
+      <Button className="w-full" onClick={handleSave} disabled={saving}>
+        {saving ? (
+          <>
+            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+            Saving...
+          </>
+        ) : (
+          <>
+            <Globe className="h-4 w-4 mr-2" />
+            Save Configuration
+          </>
+        )}
+      </Button>
     </div>
   );
 }
@@ -1023,6 +1136,54 @@ function Crawl4AITest() {
 
 function WhisperConfig() {
   const [mode, setMode] = useState<"api" | "local">("api");
+  const [modelSize, setModelSize] = useState("base");
+  const [language, setLanguage] = useState("tr");
+  const [temperature, setTemperature] = useState("0.0");
+  const [initialPrompt, setInitialPrompt] = useState("");
+  const [autoSend, setAutoSend] = useState(false);
+  const [saving, setSaving] = useState(false);
+
+  // Load settings from backend
+  useEffect(() => {
+    fetch('/api/v2/settings?category=whisper')
+      .then(res => res.json())
+      .then(data => {
+        const whisper = data.whisperSettings || data.whisper || {};
+        setMode(whisper.mode || "api");
+        setModelSize(whisper.modelSize || "base");
+        setLanguage(whisper.language || "tr");
+        setTemperature(whisper.temperature?.toString() || "0.0");
+        setInitialPrompt(whisper.initialPrompt || "");
+        setAutoSend(whisper.autoSend || false);
+      })
+      .catch(err => console.error('Failed to load whisper settings:', err));
+  }, []);
+
+  const handleSave = async () => {
+    setSaving(true);
+    try {
+      const response = await fetch('/api/v2/settings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          'whisperSettings.mode': mode,
+          'whisperSettings.modelSize': modelSize,
+          'whisperSettings.language': language,
+          'whisperSettings.temperature': parseFloat(temperature),
+          'whisperSettings.initialPrompt': initialPrompt,
+          'whisperSettings.autoSend': autoSend
+        })
+      });
+
+      if (!response.ok) throw new Error('Failed to save settings');
+      toast.success('Whisper settings saved!');
+    } catch (error: any) {
+      console.error('Failed to save whisper settings:', error);
+      toast.error(error.message || 'Failed to save settings');
+    } finally {
+      setSaving(false);
+    }
+  };
 
   return (
     <div className="space-y-3">
@@ -1043,7 +1204,7 @@ function WhisperConfig() {
         {mode === "local" && (
           <div className="space-y-1">
             <Label className="text-xs">Model Size</Label>
-            <Select defaultValue="base">
+            <Select value={modelSize} onValueChange={setModelSize}>
               <SelectTrigger className="h-8 text-xs">
                 <SelectValue />
               </SelectTrigger>
@@ -1069,7 +1230,7 @@ function WhisperConfig() {
       <div className="grid grid-cols-2 gap-2">
         <div className="space-y-1">
           <Label className="text-xs">Language</Label>
-          <Select defaultValue="tr">
+          <Select value={language} onValueChange={setLanguage}>
             <SelectTrigger className="h-8 text-xs">
               <SelectValue />
             </SelectTrigger>
@@ -1082,7 +1243,15 @@ function WhisperConfig() {
         </div>
         <div className="space-y-1">
           <Label className="text-xs">Temperature</Label>
-          <Input type="number" defaultValue="0.0" min="0" max="1" step="0.1" className="h-8 text-xs" />
+          <Input
+            type="number"
+            value={temperature}
+            onChange={(e) => setTemperature(e.target.value)}
+            min="0"
+            max="1"
+            step="0.1"
+            className="h-8 text-xs"
+          />
         </div>
       </div>
 
@@ -1091,6 +1260,8 @@ function WhisperConfig() {
         <Label className="text-xs">Initial Prompt</Label>
         <Textarea
           placeholder="Domain keywords..."
+          value={initialPrompt}
+          onChange={(e) => setInitialPrompt(e.target.value)}
           className="h-14 text-xs resize-none"
         />
       </div>
@@ -1101,12 +1272,26 @@ function WhisperConfig() {
           <Label className="text-xs">Auto-send</Label>
           <p className="text-[10px] text-muted-foreground">Send to chat</p>
         </div>
-        <Switch defaultChecked={false} />
+        <Switch checked={autoSend} onCheckedChange={setAutoSend} />
       </div>
 
       <p className="text-[10px] text-muted-foreground">
         {mode === "api" ? "Uses OpenAI API key ($0.006/min)" : "Free, GPU recommended"}
       </p>
+
+      <Button className="w-full" onClick={handleSave} disabled={saving}>
+        {saving ? (
+          <>
+            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+            Saving...
+          </>
+        ) : (
+          <>
+            <Mic className="h-4 w-4 mr-2" />
+            Save Configuration
+          </>
+        )}
+      </Button>
     </div>
   );
 }
