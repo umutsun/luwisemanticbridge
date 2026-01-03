@@ -1,0 +1,133 @@
+{
+  "name": "Luwi Semantic Bridge Demo",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "start-node",
+      "name": "Manual Trigger",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [250, 300]
+    },
+    {
+      "parameters": {
+        "values": {
+          "string": [
+            {
+              "name": "text",
+              "value": "PostgreSQL pgvector ile vektör veritabanı oluşturma ve semantic search"
+            },
+            {
+              "name": "documentId",
+              "value": "doc-001"
+            }
+          ]
+        }
+      },
+      "id": "set-embed-data",
+      "name": "Set Embed Data",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [450, 200]
+    },
+    {
+      "parameters": {
+        "operation": "embedStore",
+        "text": "={{ $json.text }}",
+        "documentId": "={{ $json.documentId }}",
+        "metadata": "{ \"source\": \"demo\", \"type\": \"technical\" }"
+      },
+      "id": "embed-store",
+      "name": "Embed & Store",
+      "type": "n8n-nodes-luwiSemanticBridge.luwiSemanticBridge",
+      "typeVersion": 1,
+      "position": [650, 200],
+      "credentials": {
+        "luwiSemanticBridgeApi": {
+          "id": "your-credential-id",
+          "name": "Luwi Semantic Bridge API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "values": {
+          "string": [
+            {
+              "name": "query",
+              "value": "veritabanı sorgulama"
+            }
+          ]
+        }
+      },
+      "id": "set-search-query",
+      "name": "Set Search Query",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [450, 400]
+    },
+    {
+      "parameters": {
+        "operation": "search",
+        "text": "={{ $json.query }}",
+        "limit": 5
+      },
+      "id": "semantic-search",
+      "name": "Semantic Search",
+      "type": "n8n-nodes-luwiSemanticBridge.luwiSemanticBridge",
+      "typeVersion": 1,
+      "position": [650, 400],
+      "credentials": {
+        "luwiSemanticBridgeApi": {
+          "id": "your-credential-id",
+          "name": "Luwi Semantic Bridge API"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Manual Trigger": {
+      "main": [
+        [
+          {
+            "node": "Set Embed Data",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Set Search Query",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set Embed Data": {
+      "main": [
+        [
+          {
+            "node": "Embed & Store",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set Search Query": {
+      "main": [
+        [
+          {
+            "node": "Semantic Search",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": ["luwi", "semantic-search", "demo"]
+}
