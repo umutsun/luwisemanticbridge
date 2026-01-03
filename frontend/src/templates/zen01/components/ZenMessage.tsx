@@ -9,6 +9,69 @@ import { ZenTypingIndicator } from './ZenTypingIndicator';
 import { useAudioPlayer } from '@/lib/hooks/use-audio-player';
 import type { ZenMessageProps, ZenSource } from '../types';
 
+// Default stop words - can be overridden via settings
+const DEFAULT_STOP_WORDS = [
+  // Turkish
+  've', 'veya', 'ile', 'için', 'göre', 'bir', 'bu', 'şu', 'da', 'de', 'ki',
+  'mi', 'mı', 'mu', 'mü', 'ise', 'gibi', 'kadar', 'daha', 'çok', 'az',
+  'nasıl', 'neden', 'hangi', 'nerede', 'olarak', 'olan', 'olup', 'olduğu',
+  'olabilir', 'olur', 'ancak', 'fakat', 'ama', 'lakin', 'hakkında',
+  'üzerine', 'sonra', 'önce', 'arasında', 'dolayı', 'nedeniyle',
+  // English
+  'the', 'and', 'or', 'but', 'for', 'with', 'from', 'this', 'that', 'what',
+  'how', 'why', 'when', 'where', 'which', 'who', 'have', 'has', 'had',
+  'been', 'being', 'will', 'would', 'could', 'should', 'about', 'into'
+];
+
+/**
+ * Extract keywords from user query for highlighting
+ * @param query - User's search query
+ * @param stopWords - Optional custom stop words list
+ * @param minLength - Minimum word length (default: 4)
+ * @param maxKeywords - Maximum keywords to extract (default: 5)
+ */
+function extractKeywords(
+  query: string,
+  stopWords: string[] = DEFAULT_STOP_WORDS,
+  minLength: number = 4,
+  maxKeywords: number = 5
+): string[] {
+  return query
+    .toLowerCase()
+    .split(/\s+/)
+    .filter(word => word.length >= minLength && !stopWords.includes(word))
+    .map(word => word.replace(/[.,;:!?'"()]/g, ''))
+    .filter(word => word.length >= minLength)
+    .slice(0, maxKeywords);
+}
+
+/**
+ * Highlight keywords in text with marker class
+ */
+function highlightKeywords(text: string, keywords: string[]): React.ReactNode[] {
+  if (!keywords.length) return [text];
+
+  // Create regex pattern for keywords (case insensitive, Turkish)
+  const pattern = new RegExp(
+    `(${keywords.map(k => k.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|')})`,
+    'gi'
+  );
+
+  const parts = text.split(pattern);
+
+  return parts.map((part, idx) => {
+    const isKeyword = keywords.some(k => k.toLowerCase() === part.toLowerCase());
+    if (isKeyword) {
+      return (
+        <span key={idx} className="zen01-marker">
+          <span>{part}</span>
+        </span>
+      );
+    }
+    return part;
+  });
+}
+
 /**
  * Preprocess markdown content to ensure proper paragraph breaks
  * LLM often outputs **Header:** or **Header** inline instead of on new lines
@@ -61,10 +124,17 @@ function preprocessMarkdown(content: string): string {
 export const ZenMessage: React.FC<ZenMessageProps> = ({
   message,
   onSourceClick,
+  lastUserQuery = '',
   voiceOutputEnabled = false,
 }) => {
   const isUser = message.role === 'user';
   const [showAllSources, setShowAllSources] = useState(false);
+
+  // Extract keywords from last user query for highlighting
+  const keywords = React.useMemo(() => {
+    if (!lastUserQuery || isUser) return [];
+    return extractKeywords(lastUserQuery);
+  }, [lastUserQuery, isUser]);
 
   // Audio player hook for TTS
   const { isPlaying, isLoading: isTTSLoading, play, pause } = useAudioPlayer({
@@ -144,12 +214,25 @@ export const ZenMessage: React.FC<ZenMessageProps> = ({
                         {children}
                       </h3>
                     ),
-                    // Paragraphs with proper spacing
-                    p: ({ children }) => (
-                      <p className="text-slate-700 dark:text-slate-200 leading-relaxed my-4 first:mt-0 last:mb-0">
-                        {children}
-                      </p>
-                    ),
+                    // Paragraphs with keyword highlighting
+                    p: ({ children }) => {
+                      // Apply keyword highlighting to text nodes
+                      const processChildren = (child: React.ReactNode): React.ReactNode => {
+                        if (typeof child === 'string' && keywords.length > 0) {
+                          return highlightKeywords(child, keywords);
+                        }
+                        if (Array.isArray(child)) {
+                          return child.map((c, i) => <React.Fragment key={i}>{processChildren(c)}</React.Fragment>);
+                        }
+                        return child;
+                      };
+
+                      return (
+                        <p className="text-slate-700 dark:text-slate-200 leading-relaxed my-4 first:mt-0 last:mb-0">
+                          {processChildren(children)}
+                        </p>
+                      );
+                    },
                     // Bold - Style as section header when at start of paragraph
                     strong: ({ children }) => (
                       <strong className="font-semibold text-cyan-700 dark:text-cyan-300 inline-block">

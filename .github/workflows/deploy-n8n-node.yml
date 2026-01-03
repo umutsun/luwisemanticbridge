@@ -1,0 +1,112 @@
+name: Deploy n8n Community Node
+
+on:
+  push:
+    branches: [ main, master ]
+    paths:
+      - 'scripts/n8n-community-node/**'
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: scripts/n8n-community-node
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18'
+        cache: 'npm'
+        cache-dependency-path: scripts/n8n-community-node/package-lock.json
+
+    - name: Install Dependencies
+      run: npm ci
+
+    - name: Build Node
+      run: npm run build
+
+    - name: Pack Node
+      run: npm pack
+
+    - name: Upload Artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: n8n-node-package
+        path: scripts/n8n-community-node/*.tgz
+        retention-days: 1
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Download Artifact
+      uses: actions/download-artifact@v4
+      with:
+        name: n8n-node-package
+        path: ./dist
+
+    - name: Setup SSH
+      run: |
+        mkdir -p ~/.ssh/
+        echo "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/id_ed25519
+        chmod 600 ~/.ssh/id_ed25519
+        cat >>~/.ssh/config <<END
+        Host n8n-server
+          HostName ${{ secrets.DEPLOY_HOST }}
+          Port ${{ secrets.DEPLOY_PORT }}
+          User ${{ secrets.DEPLOY_USER }}
+          IdentityFile ~/.ssh/id_ed25519
+          StrictHostKeyChecking no
+        END
+
+    - name: Copy Package to Server
+      run: |
+        scp ./dist/*.tgz n8n-server:/tmp/n8n-nodes-luwi.tgz
+
+    - name: Install and Restart
+      run: |
+        ssh n8n-server << 'EOF'
+          # Assume n8n runs as specific user (e.g., node or ubuntu)
+          # Find the user ID 1000 (common for container/default users)
+          N8N_USER=$(getent passwd 1000 | cut -d: -f1)
+          
+          if [ -z "$N8N_USER" ]; then
+            echo "User 1000 not found, using root"
+            N8N_USER="root"
+          fi
+          
+          echo "Deploying as user: $N8N_USER"
+          
+          # Move package to user home or install global
+          # Here we assume installing into ~/.n8n custom nodes or similar
+          
+          # Option 1: Install globally (if n8n was installed globally)
+          # npm install -g /tmp/n8n-nodes-luwi.tgz
+          
+          # Option 2: Install in custom directory
+          mkdir -p /home/$N8N_USER/.n8n/nodes
+          mv /tmp/n8n-nodes-luwi.tgz /home/$N8N_USER/.n8n/nodes/
+          
+          # Extract (if needed) or just leave it for npm install
+          cd /home/$N8N_USER/.n8n/nodes
+          tar -xzf n8n-nodes-luwi.tgz -C ./
+          # Usually manual install implies extracting to a folder named properly
+          rm -rf n8n-nodes-luwi
+          mv package n8n-nodes-luwi
+          
+          # Restoring permissions
+          chown -R $N8N_USER:$N8N_USER /home/$N8N_USER/.n8n/nodes
+          
+          # Restart n8n
+          if command -v pm2 &> /dev/null; then
+            pm2 restart n8n || pm2 restart all
+          else
+            echo "PM2 not found, skipping restart"
+          fi
+        EOF
