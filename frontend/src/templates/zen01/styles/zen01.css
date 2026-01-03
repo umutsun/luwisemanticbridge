@@ -451,18 +451,21 @@
 /* ============================================
    Marker Highlight Box for Keywords
    Hand-drawn style background box with 45deg skew
+   Optimized for readability in both dark/light modes
    ============================================ */
 .zen01-marker {
   position: relative;
   display: inline;
-  padding: 0.2em 0.4em;
+  padding: 0.2em 0.5em;
   margin: 0 0.15em;
-  /* Background box with skew - hand-drawn look */
+  /* Dark mode: Lighter cyan bg for contrast with light text */
   background: linear-gradient(
     135deg,
-    rgba(6, 182, 212, 0.30) 0%,
-    rgba(6, 182, 212, 0.22) 100%
+    rgba(6, 182, 212, 0.25) 0%,
+    rgba(6, 182, 212, 0.18) 100%
   );
+  /* Text color: bright cyan for dark mode readability */
+  color: #67e8f9;
   transform: skewX(-6deg);
   border-radius: 2px 6px 4px 8px;
   box-decoration-break: clone;
@@ -475,13 +478,15 @@
   transform: skewX(6deg);
 }
 
-/* Light mode */
+/* Light mode - darker bg and text for contrast */
 .zen01-container.light .zen01-marker {
   background: linear-gradient(
     135deg,
-    rgba(8, 145, 178, 0.25) 0%,
-    rgba(8, 145, 178, 0.18) 100%
+    rgba(8, 145, 178, 0.20) 0%,
+    rgba(8, 145, 178, 0.14) 100%
   );
+  /* Dark teal text for light mode readability */
+  color: #0e7490;
 }
 
 /* ============================================
