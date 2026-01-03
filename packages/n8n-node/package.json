@@ -1,16 +1,18 @@
 {
   "name": "n8n-nodes-luwi-semantic-bridge",
   "version": "1.0.0",
-  "description": "N8N node for Luwi Semantic Bridge operations",
+  "description": "N8N node for Luwi Semantic Bridge - Store and search semantic embeddings with PostgreSQL + pgvector",
   "main": "index.js",
+  "license": "MIT",
+  "author": "Luwi <info@luwi.dev>",
+  "homepage": "https://luwi.dev",
   "scripts": {
     "dev": "npm run watch",
     "build": "tsc && npm run build:icons",
     "build:icons": "gulp build:icons",
     "watch": "tsc --watch",
     "lint": "eslint nodes credentials --ext .ts",
-    "typecheck": "tsc --noEmit",
-    "test": "jest"
+    "typecheck": "tsc --noEmit"
   },
   "files": [
     "dist"
@@ -27,19 +29,13 @@
   "devDependencies": {
     "@types/node": "^20.11.5",
     "@types/pg": "^8.15.5",
-    "eslint": "^8.57.0",
     "gulp": "^4.0.2",
     "n8n-workflow": "^1.25.1",
     "typescript": "^5.3.3"
   },
   "dependencies": {
-    "@google-cloud/documentai": "^8.0.0",
-    "@supabase/supabase-js": "^2.39.7",
-    "cheerio": "^1.0.0-rc.12",
     "openai": "^4.26.1",
-    "p-limit": "^3.1.0",
     "pg": "^8.11.3",
-    "pgvector": "^0.1.8",
-    "puppeteer": "^22.0.0"
+    "pgvector": "^0.1.8"
   }
 }

@@ -1,6 +1,5 @@
-import { IDataObject, IHttpRequestOptions } from 'n8n-workflow';
+import { IDataObject } from 'n8n-workflow';
 import { Pool, PoolConfig } from 'pg';
-import { IEmbedding } from '../interfaces';
 
 /**
  * @file db.ts
@@ -8,6 +7,16 @@ import { IEmbedding } from '../interfaces';
  * @author Codex (Implementation Lead)
  * @version 1.0.0
  */
+
+// Embedding interface for type safety
+export interface IEmbeddingData {
+  source_id: string;
+  content: string;
+  content_hash: string;
+  embedding: number[];
+  token_count: number;
+  metadata: IDataObject;
+}
 
 let pool: Pool;
 
@@ -55,7 +64,7 @@ export async function getExistingHashes(poolInstance: Pool, hashes: string[]): P
  * @param {IEmbedding[]} embeddings - An array of embedding objects to insert.
  * @returns {Promise<number>} A promise that resolves to the number of rows inserted.
  */
-export async function batchInsertEmbeddings(poolInstance: Pool, embeddings: IEmbedding[]): Promise<number> {
+export async function batchInsertEmbeddings(poolInstance: Pool, embeddings: IEmbeddingData[]): Promise<number> {
 	if (embeddings.length === 0) {
 		return 0;
 	}
