@@ -104,17 +104,6 @@ export async function batchInsertEmbeddings(poolInstance: Pool, embeddings: IEmb
 	}
 }
 
-// We need a simple interface for the embedding object.
-// This should be moved to a shared types file later.
-// For now, defining it here.
-export interface IEmbedding {
-    source_id: string;
-    content: string;
-    content_hash: string;
-    embedding: number[];
-    token_count: number;
-    metadata: IDataObject;
-}
 
 
 export { getPool };

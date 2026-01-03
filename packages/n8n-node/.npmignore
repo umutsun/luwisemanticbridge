@@ -2,6 +2,8 @@ node_modules
 *.ts
 !*.d.ts
 tsconfig.json
+gulpfile.js
 .env
 .env.local
 *.log
+src/
