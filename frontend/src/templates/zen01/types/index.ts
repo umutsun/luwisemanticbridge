@@ -116,17 +116,18 @@ export interface ZenWelcomeProps {
   isLoading: boolean;
 }
 
-export interface ZenMessageProps {
-  message: ZenMessage;
-  onSourceClick: (source: ZenSource, allSources: ZenSource[]) => void;
-  lastUserQuery?: string;
-}
-
 // PDF Settings Interface
 export interface ZenPdfSettings {
   enabled: boolean;
   maxSizeMB: number;
   maxPages: number;
+}
+
+// Voice Settings Interface
+export interface ZenVoiceSettings {
+  enableVoiceInput: boolean;
+  enableVoiceOutput: boolean;
+  maxRecordingSeconds: number;
 }
 
 export interface ZenInputProps {
@@ -139,6 +140,14 @@ export interface ZenInputProps {
   pdfSettings?: ZenPdfSettings;
   pdfFile?: File | null;
   onPdfSelect?: (file: File | null) => void;
+  voiceSettings?: ZenVoiceSettings;
+}
+
+export interface ZenMessageProps {
+  message: ZenMessage;
+  onSourceClick: (source: ZenSource, allSources: ZenSource[]) => void;
+  lastUserQuery?: string;
+  voiceOutputEnabled?: boolean;
 }
 
 // Default Settings

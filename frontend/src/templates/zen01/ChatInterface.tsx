@@ -135,6 +135,13 @@ export default function ChatInterface() {
     maxPages: 30
   });
 
+  // Voice settings state
+  const [voiceSettings, setVoiceSettings] = useState({
+    enableVoiceInput: false,
+    enableVoiceOutput: false,
+    maxRecordingSeconds: 60
+  });
+
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -298,6 +305,31 @@ export default function ChatInterface() {
       })
       .catch(err => {
         console.error('[Zen01] Failed to fetch PDF settings:', err);
+      });
+  }, [token]);
+
+  // Fetch Voice settings when token is available
+  useEffect(() => {
+    if (!token) return;
+
+    fetch('/api/v2/chat/voice-settings', {
+      headers: {
+        'Authorization': `Bearer ${token}`
+      }
+    })
+      .then(res => res.json())
+      .then(data => {
+        if (!data.error) {
+          setVoiceSettings({
+            enableVoiceInput: data.enableVoiceInput || false,
+            enableVoiceOutput: data.enableVoiceOutput || false,
+            maxRecordingSeconds: data.maxRecordingSeconds || 60
+          });
+          console.log('[Zen01] Voice settings loaded:', data);
+        }
+      })
+      .catch(err => {
+        console.error('[Zen01] Failed to fetch voice settings:', err);
       });
   }, [token]);
 
@@ -592,7 +624,7 @@ export default function ChatInterface() {
   return (
     <ProtectedRoute>
       <div
-        className={`zen01-container ${isDark ? '' : 'light'}`}
+        className={`zen01-container ${isDark ? 'dark' : 'light'}`}
         data-theme="zen01"
         data-mode={isDark ? 'dark' : 'light'}
       >
@@ -632,6 +664,7 @@ export default function ChatInterface() {
                     message={message}
                     onSourceClick={handleSourceClick}
                     lastUserQuery={lastUserQuery}
+                    voiceOutputEnabled={voiceSettings.enableVoiceOutput}
                   />
                 ))}
               </AnimatePresence>
@@ -651,6 +684,7 @@ export default function ChatInterface() {
           pdfSettings={pdfSettings}
           pdfFile={pdfFile}
           onPdfSelect={setPdfFile}
+          voiceSettings={voiceSettings}
         />
       </div>
     </ProtectedRoute>

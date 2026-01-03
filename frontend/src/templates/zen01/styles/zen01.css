@@ -77,6 +77,7 @@
 }
 
 /* Light mode container background */
+.zen01-container.light,
 .light .zen01-container,
 [data-mode="light"] .zen01-container {
   background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 50%, #f8fafc 100%);

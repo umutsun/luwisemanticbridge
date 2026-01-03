@@ -2,10 +2,11 @@
 
 import React, { useState } from 'react';
 import { motion } from 'framer-motion';
-import { User, Bot, Clock, FileText, ExternalLink } from 'lucide-react';
+import { User, Bot, Clock, FileText, ExternalLink, Volume2, Pause, Loader2 } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { ZenTypingIndicator } from './ZenTypingIndicator';
+import { useAudioPlayer } from '@/lib/hooks/use-audio-player';
 import type { ZenMessageProps, ZenSource } from '../types';
 
 /**
@@ -60,9 +61,37 @@ function preprocessMarkdown(content: string): string {
 export const ZenMessage: React.FC<ZenMessageProps> = ({
   message,
   onSourceClick,
+  voiceOutputEnabled = false,
 }) => {
   const isUser = message.role === 'user';
   const [showAllSources, setShowAllSources] = useState(false);
+
+  // Audio player hook for TTS
+  const { isPlaying, isLoading: isTTSLoading, play, pause } = useAudioPlayer({
+    onError: (error) => {
+      console.error('[ZenMessage] TTS error:', error);
+    }
+  });
+
+  // Handle TTS play/pause
+  const handleTTSToggle = () => {
+    if (isPlaying) {
+      pause();
+    } else {
+      // Extract plain text from markdown content
+      const plainText = message.content
+        .replace(/#{1,6}\s/g, '') // Remove headers
+        .replace(/\*\*([^*]+)\*\*/g, '$1') // Remove bold
+        .replace(/\*([^*]+)\*/g, '$1') // Remove italic
+        .replace(/`([^`]+)`/g, '$1') // Remove code
+        .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1') // Remove links
+        .replace(/^\s*[-*]\s/gm, '') // Remove list markers
+        .replace(/^\s*\d+\.\s/gm, '') // Remove numbered list markers
+        .trim();
+
+      play(plainText);
+    }
+  };
   const visibleSources = showAllSources
     ? message.sources
     : message.sources?.slice(0, 3);
@@ -91,63 +120,63 @@ export const ZenMessage: React.FC<ZenMessageProps> = ({
                 <span className="text-cyan-400/60 text-sm">Thinking...</span>
               </div>
             ) : isUser ? (
-              <div className="text-slate-200 leading-relaxed whitespace-pre-wrap">
+              <div className="text-slate-700 dark:text-slate-200 leading-relaxed whitespace-pre-wrap">
                 {message.content}
               </div>
             ) : (
-              <div className="zen01-markdown prose prose-sm max-w-none prose-invert">
+              <div className="zen01-markdown prose prose-sm max-w-none dark:prose-invert">
                 <ReactMarkdown
                   remarkPlugins={[remarkGfm]}
                   components={{
                     // Headings
                     h1: ({ children }) => (
-                      <h1 className="text-lg font-bold text-cyan-200 mt-4 mb-2 pb-1 border-b border-cyan-500/30">
+                      <h1 className="text-lg font-bold text-cyan-700 dark:text-cyan-200 mt-4 mb-2 pb-1 border-b border-cyan-500/30">
                         {children}
                       </h1>
                     ),
                     h2: ({ children }) => (
-                      <h2 className="text-base font-semibold text-cyan-300 mt-4 mb-2">
+                      <h2 className="text-base font-semibold text-cyan-700 dark:text-cyan-300 mt-4 mb-2">
                         {children}
                       </h2>
                     ),
                     h3: ({ children }) => (
-                      <h3 className="text-sm font-semibold text-cyan-300 mt-3 mb-1">
+                      <h3 className="text-sm font-semibold text-cyan-700 dark:text-cyan-300 mt-3 mb-1">
                         {children}
                       </h3>
                     ),
                     // Paragraphs with proper spacing
                     p: ({ children }) => (
-                      <p className="text-slate-200 leading-relaxed my-4 first:mt-0 last:mb-0">
+                      <p className="text-slate-700 dark:text-slate-200 leading-relaxed my-4 first:mt-0 last:mb-0">
                         {children}
                       </p>
                     ),
                     // Bold - Style as section header when at start of paragraph
                     strong: ({ children }) => (
-                      <strong className="font-semibold text-cyan-300 inline-block">
+                      <strong className="font-semibold text-cyan-700 dark:text-cyan-300 inline-block">
                         {children}
                       </strong>
                     ),
                     // Italic
                     em: ({ children }) => (
-                      <em className="italic text-slate-300">
+                      <em className="italic text-slate-600 dark:text-slate-300">
                         {children}
                       </em>
                     ),
                     // Unordered lists
                     ul: ({ children }) => (
-                      <ul className="list-disc list-outside ml-4 my-2 space-y-1 text-slate-200">
+                      <ul className="list-disc list-outside ml-4 my-2 space-y-1 text-slate-700 dark:text-slate-200">
                         {children}
                       </ul>
                     ),
                     // Ordered lists
                     ol: ({ children }) => (
-                      <ol className="list-decimal list-outside ml-4 my-2 space-y-1 text-slate-200">
+                      <ol className="list-decimal list-outside ml-4 my-2 space-y-1 text-slate-700 dark:text-slate-200">
                         {children}
                       </ol>
                     ),
                     // List items
                     li: ({ children }) => (
-                      <li className="text-slate-200 pl-1">
+                      <li className="text-slate-700 dark:text-slate-200 pl-1">
                         {children}
                       </li>
                     ),
@@ -155,18 +184,18 @@ export const ZenMessage: React.FC<ZenMessageProps> = ({
                     code: ({ className, children }) => {
                       const isInline = !className;
                       return isInline ? (
-                        <code className="bg-cyan-900/40 text-cyan-200 px-1.5 py-0.5 rounded text-sm font-mono">
+                        <code className="bg-cyan-100 dark:bg-cyan-900/40 text-cyan-700 dark:text-cyan-200 px-1.5 py-0.5 rounded text-sm font-mono">
                           {children}
                         </code>
                       ) : (
-                        <code className="block bg-[#0a1628] text-cyan-200 p-3 rounded-lg text-sm font-mono overflow-x-auto my-2">
+                        <code className="block bg-slate-100 dark:bg-[#0a1628] text-cyan-700 dark:text-cyan-200 p-3 rounded-lg text-sm font-mono overflow-x-auto my-2">
                           {children}
                         </code>
                       );
                     },
                     // Blockquotes
                     blockquote: ({ children }) => (
-                      <blockquote className="border-l-4 border-cyan-500/50 pl-4 my-2 text-slate-300 italic">
+                      <blockquote className="border-l-4 border-cyan-500/50 pl-4 my-2 text-slate-600 dark:text-slate-300 italic">
                         {children}
                       </blockquote>
                     ),
@@ -176,7 +205,7 @@ export const ZenMessage: React.FC<ZenMessageProps> = ({
                         href={href}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="text-cyan-400 hover:text-cyan-300 underline underline-offset-2 transition-colors"
+                        className="text-cyan-600 dark:text-cyan-400 hover:text-cyan-700 dark:hover:text-cyan-300 underline underline-offset-2 transition-colors"
                       >
                         {children}
                       </a>
@@ -184,23 +213,23 @@ export const ZenMessage: React.FC<ZenMessageProps> = ({
                     // Tables
                     table: ({ children }) => (
                       <div className="overflow-x-auto my-2">
-                        <table className="min-w-full border border-cyan-500/30 rounded-lg">
+                        <table className="min-w-full border border-cyan-300/40 dark:border-cyan-500/30 rounded-lg">
                           {children}
                         </table>
                       </div>
                     ),
                     thead: ({ children }) => (
-                      <thead className="bg-cyan-900/30">
+                      <thead className="bg-cyan-50 dark:bg-cyan-900/30">
                         {children}
                       </thead>
                     ),
                     th: ({ children }) => (
-                      <th className="px-3 py-2 text-left text-xs font-semibold text-cyan-200 border-b border-cyan-500/30">
+                      <th className="px-3 py-2 text-left text-xs font-semibold text-cyan-700 dark:text-cyan-200 border-b border-cyan-300/40 dark:border-cyan-500/30">
                         {children}
                       </th>
                     ),
                     td: ({ children }) => (
-                      <td className="px-3 py-2 text-sm text-slate-300 border-b border-cyan-500/20">
+                      <td className="px-3 py-2 text-sm text-slate-600 dark:text-slate-300 border-b border-cyan-200/30 dark:border-cyan-500/20">
                         {children}
                       </td>
                     ),
@@ -212,13 +241,39 @@ export const ZenMessage: React.FC<ZenMessageProps> = ({
             )}
           </div>
 
-          {/* Response Time Badge */}
-          {!isUser && message.responseTime && !message.isStreaming && (
+          {/* Response Time Badge & TTS Button */}
+          {!isUser && !message.isStreaming && (
             <div className="px-4 pb-3 flex items-center gap-2">
-              <div className="zen01-response-time">
-                <Clock className="h-3 w-3" />
-                <span>{(message.responseTime / 1000).toFixed(1)}s</span>
-              </div>
+              {message.responseTime && (
+                <div className="zen01-response-time">
+                  <Clock className="h-3 w-3" />
+                  <span>{(message.responseTime / 1000).toFixed(1)}s</span>
+                </div>
+              )}
+
+              {/* TTS Button - only show for assistant messages when enabled */}
+              {voiceOutputEnabled && message.content && (
+                <button
+                  onClick={handleTTSToggle}
+                  disabled={isTTSLoading}
+                  className={`p-1.5 rounded-lg transition-colors ${
+                    isPlaying
+                      ? 'text-cyan-500 dark:text-cyan-400 bg-cyan-100 dark:bg-cyan-500/20'
+                      : isTTSLoading
+                        ? 'text-slate-400 dark:text-slate-500 cursor-wait'
+                        : 'text-slate-400 dark:text-slate-500 hover:text-cyan-500 dark:hover:text-cyan-400 hover:bg-cyan-100 dark:hover:bg-cyan-500/10'
+                  }`}
+                  title={isPlaying ? 'Durdur' : isTTSLoading ? 'Yükleniyor...' : 'Sesli dinle'}
+                >
+                  {isTTSLoading ? (
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  ) : isPlaying ? (
+                    <Pause className="h-3.5 w-3.5" />
+                  ) : (
+                    <Volume2 className="h-3.5 w-3.5" />
+                  )}
+                </button>
+              )}
             </div>
           )}
         </div>
@@ -227,8 +282,8 @@ export const ZenMessage: React.FC<ZenMessageProps> = ({
         {!isUser && message.sources && message.sources.length > 0 && !message.isStreaming && (
           <div className="zen01-sources mt-3">
             <div className="flex items-center gap-2 mb-2">
-              <FileText className="h-3.5 w-3.5 text-cyan-400/70" />
-              <span className="text-xs font-medium text-cyan-400/70">
+              <FileText className="h-3.5 w-3.5 text-cyan-600/70 dark:text-cyan-400/70" />
+              <span className="text-xs font-medium text-cyan-600/70 dark:text-cyan-400/70">
                 {message.sources.length} source{message.sources.length > 1 ? 's' : ''} found
               </span>
             </div>
@@ -240,13 +295,13 @@ export const ZenMessage: React.FC<ZenMessageProps> = ({
                   onClick={() => onSourceClick(source, message.sources || [])}
                 >
                   <div className="flex items-start gap-2">
-                    <ExternalLink className="h-3.5 w-3.5 text-cyan-400/60 mt-0.5 flex-shrink-0" />
+                    <ExternalLink className="h-3.5 w-3.5 text-cyan-600/60 dark:text-cyan-400/60 mt-0.5 flex-shrink-0" />
                     <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-cyan-300/90 truncate">
+                      <p className="text-sm font-medium text-cyan-700/90 dark:text-cyan-300/90 truncate">
                         {source.title || source.sourceTable || 'Source'}
                       </p>
                       {source.excerpt && (
-                        <p className="text-xs text-slate-400/80 mt-1 line-clamp-2">
+                        <p className="text-xs text-slate-500/80 dark:text-slate-400/80 mt-1 line-clamp-2">
                           {source.excerpt}
                         </p>
                       )}
@@ -258,7 +313,7 @@ export const ZenMessage: React.FC<ZenMessageProps> = ({
             {message.sources.length > 3 && (
               <button
                 onClick={() => setShowAllSources(!showAllSources)}
-                className="mt-2 text-xs text-cyan-400/70 hover:text-cyan-300 transition-colors"
+                className="mt-2 text-xs text-cyan-600/70 dark:text-cyan-400/70 hover:text-cyan-700 dark:hover:text-cyan-300 transition-colors"
               >
                 {showAllSources ? 'Show less' : `Show ${message.sources.length - 3} more`}
               </button>

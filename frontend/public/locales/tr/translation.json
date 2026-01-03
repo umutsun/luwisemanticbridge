@@ -756,7 +756,11 @@
       "tokenUsage": "Token Kullanımı",
       "cost": "Maliyet",
       "avgMessagesPerSession": "Oturum Başına Ortalama Mesaj",
-      "performanceMetric": "performans metriği"
+      "performanceMetric": "performans metriği",
+      "totalConversations": "Total Conversations",
+      "totalMessages": "Total Messages",
+      "avgPerSession": "Avg Per Session",
+      "totalEmbeddings": "Total Embeddings"
     },
     "system": {
       "information": "Sistem Bilgisi",
@@ -1742,7 +1746,8 @@
       "ocrProcessed": "OCR İşlendi",
       "physicalFiles": "Fiziksel Dosyalar",
       "today": "bugün",
-      "notInDb": "VT'de değil"
+      "notInDb": "VT'de değil",
+      "failed": "Failed"
     },
     "upload": {
       "dropFiles": "Dosyaları buraya bırakın",
@@ -1833,7 +1838,9 @@
       "error": "Hata",
       "transformFailed": "Toplu dönüştürme başarısız",
       "embedFailed": "Toplu gömme başarısız",
-      "processFailed": "Toplu işlem başarısız"
+      "processFailed": "Toplu işlem başarısız",
+      "noSupportedDocuments": "No Supported Documents",
+      "selectDocumentsToAnalyze": "Select Documents To Analyze"
     },
     "modal": {
       "batchProcessDocuments": "Toplu Döküman İşlemi",
@@ -3009,7 +3016,8 @@
     "showing": "Gösterilen",
     "of": "/",
     "previous": "Önceki",
-    "next": "Sonraki"
+    "next": "Sonraki",
+    "headersSaved": "Headers Saved"
   },
   "jsonViewer": {
     "selected": "seçili",
@@ -4600,5 +4608,14 @@
   "content-type": "İçerik Tipi",
   "auth-token": "Kimlik Doğrulama Tokenı",
   "asb_token": "ASB Tokenı",
-  "Retry-After": "Tekrar Dene"
+  "Retry-After": "Tekrar Dene",
+  "admin:leave": "Admin:leave",
+  "OK": "O K",
+  "Services:": "Services:",
+  "Paths:": "Paths:",
+  "URLs:": "U R Ls:",
+  "all": "All",
+  "questions": "Questions",
+  "citations": "Citations",
+  "transforms": "Transforms"
 }

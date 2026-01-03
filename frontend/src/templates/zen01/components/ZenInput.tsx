@@ -1,12 +1,13 @@
 'use client';
 
 import React, { useRef, ChangeEvent } from 'react';
-import { Send, Paperclip, X, FileText } from 'lucide-react';
+import { Send, Paperclip, X, FileText, Mic, Square, Loader2 } from 'lucide-react';
+import { useVoiceRecording } from '@/lib/hooks/use-voice-recording';
 import type { ZenInputProps } from '../types';
 
 /**
  * Zen01 Input Component
- * Floating input area with textarea, PDF upload, and send button
+ * Floating input area with textarea, PDF upload, voice input, and send button
  */
 export const ZenInput: React.FC<ZenInputProps> = ({
   value,
@@ -18,8 +19,28 @@ export const ZenInput: React.FC<ZenInputProps> = ({
   pdfSettings,
   pdfFile,
   onPdfSelect,
+  voiceSettings,
 }) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Voice recording hook
+  const {
+    isRecording,
+    isTranscribing,
+    recordingDuration,
+    startRecording,
+    stopRecording,
+  } = useVoiceRecording({
+    maxDurationSeconds: voiceSettings?.maxRecordingSeconds || 60,
+    onTranscription: (text) => {
+      if (text) {
+        onChange(value ? `${value} ${text}` : text);
+      }
+    },
+    onError: (error) => {
+      console.error('[ZenInput] Voice recording error:', error);
+    }
+  });
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -120,15 +141,45 @@ export const ZenInput: React.FC<ZenInputProps> = ({
           {pdfSettings?.enabled && (
             <button
               onClick={handlePaperclipClick}
-              disabled={isLoading || !!pdfFile}
+              disabled={isLoading || !!pdfFile || isRecording}
               className={`p-2 rounded-lg transition-colors ${
                 pdfFile
-                  ? 'text-cyan-400 bg-cyan-500/20 cursor-not-allowed'
-                  : 'text-slate-400 hover:text-cyan-400 hover:bg-cyan-500/10'
+                  ? 'text-cyan-600 dark:text-cyan-400 bg-cyan-100 dark:bg-cyan-500/20 cursor-not-allowed'
+                  : 'text-slate-500 dark:text-slate-400 hover:text-cyan-600 dark:hover:text-cyan-400 hover:bg-cyan-100 dark:hover:bg-cyan-500/10'
               } disabled:opacity-50`}
               title={pdfFile ? 'PDF eklendi' : 'PDF ekle'}
             >
               <Paperclip className="h-5 w-5" />
+            </button>
+          )}
+
+          {/* Mic button - only visible when voice input is enabled */}
+          {voiceSettings?.enableVoiceInput && (
+            <button
+              onClick={isRecording ? stopRecording : startRecording}
+              disabled={isLoading || isTranscribing}
+              className={`p-2 rounded-lg transition-colors ${
+                isRecording
+                  ? 'text-rose-500 dark:text-rose-400 bg-rose-100 dark:bg-rose-500/20 animate-pulse'
+                  : isTranscribing
+                    ? 'text-cyan-500 dark:text-cyan-400 bg-cyan-100 dark:bg-cyan-500/20'
+                    : 'text-slate-500 dark:text-slate-400 hover:text-cyan-600 dark:hover:text-cyan-400 hover:bg-cyan-100 dark:hover:bg-cyan-500/10'
+              } disabled:opacity-50`}
+              title={
+                isRecording
+                  ? `Kaydı durdur (${recordingDuration}s)`
+                  : isTranscribing
+                    ? 'Metne çevriliyor...'
+                    : 'Sesle mesaj gönder'
+              }
+            >
+              {isRecording ? (
+                <Square className="h-5 w-5" />
+              ) : isTranscribing ? (
+                <Loader2 className="h-5 w-5 animate-spin" />
+              ) : (
+                <Mic className="h-5 w-5" />
+              )}
             </button>
           )}
 
@@ -137,14 +188,23 @@ export const ZenInput: React.FC<ZenInputProps> = ({
             value={value}
             onChange={(e) => onChange(e.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder={pdfFile ? 'Bu PDF hakkında sorunuzu yazın...' : (placeholder || 'Ask anything...')}
+            placeholder={
+              isRecording
+                ? `Kayıt yapılıyor... (${recordingDuration}s)`
+                : isTranscribing
+                  ? 'Metne çevriliyor...'
+                  : pdfFile
+                    ? 'Bu PDF hakkında sorunuzu yazın...'
+                    : (placeholder || 'Ask anything...')
+            }
             rows={1}
-            className="flex-1 bg-transparent border-none text-cyan-100 placeholder:text-slate-500 resize-none focus:outline-none focus:ring-0 py-2 px-3 text-sm"
+            disabled={isRecording || isTranscribing}
+            className="flex-1 bg-transparent border-none text-slate-800 dark:text-cyan-100 placeholder:text-slate-400 dark:placeholder:text-slate-500 resize-none focus:outline-none focus:ring-0 py-2 px-3 text-sm disabled:opacity-50"
             style={{ maxHeight: '120px' }}
           />
           <button
             onClick={handleSend}
-            disabled={(!value.trim() && !pdfFile) || isLoading}
+            disabled={(!value.trim() && !pdfFile) || isLoading || isRecording}
             className="zen01-send-btn"
             aria-label="Send message"
           >

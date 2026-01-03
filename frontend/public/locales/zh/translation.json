@@ -172,6 +172,77 @@
     "error": {
       "title": "错误",
       "description": "无法保存设置"
+    },
+    "questionPatterns": {
+      "title": "[AUTO] Question Patterns",
+      "editTitle": "[AUTO] Edit Pattern: {{name}}",
+      "addTitle": "[AUTO] Add New Pattern",
+      "nameLabel": "[AUTO] Pattern Name",
+      "namePlaceholder": "[AUTO] e.g., emlak, vergi, saglik",
+      "priorityLabel": "[AUTO] Priority (lower = higher)",
+      "keywordsLabel": "[AUTO] Keywords (pipe-separated regex)",
+      "keywordsPlaceholder": "[AUTO] e.g., satılık|kiralık|daire|konut",
+      "keywordsHelp": "[AUTO] Use | to separate keywords. These match content text.",
+      "titleKeywordsLabel": "[AUTO] Title Keywords (optional)",
+      "titleKeywordsPlaceholder": "[AUTO] e.g., satılık|arsa",
+      "titleKeywordsHelp": "[AUTO] Additional keywords to match in titles only.",
+      "defaultQuestionLabel": "[AUTO] Default Question Template",
+      "defaultQuestionPlaceholder": "[AUTO] {topic} hakkında bilgi verir misiniz?",
+      "defaultQuestionHelp": "[AUTO] Use {topic} as placeholder. Used when no combination matches.",
+      "combinationsLabel": "[AUTO] Question Combinations",
+      "combinationsHelp": "[AUTO] Define specific questions when certain secondary keywords are found. Secondary keywords: fiyat, metrekare, konum, ozellik, oran, sure, basvuru, muafiyet",
+      "addPattern": "[AUTO] Add Pattern",
+      "resetDefaults": "[AUTO] Reset Defaults",
+      "deleteConfirm": "[AUTO] Delete \"{{name}}\"?"
+    },
+    "llm": {
+      "title": "[AUTO] LLM Settings",
+      "providerConfigTitle": "[AUTO] API Provider Configuration",
+      "activeServiceProvidersTitle": "[AUTO] Active Service Providers",
+      "llmProviderLabel": "[AUTO] LLM Provider",
+      "llmModelLabel": "[AUTO] LLM Model",
+      "selectProviderPlaceholder": "[AUTO] Select LLM provider",
+      "selectModelPlaceholder": "[AUTO] Select model",
+      "enterApiKey": "[AUTO] Enter API key",
+      "validateKeyHelp": "[AUTO] Enter API key for each provider and test until you see the green checkmark.",
+      "validateFirst": "[AUTO] Validate API key first",
+      "notValidated": "[AUTO] API key not validated",
+      "providerNotValidated": "[AUTO] Provider Not Validated",
+      "validateKeyFirstError": "[AUTO] Please validate the {{provider}} API key first",
+      "providerUpdatedSuccess": "[AUTO] LLM provider updated successfully",
+      "providerUpdateFailed": "[AUTO] Failed to update provider",
+      "modelUpdatedSuccess": "[AUTO] Model updated successfully",
+      "modelUpdateFailed": "[AUTO] Failed to update model",
+      "apiDocsTitle": "[AUTO] API Documentation",
+      "apiDocsDescription": "[AUTO] Explore and test your API endpoints using the interactive Swagger documentation.",
+      "openSwagger": "[AUTO] Open Swagger UI",
+      "downloadSpec": "[AUTO] Download OpenAPI Spec",
+      "swaggerUnavailable": "[AUTO] Swagger documentation is not available. Please check your backend configuration.",
+      "active": "[AUTO] Active",
+      "inactive": "[AUTO] Inactive"
+    },
+    "rag": {
+      "title": "[AUTO] RAG Configuration",
+      "resetDefaults": "[AUTO] Reset to Defaults",
+      "searchParameters": "[AUTO] Search Parameters",
+      "processingParameters": "[AUTO] Processing Parameters",
+      "searchOptions": "[AUTO] Search Options",
+      "dataSourcePriorities": "[AUTO] Data Source Priorities",
+      "similarityThreshold": "[AUTO] Similarity Threshold",
+      "similarityHelp": "[AUTO] Minimum similarity score for search results (0-1). Lower = more results, but less relevant.",
+      "minResults": "[AUTO] Min Results",
+      "minResultsHelp": "[AUTO] Initial number of sources to display (0 = citations off)",
+      "maxResults": "[AUTO] Max Results",
+      "maxResultsHelp": "[AUTO] Total sources to fetch from database (0 = citations off)",
+      "batchSize": "[AUTO] Batch Size",
+      "batchSizeHelp": "[AUTO] Number of items to load when clicking \"Load More\" (recommended: 3-5)",
+      "summaryMaxLength": "[AUTO] Summary Max Length",
+      "summaryMaxLengthHelp": "[AUTO] Maximum characters for AI-generated summaries (recommended: 800-1200 for markdown formatting)",
+      "enableHybridSearch": "[AUTO] Enable Hybrid Search",
+      "hybridSearchHelp": "[AUTO] When enabled, combines semantic similarity with keyword search for better results",
+      "enableKeywordBoost": "[AUTO] Enable Keyword Boost",
+      "keywordBoostHelp": "[AUTO] Boosts exact keyword matches in search results. Highlighted keywords appear in yellow tags.",
+      "citationWarning": "[AUTO] Citations are disabled. The system will skip semantic search and only generate a direct summary response, improving performance significantly."
     }
   },
   "header": {
@@ -529,7 +600,11 @@
       "tokenUsage": "[AUTO] Token Usage",
       "cost": "[AUTO] Cost",
       "avgMessagesPerSession": "[AUTO] Avg Messages per Session",
-      "performanceMetric": "[AUTO] performance metric"
+      "performanceMetric": "[AUTO] performance metric",
+      "totalConversations": "[AUTO] Total Conversations",
+      "totalMessages": "[AUTO] Total Messages",
+      "avgPerSession": "[AUTO] Avg Per Session",
+      "totalEmbeddings": "[AUTO] Total Embeddings"
     },
     "system": {
       "information": "[AUTO] System Information",
@@ -1445,7 +1520,10 @@
       "physicalFiles": "[AUTO] Physical Files",
       "today": "[AUTO] today",
       "pending": "[AUTO] pending",
-      "notInDb": "[AUTO] not in DB"
+      "notInDb": "[AUTO] not in DB",
+      "analyzing": "[AUTO] Analyzing",
+      "analyzed": "[AUTO] Analyzed",
+      "failed": "[AUTO] Failed"
     },
     "upload": {
       "dropFiles": "[AUTO] Drop files here",
@@ -1470,7 +1548,8 @@
       "alreadyInDatabase": "[AUTO] Already in Database",
       "deleteFromDisk": "[AUTO] Delete from disk & DB",
       "deleteFromDiskOnly": "[AUTO] Delete from disk",
-      "filterFiles": "[AUTO] [MISSING] filter Files"
+      "filterFiles": "[AUTO] [MISSING] filter Files",
+      "notInDatabase": "[AUTO] Not in DB"
     },
     "search": {
       "searchDocuments": "[AUTO] Search documents...",
@@ -1530,7 +1609,12 @@
       "error": "[AUTO] Error",
       "transformFailed": "[AUTO] Batch transform failed",
       "embedFailed": "[AUTO] Batch embedding failed",
-      "processFailed": "[AUTO] Batch processing failed"
+      "processFailed": "[AUTO] Batch processing failed",
+      "selectPdfToAnalyze": "[AUTO] Select PDF documents to analyze",
+      "analyzing": "[AUTO] Analyzing documents...",
+      "analyzeComplete": "[AUTO] Analysis Complete",
+      "noSupportedDocuments": "[AUTO] No Supported Documents",
+      "selectDocumentsToAnalyze": "[AUTO] Select Documents To Analyze"
     },
     "modal": {
       "batchProcessDocuments": "[AUTO] Batch Process Documents",
@@ -1554,7 +1638,9 @@
       "transform": "[AUTO] Transform",
       "embed": "[AUTO] Embed",
       "deleteSelected": "[AUTO] Are you sure you want to delete {count} documents?",
-      "deleteSelectedDocuments": "[AUTO] Delete selected documents"
+      "deleteSelectedDocuments": "[AUTO] Delete selected documents",
+      "analyze": "[AUTO] Analyze",
+      "analyzeTooltip": "[AUTO] Extract text from PDFs (OCR if needed) before embedding"
     },
     "toast": {
       "authenticationError": "[AUTO] Authentication Error",
@@ -1648,6 +1734,28 @@
       "success": "[AUTO] Success",
       "errors": "[AUTO] Errors",
       "avgConfidenceLabel": "[AUTO] Avg Confidence"
+    },
+    "loadMore": "[AUTO] Load More",
+    "remaining": "[AUTO] remaining",
+    "embedding": {
+      "title": "[AUTO] Embedding Process",
+      "processed": "[AUTO] Processed",
+      "tokens": "[AUTO] Tokens",
+      "speed": "[AUTO] Speed",
+      "remaining": "[AUTO] Remaining",
+      "calculating": "[AUTO] Calculating...",
+      "pause": "[AUTO] Pause",
+      "resume": "[AUTO] Resume",
+      "stop": "[AUTO] Stop",
+      "paused": "[AUTO] Paused",
+      "pausedDescription": "[AUTO] Embedding process paused",
+      "resumed": "[AUTO] Resumed",
+      "resumedDescription": "[AUTO] Embedding process resumed",
+      "stopped": "[AUTO] Stopped",
+      "stoppedDescription": "[AUTO] Embedding process stopped",
+      "pauseFailed": "[AUTO] Failed to pause",
+      "resumeFailed": "[AUTO] Failed to resume",
+      "stopFailed": "[AUTO] Failed to stop"
     }
   },
   "crawls": {
@@ -2712,7 +2820,8 @@
     "showing": "[AUTO] Showing",
     "of": "[AUTO] of",
     "previous": "[AUTO] Previous",
-    "next": "[AUTO] Next"
+    "next": "[AUTO] Next",
+    "headersSaved": "[AUTO] Headers Saved"
   },
   "jsonViewer": {
     "selected": "[AUTO] selected",
@@ -3035,7 +3144,13 @@
       "help": "[AUTO] Press Enter to send, Shift+Enter for new line"
     },
     "messageCount": "[AUTO] {{count}} messages",
-    "messagesLabel": "[AUTO] messages"
+    "messagesLabel": "[AUTO] messages",
+    "followUp": "[AUTO] Related questions",
+    "skeleton": {
+      "searching": "[AUTO] Searching sources...",
+      "generating": "[AUTO] Generating response...",
+      "processing": "[AUTO] Processing..."
+    }
   },
   "systemMonitor": {
     "title": "[AUTO] System Monitor",
@@ -4304,5 +4419,14 @@
   "content-type": "[AUTO] [MISSING] content-type",
   "auth-token": "[AUTO] [MISSING] auth-token",
   "asb_token": "[AUTO] [MISSING] asb_token",
-  "Retry-After": "[AUTO] [MISSING] Retry- After"
+  "Retry-After": "[AUTO] [MISSING] Retry- After",
+  "admin:leave": "[AUTO] Admin:leave",
+  "OK": "[AUTO] O K",
+  "Services:": "[AUTO] Services:",
+  "Paths:": "[AUTO] Paths:",
+  "URLs:": "[AUTO] U R Ls:",
+  "all": "[AUTO] All",
+  "questions": "[AUTO] Questions",
+  "citations": "[AUTO] Citations",
+  "transforms": "[AUTO] Transforms"
 }

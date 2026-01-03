@@ -692,7 +692,11 @@
       "tokenUsage": "Token Usage",
       "cost": "Cost",
       "avgMessagesPerSession": "Avg Messages per Session",
-      "performanceMetric": "performance metric"
+      "performanceMetric": "performance metric",
+      "totalConversations": "Total Conversations",
+      "totalMessages": "Total Messages",
+      "avgPerSession": "Avg Per Session",
+      "totalEmbeddings": "Total Embeddings"
     },
     "system": {
       "information": "System Information",
@@ -1540,7 +1544,8 @@
       "ocrProcessed": "OCR Processed",
       "physicalFiles": "Physical Files",
       "today": "today",
-      "notInDb": "not in DB"
+      "notInDb": "not in DB",
+      "failed": "Failed"
     },
     "upload": {
       "dropFiles": "Drop files here",
@@ -1631,7 +1636,9 @@
       "error": "Error",
       "transformFailed": "Batch transform failed",
       "embedFailed": "Batch embedding failed",
-      "processFailed": "Batch processing failed"
+      "processFailed": "Batch processing failed",
+      "noSupportedDocuments": "No Supported Documents",
+      "selectDocumentsToAnalyze": "Select Documents To Analyze"
     },
     "modal": {
       "batchProcessDocuments": "Batch Process Documents",
@@ -2801,7 +2808,8 @@
     "showing": "Showing",
     "of": "of",
     "previous": "Previous",
-    "next": "Next"
+    "next": "Next",
+    "headersSaved": "Headers Saved"
   },
   "jsonViewer": {
     "selected": "selected",
@@ -4384,5 +4392,14 @@
   "content-type": "[MISSING] content-type",
   "auth-token": "[MISSING] auth-token",
   "asb_token": "[MISSING] asb_token",
-  "Retry-After": "[MISSING] Retry- After"
+  "Retry-After": "[MISSING] Retry- After",
+  "admin:leave": "Admin:leave",
+  "OK": "O K",
+  "Services:": "Services:",
+  "Paths:": "Paths:",
+  "URLs:": "U R Ls:",
+  "all": "All",
+  "questions": "Questions",
+  "citations": "Citations",
+  "transforms": "Transforms"
 }

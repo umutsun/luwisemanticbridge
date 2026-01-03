@@ -34,11 +34,11 @@ export const ZenHeader: React.FC<ZenHeaderProps> = ({
             <MessageSquare className="h-5 w-5 text-white" />
           </div>
           <div>
-            <h1 className="text-lg font-semibold">
+            <h1 className="text-lg font-semibold text-slate-800 dark:text-slate-100">
               {chatbotSettings.title || 'Zen Assistant'}
             </h1>
             {chatbotSettings.subtitle && (
-              <p className="text-xs opacity-60">{chatbotSettings.subtitle}</p>
+              <p className="text-xs text-slate-500 dark:text-slate-400">{chatbotSettings.subtitle}</p>
             )}
           </div>
         </div>
@@ -83,15 +83,15 @@ export const ZenHeader: React.FC<ZenHeaderProps> = ({
             >
               <DropdownMenuItem
                 onClick={onClearChat}
-                className="zen01-dropdown-item cursor-pointer"
+                className="zen01-dropdown-item cursor-pointer text-slate-700 dark:text-slate-200"
               >
                 <Trash2 className="h-4 w-4 mr-2" />
                 Clear Chat
               </DropdownMenuItem>
-              <DropdownMenuSeparator className="bg-[#1e3a5f]/50 dark:bg-[#1e3a5f]/50 bg-slate-200" />
+              <DropdownMenuSeparator className="bg-slate-200 dark:bg-[#1e3a5f]/50" />
               <DropdownMenuItem
                 onClick={onLogout}
-                className="text-rose-500 hover:text-rose-600 dark:text-rose-400 dark:hover:text-rose-300 cursor-pointer"
+                className="text-rose-600 hover:text-rose-700 dark:text-rose-400 dark:hover:text-rose-300 cursor-pointer"
               >
                 <LogOut className="h-4 w-4 mr-2" />
                 Logout

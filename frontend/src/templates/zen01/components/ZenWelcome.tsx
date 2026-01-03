@@ -25,7 +25,7 @@ export const ZenWelcome: React.FC<ZenWelcomeProps> = ({
       <h1 className="zen01-welcome-title">
         {chatbotSettings.greeting || t('chat.greeting', 'Merhaba')}, {displayName}
       </h1>
-      <p className="zen01-welcome-subtitle">
+      <p className="zen01-welcome-subtitle text-slate-600 dark:text-slate-400">
         {chatbotSettings.welcomeMessage || t('chat.welcomeMessage', 'Size nasil yardimci olabilirim?')}
       </p>
 
@@ -37,7 +37,7 @@ export const ZenWelcome: React.FC<ZenWelcomeProps> = ({
               {[1, 2, 3].map((i) => (
                 <div
                   key={i}
-                  className="h-10 w-32 rounded-full bg-cyan-500/10 animate-pulse"
+                  className="h-10 w-32 rounded-full bg-cyan-200/30 dark:bg-cyan-500/10 animate-pulse"
                 />
               ))}
             </div>
