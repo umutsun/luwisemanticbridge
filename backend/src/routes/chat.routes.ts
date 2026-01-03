@@ -1093,9 +1093,12 @@ router.get('/api/v2/chat/voice-settings', authenticateToken, async (req: Authent
   try {
     // Check multiple sources for voice settings:
     // 1. ragSettings.enableVoiceInput/Output (RAG Settings tab)
-    // 2. chatbot.enableVoiceInput/Output (legacy/chatbot JSON)
+    // 2. voiceSettings.enableVoiceInput/Output (Voice Settings tab)
+    // 3. chatbot.enableVoiceInput/Output (legacy/chatbot JSON)
     const ragVoiceInput = await settingsService.getSetting('ragSettings.enableVoiceInput');
     const ragVoiceOutput = await settingsService.getSetting('ragSettings.enableVoiceOutput');
+    const voiceVoiceInput = await settingsService.getSetting('voiceSettings.enableVoiceInput');
+    const voiceVoiceOutput = await settingsService.getSetting('voiceSettings.enableVoiceOutput');
 
     let chatbotVoiceInput = false;
     let chatbotVoiceOutput = false;
@@ -1112,17 +1115,21 @@ router.get('/api/v2/chat/voice-settings', authenticateToken, async (req: Authent
       }
     }
 
-    // Enable if EITHER source says true
-    const enableVoiceInput = ragVoiceInput === 'true' || ragVoiceInput === true || chatbotVoiceInput;
-    const enableVoiceOutput = ragVoiceOutput === 'true' || ragVoiceOutput === true || chatbotVoiceOutput;
+    // Enable if ANY source says true
+    const enableVoiceInput = ragVoiceInput === 'true' || ragVoiceInput === true ||
+                            voiceVoiceInput === 'true' || voiceVoiceInput === true ||
+                            chatbotVoiceInput;
+    const enableVoiceOutput = ragVoiceOutput === 'true' || ragVoiceOutput === true ||
+                             voiceVoiceOutput === 'true' || voiceVoiceOutput === true ||
+                             chatbotVoiceOutput;
 
-    // Additional voice settings (can be extended later)
-    const ttsProvider = 'openai';
-    const ttsVoice = 'alloy';
-    const ttsSpeed = 1.0;
-    const maxRecordingSeconds = 60;
+    // Get additional voice settings from voiceSettings prefix
+    const ttsProvider = await settingsService.getSetting('voiceSettings.ttsProvider') || 'openai';
+    const ttsVoice = await settingsService.getSetting('voiceSettings.ttsVoice') || 'alloy';
+    const ttsSpeed = parseFloat(await settingsService.getSetting('voiceSettings.ttsSpeed') || '1.0');
+    const maxRecordingSeconds = parseInt(await settingsService.getSetting('voiceSettings.maxRecordingSeconds') || '60');
 
-    console.log('[Voice Settings] Loaded:', { enableVoiceInput, enableVoiceOutput, ragVoiceInput, ragVoiceOutput });
+    console.log('[Voice Settings] Loaded:', { enableVoiceInput, enableVoiceOutput, ragVoiceInput, voiceVoiceInput });
 
     res.json({
       enableVoiceInput,
