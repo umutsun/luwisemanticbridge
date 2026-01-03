@@ -40,10 +40,9 @@ const nextConfig = {
   // Experimental features for better performance
   experimental: {
     optimizeCss: true,
+    // External packages for server components (moved here in Next.js 15)
+    serverExternalPackages: ['puppeteer', 'cheerio'],
   },
-
-  // External packages for server components
-  serverExternalPackages: ['puppeteer', 'cheerio'],
 
   // Rewrite API requests to backend
   async rewrites() {
