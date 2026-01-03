@@ -1422,44 +1422,73 @@ router.get('/metrics', async (req: Request, res: Response) => {
       }
     } catch (err) { /* ignore */ }
 
-    // Get live token usage and chat stats
+    // Get live token usage and chat stats with Redis cache
     let liveStats = {
       totalTokensUsed: 0,
       totalCost: 0,
       totalMessages: 0,
       totalConversations: 0,
-      totalUsers: 0
+      totalUsers: 0,
+      chatTokens: 0,
+      chatCost: 0
     };
+
     try {
-      const [tokenResult, msgResult, convResult, userResult] = await Promise.all([
-        lsembPool.query(`
-          WITH token_summary AS (
-            -- Unified embeddings (RAG migrations)
-            SELECT COALESCE(SUM(tokens_used), 0) as tokens, 0::numeric as cost
-            FROM unified_embeddings WHERE tokens_used IS NOT NULL
-            UNION ALL
-            -- Document embeddings (document processing)
-            SELECT COALESCE(SUM(tokens_used), 0), 0
-            FROM document_embeddings WHERE tokens_used IS NOT NULL
-            UNION ALL
-            -- Documents (OCR, analysis with cost tracking)
-            SELECT COALESCE(SUM(tokens_used), 0), COALESCE(SUM(cost_usd), 0)
-            FROM documents WHERE tokens_used IS NOT NULL OR cost_usd IS NOT NULL
-          )
-          SELECT SUM(tokens) as total_tokens, SUM(cost) as total_cost FROM token_summary
-        `),
-        lsembPool.query('SELECT COUNT(*) as count FROM messages'),
-        lsembPool.query('SELECT COUNT(*) as count FROM conversations'),
-        lsembPool.query('SELECT COUNT(*) as count FROM users')
-      ]);
-      liveStats = {
-        totalTokensUsed: parseInt(tokenResult.rows[0]?.total_tokens || 0),
-        totalCost: parseFloat(tokenResult.rows[0]?.total_cost || 0),
-        totalMessages: parseInt(msgResult.rows[0]?.count || 0),
-        totalConversations: parseInt(convResult.rows[0]?.count || 0),
-        totalUsers: parseInt(userResult.rows[0]?.count || 0)
-      };
-    } catch (err) { /* ignore - tables might not exist */ }
+      // Try Redis cache first (5 second TTL for live feel)
+      const cachedStats = await redis.get('dashboard:liveStats');
+      if (cachedStats) {
+        liveStats = JSON.parse(cachedStats);
+      } else {
+        // Query all token sources
+        const [tokenResult, msgResult, convResult, userResult, chatTokenResult] = await Promise.all([
+          lsembPool.query(`
+            WITH token_summary AS (
+              -- Unified embeddings (RAG migrations)
+              SELECT COALESCE(SUM(tokens_used), 0) as tokens, 0::numeric as cost
+              FROM unified_embeddings WHERE tokens_used IS NOT NULL
+              UNION ALL
+              -- Document embeddings (document processing)
+              SELECT COALESCE(SUM(tokens_used), 0), 0
+              FROM document_embeddings WHERE tokens_used IS NOT NULL
+              UNION ALL
+              -- Documents (OCR, analysis with cost tracking)
+              SELECT COALESCE(SUM(tokens_used), 0), COALESCE(SUM(cost_usd), 0)
+              FROM documents WHERE tokens_used IS NOT NULL OR cost_usd IS NOT NULL
+            )
+            SELECT SUM(tokens) as total_tokens, SUM(cost) as total_cost FROM token_summary
+          `),
+          lsembPool.query('SELECT COUNT(*) as count FROM messages'),
+          lsembPool.query('SELECT COUNT(*) as count FROM conversations'),
+          lsembPool.query('SELECT COUNT(*) as count FROM users'),
+          // Chat messages token usage
+          lsembPool.query(`
+            SELECT
+              COALESCE(SUM(total_tokens), 0) as chat_tokens,
+              COALESCE(SUM(cost_usd), 0) as chat_cost
+            FROM messages
+            WHERE total_tokens > 0
+          `)
+        ]);
+
+        const chatTokens = parseInt(chatTokenResult.rows[0]?.chat_tokens || 0);
+        const chatCost = parseFloat(chatTokenResult.rows[0]?.chat_cost || 0);
+
+        liveStats = {
+          totalTokensUsed: parseInt(tokenResult.rows[0]?.total_tokens || 0) + chatTokens,
+          totalCost: parseFloat(tokenResult.rows[0]?.total_cost || 0) + chatCost,
+          totalMessages: parseInt(msgResult.rows[0]?.count || 0),
+          totalConversations: parseInt(convResult.rows[0]?.count || 0),
+          totalUsers: parseInt(userResult.rows[0]?.count || 0),
+          chatTokens,
+          chatCost
+        };
+
+        // Cache for 5 seconds (live feel but reduces DB load)
+        await redis.setex('dashboard:liveStats', 5, JSON.stringify(liveStats));
+      }
+    } catch (err) {
+      console.error('Error fetching live stats:', err);
+    }
 
     const dashboardData = {
       systemMetrics: {
@@ -1512,13 +1541,15 @@ router.get('/metrics', async (req: Request, res: Response) => {
         cacheHitRate: metrics.performance.cacheHitRate,
         totalDocuments: metrics.performance.totalDocuments
       },
-      // Live usage stats - updated in real-time
+      // Live usage stats - updated in real-time (5s Redis cache)
       liveStats: {
         totalTokensUsed: liveStats.totalTokensUsed,
         totalCost: liveStats.totalCost,
         totalMessages: liveStats.totalMessages,
         totalConversations: liveStats.totalConversations,
-        totalUsers: liveStats.totalUsers
+        totalUsers: liveStats.totalUsers,
+        chatTokens: liveStats.chatTokens,
+        chatCost: liveStats.chatCost
       },
       services: metrics.services,
       pipelines: metrics.pipelines,
