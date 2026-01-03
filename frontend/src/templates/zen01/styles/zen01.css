@@ -39,7 +39,8 @@
    ============================================ */
 [data-theme="zen01"][data-mode="light"],
 .zen01-container.light[data-theme="zen01"],
-.zen01-container[data-mode="light"] {
+.zen01-container[data-mode="light"],
+.zen01-container.light {
   /* Light Mode Colors */
   --zen-deep: #f8fafc;
   --zen-mid: #f1f5f9;

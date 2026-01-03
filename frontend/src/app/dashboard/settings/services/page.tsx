@@ -86,7 +86,7 @@ export default function ServicesPage() {
   const [showServiceDialog, setShowServiceDialog] = useState(false);
   const [logs, setLogs] = useState<string[]>([]);
   const [showPgaiModal, setShowPgaiModal] = useState(false);
-  const [pgaiWorkers, setPgaiWorkers] = useState<Array<{id: number, name: string, status: string, table?: string}>>([]);
+  const [pgaiWorkers, setPgaiWorkers] = useState<Array<{ id: number, name: string, status: string, table?: string }>>([]);
   const [vectorTables, setVectorTables] = useState<string[]>([]);
 
   // DevOps hooks
@@ -255,80 +255,80 @@ export default function ServicesPage() {
         <div className="lg:col-span-2 space-y-4">
           {/* Services Grid */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-        {services.map((service) => {
-          const Icon = service.icon;
-          return (
-            <Card
-              key={service.name}
-              className={`relative overflow-hidden transition-all hover:shadow-md cursor-pointer
+            {services.map((service) => {
+              const Icon = service.icon;
+              return (
+                <Card
+                  key={service.name}
+                  className={`relative overflow-hidden transition-all hover:shadow-md cursor-pointer
                 ${activeService === service.name ? 'ring-2 ring-primary' : ''}
                 backdrop-blur-sm dark:bg-card/80 bg-gray-50/50 border-gray-200/60
               `}
-              onClick={() => {
-                setActiveService(service.name);
-                setShowServiceDialog(true);
-              }}
-            >
-              {/* Status indicator line */}
-              <div className={`absolute top-0 left-0 right-0 h-1 ${getStatusColor(service.status)}`} />
+                  onClick={() => {
+                    setActiveService(service.name);
+                    setShowServiceDialog(true);
+                  }}
+                >
+                  {/* Status indicator line */}
+                  <div className={`absolute top-0 left-0 right-0 h-1 ${getStatusColor(service.status)}`} />
 
-              <CardHeader className="pb-2">
-                <div className="flex items-start justify-between">
-                  <div className="flex items-center space-x-2">
-                    <Icon className="h-4 w-4 text-muted-foreground" />
-                    <CardTitle className="text-sm">{service.displayName}</CardTitle>
-                  </div>
-                  <div className="flex items-center gap-1">
-                    {service.name === "pgai" && (
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        className="h-6 w-6 p-0"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setShowPgaiModal(true);
-                        }}
-                        title="Configure Workers"
-                      >
-                        <SettingsIcon className="h-3 w-3" />
-                      </Button>
-                    )}
-                    {getStatusIcon(service.status)}
-                  </div>
-                </div>
-                <CardDescription className="text-xs mt-1">
-                  {service.name === "pgai" && service.workerCount
-                    ? `${service.workerCount} worker${service.workerCount > 1 ? 's' : ''} running`
-                    : service.description}
-                </CardDescription>
-              </CardHeader>
+                  <CardHeader className="pb-2">
+                    <div className="flex items-start justify-between">
+                      <div className="flex items-center space-x-2">
+                        <Icon className="h-4 w-4 text-muted-foreground" />
+                        <CardTitle className="text-sm">{service.displayName}</CardTitle>
+                      </div>
+                      <div className="flex items-center gap-1">
+                        {service.name === "pgai" && (
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="h-6 w-6 p-0"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setShowPgaiModal(true);
+                            }}
+                            title="Configure Workers"
+                          >
+                            <SettingsIcon className="h-3 w-3" />
+                          </Button>
+                        )}
+                        {getStatusIcon(service.status)}
+                      </div>
+                    </div>
+                    <CardDescription className="text-xs mt-1">
+                      {service.name === "pgai" && service.workerCount
+                        ? `${service.workerCount} worker${service.workerCount > 1 ? 's' : ''} running`
+                        : service.description}
+                    </CardDescription>
+                  </CardHeader>
 
-              <CardContent className="pt-0">
-                {/* Service Info */}
-                <div className="space-y-1.5">
-                  {service.port && (
-                    <div className="flex items-center justify-between text-xs">
-                      <span className="text-muted-foreground">Port</span>
-                      <span className="font-mono">{service.port}</span>
+                  <CardContent className="pt-0">
+                    {/* Service Info */}
+                    <div className="space-y-1.5">
+                      {service.port && (
+                        <div className="flex items-center justify-between text-xs">
+                          <span className="text-muted-foreground">Port</span>
+                          <span className="font-mono">{service.port}</span>
+                        </div>
+                      )}
+                      {service.version && (
+                        <div className="flex items-center justify-between text-xs">
+                          <span className="text-muted-foreground">Version</span>
+                          <span>{service.version}</span>
+                        </div>
+                      )}
+                      {/* Type badge for database extensions */}
+                      {["pgai", "pgvectorscale"].includes(service.name) && (
+                        <Badge variant="outline" className="text-[10px] mt-1">
+                          DB Extension
+                        </Badge>
+                      )}
                     </div>
-                  )}
-                  {service.version && (
-                    <div className="flex items-center justify-between text-xs">
-                      <span className="text-muted-foreground">Version</span>
-                      <span>{service.version}</span>
-                    </div>
-                  )}
-                  {/* Type badge for database extensions */}
-                  {["pgai", "pgvectorscale"].includes(service.name) && (
-                    <Badge variant="outline" className="text-[10px] mt-1">
-                      DB Extension
-                    </Badge>
-                  )}
-                </div>
-              </CardContent>
-            </Card>
-          );
-          })}
+                  </CardContent>
+                </Card>
+              );
+            })}
           </div>
         </div>
 
@@ -1121,9 +1121,14 @@ function N8NConfig() {
     fetch('/api/settings?category=n8n')
       .then(res => res.json())
       .then(data => {
+        // Handle both structure types: { n8n: { url: ... } } and { url: ... }
         if (data.n8n) {
           setN8nUrl(data.n8n.url || "http://localhost:5678");
           setApiKey(data.n8n.apiKey || "");
+        } else if (data.url || data.apiKey) {
+          // Direct category response
+          setN8nUrl(data.url || "http://localhost:5678");
+          setApiKey(data.apiKey || "");
         }
       })
       .catch(err => console.error('Failed to load n8n settings:', err));
@@ -2169,17 +2174,16 @@ function DeploymentModal({ isOpen, onOpenChange }: { isOpen: boolean; onOpenChan
               output.map((line, i) => (
                 <div
                   key={i}
-                  className={`${
-                    line.includes('$') ? 'text-cyan-300 font-semibold mt-2' :
-                    line.includes('OK') || line.includes('✓') ? 'text-emerald-400' :
-                    line.includes('FAILED') || line.includes('ERROR') || line.includes('✗') ? 'text-rose-400' :
-                    line.includes('---') ? 'text-blue-300 font-semibold' :
-                    line.includes('Commit:') || line.includes('completed') ? 'text-amber-300' :
-                    line.includes('[WARN]') || line.includes('warn') ? 'text-amber-400' :
-                    line.includes('[ERROR]') || line.includes('error') ? 'text-rose-400' :
-                    line.includes('[INFO]') || line.includes('info') ? 'text-sky-300' :
-                    'text-slate-300'
-                  }`}
+                  className={`${line.includes('$') ? 'text-cyan-300 font-semibold mt-2' :
+                      line.includes('OK') || line.includes('✓') ? 'text-emerald-400' :
+                        line.includes('FAILED') || line.includes('ERROR') || line.includes('✗') ? 'text-rose-400' :
+                          line.includes('---') ? 'text-blue-300 font-semibold' :
+                            line.includes('Commit:') || line.includes('completed') ? 'text-amber-300' :
+                              line.includes('[WARN]') || line.includes('warn') ? 'text-amber-400' :
+                                line.includes('[ERROR]') || line.includes('error') ? 'text-rose-400' :
+                                  line.includes('[INFO]') || line.includes('info') ? 'text-sky-300' :
+                                    'text-slate-300'
+                    }`}
                 >
                   {line}
                 </div>
