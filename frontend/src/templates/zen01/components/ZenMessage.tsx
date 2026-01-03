@@ -433,7 +433,7 @@ export const ZenMessage: React.FC<ZenMessageProps> = ({
                         )}
                         {/* Source Type Badge - at bottom */}
                         <div className="mt-1.5">
-                          <span className="inline-block px-1.5 py-0.5 text-[10px] font-medium bg-slate-100 dark:bg-slate-700/50 text-slate-600 dark:text-slate-300 rounded capitalize">
+                          <span className="zen01-source-badge">
                             {sourceTypeLabel}
                           </span>
                         </div>

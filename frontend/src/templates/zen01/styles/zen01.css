@@ -535,6 +535,30 @@
 }
 
 /* ============================================
+   Source Type Badge (Citation Labels)
+   High contrast for readability
+   ============================================ */
+.zen01-source-badge {
+  display: inline-block;
+  padding: 0.25rem 0.5rem;
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: capitalize;
+  border-radius: 4px;
+  /* Dark mode - cyan theme */
+  background: rgba(6, 182, 212, 0.25);
+  color: #67e8f9;
+  border: 1px solid rgba(6, 182, 212, 0.4);
+}
+
+/* Light mode - darker for contrast */
+.zen01-container.light .zen01-source-badge {
+  background: rgba(8, 145, 178, 0.15);
+  color: #0e7490;
+  border: 1px solid rgba(8, 145, 178, 0.3);
+}
+
+/* ============================================
    Live Indicator
    ============================================ */
 .zen01-live {
