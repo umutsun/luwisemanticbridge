@@ -449,76 +449,39 @@
 }
 
 /* ============================================
-   Marker Highlight for Keywords
-   Hand-drawn style marker with 45deg skew
+   Marker Highlight Box for Keywords
+   Hand-drawn style background box with 45deg skew
    ============================================ */
 .zen01-marker {
   position: relative;
   display: inline;
-  padding: 0.15em 0.2em;
-  margin: 0 0.1em;
-}
-
-.zen01-marker::before {
-  content: '';
-  position: absolute;
-  left: -2px;
-  right: -2px;
-  top: 10%;
-  bottom: 5%;
-  z-index: -1;
+  padding: 0.2em 0.4em;
+  margin: 0 0.15em;
+  /* Background box with skew - hand-drawn look */
   background: linear-gradient(
     135deg,
-    rgba(6, 182, 212, 0.35) 0%,
-    rgba(6, 182, 212, 0.25) 50%,
-    rgba(6, 182, 212, 0.4) 100%
+    rgba(6, 182, 212, 0.30) 0%,
+    rgba(6, 182, 212, 0.22) 100%
   );
-  transform: skewX(-8deg) rotate(-1deg);
-  border-radius: 3px 8px 5px 10px;
-  /* Hand-drawn irregular edge effect */
-  clip-path: polygon(
-    2% 8%,
-    15% 0%,
-    45% 5%,
-    75% 0%,
-    98% 12%,
-    100% 35%,
-    97% 70%,
-    100% 92%,
-    85% 100%,
-    55% 95%,
-    25% 100%,
-    5% 95%,
-    0% 65%,
-    3% 30%
-  );
-}
-
-/* Add subtle brush stroke variation */
-.zen01-marker::after {
-  content: '';
-  position: absolute;
-  left: 0;
-  right: 0;
-  top: 20%;
-  bottom: 15%;
-  z-index: -1;
-  background: rgba(6, 182, 212, 0.15);
-  transform: skewX(-12deg) rotate(0.5deg);
+  transform: skewX(-6deg);
   border-radius: 2px 6px 4px 8px;
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
 }
 
-.zen01-container.light .zen01-marker::before {
+/* Keep text straight while box is skewed */
+.zen01-marker > * {
+  display: inline-block;
+  transform: skewX(6deg);
+}
+
+/* Light mode */
+.zen01-container.light .zen01-marker {
   background: linear-gradient(
     135deg,
-    rgba(8, 145, 178, 0.30) 0%,
-    rgba(8, 145, 178, 0.20) 50%,
-    rgba(8, 145, 178, 0.35) 100%
+    rgba(8, 145, 178, 0.25) 0%,
+    rgba(8, 145, 178, 0.18) 100%
   );
-}
-
-.zen01-container.light .zen01-marker::after {
-  background: rgba(8, 145, 178, 0.12);
 }
 
 /* ============================================
