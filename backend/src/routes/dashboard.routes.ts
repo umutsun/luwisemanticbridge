@@ -1434,9 +1434,17 @@ router.get('/metrics', async (req: Request, res: Response) => {
       const [tokenResult, msgResult, convResult, userResult] = await Promise.all([
         lsembPool.query(`
           WITH token_summary AS (
-            SELECT COALESCE(SUM(tokens_used), 0) as tokens, 0 as cost FROM unified_embeddings WHERE tokens_used IS NOT NULL
+            -- Unified embeddings (RAG migrations)
+            SELECT COALESCE(SUM(tokens_used), 0) as tokens, 0::numeric as cost
+            FROM unified_embeddings WHERE tokens_used IS NOT NULL
             UNION ALL
-            SELECT COALESCE(SUM(tokens_used), 0), COALESCE(SUM(cost_usd), 0) FROM documents WHERE tokens_used IS NOT NULL
+            -- Document embeddings (document processing)
+            SELECT COALESCE(SUM(tokens_used), 0), 0
+            FROM document_embeddings WHERE tokens_used IS NOT NULL
+            UNION ALL
+            -- Documents (OCR, analysis with cost tracking)
+            SELECT COALESCE(SUM(tokens_used), 0), COALESCE(SUM(cost_usd), 0)
+            FROM documents WHERE tokens_used IS NOT NULL OR cost_usd IS NOT NULL
           )
           SELECT SUM(tokens) as total_tokens, SUM(cost) as total_cost FROM token_summary
         `),
