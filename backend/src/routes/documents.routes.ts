@@ -23,21 +23,21 @@ import * as ExcelJS from 'exceljs';
 function stripBOM(buffer: Buffer): Buffer {
   // UTF-8 BOM: EF BB BF
   if (buffer.length >= 3 &&
-      buffer[0] === 0xEF &&
-      buffer[1] === 0xBB &&
-      buffer[2] === 0xBF) {
+    buffer[0] === 0xEF &&
+    buffer[1] === 0xBB &&
+    buffer[2] === 0xBF) {
     return buffer.slice(3);
   }
   // UTF-16 LE BOM: FF FE
   if (buffer.length >= 2 &&
-      buffer[0] === 0xFF &&
-      buffer[1] === 0xFE) {
+    buffer[0] === 0xFF &&
+    buffer[1] === 0xFE) {
     return buffer.slice(2);
   }
   // UTF-16 BE BOM: FE FF
   if (buffer.length >= 2 &&
-      buffer[0] === 0xFE &&
-      buffer[1] === 0xFF) {
+    buffer[0] === 0xFE &&
+    buffer[1] === 0xFF) {
     return buffer.slice(2);
   }
   return buffer;
@@ -95,9 +95,9 @@ function decodeBufferToUTF8(buffer: Buffer): string {
       const decoded = iconv.decode(cleanBuffer, normalizedEncoding);
       // Verify Turkish characters are preserved
       if (decoded.includes('ü') || decoded.includes('ş') || decoded.includes('ğ') ||
-          decoded.includes('ı') || decoded.includes('ö') || decoded.includes('ç') ||
-          decoded.includes('Ü') || decoded.includes('Ş') || decoded.includes('Ğ') ||
-          decoded.includes('İ') || decoded.includes('Ö') || decoded.includes('Ç')) {
+        decoded.includes('ı') || decoded.includes('ö') || decoded.includes('ç') ||
+        decoded.includes('Ü') || decoded.includes('Ş') || decoded.includes('Ğ') ||
+        decoded.includes('İ') || decoded.includes('Ö') || decoded.includes('Ç')) {
         console.log('[Encoding] Turkish characters found, using detected encoding');
         return decoded;
       }
@@ -176,6 +176,7 @@ const getUploadDirectory = (): string => {
 };
 
 // Configure multer for file uploads
+// Configure multer for file uploads with SECURITY hardening
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
     try {
@@ -186,25 +187,17 @@ const storage = multer.diskStorage({
     }
   },
   filename: (req, file, cb) => {
-    // Use original filename directly (overwrite if exists)
-    // This allows duplicate uploads to replace the existing file
-    const uploadDir = getUploadDirectory();
-    const targetPath = path.join(uploadDir, file.originalname);
+    // SECURITY: Use generated unique filename to prevent overwrite and traversal
+    // We still store original filename in DB, but physical file is safe
+    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+    // Sanitize extension to only allow alphanumerics
+    const originalExt = path.extname(file.originalname);
+    const safeExt = originalExt.replace(/[^a-zA-Z0-9.]/g, '').toLowerCase();
 
-    // Check if file exists
-    if (fs.existsSync(targetPath)) {
-      console.log(` Overwriting existing file: ${file.originalname}`);
-      // Delete old file before upload
-      try {
-        fs.unlinkSync(targetPath);
-        console.log(`️ Deleted old file: ${file.originalname}`);
-      } catch (err) {
-        console.error(`️ Failed to delete old file:`, err);
-      }
-    }
+    const safeFilename = `doc-${uniqueSuffix}${safeExt}`;
 
-    // Use original filename as-is
-    cb(null, file.originalname);
+    // Pass the safe filename
+    cb(null, safeFilename);
   }
 });
 
@@ -230,7 +223,7 @@ router.post('/init', async (req: Request, res: Response) => {
   try {
     // First drop the table if it exists to ensure clean state
     await lsembPool.query('DROP TABLE IF EXISTS documents CASCADE');
-    
+
     // Create fresh table with proper structure
     await lsembPool.query(`
       CREATE TABLE documents (
@@ -246,14 +239,14 @@ router.post('/init', async (req: Request, res: Response) => {
       )
     `);
 
-    res.json({ 
-      success: true, 
-      message: 'Documents table initialized' 
+    res.json({
+      success: true,
+      message: 'Documents table initialized'
     });
   } catch (error) {
     console.error('Error initializing documents table:', error);
-    res.status(500).json({ 
-      error: 'Failed to initialize documents table' 
+    res.status(500).json({
+      error: 'Failed to initialize documents table'
     });
   }
 });
@@ -1707,7 +1700,7 @@ function countArrays(obj: any): number {
 router.get('/:id', authenticateToken, async (req: AuthenticatedRequest, res: Response) => {
   try {
     const { id } = req.params;
-    
+
     const result = await lsembPool.query(
       'SELECT * FROM documents WHERE id = $1',
       [id]
@@ -1753,8 +1746,8 @@ router.get('/:id', authenticateToken, async (req: AuthenticatedRequest, res: Res
     });
   } catch (error) {
     console.error('Error fetching document:', error);
-    res.status(500).json({ 
-      error: 'Failed to fetch document' 
+    res.status(500).json({
+      error: 'Failed to fetch document'
     });
   }
 });
@@ -1805,8 +1798,8 @@ router.put('/:id', authenticateToken, async (req: AuthenticatedRequest, res: Res
     });
   } catch (error) {
     console.error('Error updating document:', error);
-    res.status(500).json({ 
-      error: 'Failed to update document' 
+    res.status(500).json({
+      error: 'Failed to update document'
     });
   }
 });
@@ -2011,7 +2004,7 @@ router.delete('/:id/embeddings', authenticateToken, async (req: AuthenticatedReq
 router.post('/search', authenticateToken, async (req: AuthenticatedRequest, res: Response) => {
   try {
     const { query, limit = 5 } = req.body;
-    
+
     if (!query) {
       return res.status(400).json({ error: 'Query is required' });
     }
@@ -2025,8 +2018,8 @@ router.post('/search', authenticateToken, async (req: AuthenticatedRequest, res:
     });
   } catch (error: any) {
     console.error('Error searching documents:', error);
-    res.status(500).json({ 
-      error: error.message || 'Failed to search documents' 
+    res.status(500).json({
+      error: error.message || 'Failed to search documents'
     });
   }
 });
@@ -2142,7 +2135,7 @@ router.post('/bulk-embed', authenticateToken, async (req: AuthenticatedRequest, 
         // Determine document type
         const documentType = document.metadata?.document_type ||
           (document.title.match(/\.(csv|json)$/i) ? 'tabular' :
-           document.title.match(/\.(pdf|doc|docx|md)$/i) ? 'structured' : 'text');
+            document.title.match(/\.(pdf|doc|docx|md)$/i) ? 'structured' : 'text');
 
         console.log(`📄 Embedding document ${docId}: ${document.title} (type: ${documentType})`);
 
@@ -2305,7 +2298,7 @@ router.post('/reindex', authenticateToken, async (req: AuthenticatedRequest, res
         // Determine document type
         const documentType = doc.metadata?.document_type ||
           (doc.title.match(/\.(csv|json)$/i) ? 'tabular' :
-           doc.title.match(/\.(pdf|doc|docx|md)$/i) ? 'structured' : 'text');
+            doc.title.match(/\.(pdf|doc|docx|md)$/i) ? 'structured' : 'text');
 
         // Create new embeddings with contextual processor
         await contextualDocumentProcessor.processAndEmbedDocumentEnhanced(
@@ -2465,8 +2458,8 @@ router.get('/table-creation/progress/:jobId', authenticateToken, async (req: Aut
         const mappedProgress = {
           jobId,
           status: p.status === 'completed' ? 'COMPLETED' :
-                  p.status === 'failed' ? 'FAILED' :
-                  p.status === 'cancelled' ? 'CANCELLED' : 'INSERTING_DATA',
+            p.status === 'failed' ? 'FAILED' :
+              p.status === 'cancelled' ? 'CANCELLED' : 'INSERTING_DATA',
           progress: parseFloat((p.progress || 0).toFixed(2)), // Keep decimal precision for smooth progress
           totalRows: p.total_rows || 0,
           rowsInserted: p.rows_processed || 0,
@@ -2949,8 +2942,8 @@ router.get('/pdf/:documentId', authenticateToken, async (req: AuthenticatedReque
 
     // Check if it's a PDF
     const isPDF = doc.type === 'pdf' ||
-                  doc.file_type === 'application/pdf' ||
-                  doc.title?.toLowerCase().endsWith('.pdf');
+      doc.file_type === 'application/pdf' ||
+      doc.title?.toLowerCase().endsWith('.pdf');
 
     if (!isPDF) {
       return res.status(400).json({ error: 'Document is not a PDF' });

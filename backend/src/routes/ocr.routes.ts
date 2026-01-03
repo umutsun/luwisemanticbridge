@@ -237,9 +237,42 @@ router.post('/process-url', async (req, res) => {
       });
     }
 
+    // SSRF PROTECTION
+    try {
+      const parsedUrl = new URL(imageUrl);
+
+      // 1. Protocol check
+      if (!['http:', 'https:'].includes(parsedUrl.protocol)) {
+        throw new Error('Geçersiz protokol. Sadece HTTP/HTTPS desteklenir.');
+      }
+
+      // 2. Hostname check (Basic blocking of localhost/private IPs)
+      const hostname = parsedUrl.hostname.toLowerCase();
+      if (hostname === 'localhost' ||
+        hostname === '127.0.0.1' ||
+        hostname === '::1' ||
+        hostname.startsWith('192.168.') ||
+        hostname.startsWith('10.') ||
+        hostname.startsWith('172.16.') ||
+        hostname.endsWith('.internal') ||
+        hostname.endsWith('.local')) {
+        throw new Error('Erişim engellendi: Dahili ağ kaynaklarına erişim yasak.');
+      }
+    } catch (validationError: any) {
+      return res.status(400).json({
+        success: false,
+        error: `URL Güvenlik Hatası: ${validationError.message}`
+      });
+    }
+
     // URL'den görsel indir (axios ile)
     const axios = require('axios');
-    const response = await axios.get(imageUrl, { responseType: 'arraybuffer' });
+    const response = await axios.get(imageUrl, {
+      responseType: 'arraybuffer',
+      // Limit download size to prevent DoS
+      maxContentLength: 20 * 1024 * 1024, // 20MB
+      timeout: 10000 // 10s timeout
+    });
 
     const tempFilePath = path.join('uploads/temp-ocr/', `url-${Date.now()}.jpg`);
     await fs.writeFile(tempFilePath, response.data);
@@ -263,10 +296,13 @@ router.post('/process-url', async (req, res) => {
       });
     } finally {
       // Cleanup
-      await fs.unlink(tempFilePath).catch(() => {});
+      await fs.unlink(tempFilePath).catch(() => { });
     }
   } catch (error: any) {
     logger.error('OCR process-url hatası:', error);
+    if (error.code === 'ECONNABORTED') {
+      return res.status(408).json({ success: false, error: 'İstek zaman aşımına uğradı' });
+    }
     res.status(500).json({
       success: false,
       error: error.message

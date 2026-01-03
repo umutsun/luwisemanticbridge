@@ -242,45 +242,43 @@ router.post('/ssh/execute', async (req: Request, res: Response) => {
     return res.status(400).json({ success: false, error: 'Command is required' });
   }
 
-  // Whitelist: Safe commands that should always be allowed
+  // Whitelist: Safe commands with STRICT anchoring
+  // Must match the entire string to prevent appending malicious commands
   const safeCommandPatterns = [
-    /^tail\s+-n\s+\d+\s+\/root\/\.pm2\/logs\//,  // PM2 log reading
-    /^cat\s+\/root\/\.pm2\/logs\//,              // PM2 log cat
-    /^pm2\s+(list|jlist|status|logs)/,           // PM2 status commands
-    /^git\s+(status|log|branch|pull)/,           // Git read commands
-    /^df\s+-h/,                                   // Disk usage
-    /^free\s+-/,                                  // Memory usage
-    /^uptime/,                                    // Uptime
-    /^systemctl\s+status/,                        // Service status
-    /^nginx\s+-t/,                                // Nginx test config
+    /^tail\s+-n\s+\d+\s+\/root\/\.pm2\/logs\/[\w.\-]+$/,  // strict file path
+    /^cat\s+\/root\/\.pm2\/logs\/[\w.\-]+$/,              // strict file path
+    /^pm2\s+(list|jlist|status|logs)(\s+[\w.\-]+)*$/,     // strict pm2
+    /^git\s+(status|log|branch|pull)(\s+[\w.\-\/]+)*$/,   // strict git
+    /^df\s+-h$/,                                          // exact match
+    /^free\s+-[mh]$/,                                     // strict flags
+    /^uptime$/,                                           // exact match
+    /^systemctl\s+status(\s+[\w.\-]+)?$/,                 // strict service name
+    /^nginx\s+-t$/,                                       // exact match
   ];
 
-  // Check if command matches safe patterns (skip security check)
+  // Shell metacharacters that must NOT be present (Defense in Depth)
+  const dangerousChars = /[;|&`$()<>]/;
+
+  if (dangerousChars.test(command)) {
+    console.log(`[DevOps] SSH Execute - Command blocked due to metacharacters: ${command}`);
+    return res.status(403).json({
+      success: false,
+      error: 'Security Alert: Shell metacharacters detected and blocked.'
+    });
+  }
+
+  // Check if command matches safe patterns strictly
   const isSafeCommand = safeCommandPatterns.some(pattern => pattern.test(command));
 
   if (isSafeCommand) {
-    console.log('[DevOps] SSH Execute - Command whitelisted as safe');
+    console.log('[DevOps] SSH Execute - Command verified as safe');
   } else {
-    // Security: Block dangerous commands (only for non-whitelisted commands)
-    const dangerousPatterns = [
-      /rm\s+-rf\s+\/(?!var\/www)/,  // rm -rf / (except /var/www)
-      /mkfs/,
-      /dd\s+if=/,
-      />\s*\/dev\//,
-      /chmod\s+777\s+\//,
-      /wget.*\|\s*sh/,
-      /curl.*\|\s*sh/
-    ];
-
-    for (const pattern of dangerousPatterns) {
-      if (pattern.test(command)) {
-        console.log(`[DevOps] SSH Execute - Command BLOCKED by pattern: ${pattern}`);
-        return res.status(403).json({
-          success: false,
-          error: 'Command blocked for security reasons'
-        });
-      }
-    }
+    // Block everything else
+    console.log(`[DevOps] SSH Execute - Command NOT matched in whitelist: ${command}`);
+    return res.status(403).json({
+      success: false,
+      error: 'Command not authorized by strict security policy'
+    });
   }
 
   try {
