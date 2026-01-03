@@ -31,3 +31,18 @@ Working with:
 - Claude (CTO & System Architect)
 - Codex (DevOps & Automation)
 - DeepSeek (AI/ML Engineer)
+
+## Deployment Configurations
+
+### n8n.luwi.dev
+- **Host:** n8n.luwi.dev (91.99.229.96)
+- **Port:** 2222
+- **User:** root
+- **Identity File:** `C:\Users\umut.demirci\.ssh\id_ed25519_luwi`
+- **Options:** `StrictHostKeyChecking=no`
+- **Connection Command:** `ssh -p 2222 -i C:\Users\umut.demirci\.ssh\id_ed25519_luwi root@n8n.luwi.dev`
+
+### File Transfer (SCP)
+```bash
+scp -P 2222 -i C:\Users\umut.demirci\.ssh\id_ed25519_luwi source_file root@n8n.luwi.dev:/dest/path
+```
