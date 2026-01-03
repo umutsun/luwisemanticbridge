@@ -48,6 +48,14 @@ function extractKeywords(
 /**
  * Highlight keywords in text with marker class
  */
+// Marker colors - like different highlighter pens
+const MARKER_COLORS = [
+  'zen01-marker-yellow',  // Yellow highlighter
+  'zen01-marker-green',   // Green highlighter
+  'zen01-marker-pink',    // Pink highlighter
+  'zen01-marker-blue',    // Blue highlighter
+];
+
 function highlightKeywords(text: string, keywords: string[]): React.ReactNode[] {
   if (!keywords.length) return [text];
 
@@ -59,11 +67,22 @@ function highlightKeywords(text: string, keywords: string[]): React.ReactNode[] 
 
   const parts = text.split(pattern);
 
+  // Track which color to use for each keyword
+  const keywordColorMap = new Map<string, string>();
+  let colorIndex = 0;
+
   return parts.map((part, idx) => {
-    const isKeyword = keywords.some(k => k.toLowerCase() === part.toLowerCase());
-    if (isKeyword) {
+    const matchedKeyword = keywords.find(k => k.toLowerCase() === part.toLowerCase());
+    if (matchedKeyword) {
+      // Assign consistent color to each keyword
+      const keyLower = matchedKeyword.toLowerCase();
+      if (!keywordColorMap.has(keyLower)) {
+        keywordColorMap.set(keyLower, MARKER_COLORS[colorIndex % MARKER_COLORS.length]);
+        colorIndex++;
+      }
+      const markerClass = keywordColorMap.get(keyLower);
       return (
-        <span key={idx} className="zen01-marker">
+        <span key={idx} className={`zen01-marker ${markerClass}`}>
           <span>{part}</span>
         </span>
       );
@@ -376,11 +395,6 @@ export const ZenMessage: React.FC<ZenMessageProps> = ({
                   ? source.sourceType.replace(/_/g, ' ').replace(/csv /i, '')
                   : source.sourceTable?.replace(/csv_/i, '').replace(/_/g, ' ') || 'Kaynak';
 
-                // Format relevance score
-                const relevancePercent = source.score
-                  ? Math.round(source.score * 100)
-                  : null;
-
                 return (
                   <div
                     key={idx}
@@ -394,17 +408,6 @@ export const ZenMessage: React.FC<ZenMessageProps> = ({
                         </span>
                       </div>
                       <div className="flex-1 min-w-0">
-                        {/* Source Type Badge + Relevance */}
-                        <div className="flex items-center gap-2 mb-1">
-                          <span className="inline-block px-1.5 py-0.5 text-[10px] font-medium bg-slate-100 dark:bg-slate-700/50 text-slate-600 dark:text-slate-300 rounded capitalize">
-                            {sourceTypeLabel}
-                          </span>
-                          {relevancePercent && (
-                            <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-medium">
-                              %{relevancePercent} ilgili
-                            </span>
-                          )}
-                        </div>
                         {/* Title */}
                         <p className="text-sm font-medium text-cyan-700/90 dark:text-cyan-300/90 line-clamp-1">
                           {source.title || source.summary?.slice(0, 60) || 'Belge'}
@@ -428,6 +431,12 @@ export const ZenMessage: React.FC<ZenMessageProps> = ({
                             ))}
                           </div>
                         )}
+                        {/* Source Type Badge - at bottom */}
+                        <div className="mt-1.5">
+                          <span className="inline-block px-1.5 py-0.5 text-[10px] font-medium bg-slate-100 dark:bg-slate-700/50 text-slate-600 dark:text-slate-300 rounded capitalize">
+                            {sourceTypeLabel}
+                          </span>
+                        </div>
                       </div>
                     </div>
                   </div>
