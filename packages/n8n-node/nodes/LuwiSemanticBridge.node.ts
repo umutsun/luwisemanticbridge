@@ -8,22 +8,22 @@ import {
 import { Client } from 'pg';
 import OpenAI from 'openai';
 
-export class AliceSemanticBridge implements INodeType {
+export class LuwiSemanticBridge implements INodeType {
   description: INodeTypeDescription = {
     displayName: 'Luwi Semantic Bridge',
-    name: 'aliceSemanticBridge',
-    icon: 'file:alice.svg',
+    name: 'luwiSemanticBridge',
+    icon: 'file:LuwiSemanticBridge.svg',
     group: ['transform'],
     version: 1,
     description: 'Store and search semantic embeddings with PostgreSQL + pgvector',
     defaults: {
-      name: 'Luwi Semantic Bridge,
+      name: 'Luwi Semantic Bridge',
     },
     inputs: [NodeConnectionType.Main],
     outputs: [NodeConnectionType.Main],
     credentials: [
       {
-        name: 'aliceSemanticBridgeApi',
+        name: 'luwiSemanticBridgeApi',
         required: true,
       },
     ],
@@ -97,7 +97,7 @@ export class AliceSemanticBridge implements INodeType {
   async execute(this: IExecuteFunctions): Promise<INodeExecutionData[][]> {
     const items = this.getInputData();
     const returnData: INodeExecutionData[] = [];
-    const credentials = await this.getCredentials('aliceSemanticBridgeApi');
+    const credentials = await this.getCredentials('luwiSemanticBridgeApi');
 
     // Initialize PostgreSQL client
     const pgClient = new Client({

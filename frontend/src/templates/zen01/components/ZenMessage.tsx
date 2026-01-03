@@ -2,7 +2,7 @@
 
 import React, { useState } from 'react';
 import { motion } from 'framer-motion';
-import { User, Bot, Clock, FileText, ExternalLink, Volume2, Pause, Loader2 } from 'lucide-react';
+import { User, Bot, Clock, Volume2, Pause, Loader2 } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { ZenTypingIndicator } from './ZenTypingIndicator';
@@ -361,44 +361,85 @@ export const ZenMessage: React.FC<ZenMessageProps> = ({
           )}
         </div>
 
-        {/* Sources Section */}
+        {/* Sources Section - Enhanced Citations */}
         {!isUser && message.sources && message.sources.length > 0 && !message.isStreaming && (
           <div className="zen01-sources mt-3">
-            <div className="flex items-center gap-2 mb-2">
-              <FileText className="h-3.5 w-3.5 text-cyan-600/70 dark:text-cyan-400/70" />
+            <div className="mb-2">
               <span className="text-xs font-medium text-cyan-600/70 dark:text-cyan-400/70">
-                {message.sources.length} source{message.sources.length > 1 ? 's' : ''} found
+                Atıflar ({message.sources.length} kaynak)
               </span>
             </div>
             <div className="space-y-2">
-              {visibleSources?.map((source: ZenSource, idx: number) => (
-                <div
-                  key={idx}
-                  className="zen01-source-item"
-                  onClick={() => onSourceClick(source, message.sources || [])}
-                >
-                  <div className="flex items-start gap-2">
-                    <ExternalLink className="h-3.5 w-3.5 text-cyan-600/60 dark:text-cyan-400/60 mt-0.5 flex-shrink-0" />
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-cyan-700/90 dark:text-cyan-300/90 truncate">
-                        {source.title || source.sourceTable || 'Source'}
-                      </p>
-                      {source.excerpt && (
-                        <p className="text-xs text-slate-500/80 dark:text-slate-400/80 mt-1 line-clamp-2">
-                          {source.excerpt}
+              {visibleSources?.map((source: ZenSource, idx: number) => {
+                // Format source type label
+                const sourceTypeLabel = source.sourceType
+                  ? source.sourceType.replace(/_/g, ' ').replace(/csv /i, '')
+                  : source.sourceTable?.replace(/csv_/i, '').replace(/_/g, ' ') || 'Kaynak';
+
+                // Format relevance score
+                const relevancePercent = source.score
+                  ? Math.round(source.score * 100)
+                  : null;
+
+                return (
+                  <div
+                    key={idx}
+                    className="zen01-source-item"
+                    onClick={() => onSourceClick(source, message.sources || [])}
+                  >
+                    <div className="flex items-start gap-2">
+                      <div className="flex-shrink-0 mt-0.5">
+                        <span className="inline-flex items-center justify-center w-5 h-5 rounded bg-cyan-500/20 dark:bg-cyan-500/30 text-[10px] font-bold text-cyan-600 dark:text-cyan-300">
+                          {idx + 1}
+                        </span>
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        {/* Source Type Badge + Relevance */}
+                        <div className="flex items-center gap-2 mb-1">
+                          <span className="inline-block px-1.5 py-0.5 text-[10px] font-medium bg-slate-100 dark:bg-slate-700/50 text-slate-600 dark:text-slate-300 rounded capitalize">
+                            {sourceTypeLabel}
+                          </span>
+                          {relevancePercent && (
+                            <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-medium">
+                              %{relevancePercent} ilgili
+                            </span>
+                          )}
+                        </div>
+                        {/* Title */}
+                        <p className="text-sm font-medium text-cyan-700/90 dark:text-cyan-300/90 line-clamp-1">
+                          {source.title || source.summary?.slice(0, 60) || 'Belge'}
                         </p>
-                      )}
+                        {/* Summary or Excerpt */}
+                        {(source.summary || source.excerpt) && (
+                          <p className="text-xs text-slate-500/80 dark:text-slate-400/80 mt-1 line-clamp-2">
+                            {source.summary || source.excerpt}
+                          </p>
+                        )}
+                        {/* Keywords if available */}
+                        {source.keywords && source.keywords.length > 0 && (
+                          <div className="flex flex-wrap gap-1 mt-1.5">
+                            {source.keywords.slice(0, 3).map((keyword, kidx) => (
+                              <span
+                                key={kidx}
+                                className="text-[10px] px-1.5 py-0.5 bg-cyan-50 dark:bg-cyan-900/30 text-cyan-600 dark:text-cyan-400 rounded"
+                              >
+                                {keyword}
+                              </span>
+                            ))}
+                          </div>
+                        )}
+                      </div>
                     </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
             {message.sources.length > 3 && (
               <button
                 onClick={() => setShowAllSources(!showAllSources)}
                 className="mt-2 text-xs text-cyan-600/70 dark:text-cyan-400/70 hover:text-cyan-700 dark:hover:text-cyan-300 transition-colors"
               >
-                {showAllSources ? 'Show less' : `Show ${message.sources.length - 3} more`}
+                {showAllSources ? 'Daha az göster' : `${message.sources.length - 3} kaynak daha göster`}
               </button>
             )}
           </div>

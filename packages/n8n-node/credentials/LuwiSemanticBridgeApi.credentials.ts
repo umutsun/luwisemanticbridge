@@ -3,10 +3,10 @@ import {
   INodeProperties,
 } from 'n8n-workflow';
 
-export class AliceSemanticBridgeApi implements ICredentialType {
-  name = 'aliceSemanticBridgeApi';
-  displayName = 'Alice Semantic Bridge API';
-  documentationUrl = 'https://github.com/alice-semantic-bridge';
+export class LuwiSemanticBridgeApi implements ICredentialType {
+  name = 'luwiSemanticBridgeApi';
+  displayName = 'Luwi Semantic Bridge API';
+  documentationUrl = 'https://luwi.dev';
   properties: INodeProperties[] = [
     {
       displayName: 'PostgreSQL Host',

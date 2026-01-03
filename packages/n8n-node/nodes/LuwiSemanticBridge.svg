@@ -1,0 +1,168 @@
+<<<<<<< HEAD
+<?xml version="1.0" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 20010904//EN"
+ "http://www.w3.org/TR/2001/REC-SVG-20010904/DTD/svg10.dtd">
+<svg version="1.0" xmlns="http://www.w3.org/2000/svg"
+ width="360.000000pt" height="360.000000pt" viewBox="0 0 360.000000 360.000000"
+ preserveAspectRatio="xMidYMid meet">
+
+<g transform="translate(0.000000,360.000000) scale(0.100000,-0.100000)"
+fill="#000000" stroke="none">
+<path d="M0 1800 l0 -1800 1800 0 1800 0 0 1800 0 1800 -1800 0 -1800 0 0
+-1800z m1983 1215 c330 -63 602 -265 737 -547 81 -168 85 -197 100 -680 12
+-381 -3 -496 -87 -662 -176 -350 -524 -556 -938 -556 -128 0 -246 17 -341 48
+-333 110 -568 349 -665 677 -24 79 -24 86 -21 450 4 482 19 584 118 764 115
+210 333 390 564 468 151 51 382 67 533 38z"/>
+<path d="M1660 2854 c-45 -8 -183 -46 -199 -54 -9 -5 -41 -21 -71 -36 -156
+-77 -291 -209 -364 -356 -68 -139 -76 -191 -86 -578 -11 -427 -4 -485 77 -647
+114 -228 351 -391 633 -435 96 -15 310 -3 395 22 154 45 278 115 381 217 104
+102 181 240 209 374 17 81 19 347 5 659 -11 243 -31 321 -124 465 -104 161
+-280 285 -501 350 -58 18 -294 30 -355 19z m313 -435 c121 -31 209 -80 298
+-169 63 -62 84 -92 122 -170 69 -145 82 -213 81 -420 0 -155 -3 -182 -22 -234
+-61 -165 -191 -266 -342 -266 -104 0 -209 67 -248 157 -53 126 -30 331 51 451
+66 99 141 149 203 138 63 -12 62 -65 -6 -260 -29 -86 -42 -179 -26 -204 4 -7
+28 -12 52 -12 91 0 134 86 134 265 0 345 -204 562 -510 542 -88 -6 -161 -28
+-228 -71 -156 -99 -241 -320 -213 -551 11 -90 33 -142 74 -170 26 -18 88 -20
+105 -3 20 20 14 99 -14 178 -44 130 -56 174 -61 217 -4 36 -2 43 21 58 87 57
+237 -81 291 -269 24 -83 24 -210 -1 -282 -60 -180 -279 -240 -451 -122 -139
+94 -199 285 -172 547 36 357 203 572 504 651 99 27 253 26 358 -1z"/>
+</g>
+</svg>
+=======
+<svg viewBox="0 0 120 40" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <!-- Lava gradient effect -->
+    <linearGradient id="lavaGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#ff6b35;stop-opacity:1">
+        <animate attributeName="stop-color" 
+                 values="#ff6b35;#f7931e;#6366f1;#2563eb;#ff6b35" 
+                 dur="4s" 
+                 repeatCount="indefinite"/>
+      </stop>
+      <stop offset="50%" style="stop-color:#6366f1;stop-opacity:1">
+        <animate attributeName="stop-color" 
+                 values="#6366f1;#2563eb;#ff6b35;#f7931e;#6366f1" 
+                 dur="4s" 
+                 repeatCount="indefinite"/>
+      </stop>
+      <stop offset="100%" style="stop-color:#2563eb;stop-opacity:1">
+        <animate attributeName="stop-color" 
+                 values="#2563eb;#1e40af;#ff6b35;#6366f1;#2563eb" 
+                 dur="4s" 
+                 repeatCount="indefinite"/>
+      </stop>
+    </linearGradient>
+    
+    <!-- Text lava effect -->
+    <linearGradient id="textLava" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" style="stop-color:#ffffff;stop-opacity:1"/>
+      <stop offset="50%" style="stop-color:#fbbf24;stop-opacity:1">
+        <animate attributeName="stop-color" 
+                 values="#fbbf24;#ffffff;#ff6b35;#fbbf24" 
+                 dur="3s" 
+                 repeatCount="indefinite"/>
+      </stop>
+      <stop offset="100%" style="stop-color:#ffffff;stop-opacity:1"/>
+    </linearGradient>
+    
+    <!-- Dot lava effect -->
+    <radialGradient id="dotLava" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" style="stop-color:#ff6b35;stop-opacity:1">
+        <animate attributeName="stop-color" 
+                 values="#ff6b35;#c084fc;#f7931e;#ff6b35" 
+                 dur="2s" 
+                 repeatCount="indefinite"/>
+      </stop>
+      <stop offset="100%" style="stop-color:#c084fc;stop-opacity:1">
+        <animate attributeName="stop-color" 
+                 values="#c084fc;#ff6b35;#fbbf24;#c084fc" 
+                 dur="2s" 
+                 repeatCount="indefinite"/>
+      </stop>
+    </radialGradient>
+    
+    <!-- Glow effect -->
+    <filter id="lavaGlow" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="1" result="coloredBlur"/>
+      <feMerge> 
+        <feMergeNode in="coloredBlur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+    
+    <!-- Pulsing glow for text -->
+    <filter id="textGlow" x="-10%" y="-10%" width="120%" height="120%">
+      <feGaussianBlur stdDeviation="0.5" result="glow"/>
+      <feFlood flood-color="#ff6b35" flood-opacity="0.3"/>
+      <feComposite in="flood" in2="glow" operator="in" result="glow"/>
+      <feMerge>
+        <feMergeNode in="glow"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+  
+  <!-- Background with lava effect -->
+  <rect width="120" height="40" rx="8" 
+        fill="url(#lavaGradient)" 
+        filter="url(#lavaGlow)">
+    <animate attributeName="rx" values="8;10;8" dur="6s" repeatCount="indefinite"/>
+  </rect>
+  
+  <!-- Inner glow -->
+  <rect x="2" y="2" width="116" height="36" rx="6" 
+        fill="none" 
+        stroke="rgba(255,255,255,0.2)" 
+        stroke-width="0.5"/>
+  
+  <!-- L -->
+  <path d="M12 8H16V28H26V32H12V8Z" 
+        fill="url(#textLava)" 
+        filter="url(#textGlow)"/>
+  
+  <!-- U -->
+  <path d="M30 8H34V24C34 26.2091 35.7909 28 38 28C40.2091 28 42 26.2091 42 24V8H46V24C46 28.4183 42.4183 32 38 32C33.5817 32 30 28.4183 30 24V8Z" 
+        fill="url(#textLava)" 
+        filter="url(#textGlow)"/>
+  
+  <!-- W -->
+  <path d="M50 8H53.5L56 22L58.5 8H62L64.5 22L67 8H70.5L66.5 32H63L60 16L57 32H53.5L50 8Z" 
+        fill="url(#textLava)" 
+        filter="url(#textGlow)"/>
+  
+  <!-- I -->
+  <path d="M74 8H78V32H74V8Z" 
+        fill="url(#textLava)" 
+        filter="url(#textGlow)"/>
+  
+  <!-- Animated Dot with lava effect -->
+  <circle cx="84" cy="30" r="2" 
+          fill="url(#dotLava)" 
+          filter="url(#lavaGlow)">
+    <animate attributeName="r" values="2;3;2" dur="2s" repeatCount="indefinite"/>
+    <animate attributeName="opacity" values="1;0.7;1" dur="1.5s" repeatCount="indefinite"/>
+  </circle>
+  
+  <!-- Floating lava particles -->
+  <circle cx="100" cy="12" r="0.8" fill="#ff6b35" opacity="0.6">
+    <animate attributeName="opacity" values="0.6;0.1;0.6" dur="2s" repeatCount="indefinite"/>
+    <animate attributeName="cy" values="12;8;12" dur="3s" repeatCount="indefinite"/>
+  </circle>
+  
+  <circle cx="20" cy="35" r="0.6" fill="#f7931e" opacity="0.5">
+    <animate attributeName="opacity" values="0.5;0.1;0.5" dur="2.5s" repeatCount="indefinite"/>
+    <animate attributeName="cx" values="20;25;20" dur="4s" repeatCount="indefinite"/>
+  </circle>
+  
+  <!-- Flowing highlight -->
+  <ellipse cx="60" cy="20" rx="15" ry="3" 
+           fill="url(#lavaGradient)" 
+           opacity="0.2">
+    <animateTransform attributeName="transform" 
+                      type="rotate" 
+                      values="0 60 20;10 60 20;0 60 20" 
+                      dur="5s" 
+                      repeatCount="indefinite"/>
+  </ellipse>
+</svg>
+>>>>>>> 589674a73f72dca600a338ef6a3790ab37d0862f
