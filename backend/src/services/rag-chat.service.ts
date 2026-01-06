@@ -2073,13 +2073,9 @@ ${questionLabel}: ${message}`;
 
         // CRITICAL: Replace the forbidden ALINTI with a standard message
         // Never show KONU/İLGİ/hk./sorulmaktadır lines as if they were evidence
-        const alintiSection = fixedText.match(/**ALINTI**s*
-?"[^"]*"[^]*?(?=
-
-|
-**|$)/i);
+        const alintiSection = fixedText.match(/\*\*ALINTI\*\*\s*\n?"[^"]*"[^]*?(?=\n\n|\n\*\*|$)/i);
         if (alintiSection) {
-          const sourceRef = alintiSection[0].match(/[Kaynaks*d+]/i)?.[0] || '[Kaynak 1]';
+          const sourceRef = alintiSection[0].match(/\[Kaynak\s*\d+\]/i)?.[0] || '[Kaynak 1]';
           const cleanAlintiText = `**ALINTI**
 "Kesin hüküm cümlesi bulunamadı (kaynakta yalnızca konu başlığı/başvuru özeti var)." ${sourceRef}`;
           fixedText = fixedText.replace(alintiSection[0], cleanAlintiText);
