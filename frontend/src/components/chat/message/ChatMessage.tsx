@@ -19,7 +19,16 @@ function formatMarkdownContent(content: string): string {
 
   // Known section headers that need line breaks (case-insensitive)
   const sectionHeaders = [
-    // Strict RAG mode headers (Turkish)
+    // Strict RAG mode v2 headers (Turkish)
+    'BULGU',
+    'KAYNAK BİLGİSİ',
+    'KAYNAK BILGISI',
+    'SONUÇ',
+    'SONUC',
+    'DOĞRUDAN ALINTI',
+    'DOGRUDAN ALINTI',
+    'KAYNAK SINIRLAMASI',
+    // Strict RAG mode v1 headers (Turkish)
     'HUKUKİ SONUÇ',
     'HUKUKI SONUÇ',
     'KAYNAK DEĞERLENDİRMESİ',
@@ -36,6 +45,11 @@ function formatMarkdownContent(content: string): string {
     'KAYNAK YETERSİZLİĞİ',
     'KAYNAK YETERSIZLIGI',
     // Strict RAG mode headers (English)
+    'FINDING',
+    'SOURCE INFO',
+    'CONCLUSION',
+    'DIRECT QUOTE',
+    'SOURCE LIMITATION',
     'LEGAL CONCLUSION',
     'SOURCE EVALUATION',
     'DIRECT QUOTES',

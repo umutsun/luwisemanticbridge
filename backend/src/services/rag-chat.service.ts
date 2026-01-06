@@ -877,7 +877,9 @@ ${questionLabel}: ${message}`;
         // Citation control
         'ragSettings.disableCitationText',
         // Strict RAG mode (source-faithful responses for legal/accurate answers)
-        'ragSettings.strictMode'
+        'ragSettings.strictMode',
+        'ragSettings.strictModeInstructionTr',
+        'ragSettings.strictModeInstructionEn'
       ];
 
       const settingsResult = await pool.query(
@@ -1158,109 +1160,129 @@ ${questionLabel}: ${message}`;
           // ========================================
           // STRICT RAG MODE - Source-faithful responses
           // ========================================
-          // This mode ensures:
-          // 1. Only information from sources is used
-          // 2. Direct quotes are provided
-          // 3. Structured format for verification
-          // 4. Clear source attribution
+          // Prompts are loaded from database settings (customizable per tenant)
+          // Falls back to default if not set in database
 
-          const strictInstructionTr = `YANITLAMA KURALLARI (KESİNLİKLE UYULMALI):
+          const defaultStrictInstructionTr = `YANITLAMA KURALLARI:
 
-🚨 EN ÖNEMLİ KURAL: KAYNAK KALİTESİNİ DEĞERLENDIR
+🔍 ÖNCE SORU TİPİNİ BELİRLE:
 
-ÖNCE şunu kontrol et:
-1. Sağlanan kaynaklar DOĞRUDAN soruyla ilgili mi?
-2. Kaynaklar birincil mevzuat mı (kanun metni, yönetmelik) yoksa ikincil mi (makale, tez, yorum)?
-3. Kaynaklarda sorulan kavramın TANIMI veya DÜZENLEMESİ var mı?
-
-EĞER KAYNAKLAR YETERSİZ veya ALAKASIZ İSE:
-Şu şekilde yanıt ver:
-"⚠️ KAYNAK YETERSİZLİĞİ
-
-Sağlanan kaynaklarda [SORU KONUSU] hakkında doğrudan mevzuat metni veya yeterli bilgi bulunamadı.
-
-Bulunan kaynaklar (makale, tez vb.) bu konuya dolaylı olarak değiniyor ancak birincil kaynak (kanun metni) sağlanamadığı için kesin hukuki tanım veremiyorum.
-
-Önerilen: Bu konu için ilgili kanun metnine (örn. VUK, GVK vb.) doğrudan başvurunuz."
-
-VE BURADA DUR. Tanım uydurma, yorum yapma.
+A) OLGUSAL SORU (belgede X geçiyor mu? hangi belgede? listele)
+B) HUKUKİ ANALİZ SORUSU (X nedir? nasıl uygulanır? hangi durumlarda?)
 
 ---
 
-EĞER KAYNAKLAR YETERLİ VE DOĞRUDAN İLGİLİ İSE:
+📋 TİP A: OLGUSAL SORU İÇİN
 
-**KAYNAK DEĞERLENDİRMESİ**
-[Bulunan kaynakların türünü belirt: Kanun metni / Özelge / Danıştay Kararı / Makale vb.]
+Kısa ve net yanıt ver:
 
-**HUKUKİ SONUÇ**
-[SADECE kaynaklarda AYNEN yazan bilgiyi özetle. Her cümle için [Kaynak X] göster.]
+**BULGU**
+[Evet/Hayır + tek cümle açıklama]
 
-**DOĞRUDAN ALINTILAR**
-[Kaynaktan birebir alıntı yap - tırnak içinde göster]
+**KAYNAK BİLGİSİ**
+- Belge: [belge adı/başlığı]
+- Tür: [Tez/Makale/Özelge/Karar vb.]
+- Kaynak ID: [Kaynak X]
+
+Başka bölüm AÇMA. Mevzuat/içtihat/sınırlar bölümü YAZMA.
+
+---
+
+⚖️ TİP B: HUKUKİ ANALİZ SORUSU İÇİN
+
+ÖNCE kaynak kalitesini değerlendir:
+- Birincil kaynak (kanun metni, yönetmelik) var mı?
+- Yoksa sadece ikincil kaynak (makale, tez) mı var?
+
+EĞER BİRİNCİL KAYNAK YOKSA:
+"⚠️ KAYNAK SINIRLAMASI
+
+Sağlanan kaynaklarda bu konuda doğrudan mevzuat metni bulunamadı. Mevcut kaynaklar (makale/tez/yorum) ikincil niteliktedir.
+
+Kesin hukuki tanım için ilgili mevzuata doğrudan başvurunuz."
+
+VE DUR - tanım uydurma.
+
+EĞER YETERLİ KAYNAK VARSA:
+
+**SONUÇ**
+[Kaynaklarda AYNEN yazan bilgi - her iddia için [Kaynak X] göster]
+
+**DOĞRUDAN ALINTI**
 "..." [Kaynak X]
 
-**SINIRLAR**
-[Sadece kaynakta açıkça belirtilen sınırları yaz. Yoksa bu bölümü YAZMA.]
+---
+
+❌ YASAKLAR:
+- Boş bölüm açma (içerik yoksa bölümü yazma)
+- "Mevzuat yok" deme (bunun yerine "kaynaklarda bulunamadı" de)
+- Alakasız kaynaklardan yorum çıkarma
+- Kendi bilginden tanım yapma
+- "Genel olarak", "muhtemelen" gibi belirsiz ifadeler`;
+
+          const defaultStrictInstructionEn = `RESPONSE RULES:
+
+🔍 FIRST DETERMINE QUESTION TYPE:
+
+A) FACTUAL QUESTION (does X appear in documents? which document? list them)
+B) LEGAL ANALYSIS QUESTION (what is X? how is it applied? in which cases?)
 
 ---
 
-YASAKLAR (KESİNLİKLE YAPMA):
-❌ Kaynakta olmayan bilgi ekleme
-❌ "Genel olarak", "genellikle", "muhtemelen" gibi ifadeler kullanma
-❌ Kendi bilginden tanım yapma
-❌ Alakasız kaynaklardan sonuç çıkarma
-❌ "Mevzuat yok" deme - bunun yerine "Sağlanan kaynaklarda mevzuat metni bulunamadı" de
-❌ Boş bölüm açma (İçtihat yoksa o bölümü hiç yazma)`;
+📋 TYPE A: FACTUAL QUESTION
 
-          const strictInstructionEn = `RESPONSE RULES (STRICTLY ENFORCED):
+Give short, direct answer:
 
-🚨 MOST IMPORTANT RULE: EVALUATE SOURCE QUALITY FIRST
+**FINDING**
+[Yes/No + one sentence explanation]
 
-CHECK these before answering:
-1. Are the provided sources DIRECTLY related to the question?
-2. Are sources primary legislation (law text, regulation) or secondary (article, thesis, commentary)?
-3. Do sources contain the DEFINITION or REGULATION of the asked concept?
+**SOURCE INFO**
+- Document: [document name/title]
+- Type: [Thesis/Article/Ruling/Decision etc.]
+- Source ID: [Source X]
 
-IF SOURCES ARE INSUFFICIENT or IRRELEVANT:
-Respond with:
-"⚠️ INSUFFICIENT SOURCES
-
-No direct legislation text or sufficient information about [QUESTION TOPIC] was found in the provided sources.
-
-The found sources (articles, theses, etc.) only indirectly mention this topic. Since primary source (law text) is not available, I cannot provide a definitive legal definition.
-
-Recommendation: Please refer directly to the relevant legislation (e.g., Tax Procedure Law, Income Tax Law, etc.)."
-
-AND STOP HERE. Do not invent definitions or interpret.
+Do NOT add other sections. Do NOT write legislation/case law/limitations sections.
 
 ---
 
-IF SOURCES ARE SUFFICIENT AND DIRECTLY RELEVANT:
+⚖️ TYPE B: LEGAL ANALYSIS QUESTION
 
-**SOURCE EVALUATION**
-[State the type of sources found: Law text / Tax Ruling / Court Decision / Article, etc.]
+FIRST evaluate source quality:
+- Is there primary source (law text, regulation)?
+- Or only secondary sources (article, thesis)?
 
-**LEGAL CONCLUSION**
-[ONLY summarize what is EXACTLY written in sources. Show [Source X] for each sentence.]
+IF NO PRIMARY SOURCE:
+"⚠️ SOURCE LIMITATION
 
-**DIRECT QUOTES**
-[Quote directly from source - show in quotation marks]
+No direct legislation text found in provided sources for this topic. Available sources (articles/theses/commentary) are secondary in nature.
+
+For definitive legal definition, please refer directly to relevant legislation."
+
+AND STOP - do not invent definitions.
+
+IF SUFFICIENT SOURCES EXIST:
+
+**CONCLUSION**
+[Information EXACTLY as written in sources - show [Source X] for each claim]
+
+**DIRECT QUOTE**
 "..." [Source X]
 
-**LIMITATIONS**
-[Only write limitations explicitly stated in source. If none, DO NOT write this section.]
-
 ---
 
-PROHIBITIONS (NEVER DO):
-❌ Add information not in sources
-❌ Use phrases like "generally", "usually", "probably"
-❌ Create definitions from your own knowledge
-❌ Draw conclusions from irrelevant sources
-❌ Say "no legislation exists" - instead say "legislation text not found in provided sources"
-❌ Create empty sections (if no case law, don't write that section)`;
+❌ PROHIBITIONS:
+- Do not create empty sections (if no content, don't write section)
+- Do not say "no legislation exists" (say "not found in sources" instead)
+- Do not draw conclusions from irrelevant sources
+- Do not create definitions from your own knowledge
+- Do not use "generally", "probably" etc.`;
+
+          // Load from database settings (per-tenant customization) or use defaults
+          const strictInstructionTr = settingsMap.get('ragSettings.strictModeInstructionTr') || defaultStrictInstructionTr;
+          const strictInstructionEn = settingsMap.get('ragSettings.strictModeInstructionEn') || defaultStrictInstructionEn;
 
           const strictInstruction = responseLanguage === 'en' ? strictInstructionEn : strictInstructionTr;
+          console.log(`📋 STRICT MODE: Using ${settingsMap.get('ragSettings.strictModeInstructionTr') ? 'custom' : 'default'} prompt (${responseLanguage})`);
 
           // Build enhanced context with source numbers for strict mode
           let strictContext = '';

@@ -108,6 +108,14 @@ function preprocessMarkdown(content: string): string {
   // Known section header patterns in Turkish legal/tax documents
   const sectionHeaders = [
     // Strict RAG mode headers (new)
+    'BULGU',
+    'KAYNAK BİLGİSİ',
+    'KAYNAK BILGISI',
+    'SONUÇ',
+    'SONUC',
+    'DOĞRUDAN ALINTI',
+    'DOGRUDAN ALINTI',
+    'KAYNAK SINIRLAMASI',
     'HUKUKİ SONUÇ',
     'HUKUKI SONUÇ',
     'KAYNAK DEĞERLENDİRMESİ',
@@ -145,6 +153,11 @@ function preprocessMarkdown(content: string): string {
     'Önemli Notlar',
     'Uyarı',
     // English strict mode headers
+    'FINDING',
+    'SOURCE INFO',
+    'CONCLUSION',
+    'DIRECT QUOTE',
+    'SOURCE LIMITATION',
     'LEGAL CONCLUSION',
     'SOURCE EVALUATION',
     'DIRECT QUOTES',
