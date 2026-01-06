@@ -2028,7 +2028,9 @@ ${questionLabel}: ${message}`;
     const forbiddenQuotePatterns = [
       /sorulmaktadır/i,           // "is being asked" - question marker
       /hususu sorulmaktadır/i,    // "the matter is being asked"
-      /mümkün olup olmadığı.*sorulmaktadır/i,  // "whether possible is being asked"
+      /mümkün olup olmadığı/i,    // "whether possible" - question pattern
+      /olup olmadığı\s*(hk\.?|hakkında)/i,  // "whether or not... hk" - KONU line
+      /\s+hk\.?"?\s*$/i,          // ends with "hk." - KONU title, NOT evidence!
       /^KONU:/im,                 // "SUBJECT:" header
       /^İLGİ:/im,                 // "REFERENCE:" header
       /Dilekçenizde.*sorulmaktadır/i,  // "In your petition... is being asked"
@@ -2071,7 +2073,37 @@ ${questionLabel}: ${message}`;
       }
     }
 
-    // 9. Clean up multiple spaces
+    // 9. SEMANTIC MISMATCH DETECTION
+    // If question asks "zorunlu mu?" but answer says "mümkündür", this is a semantic mismatch
+    // "mümkündür" (is possible) ≠ "zorunludur" (is required)
+    if (originalQuestion) {
+      const questionLower = originalQuestion.toLowerCase();
+      const cevapMatch = fixedText.match(/\*\*CEVAP\*\*\s*\n?([^\n]+)/i);
+
+      if (cevapMatch) {
+        const cevapText = cevapMatch[1].toLowerCase();
+
+        // Question asks about obligation but answer talks about possibility
+        const asksAboutObligation = /zorunlu\s*(mu|mudur|değil|olmak)|mecburi|gerekli\s*mi/i.test(questionLower);
+        const answersWithPossibility = /mümkündür|mümkün bulunmaktadır/i.test(cevapText) &&
+                                        !/zorunlu|zorunludur|gerekmektedir|mecburidir/i.test(cevapText);
+
+        if (asksAboutObligation && answersWithPossibility) {
+          console.log(`⚠️ POST-PROCESS: Semantic mismatch detected`);
+          console.log(`   Question asks about obligation, answer talks about possibility`);
+
+          // Extract source reference
+          const sourceRef = cevapText.match(/\[kaynak\s*\d+\]/i)?.[0] || '[Kaynak 1]';
+          const correctedCevap = `Bu konuda "zorunlu olup olmadığı" yönünde açık bir hüküm cümlesi bulunamadı. Mevcut kaynak yalnızca "mümkün olup olmadığı" konusunda bilgi içeriyor. ${sourceRef}`;
+
+          fixedText = fixedText.replace(cevapMatch[1], correctedCevap);
+          console.log(`🔧 POST-PROCESS: Replaced mismatched answer with clarification`);
+          fixCount++;
+        }
+      }
+    }
+
+    // 10. Clean up multiple spaces
     fixedText = fixedText.replace(/\s{2,}/g, ' ').replace(/ +\./g, '.').replace(/ +,/g, ',');
 
     if (fixCount > 0) {
