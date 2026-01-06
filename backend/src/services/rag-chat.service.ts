@@ -1366,7 +1366,7 @@ ${questionLabel}: ${message}`;
       // Fix empty source references [] in strict mode - replace with best matching source
       // This runs AFTER strip to ensure [Kaynak X] references are preserved
       if (strictRagMode && searchResults.length > 0) {
-        response.content = this.fixEmptySourceReferences(response.content, searchResults, settingsMap);
+        response.content = this.fixEmptySourceReferences(response.content, searchResults, settingsMap, message);
       }
 
       // 5. Save messages to database with error handling
@@ -1868,7 +1868,7 @@ ${questionLabel}: ${message}`;
    * Fixes: empty [], generic titles, quote prefixes
    * Configuration loaded from database for all patterns
    */
-  private fixEmptySourceReferences(text: string, searchResults: any[], settingsMap?: Map<string, string>): string {
+  private fixEmptySourceReferences(text: string, searchResults: any[], settingsMap?: Map<string, string>, originalQuestion?: string): string {
     if (!text || !searchResults.length) return text;
 
     let fixedText = text;
