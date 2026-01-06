@@ -1166,46 +1166,58 @@ ${questionLabel}: ${message}`;
         console.log(`✅ STRICT MODE ACTIVE - Using simplified CEVAP/ALINTI format`);
 
         // Turkish strict mode prompt - loaded from database if customized
-        const defaultStrictInstructionTr = `KAYNAK-SADIK YANITLAMA SİSTEMİ
-
-Aşağıda numaralı kaynaklar var. SADECE bu kaynaklardaki bilgiyi kullan.
+        const defaultStrictInstructionTr = `Aşağıda [Kaynak 1], [Kaynak 2], [Kaynak 3] şeklinde numaralanmış kaynaklar var.
 
 FORMAT:
 
 **CEVAP**
-- Her kritik bilgi için ayrı cümle yaz + [Kaynak X] referans
-- Kaynakta birden fazla önemli bilgi varsa HEPSİNİ yaz (örn: "zorunludur" + "nasıl/ne zaman yapılır")
+[Cevap cümlesi] [Kaynak 1]
+[Ek bilgi] [Kaynak 1]
 
 **ALINTI**
-- Kritik cümleleri TAM ver, kısaltma (...) kullanma
-- Birden fazla kritik cümle varsa hepsini alıntıla
-- Format: "[Tam cümle 1]. [Tam cümle 2]." — Tür: [tür], Başlık: [başlık] [Kaynak X]
+"[Tam alıntı cümlesi]" — Tür: SoruCevap, Başlık: [başlık] [Kaynak 3]
 
-KURALLAR:
-- Her iddia için [Kaynak 1], [Kaynak 2] NUMARA yaz - BOŞ BIRAKMA
-- SoruCevap, Makale, Özelge = geçerli kaynak
-- "Mevzuat yok" DEME - kaynakları kullan`;
+KRİTİK:
+1. Her cümle sonuna [Kaynak 1] veya [Kaynak 2] veya [Kaynak 3] YAZ
+2. BOŞ [] YAZMA - numara şart: [Kaynak 1], [Kaynak 2], [Kaynak 3]
+3. Soru-Cevap (SoruCevap) kaynağı varsa ONU kullan - en güvenilir
+4. Document_embeddings içindekiler tablosu DEĞİL, asıl cevap içeren kaynağı seç
+
+ÖRNEK:
+Kaynak listesinde [Kaynak 3] SoruCevap "X zorunludur" diyorsa:
+
+**CEVAP**
+X zorunludur. [Kaynak 3]
+
+**ALINTI**
+"X zorunludur." — Tür: SoruCevap, Başlık: X zorunlu mu? [Kaynak 3]`;
 
         // English strict mode prompt - loaded from database if customized
-        const defaultStrictInstructionEn = `SOURCE-FAITHFUL RESPONSE SYSTEM
-
-Numbered sources are provided below. Use ONLY information from these sources.
+        const defaultStrictInstructionEn = `Sources are numbered as [Source 1], [Source 2], [Source 3] below.
 
 FORMAT:
 
 **ANSWER**
-- Write separate sentence for each critical fact + [Source X] reference
-- If source has multiple important facts, include ALL (e.g., "mandatory" + "how/when to do it")
+[Answer sentence] [Source 1]
+[Additional info] [Source 1]
 
 **QUOTE**
-- Give critical sentences in FULL, no abbreviations (...)
-- If multiple critical sentences, quote all of them
-- Format: "[Full sentence 1]. [Full sentence 2]." — Type: [type], Title: [title] [Source X]
+"[Full quote sentence]" — Type: Q&A, Title: [title] [Source 3]
 
-RULES:
-- Write [Source 1], [Source 2] NUMBER for every claim - NEVER EMPTY
-- Q&A, Articles, Rulings = valid sources
-- Do NOT say "no legislation" - use available sources`;
+CRITICAL:
+1. Write [Source 1] or [Source 2] or [Source 3] after EVERY sentence
+2. NEVER write empty [] - number is required: [Source 1], [Source 2], [Source 3]
+3. If Q&A source exists, USE IT - most reliable
+4. Choose source with actual answer, NOT table of contents
+
+EXAMPLE:
+If [Source 3] Q&A says "X is mandatory":
+
+**ANSWER**
+X is mandatory. [Source 3]
+
+**QUOTE**
+"X is mandatory." — Type: Q&A, Title: Is X mandatory? [Source 3]`;
 
           // Load from database settings (per-tenant customization) or use defaults
           const strictInstructionTr = settingsMap.get('ragSettings.strictModeInstructionTr') || defaultStrictInstructionTr;
