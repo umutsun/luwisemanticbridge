@@ -2023,7 +2023,55 @@ ${questionLabel}: ${message}`;
       fixCount++;
     }
 
-    // 8. Clean up multiple spaces
+    // 8. CRITICAL: Detect forbidden quote patterns (question sentences, not verdicts)
+    // If ALINTI contains these patterns, the quote is invalid - it's a question, not evidence
+    const forbiddenQuotePatterns = [
+      /sorulmaktadır/i,           // "is being asked" - question marker
+      /hususu sorulmaktadır/i,    // "the matter is being asked"
+      /mümkün olup olmadığı.*sorulmaktadır/i,  // "whether possible is being asked"
+      /^KONU:/im,                 // "SUBJECT:" header
+      /^İLGİ:/im,                 // "REFERENCE:" header
+      /Dilekçenizde.*sorulmaktadır/i,  // "In your petition... is being asked"
+      /is being asked/i,          // English version
+      /whether.*is possible.*asked/i,  // English pattern
+    ];
+
+    // Extract the ALINTI section to check for forbidden patterns
+    const alintiForbiddenMatch = fixedText.match(/\*\*ALINTI\*\*\s*\n?"([^"]+)"/i);
+    if (alintiForbiddenMatch) {
+      const quotedText = alintiForbiddenMatch[1];
+      const hasForbiddenPattern = forbiddenQuotePatterns.some(pattern => pattern.test(quotedText));
+
+      if (hasForbiddenPattern) {
+        console.log(`⚠️ POST-PROCESS: Detected forbidden quote pattern (question, not verdict)`);
+        console.log(`   Quote was: "${quotedText.substring(0, 100)}..."`);
+
+        // Replace the definitive answer with a cautious one
+        // Find the CEVAP section and modify if it contains definitive claims
+        const cevapMatch = fixedText.match(/\*\*CEVAP\*\*\s*\n?([^\n]+)/i);
+        if (cevapMatch) {
+          const originalCevap = cevapMatch[1];
+          // If CEVAP contains definitive words like "mümkündür" but quote is just a question
+          if (/mümkündür|zorunludur|uygundur|gerekmektedir/i.test(originalCevap)) {
+            // Extract source reference
+            const sourceRef = originalCevap.match(/\[Kaynak\s*\d+\]/i)?.[0] || '[Kaynak 1]';
+            const cautionCevap = `Bu konuda ilgili özelge incelenebilir, ancak kesin hüküm cümlesi alıntılanamadı. ${sourceRef}`;
+            fixedText = fixedText.replace(originalCevap, cautionCevap);
+            console.log(`🔧 POST-PROCESS: Replaced definitive claim with cautious statement`);
+            fixCount++;
+          }
+        }
+
+        // Also add a warning to the quote section
+        const warningNote = '\n\n⚠️ Not: Yukarıdaki alıntı sorunun kendisini içermektedir, hüküm cümlesini değil.';
+        if (!fixedText.includes(warningNote)) {
+          fixedText = fixedText + warningNote;
+          fixCount++;
+        }
+      }
+    }
+
+    // 9. Clean up multiple spaces
     fixedText = fixedText.replace(/\s{2,}/g, ' ').replace(/ +\./g, '.').replace(/ +,/g, ',');
 
     if (fixCount > 0) {

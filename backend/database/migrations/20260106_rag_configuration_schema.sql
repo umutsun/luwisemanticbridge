@@ -11,49 +11,48 @@
 INSERT INTO settings (key, value, category, description)
 VALUES (
   'ragSettings.strictModePromptTr',
-  'Aşağıda numaralanmış kaynaklar var. Her kaynağın Tür ve Başlık bilgisi şemada yazılı.
+  'Aşağıda numaralanmış kaynaklar var.
 
-⚠️ ÖNCELİKLİ KURAL 1 - KAYNAK UYUMU:
-Önce kaynakların SORU ile ilgili olup olmadığını kontrol et.
-- Soruda geçen ANAHTAR KELİMELER kaynakta var mı?
-- EĞER HİÇBİR KAYNAK SORUYLA DOĞRUDAN İLGİLİ DEĞİLSE → kesin hüküm kurma.
+⛔ YASAKLI ALINTI KALIPLARI (bunları ASLA alıntılama):
+- "KONU: ..."
+- "İLGİ: ..."
+- "Dilekçenizde ... sorulmaktadır"
+- "... hususu sorulmaktadır"
+- "... mümkün olup olmadığı sorulmaktadır"
+Bu cümleler SORU, kanıt değil! Bunları alıntılarsan BAŞARISIZ sayılırsın.
 
-⚠️ ÖNCELİKLİ KURAL 2 - ALINTI HÜKÜM CÜMLESİ OLMALI:
-ALINTI sadece HÜKÜM/SONUÇ cümlesi olabilir ("mümkündür", "uygundur", "yapılmalıdır" gibi).
-❌ ALINTI OLAMAZ:
-- "KONU: ... hk." satırları (bunlar soru başlığı, kanıt değil)
-- "İLGİ: ..." satırları
-- "Dilekçenizde ... sorulmaktadır" cümleleri
-- Sadece soru tekrarı olan metinler
-✅ ALINTI OLMALI:
-- "... mümkündür/uygundur/yapılmalıdır ..." gibi karar cümlesi
-- "... öngörülmüştür/belirlenmiştir ..." gibi hüküm cümlesi
+✅ SADECE HÜKÜM CÜMLESİ ALINTILANABİLİR:
+Alıntı şu kelimelerden birini İÇERMELİ:
+- "mümkündür" / "mümkün bulunmaktadır"
+- "uygundur" / "uygun görülmektedir"
+- "gerekmektedir" / "zorunludur"
+- "öngörülmüştür" / "belirlenmiştir"
+
+HÜKÜM CÜMLESİ NASIL BULUNUR:
+1. Kaynakta "Bilindiği üzere..." veya "Bu itibarla..." sonrasına bak
+2. "...dır/...dir/...tır/...tir" ile biten sonuç cümlelerini ara
+3. Giriş paragrafını (dilekçenizde, KONU, İLGİ) ATLA
 
 FORMAT:
 
 **CEVAP**
-[Tek sade cümle ile doğrudan cevap] [Kaynak X]
+[Tek cümle cevap] [Kaynak X]
 
 **ALINTI**
-"[HÜKÜM CÜMLESİ - mümkündür/uygundur/yapılmalıdır içeren]" — Tür: [ŞEMADAN AL], Başlık: [ŞEMADAN AL] [Kaynak X]
+"[mümkündür/uygundur/gerekmektedir içeren HÜKÜM cümlesi]" — Tür: [tür], Başlık: [başlık] [Kaynak X]
 
-KRİTİK KURALLAR:
-1. ❌ ALAKASIZ KAYNAKTAN KESİN HÜKÜM KURMA
-2. ❌ "KONU/İLGİ" SATIRLARINI ALINTI OLARAK KULLANMA - bunlar kanıt değil!
-3. ✅ ALINTI mutlaka hüküm/sonuç cümlesi olmalı
-4. Sorudaki anahtar kelimeler alıntıda da olmalı
-5. CEVAP kısa olsun - SADECE kaynakta yazan bilgiyi özetle
-6. ⚠️ İÇİNDEKİLER UYARISI olan kaynakları KULLANMA
-7. SoruCevap/Özelge kaynağını TERCİH ET
-8. Tür ve Başlık''ı ŞEMADAN KOPYALA
+❌ YANLIŞ ÖRNEK:
+ALINTI: "...mümkün olup olmadığı hususu sorulmaktadır."
+Bu SORU, kanıt değil! BAŞARISIZ!
 
-ÖRNEK YANLIŞ ALINTI:
-"KONU: Vergi levhasının araçlarda bulundurulmasının mümkün olup olmadığı hk." ❌ Bu soru başlığı, kanıt değil!
+✅ DOĞRU ÖRNEK:
+ALINTI: "...vergi levhanızın fotokopilerinin bulundurulması mümkündür."
+Bu HÜKÜM cümlesi! BAŞARILI!
 
-ÖRNEK DOĞRU ALINTI:
-"Nakliye araçlarınızda vergi levhanızın fotokopilerinin bulundurulması mümkündür." ✅ Bu hüküm cümlesi!',
+EĞER HÜKÜM CÜMLESİ BULAMAZSAN:
+"Bu konuda kesin bir hüküm cümlesi bulunamadı, ancak ilgili kaynak incelenebilir." de.',
   'rag',
-  'Turkish strict mode prompt - requires verdict sentences as quotes'
+  'Turkish strict mode - explicit forbidden patterns'
 )
 ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, description = EXCLUDED.description;
 
@@ -61,49 +60,48 @@ ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, description = EXCLUDED.d
 INSERT INTO settings (key, value, category, description)
 VALUES (
   'ragSettings.strictModePromptEn',
-  'Sources are numbered below. Each source has Type and Title in the schema.
+  'Sources are numbered below.
 
-⚠️ PRIORITY RULE 1 - SOURCE RELEVANCE:
-First check if sources are RELEVANT to the question.
-- Do the KEY TERMS from the question appear in the source?
-- IF NO SOURCE IS DIRECTLY RELEVANT → do not make definitive claims.
+⛔ FORBIDDEN QUOTE PATTERNS (NEVER quote these):
+- "SUBJECT: ..."
+- "REFERENCE: ..."
+- "In your petition ... you asked"
+- "... is being asked"
+- "... whether or not ... is possible"
+These are QUESTIONS, not evidence! If you quote these, you FAIL.
 
-⚠️ PRIORITY RULE 2 - QUOTE MUST BE A VERDICT SENTENCE:
-QUOTE must be a VERDICT/CONCLUSION sentence (containing "is permitted", "is appropriate", "must be done", etc.).
-❌ CANNOT BE A QUOTE:
-- "SUBJECT: ... regarding..." lines (these are question titles, not evidence)
-- "REFERENCE: ..." lines
-- "In your petition ... you asked" sentences
-- Text that merely restates the question
-✅ MUST BE A QUOTE:
-- "... is permitted/appropriate/must be done ..." verdict sentences
-- "... has been determined/established ..." conclusion sentences
+✅ ONLY VERDICT SENTENCES CAN BE QUOTED:
+Quote MUST contain one of these words:
+- "is permitted" / "is allowed"
+- "is appropriate" / "is deemed appropriate"
+- "is required" / "must be"
+- "has been determined" / "has been established"
+
+HOW TO FIND A VERDICT SENTENCE:
+1. Look after "As is known..." or "Therefore..." in the source
+2. Find sentences ending with conclusive statements
+3. SKIP the introduction paragraph (petition, SUBJECT, REFERENCE)
 
 FORMAT:
 
 **ANSWER**
-[Single concise sentence with direct answer] [Source X]
+[Single sentence answer] [Source X]
 
 **QUOTE**
-"[VERDICT SENTENCE - containing is permitted/appropriate/must be done]" — Type: [COPY FROM SCHEMA], Title: [COPY FROM SCHEMA] [Source X]
+"[VERDICT sentence containing is permitted/required/appropriate]" — Type: [type], Title: [title] [Source X]
 
-CRITICAL RULES:
-1. ❌ NEVER make definitive claims from IRRELEVANT sources
-2. ❌ NEVER use "SUBJECT/REFERENCE" lines as quotes - they are not evidence!
-3. ✅ QUOTE must be a verdict/conclusion sentence
-4. Key terms from question must appear in the quote
-5. ANSWER must be short - ONLY summarize what is in the source
-6. ⚠️ DO NOT use sources marked with TOC WARNING
-7. PREFER Q&A/Ruling sources
-8. Copy Type and Title FROM SCHEMA
+❌ WRONG EXAMPLE:
+QUOTE: "...whether keeping copies is possible is being asked."
+This is a QUESTION, not evidence! FAIL!
 
-EXAMPLE WRONG QUOTE:
-"SUBJECT: Whether tax certificates can be kept in vehicles." ❌ This is a question title, not evidence!
+✅ CORRECT EXAMPLE:
+QUOTE: "...keeping copies of your tax certificate is permitted."
+This is a VERDICT sentence! SUCCESS!
 
-EXAMPLE CORRECT QUOTE:
-"Keeping copies of your tax certificate in your transport vehicles is permitted." ✅ This is a verdict sentence!',
+IF YOU CANNOT FIND A VERDICT SENTENCE:
+Say "No definitive ruling sentence found on this topic, but the relevant source can be reviewed."',
   'rag',
-  'English strict mode prompt - requires verdict sentences as quotes'
+  'English strict mode - explicit forbidden patterns'
 )
 ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, description = EXCLUDED.description;
 
