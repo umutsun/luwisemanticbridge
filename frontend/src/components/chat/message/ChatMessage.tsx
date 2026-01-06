@@ -12,11 +12,57 @@ import remarkGfm from 'remark-gfm';
  * Format markdown content for better visual presentation
  * - Adds line breaks before/after bold headings for paragraph separation
  * - Converts inline numbered items to proper list format
+ * - Handles strict RAG mode headers (HUKUKİ SONUÇ, KAYNAK DEĞERLENDİRMESİ, etc.)
  */
 function formatMarkdownContent(content: string): string {
   if (!content) return '';
 
-  return content
+  // Known section headers that need line breaks (case-insensitive)
+  const sectionHeaders = [
+    // Strict RAG mode headers (Turkish)
+    'HUKUKİ SONUÇ',
+    'HUKUKI SONUÇ',
+    'KAYNAK DEĞERLENDİRMESİ',
+    'KAYNAK DEGERLENDIRMESI',
+    'DOĞRUDAN ALINTILAR',
+    'DOGRUDAN ALINTILAR',
+    'SINIRLAR VE RİSKLER',
+    'SINIRLAR VE RISKLER',
+    'SINIRLAR',
+    'İLGİLİ MEVZUAT',
+    'ILGILI MEVZUAT',
+    'KAYNAK LİSTESİ',
+    'KAYNAK LISTESI',
+    'KAYNAK YETERSİZLİĞİ',
+    'KAYNAK YETERSIZLIGI',
+    // Strict RAG mode headers (English)
+    'LEGAL CONCLUSION',
+    'SOURCE EVALUATION',
+    'DIRECT QUOTES',
+    'LIMITATIONS',
+    'INSUFFICIENT SOURCES',
+    // Legacy headers
+    'Özet',
+    'Sonuç',
+    'Tavsiyeler',
+    'Öneriler',
+  ];
+
+  let result = content;
+
+  // Add line breaks before known section headers
+  sectionHeaders.forEach(header => {
+    const pattern = new RegExp(`([^\\n])(\\s*)(\\*\\*${header}:?\\*\\*)`, 'gi');
+    result = result.replace(pattern, '$1\n\n$3');
+  });
+
+  // Handle ⚠️ warning emoji at start of sections
+  result = result.replace(/([^\n])(⚠️)/g, '$1\n\n$2');
+
+  // Handle --- section dividers
+  result = result.replace(/([^\n])(---)/g, '$1\n\n$2');
+
+  return result
     // Numbered items with parenthesis: "1)" "2)" etc → new line before
     .replace(/\s+(\d+)\)\s+/g, '\n\n$1. ')
     // Numbered items with dot inline: "1." "2." etc (when not at start) → new line before

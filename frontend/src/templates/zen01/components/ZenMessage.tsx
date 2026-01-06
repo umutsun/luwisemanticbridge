@@ -107,6 +107,23 @@ function highlightKeywords(text: string, keywords: string[]): React.ReactNode[] 
 function preprocessMarkdown(content: string): string {
   // Known section header patterns in Turkish legal/tax documents
   const sectionHeaders = [
+    // Strict RAG mode headers (new)
+    'HUKUKİ SONUÇ',
+    'HUKUKI SONUÇ',
+    'KAYNAK DEĞERLENDİRMESİ',
+    'KAYNAK DEGERLENDIRMESI',
+    'DOĞRUDAN ALINTILAR',
+    'DOGRUDAN ALINTILAR',
+    'SINIRLAR VE RİSKLER',
+    'SINIRLAR VE RISKLER',
+    'SINIRLAR',
+    'İLGİLİ MEVZUAT',
+    'ILGILI MEVZUAT',
+    'KAYNAK LİSTESİ',
+    'KAYNAK LISTESI',
+    'KAYNAK YETERSİZLİĞİ',
+    'KAYNAK YETERSIZLIGI',
+    // Legacy headers
     'Hukuki Değerlendirme',
     'Varsayımlar',
     'İlgili Mevzuat ve Dayanaklar',
@@ -127,6 +144,12 @@ function preprocessMarkdown(content: string): string {
     'Detaylar',
     'Önemli Notlar',
     'Uyarı',
+    // English strict mode headers
+    'LEGAL CONCLUSION',
+    'SOURCE EVALUATION',
+    'DIRECT QUOTES',
+    'LIMITATIONS',
+    'INSUFFICIENT SOURCES',
   ];
 
   let result = content;
@@ -134,13 +157,19 @@ function preprocessMarkdown(content: string): string {
   // Add line breaks before each known section header
   sectionHeaders.forEach(header => {
     // Match **Header** or **Header:** that's not at start of line
-    const pattern = new RegExp(`([^\\n])(\\s)(\\*\\*${header}:?\\*\\*)`, 'g');
+    const pattern = new RegExp(`([^\\n])(\\s)(\\*\\*${header}:?\\*\\*)`, 'gi');
     result = result.replace(pattern, '$1\n\n$3');
   });
 
   // Also handle generic bold text followed by colon as headers
   // Pattern: space followed by **AnyText:** (with colon)
   result = result.replace(/([^\n])(\s)(\*\*[^*]{2,30}:\*\*)/g, '$1\n\n$3');
+
+  // Handle ⚠️ warning emoji at start of sections
+  result = result.replace(/([^\n])(⚠️)/g, '$1\n\n$2');
+
+  // Handle --- section dividers
+  result = result.replace(/([^\n])(---)/g, '$1\n\n$2');
 
   return result;
 }
