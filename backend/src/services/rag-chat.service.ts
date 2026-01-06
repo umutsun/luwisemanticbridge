@@ -1228,7 +1228,9 @@ X is mandatory. [Source 3]
 
           // Build enhanced context with source numbers for strict mode
           let strictContext = '';
-          for (let idx = 0; idx < Math.min(initialDisplayCount, searchResults.length); idx++) {
+          const sourceCount = Math.min(initialDisplayCount, searchResults.length);
+
+          for (let idx = 0; idx < sourceCount; idx++) {
             const r = searchResults[idx];
             const title = r.title || 'Untitled';
             const sourceType = r.source_type || r.source_table || 'Unknown';
@@ -1241,7 +1243,15 @@ X is mandatory. [Source 3]
             strictContext += `İçerik: ${content}\n\n`;
           }
 
-          userPrompt = `${strictInstruction}\n\n--- ${contextLabel} ---\n${strictContext}\n--- KAYNAKLAR SONU ---\n\n${questionLabel}: ${message}`;
+          // Build available source numbers list dynamically
+          const sourceNumbers = Array.from({length: sourceCount}, (_, i) => `[Kaynak ${i + 1}]`).join(', ');
+
+          // Add explicit reminder about available source numbers
+          const sourceReminder = responseLanguage === 'en'
+            ? `\n\nAVAILABLE SOURCES: ${sourceNumbers.replace(/Kaynak/g, 'Source')}\nYou MUST use one of these exact references. NEVER write empty [].`
+            : `\n\nMEVCUT KAYNAKLAR: ${sourceNumbers}\nBu referanslardan birini MUTLAKA kullan. ASLA boş [] yazma.`;
+
+          userPrompt = `${strictInstruction}${sourceReminder}\n\n--- ${contextLabel} ---\n${strictContext}\n--- KAYNAKLAR SONU ---\n\n${questionLabel}: ${message}`;
           console.log('📋 STRICT RAG MODE: Using source-faithful prompt format');
           console.log(`📝 PROMPT PREVIEW (first 300 chars): ${userPrompt.substring(0, 300).replace(/\n/g, '\\n')}`);
         } else {
