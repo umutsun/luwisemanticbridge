@@ -30,6 +30,7 @@ ANALYZER_TIMEOUT = float(os.getenv("SEMANTIC_ANALYZER_TIMEOUT", "5.0"))
 DEGRADED_MODE_ENABLED = os.getenv("SEMANTIC_ANALYZER_DEGRADED", "true").lower() == "true"
 CACHE_TTL = int(os.getenv("SEMANTIC_CACHE_TTL", "300"))  # 5 minutes
 CACHE_PREFIX = "semantic_analyzer"
+SCHEMA_CONFIG_KEY = "semantic_analyzer_config"  # Redis key for schema-based config
 
 
 class AnalysisIssue(Enum):
@@ -40,6 +41,8 @@ class AnalysisIssue(Enum):
     MODALITY_MISMATCH = "modality_mismatch"
     NO_VERDICT_SENTENCE = "no_verdict_sentence"
     LOW_RELEVANCE = "low_relevance"
+    QUOTE_NOT_VERBATIM = "quote_not_verbatim"  # NEW: Quote doesn't exist in source
+    MODALITY_INFERENCE = "modality_inference"  # NEW: Inferred obligation from possibility
 
 
 class Modality(Enum):
@@ -189,6 +192,28 @@ class RedisCache:
         key = self._make_key("analysis", question, chunk_text)
         await self.set(key, analysis)
 
+    async def get_config(self) -> Optional[dict]:
+        """Get schema-based configuration from Redis"""
+        if not self._connected or not self._redis:
+            return None
+        try:
+            data = await self._redis.get(SCHEMA_CONFIG_KEY)
+            if data:
+                return json.loads(data)
+        except Exception as e:
+            logger.debug(f"Config get error: {e}")
+        return None
+
+    async def set_config(self, config: dict):
+        """Store schema-based configuration in Redis"""
+        if not self._connected or not self._redis:
+            return
+        try:
+            # Long TTL for config (1 hour)
+            await self._redis.setex(SCHEMA_CONFIG_KEY, 3600, json.dumps(config))
+        except Exception as e:
+            logger.debug(f"Config set error: {e}")
+
 
 class SemanticAnalyzerService:
     """
@@ -212,6 +237,7 @@ class SemanticAnalyzerService:
         self._degraded_mode = False
         self._init_time = 0.0
         self._cache = RedisCache()
+        self._verbatim_tolerance = 0.85  # Default, can be overridden by schema
 
         # === TURKISH VERBS/ACTIONS ===
         self.action_groups = {
@@ -306,7 +332,65 @@ class SemanticAnalyzerService:
             "forbidden_pattern": "Bu alıntı soru başlığı/giriş paragrafıdır, hüküm değildir.",
             "no_verdict": "Bu konuda açık hüküm cümlesi bulunamadı.",
             "generic": "Bu konuda kesin bir hüküm cümlesi bulunamadı.",
+            "quote_not_verbatim": "Belirtilen alıntı, kaynak metinde birebir bulunamadı. "
+                                  "Alıntı parafraz veya çıkarım olabilir.",
+            "modality_inference": "Kaynak yalnızca 'mümkün' yönünde bilgi içeriyor. "
+                                  "'Zorunlu olup olmadığı' hakkında açık hüküm cümlesi bulunamadı.",
         }
+
+    async def load_config_from_schema(self, config: dict):
+        """Load configuration from database schema
+
+        Expected config structure:
+        {
+            "action_groups": {...},      # Override action verb groups
+            "object_anchors": {...},     # Override object anchor groups
+            "forbidden_patterns": [...], # Override forbidden patterns
+            "verdict_patterns": [...],   # Override verdict patterns
+            "fail_messages": {...},      # Override fail messages
+            "verbatim_tolerance": 0.85,  # Quote verification tolerance
+            "modality_patterns": {...}   # Override modality patterns
+        }
+        """
+        if not config:
+            return
+
+        # Update action groups
+        if "action_groups" in config and isinstance(config["action_groups"], dict):
+            self.action_groups.update(config["action_groups"])
+            logger.info(f"Updated action_groups from schema: {len(config['action_groups'])} groups")
+
+        # Update object anchors
+        if "object_anchors" in config and isinstance(config["object_anchors"], dict):
+            self.object_anchors.update(config["object_anchors"])
+            logger.info(f"Updated object_anchors from schema: {len(config['object_anchors'])} anchors")
+
+        # Update forbidden patterns
+        if "forbidden_patterns" in config and isinstance(config["forbidden_patterns"], list):
+            self.forbidden_patterns = [
+                (p["pattern"], p.get("description", "yasaklı pattern"))
+                for p in config["forbidden_patterns"]
+                if isinstance(p, dict) and "pattern" in p
+            ]
+            logger.info(f"Updated forbidden_patterns from schema: {len(self.forbidden_patterns)} patterns")
+
+        # Update verdict patterns
+        if "verdict_patterns" in config and isinstance(config["verdict_patterns"], list):
+            self.verdict_patterns = config["verdict_patterns"]
+            logger.info(f"Updated verdict_patterns from schema: {len(self.verdict_patterns)} patterns")
+
+        # Update fail messages
+        if "fail_messages" in config and isinstance(config["fail_messages"], dict):
+            self.fail_messages.update(config["fail_messages"])
+            logger.info(f"Updated fail_messages from schema")
+
+        # Store verbatim tolerance
+        if "verbatim_tolerance" in config:
+            self._verbatim_tolerance = float(config["verbatim_tolerance"])
+            logger.info(f"Set verbatim_tolerance from schema: {self._verbatim_tolerance}")
+
+        # Cache the config in Redis
+        await self._cache.set_config(config)
 
     async def initialize(self):
         """Initialize with timeout and degraded mode"""
@@ -317,6 +401,12 @@ class SemanticAnalyzerService:
 
         # Connect to Redis cache
         await self._cache.connect()
+
+        # Try to load config from Redis cache
+        cached_config = await self._cache.get_config()
+        if cached_config:
+            await self.load_config_from_schema(cached_config)
+            logger.info("Loaded config from Redis cache")
 
         try:
             if DEGRADED_MODE_ENABLED:
@@ -523,6 +613,143 @@ class SemanticAnalyzerService:
                 return True, match.group(0).strip()
         return False, None
 
+    def _verify_verbatim_quote(self, quote: str, source_text: str, tolerance: Optional[float] = None) -> Tuple[bool, Optional[str]]:
+        """Verify that a quote exists verbatim (or near-verbatim) in source text
+
+        Args:
+            quote: The quoted text to verify
+            source_text: The source text to search in
+            tolerance: Minimum word overlap ratio (0-1) to consider a match (uses schema default if not provided)
+
+        Returns:
+            (is_verbatim, reason)
+        """
+        # Use schema-configured tolerance or default
+        if tolerance is None:
+            tolerance = self._verbatim_tolerance
+
+        if not quote or not source_text:
+            return False, "Boş alıntı veya kaynak"
+
+        # Normalize both texts for comparison
+        def normalize(text: str) -> str:
+            # Remove extra whitespace, normalize Turkish characters
+            text = re.sub(r'\s+', ' ', text.strip().lower())
+            return text
+
+        quote_norm = normalize(quote)
+        source_norm = normalize(source_text)
+
+        # Check for exact substring match
+        if quote_norm in source_norm:
+            return True, None
+
+        # Check for near-verbatim match using sliding window
+        quote_words = quote_norm.split()
+        if len(quote_words) < 5:
+            # For very short quotes, require exact match
+            return False, "Kısa alıntı kaynak metinde bulunamadı"
+
+        # Try to find a window in source that matches most of the quote words
+        source_words = source_norm.split()
+        window_size = len(quote_words)
+
+        best_overlap = 0.0
+        for i in range(len(source_words) - window_size + 1):
+            window = source_words[i:i + window_size]
+            # Count matching words (order doesn't matter for tolerance check)
+            overlap = len(set(quote_words) & set(window)) / len(quote_words)
+            best_overlap = max(best_overlap, overlap)
+
+            if overlap >= tolerance:
+                return True, None
+
+        # Also check if quote words appear in sequence (with some gaps allowed)
+        # This handles cases where minor words are added/removed
+        seq_match = self._check_sequence_match(quote_words, source_words)
+        if seq_match:
+            return True, None
+
+        return False, f"Alıntı kaynak metinde bulunamadı (benzerlik: {best_overlap:.0%})"
+
+    def _check_sequence_match(self, quote_words: List[str], source_words: List[str], max_gap: int = 3) -> bool:
+        """Check if quote words appear in sequence in source (with allowed gaps)"""
+        if not quote_words:
+            return False
+
+        # Find starting positions for first quote word
+        first_word = quote_words[0]
+        start_positions = [i for i, w in enumerate(source_words) if w == first_word]
+
+        for start_pos in start_positions:
+            matched = 1
+            last_match_pos = start_pos
+
+            for q_word in quote_words[1:]:
+                # Look for this word within max_gap positions from last match
+                found = False
+                for offset in range(1, max_gap + 1):
+                    check_pos = last_match_pos + offset
+                    if check_pos < len(source_words) and source_words[check_pos] == q_word:
+                        matched += 1
+                        last_match_pos = check_pos
+                        found = True
+                        break
+                if not found:
+                    break
+
+            # If we matched most words (80%+), consider it a match
+            if matched / len(quote_words) >= 0.8:
+                return True
+
+        return False
+
+    def _check_modality_inference(
+        self,
+        question: str,
+        source_text: str,
+        answer: str
+    ) -> Tuple[bool, Optional[str]]:
+        """Check if answer infers obligation from possibility (FORBIDDEN)
+
+        Rule: If question asks "zorunlu mu?" and source only contains "mümkündür",
+        answering with "zorunlu değildir" is an invalid inference.
+
+        Returns:
+            (is_valid, reason) - False if invalid inference detected
+        """
+        q_modality = self._extract_question_modality(question)
+
+        # Only check when question asks about obligation
+        if q_modality != Modality.ZORUNLU:
+            return True, None
+
+        source_lower = source_text.lower()
+        answer_lower = answer.lower()
+
+        # Check what modality the source actually contains
+        source_has_obligation = bool(re.search(
+            r"zorunlu(dur|değildir)?|gerekmekte(dir)?|gerekmemekte|gerekmez|mecburi",
+            source_lower, re.IGNORECASE
+        ))
+        source_has_possibility = bool(re.search(
+            r"mümkün(dür)?|mümkün\s+değildir|yapılabilir|olabilir",
+            source_lower, re.IGNORECASE
+        ))
+
+        # Check what the answer claims
+        answer_claims_obligation = bool(re.search(
+            r"zorunlu(dur)?|zorunlu\s+değildir|gerek(mekte|li|mez)|mecburi",
+            answer_lower, re.IGNORECASE
+        ))
+
+        # INVALID: Question asks "zorunlu mu?", source only has "mümkündür",
+        # but answer claims something about obligation
+        if answer_claims_obligation and source_has_possibility and not source_has_obligation:
+            return False, "'Mümkün' içeren kaynaktan 'zorunlu' çıkarımı yapılamaz"
+
+        return True, None
+
     async def analyze_chunks(
         self,
         question: str,
@@ -662,23 +889,55 @@ class SemanticAnalyzerService:
         self,
         question: str,
         quote: str,
-        answer: str
+        answer: str,
+        source_text: Optional[str] = None  # NEW: source text for verbatim verification
     ) -> QuoteValidation:
-        """Validate a quote and answer combination"""
+        """Validate a quote and answer combination
+
+        Args:
+            question: The user's question
+            quote: The quoted text (ALINTI)
+            answer: The generated answer (CEVAP)
+            source_text: Optional source chunk text for verbatim verification
+        """
         await self.initialize()
 
         issues = []
         fail_reasons = []
         confidence = 1.0
 
-        # 1. ACTION MATCH
+        # 1. VERBATIM QUOTE VERIFICATION (NEW - CRITICAL)
+        if source_text:
+            is_verbatim, verbatim_reason = self._verify_verbatim_quote(quote, source_text)
+            if not is_verbatim:
+                issues.append({
+                    "type": AnalysisIssue.QUOTE_NOT_VERBATIM.value,
+                    "description": verbatim_reason,
+                    "severity": "critical"
+                })
+                fail_reasons.append(self.fail_messages["quote_not_verbatim"])
+                confidence -= 0.6  # Critical penalty for non-verbatim quote
+
+        # 2. MODALITY INFERENCE CHECK (NEW - CRITICAL)
+        if source_text:
+            is_valid_inference, inference_reason = self._check_modality_inference(question, source_text, answer)
+            if not is_valid_inference:
+                issues.append({
+                    "type": AnalysisIssue.MODALITY_INFERENCE.value,
+                    "description": inference_reason,
+                    "severity": "critical"
+                })
+                fail_reasons.append(self.fail_messages["modality_inference"])
+                confidence -= 0.5  # Critical penalty for invalid inference
+
+        # 3. ACTION MATCH
         action_match, action_reason, q_action, qt_action = self._check_action_match(question, quote)
         if not action_match:
             issues.append({"type": AnalysisIssue.ACTION_MISMATCH.value, "description": action_reason, "severity": "critical"})
             fail_reasons.append(self.fail_messages["action_mismatch"].format(question_action=q_action or "?", quote_action=qt_action or "?"))
             confidence -= 0.5
 
-        # 2. MODALITY ALIGNMENT
+        # 4. MODALITY ALIGNMENT
         modality_match, modality_reason = self._check_modality_alignment(question, answer)
         if not modality_match:
             q_mod = self._extract_question_modality(question)
@@ -687,14 +946,14 @@ class SemanticAnalyzerService:
             fail_reasons.append(self.fail_messages["modality_mismatch"].format(question_modality=q_mod.value, answer_modality=a_mod.value))
             confidence -= 0.4
 
-        # 3. FORBIDDEN PATTERNS
+        # 5. FORBIDDEN PATTERNS
         has_forbidden, forbidden_desc = self._check_forbidden_patterns(quote)
         if has_forbidden:
             issues.append({"type": AnalysisIssue.FORBIDDEN_PATTERN.value, "description": forbidden_desc, "severity": "high"})
             fail_reasons.append(self.fail_messages["forbidden_pattern"])
             confidence -= 0.3
 
-        # 4. VERDICT SENTENCE
+        # 6. VERDICT SENTENCE
         has_verdict, _ = self._check_verdict_sentence(quote)
         if not has_verdict:
             issues.append({"type": AnalysisIssue.NO_VERDICT_SENTENCE.value, "description": "Alıntıda hüküm cümlesi bulunamadı", "severity": "medium"})
@@ -703,7 +962,12 @@ class SemanticAnalyzerService:
 
         suggested_answer = None
         if issues:
-            if any(i["type"] == AnalysisIssue.ACTION_MISMATCH.value for i in issues):
+            # Priority: verbatim > inference > action > modality > forbidden > verdict
+            if any(i["type"] == AnalysisIssue.QUOTE_NOT_VERBATIM.value for i in issues):
+                suggested_answer = self.fail_messages["quote_not_verbatim"]
+            elif any(i["type"] == AnalysisIssue.MODALITY_INFERENCE.value for i in issues):
+                suggested_answer = self.fail_messages["modality_inference"]
+            elif any(i["type"] == AnalysisIssue.ACTION_MISMATCH.value for i in issues):
                 suggested_answer = fail_reasons[0] if fail_reasons else self.fail_messages["generic"]
             elif any(i["type"] == AnalysisIssue.MODALITY_MISMATCH.value for i in issues):
                 suggested_answer = next((r for r in fail_reasons if "modalite" in r.lower()), self.fail_messages["no_verdict"])

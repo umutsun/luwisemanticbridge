@@ -96,13 +96,15 @@ class ValidateQuoteRequest(BaseModel):
     question: str = Field(..., description="The user's question", min_length=3)
     quote: str = Field(..., description="The quoted text from source", min_length=5)
     answer: str = Field(..., description="The generated answer", min_length=3)
+    source_text: Optional[str] = Field(None, description="Original source chunk for verbatim verification")
 
     class Config:
         json_schema_extra = {
             "example": {
                 "question": "vergi levhası bulundurmak zorunlu mu?",
-                "quote": "...mümkün olup olmadığı hk.",
-                "answer": "zorunlu değildir"
+                "quote": "Vergi levhası bulundurma zorunluluğu kaldırılmıştır.",
+                "answer": "zorunlu değildir",
+                "source_text": "Vergi levhası bulundurma zorunluluğu kaldırılmıştır. 2012 yılından itibaren işyerinde vergi levhası bulundurulması zorunlu değildir."
             }
         }
 
@@ -216,10 +218,12 @@ async def analyze_chunks(request: AnalyzeChunksRequest) -> AnalyzeChunksResponse
     summary="Validate quote and answer combination",
     description="""
     Validates a quote and answer for quality issues:
-    - Forbidden patterns in quote
-    - Missing verdict sentence
-    - Semantic drift between question and quote
-    - Semantic mismatch between question type and answer
+    - **Verbatim verification**: Quote must exist in source (if provided)
+    - **Modality inference**: Can't infer "zorunlu değildir" from "mümkündür"
+    - **Forbidden patterns**: KONU, İLGİ, sorulmaktadır
+    - **Action mismatch**: asmak ≠ bulundurmak
+    - **Modality mismatch**: zorunlu mu? → mümkündür
+    - **Missing verdict sentence**
 
     Returns validation result with suggested corrections.
     """
@@ -228,11 +232,14 @@ async def validate_quote(request: ValidateQuoteRequest) -> ValidateQuoteResponse
     """Validate a quote and answer combination"""
     try:
         logger.info(f"Validating quote for question: {request.question[:50]}...")
+        if request.source_text:
+            logger.info(f"  Source text provided for verbatim verification")
 
         validation = await semantic_analyzer.validate_quote(
             question=request.question,
             quote=request.quote,
-            answer=request.answer
+            answer=request.answer,
+            source_text=request.source_text  # NEW: pass source for verbatim check
         )
 
         logger.info(f"Validation result: valid={validation.valid}, issues={len(validation.issues)}")
@@ -312,4 +319,82 @@ async def health_check():
     return {
         "status": "healthy" if status["initialized"] else "initializing",
         **status
+    }
+
+
+class ConfigUpdateRequest(BaseModel):
+    """Request model for config update from schema"""
+    action_groups: Optional[Dict[str, List[str]]] = Field(None, description="Action verb groups")
+    object_anchors: Optional[Dict[str, List[str]]] = Field(None, description="Object keyword anchors")
+    forbidden_patterns: Optional[List[Dict[str, str]]] = Field(None, description="Forbidden patterns [{'pattern': '...', 'description': '...'}]")
+    verdict_patterns: Optional[List[str]] = Field(None, description="Verdict sentence patterns")
+    fail_messages: Optional[Dict[str, str]] = Field(None, description="Fail-closed messages")
+    verbatim_tolerance: Optional[float] = Field(None, description="Quote verbatim verification tolerance (0-1)", ge=0, le=1)
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "action_groups": {
+                    "keep": ["bulundur", "bulundurmak", "taşı"],
+                    "hang": ["as", "asmak", "asma"]
+                },
+                "object_anchors": {
+                    "vergi_levhası": ["vergi levhası", "levha"],
+                    "fatura": ["fatura", "e-fatura"]
+                },
+                "verbatim_tolerance": 0.85
+            }
+        }
+
+
+@router.post(
+    "/config",
+    summary="Update analyzer configuration from schema",
+    description="""
+    Updates the semantic analyzer configuration from database schema.
+    All fields are optional - only provided fields will be updated.
+
+    This allows dynamic configuration without restarting the service.
+    Configuration is cached in Redis for persistence.
+    """
+)
+async def update_config(request: ConfigUpdateRequest):
+    """Update analyzer configuration from schema"""
+    try:
+        config = request.model_dump(exclude_none=True)
+        if not config:
+            return {"status": "no_changes", "message": "No configuration provided"}
+
+        logger.info(f"Updating config from schema: {list(config.keys())}")
+
+        await semantic_analyzer.load_config_from_schema(config)
+
+        return {
+            "status": "updated",
+            "updated_fields": list(config.keys()),
+            "message": "Configuration updated and cached in Redis"
+        }
+
+    except Exception as e:
+        logger.error(f"Config update failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get(
+    "/config",
+    summary="Get current analyzer configuration",
+    description="Returns the current configuration of action groups, object anchors, and patterns"
+)
+async def get_config():
+    """Get current analyzer configuration"""
+    return {
+        "action_groups": semantic_analyzer.action_groups,
+        "object_anchors": semantic_analyzer.object_anchors,
+        "forbidden_patterns": [
+            {"pattern": p, "description": d}
+            for p, d in semantic_analyzer.forbidden_patterns
+        ],
+        "verdict_patterns": semantic_analyzer.verdict_patterns,
+        "verbatim_tolerance": semantic_analyzer._verbatim_tolerance,
+        "fail_messages": semantic_analyzer.fail_messages
     }
