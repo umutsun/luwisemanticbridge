@@ -1218,11 +1218,15 @@ CRITICAL:
             const sourceType = r.source_type || r.source_table || 'Unknown';
             let content = r.excerpt || r.content || '';
 
-            // Clean content - remove "Cevap:", "Soru:" prefixes for cleaner quotes
+            // Clean content - remove prefixes and HTML tags for cleaner quotes
             content = content
               .replace(/^Cevap:\s*/i, '')
               .replace(/^Soru:\s*/i, '')
               .replace(/^Yanıt:\s*/i, '')
+              .replace(/<br\s*\/?>/gi, ' ')
+              .replace(/<\/?(p|div|span|strong|em|b|i)>/gi, '')
+              .replace(/&nbsp;/gi, ' ')
+              .replace(/\s{2,}/g, ' ')
               .trim();
 
             // Explicit schema format - LLM should copy these values
@@ -1897,19 +1901,53 @@ CRITICAL:
       }
     }
 
-    // 5. Clean "Tür:" field - normalize source type display
+    // 5. Clean HTML tags from response - <br />, <br/>, <br>, etc.
+    const htmlPatterns = [
+      { pattern: /<br\s*\/?>/gi, replacement: ' ' },
+      { pattern: /<\/?(p|div|span|strong|em|b|i)>/gi, replacement: '' },
+      { pattern: /&nbsp;/gi, replacement: ' ' },
+      { pattern: /&amp;/gi, replacement: '&' },
+      { pattern: /&lt;/gi, replacement: '<' },
+      { pattern: /&gt;/gi, replacement: '>' },
+      { pattern: /&quot;/gi, replacement: '"' }
+    ];
+
+    for (const { pattern, replacement } of htmlPatterns) {
+      const beforeFix = fixedText;
+      fixedText = fixedText.replace(pattern, replacement);
+      if (fixedText !== beforeFix && !fixedText.includes('<br')) {
+        console.log(`🔧 POST-PROCESS: Cleaned HTML tags`);
+        fixCount++;
+      }
+    }
+
+    // 6. Clean "Tür:" field - normalize source type display
     // "Tür: csv_sorucevap" → "Tür: SoruCevap" (more readable)
     const typeNormalizations = [
       { pattern: /Tür:\s*csv_sorucevap/gi, replacement: 'Tür: SoruCevap' },
       { pattern: /Tür:\s*csv_ozelge/gi, replacement: 'Tür: Özelge' },
       { pattern: /Tür:\s*csv_danistaykararlari/gi, replacement: 'Tür: Danıştay Kararı' },
       { pattern: /Tür:\s*csv_makale/gi, replacement: 'Tür: Makale' },
-      { pattern: /Tür:\s*document_embeddings/gi, replacement: 'Tür: Döküman' }
+      { pattern: /Tür:\s*document_embeddings/gi, replacement: 'Tür: Döküman' },
+      { pattern: /Tür:\s*sorucevap/gi, replacement: 'Tür: SoruCevap' }
     ];
 
     for (const { pattern, replacement } of typeNormalizations) {
       fixedText = fixedText.replace(pattern, replacement);
     }
+
+    // 7. Fix "Başlık: Soru-Cevap" without source reference (fallback fix)
+    // Pattern: "Başlık: Soru-Cevap" at end of line or before punctuation
+    const genericTitleFallback = /Başlık:\s*Soru-?[Cc]evap(?!\s*\[)/gi;
+    if (genericTitleFallback.test(fixedText) && searchResults[bestSourceIdx]?.title) {
+      const actualTitle = searchResults[bestSourceIdx].title;
+      fixedText = fixedText.replace(genericTitleFallback, `Başlık: ${actualTitle}`);
+      console.log(`🔧 POST-PROCESS: Fixed fallback generic title`);
+      fixCount++;
+    }
+
+    // 8. Clean up multiple spaces
+    fixedText = fixedText.replace(/\s{2,}/g, ' ').replace(/ +\./g, '.').replace(/ +,/g, ',');
 
     if (fixCount > 0) {
       console.log(`✅ POST-PROCESS: Applied ${fixCount} fixes to response`);
