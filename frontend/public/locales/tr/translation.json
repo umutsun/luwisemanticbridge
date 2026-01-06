@@ -936,7 +936,8 @@
       "taxProcedureUpdate": "Vergi Usul Güncellemesi",
       "storageSpace": "Depolama Alanı",
       "storage80Full": "Depolama %80 Dolu"
-    }
+    },
+    "subtitle": "Sistem genel bakış ve gerçek zamanlı metrikler"
   },
   "users": {
     "title": "Başlık",

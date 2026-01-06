@@ -1484,8 +1484,8 @@ export default function DashboardPage() {
       {/* Dashboard Header with Live Status */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-cyan-100">Dashboard</h1>
-          <p className="text-sm text-gray-500 dark:text-slate-400 mt-1">System overview and real-time metrics</p>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-cyan-100">{config?.app?.name || 'Dashboard'}</h1>
+          <p className="text-sm text-gray-500 dark:text-slate-400 mt-1">{t('dashboard.subtitle')}</p>
         </div>
         <div className="flex items-center gap-4">
           <LiveIndicator connected={sseConnected} />

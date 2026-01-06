@@ -57,7 +57,13 @@ class AnalyzeChunksRequest(BaseModel):
 
 
 class ChunkAnalysisResponse(BaseModel):
-    """Response model for a single chunk analysis"""
+    """Response model for a single chunk analysis
+
+    Score breakdown:
+    - base_score: Core quality score (0-1) with penalties
+    - bonus: Extra points (0-0.5) for modality match with anchor
+    - confidence: final_score = base_score + bonus (may exceed 1.0)
+    """
     chunk_id: str
     relevance_score: float
     action_match: bool
@@ -70,9 +76,13 @@ class ChunkAnalysisResponse(BaseModel):
     forbidden_pattern: Optional[str]
     has_verdict_sentence: bool
     verdict_sentence: Optional[str]
+    object_anchor_match: bool = True  # New: object/keyword anchor match
+    object_anchor_details: Optional[str] = None  # New: anchor match details
     issues: List[str]
     recommended: bool
-    confidence: float
+    base_score: float = 1.0  # Core quality (0-1)
+    bonus: float = 0.0  # Extra bonus (0-0.5)
+    confidence: float  # Legacy: final_score = base + bonus
 
 
 class AnalyzeChunksResponse(BaseModel):
@@ -167,8 +177,12 @@ async def analyze_chunks(request: AnalyzeChunksRequest) -> AnalyzeChunksResponse
                 forbidden_pattern=a.forbidden_pattern,
                 has_verdict_sentence=a.has_verdict_sentence,
                 verdict_sentence=a.verdict_sentence,
+                object_anchor_match=a.object_anchor_match,
+                object_anchor_details=a.object_anchor_details,
                 issues=a.issues,
                 recommended=a.recommended,
+                base_score=a.base_score,
+                bonus=a.bonus,
                 confidence=a.confidence
             )
             for a in analyses

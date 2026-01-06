@@ -872,7 +872,8 @@
       "taxProcedureUpdate": "[MISSING] tax Procedure Update",
       "storageSpace": "[MISSING] storage Space",
       "storage80Full": "[MISSING] storage80 Full"
-    }
+    },
+    "subtitle": "System overview and real-time metrics"
   },
   "users": {
     "title": "Users",

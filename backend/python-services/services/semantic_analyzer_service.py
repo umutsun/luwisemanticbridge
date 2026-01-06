@@ -68,7 +68,13 @@ class ActionExtraction:
 
 @dataclass
 class ChunkAnalysis:
-    """Analysis result for a single chunk"""
+    """Analysis result for a single chunk
+
+    Score breakdown:
+    - base_score: Core quality score (0-1) from action/modality/patterns
+    - bonus: Additional points (0-0.5) from obligation match + anchor match
+    - final_score: base_score + bonus (may exceed 1.0, that's OK)
+    """
     chunk_id: str
     relevance_score: float
     action_match: bool
@@ -81,12 +87,22 @@ class ChunkAnalysis:
     forbidden_pattern: Optional[str]
     has_verdict_sentence: bool
     verdict_sentence: Optional[str]
-    issues: List[str]
-    recommended: bool
-    confidence: float = 0.0
+    object_anchor_match: bool = True  # New: object/keyword anchor
+    object_anchor_details: Optional[str] = None  # New: anchor details
+    issues: List[str] = field(default_factory=list)
+    recommended: bool = False
+    # Score breakdown
+    base_score: float = 1.0  # Core quality (0-1)
+    bonus: float = 0.0  # Additional bonus (0-0.5)
+    confidence: float = 0.0  # Legacy: final_score = base + bonus
 
     def to_dict(self) -> dict:
         return asdict(self)
+
+    @property
+    def final_score(self) -> float:
+        """Calculate final score (base + bonus)"""
+        return self.base_score + self.bonus
 
 
 @dataclass
@@ -209,6 +225,22 @@ class SemanticAnalyzerService:
             "export": ["ihraç", "ihracat", "dış satım"],
             "import": ["ithal", "ithalat", "dış alım"],
             "register": ["tescil", "kayıt", "kaydet", "kaydettir"],
+        }
+
+        # === OBJECT/KEYWORD ANCHORS ===
+        # Different document types - same action on different objects is NOT equivalent
+        self.object_anchors = {
+            "vergi_levhası": ["vergi levhası", "vergi levha", "vl", "levha"],
+            "sevk_irsaliyesi": ["sevk irsaliyesi", "irsaliye", "sevk belgesi"],
+            "fatura": ["fatura", "e-fatura", "efatura", "elektronik fatura"],
+            "beyanname": ["beyanname", "kdv beyannamesi", "gelir vergisi beyannamesi"],
+            "defter": ["defter", "yevmiye defteri", "envanter defteri", "büyük defter"],
+            "fiş": ["fiş", "ödeme kaydedici cihaz fişi", "perakende satış fişi", "yazarkasa fişi"],
+            "makbuz": ["makbuz", "gider pusulası", "müstahsil makbuzu"],
+            "belge": ["belge", "evrak", "doküman"],
+            "ödeme": ["ödeme", "tahsilat", "para", "nakit"],
+            "taşınmaz": ["taşınmaz", "gayrimenkul", "arsa", "arazi", "bina", "konut", "işyeri"],
+            "araç": ["araç", "otomobil", "taşıt", "motorlu taşıt"],
         }
 
         # === MODALITY PATTERNS ===
@@ -338,6 +370,49 @@ class SemanticAnalyzerService:
 
         return found_actions
 
+    def _extract_object_anchors(self, text: str) -> Set[str]:
+        """Extract object/keyword anchors from text
+
+        Returns normalized anchor names (e.g., "vergi_levhası", "fatura")
+        """
+        text_lower = text.lower()
+        found_anchors = set()
+
+        for anchor_name, keywords in self.object_anchors.items():
+            for keyword in keywords:
+                # Case-insensitive search for keyword
+                if keyword.lower() in text_lower:
+                    found_anchors.add(anchor_name)
+                    break  # Found one match for this anchor, move to next
+
+        return found_anchors
+
+    def _check_object_anchor_match(self, question: str, chunk: str) -> Tuple[bool, Optional[str], Set[str], Set[str]]:
+        """Check if object anchors in question match chunk
+
+        Returns: (match, reason, question_anchors, chunk_anchors)
+        """
+        q_anchors = self._extract_object_anchors(question)
+        c_anchors = self._extract_object_anchors(chunk)
+
+        # If question has no specific object, consider it a match
+        if not q_anchors:
+            return True, None, q_anchors, c_anchors
+
+        # If chunk has no objects but question does, it's uncertain (not a mismatch)
+        if not c_anchors:
+            return True, "Chunk'ta nesne belirtilmemiş", q_anchors, c_anchors
+
+        # Check for intersection
+        common = q_anchors.intersection(c_anchors)
+        if common:
+            return True, None, q_anchors, c_anchors
+
+        # Different objects - this is a mismatch
+        q_obj = list(q_anchors)[0].replace("_", " ") if q_anchors else "?"
+        c_obj = list(c_anchors)[0].replace("_", " ") if c_anchors else "?"
+        return False, f'Soru "{q_obj}" hakkında, chunk "{c_obj}" hakkında', q_anchors, c_anchors
+
     def _check_action_match(self, question: str, quote: str) -> Tuple[bool, Optional[str], Optional[str], Optional[str]]:
         """Check if action in question matches action in quote"""
         question_actions = self._extract_actions(question)
@@ -454,7 +529,13 @@ class SemanticAnalyzerService:
         chunks: List[Dict],
         min_relevance: float = 0.3
     ) -> List[ChunkAnalysis]:
-        """Analyze multiple chunks with hybrid decision making"""
+        """Analyze multiple chunks with hybrid decision making
+
+        Score breakdown:
+        - base_score: Starts at 1.0, penalties applied for issues
+        - bonus: Applied ONLY when object anchor matches
+        - confidence: base_score + bonus (legacy field, may exceed 1.0)
+        """
         await self.initialize()
 
         results = []
@@ -470,15 +551,22 @@ class SemanticAnalyzerService:
                 continue
 
             issues = []
-            confidence = 1.0
+            base_score = 1.0  # Core quality score (0-1)
+            bonus = 0.0  # Extra points for matching modality with anchor
 
             # 1. ACTION MATCH
             action_match, action_reason, q_action, qt_action = self._check_action_match(question, chunk_text)
             if not action_match:
                 issues.append(f"action_mismatch: {action_reason}")
-                confidence -= 0.5
+                base_score -= 0.5
 
-            # 2. MODALITY ALIGNMENT
+            # 2. OBJECT ANCHOR MATCH (NEW)
+            object_anchor_match, anchor_reason, q_anchors, c_anchors = self._check_object_anchor_match(question, chunk_text)
+            if not object_anchor_match:
+                issues.append(f"object_mismatch: {anchor_reason}")
+                base_score -= 0.3
+
+            # 3. MODALITY ALIGNMENT
             has_verdict, verdict = self._check_verdict_sentence(chunk_text)
             modality_match = True
             modality_details = None
@@ -486,51 +574,55 @@ class SemanticAnalyzerService:
                 modality_match, modality_details = self._check_modality_alignment(question, verdict)
                 if not modality_match:
                     issues.append(f"modality_mismatch: {modality_details}")
-                    confidence -= 0.4
+                    base_score -= 0.4
 
-            # 3. FORBIDDEN PATTERNS
+            # 4. FORBIDDEN PATTERNS
             has_forbidden, forbidden_desc = self._check_forbidden_patterns(chunk_text)
             if has_forbidden:
                 issues.append(f"forbidden_pattern: {forbidden_desc}")
-                confidence -= 0.3
+                base_score -= 0.3
 
-            # 4. VERDICT SENTENCE
+            # 5. VERDICT SENTENCE
             if not has_verdict:
                 issues.append("no_verdict_sentence")
-                confidence -= 0.2
+                base_score -= 0.2
 
-            # 5. SIMILARITY
+            # 6. SIMILARITY
             relevance = await self._compute_similarity(question, chunk_text)
             if relevance < min_relevance:
                 issues.append(f"low_relevance: {relevance:.2f}")
-                confidence -= 0.1
+                base_score -= 0.1
 
-            # 6. OBLIGATION PATTERN BONUS
+            # 7. OBLIGATION PATTERN BONUS (only with anchor match!)
             # For "zorunlu mu?" questions, prioritize chunks with obligation verdicts
+            # BUT only if object anchor also matches
             q_modality = self._extract_question_modality(question)
-            obligation_bonus = 0.0
-            if q_modality == Modality.ZORUNLU:
+            if q_modality == Modality.ZORUNLU and object_anchor_match and action_match:
                 # Check if chunk contains obligation patterns
                 obligation_patterns = [
-                    r"zorunludur", r"zorunlus+değildir", r"zorunlus+bulunmamaktadır",
-                    r"yeterlidir", r"yeterlis+değildir",
+                    r"zorunludur", r"zorunlu\s+değildir", r"zorunlu\s+bulunmamaktadır",
+                    r"yeterlidir", r"yeterli\s+değildir",
                     r"gerekmektedir", r"gerekmemektedir", r"gerekmez",
-                    r"mecburidir", r"mecburis+değildir",
+                    r"mecburidir", r"mecburi\s+değildir",
                 ]
                 chunk_lower = chunk_text.lower()
                 for pattern in obligation_patterns:
                     if re.search(pattern, chunk_lower, re.IGNORECASE):
-                        obligation_bonus = 0.3  # Significant bonus for matching modality
+                        bonus = 0.3  # Significant bonus for matching modality
                         break
 
-            # Apply bonus to confidence
-            confidence += obligation_bonus
+            # Clamp base_score to 0-1 range
+            base_score = max(0.0, min(1.0, base_score))
+
+            # Final confidence = base + bonus (may exceed 1.0, that's OK per user requirement)
+            confidence = base_score + bonus
 
             has_drift = not action_match
             drift_reason = action_reason
 
             recommended = (
                 action_match and
+                object_anchor_match and  # NEW: require anchor match
                 modality_match and
                 not has_forbidden and
                 has_verdict and
@@ -550,8 +642,12 @@ class SemanticAnalyzerService:
                 forbidden_pattern=forbidden_desc,
                 has_verdict_sentence=has_verdict,
                 verdict_sentence=verdict,
+                object_anchor_match=object_anchor_match,
+                object_anchor_details=anchor_reason,
                 issues=issues,
                 recommended=recommended,
+                base_score=base_score,
+                bonus=bonus,
                 confidence=max(0.0, confidence)
             )
 
