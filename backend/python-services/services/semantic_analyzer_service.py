@@ -118,6 +118,7 @@ class QuoteValidation:
     suggested_answer: Optional[str]
     confidence: float
     fail_reasons: List[str] = field(default_factory=list)
+    config_version: Optional[str] = None  # Track which config was used
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -229,6 +230,35 @@ class SemanticAnalyzerService:
     5. Similarity score (least important alone)
     """
 
+    # === VERDICT TOKEN CATEGORIES ===
+    # STRONG: Definitive obligation/prohibition statements
+    STRONG_VERDICT_TOKENS = [
+        "zorunludur", "zorunlu değildir", "zorunlu bulunmamaktadır",
+        "gerekmektedir", "gerekmemektedir", "gerekmez",
+        "mecburidir", "mecburi değildir",
+        "şarttır", "şart değildir",
+    ]
+    # WEAK: Possibility/suitability statements (cannot infer obligation)
+    WEAK_VERDICT_TOKENS = [
+        "mümkündür", "mümkün değildir", "mümkün bulunmamaktadır",
+        "uygundur", "uygun değildir",
+        "yeterlidir", "yeterli değildir",
+        "yapılabilir", "yapılamaz",
+        "olabilir", "olamaz",
+    ]
+
+    @staticmethod
+    def _normalize_text(text: str) -> str:
+        """Unified text normalization for all comparisons
+
+        Normalizes whitespace and converts to lowercase.
+        Used across all text comparison methods for consistency.
+        """
+        if not text:
+            return ""
+        # Remove extra whitespace but preserve exact words
+        return re.sub(r'\s+', ' ', text.strip().lower())
+
     def __init__(self):
         self.model_name = os.getenv(
             "SEMANTIC_MODEL",
@@ -330,18 +360,29 @@ class SemanticAnalyzerService:
         ]
 
         # === FAIL-CLOSED MESSAGES ===
+        # Standardized messages for both CEVAP and ALINTI fail-closed scenarios
+        # Format: Each message should be usable standalone as CEVAP text
         self.fail_messages = {
+            # Action-related issues
             "action_mismatch": "Mevcut kaynak farklı bir eylemi ({quote_action}) ele alıyor. "
                               "Sorulan eylem ({question_action}) hakkında doğrudan hüküm bulunamadı.",
+            # Modality-related issues
             "modality_mismatch": "Sorulan '{question_modality}' için cevap '{answer_modality}' "
                                  "türünde verilmiş. Doğru modalite eşleşmesi bulunamadı.",
-            "forbidden_pattern": "Bu alıntı soru başlığı/giriş paragrafıdır, hüküm değildir.",
-            "no_verdict": "Bu konuda açık hüküm cümlesi bulunamadı.",
-            "generic": "Bu konuda kesin bir hüküm cümlesi bulunamadı.",
-            "quote_not_verbatim": "Belirtilen alıntı, kaynak metinde birebir bulunamadı. "
-                                  "Alıntı parafraz veya çıkarım olabilir.",
-            "modality_inference": "Kaynak yalnızca 'mümkün' yönünde bilgi içeriyor. "
+            "modality_inference": "Kaynak yalnızca 'mümkün/olabilir' yönünde bilgi içeriyor. "
                                   "'Zorunlu olup olmadığı' hakkında açık hüküm cümlesi bulunamadı.",
+            # Quote-related issues
+            "quote_not_verbatim": "Belirtilen alıntı, kaynak metinde birebir bulunamadı. "
+                                  "Lütfen kaynağı kontrol ediniz.",
+            "forbidden_pattern": "Bu alıntı soru başlığı/giriş paragrafıdır, hüküm değildir.",
+            # Verdict-related issues
+            "no_verdict": "Bu konuda açık hüküm cümlesi bulunamadı.",
+            "no_strong_verdict": "Kaynakta sadece 'mümkün/uygun' gibi yumuşak ifadeler var. "
+                                 "Kesin zorunluluk/yasak bildiren hüküm bulunamadı.",
+            # Generic fallback
+            "generic": "Bu konuda kesin bir hüküm cümlesi bulunamadı.",
+            # ALINTI-specific (synchronized with CEVAP)
+            "alinti_empty": "Kaynak metin bu soru için doğrudan alıntılanabilir ifade içermiyor.",
         }
 
     async def load_config_from_schema(self, config: dict):
@@ -647,14 +688,9 @@ class SemanticAnalyzerService:
         if not quote or not source_text:
             return False, "Boş alıntı veya kaynak"
 
-        # Normalize both texts for comparison (whitespace only, preserve words)
-        def normalize(text: str) -> str:
-            # Remove extra whitespace but preserve exact words
-            text = re.sub(r'\s+', ' ', text.strip().lower())
-            return text
-
-        quote_norm = normalize(quote)
-        source_norm = normalize(source_text)
+        # Use unified normalize function
+        quote_norm = self._normalize_text(quote)
+        source_norm = self._normalize_text(source_text)
 
         # PRIMARY CHECK: Exact substring match (REQUIRED for strict mode)
         if quote_norm in source_norm:
@@ -662,23 +698,20 @@ class SemanticAnalyzerService:
 
         # STRICT MODE (default): No tolerance for ALINTI - it's legal evidence
         if strict:
-            # Check if verdict tokens exist in both (critical words must match)
-            verdict_tokens = [
-                "zorunludur", "zorunlu değildir", "zorunlu bulunmamaktadır",
-                "gerekmektedir", "gerekmemektedir", "gerekmez",
-                "mümkündür", "mümkün değildir", "mümkün bulunmamaktadır",
-                "uygundur", "uygun değildir",
-                "yeterlidir", "yeterli değildir",
-                "mecburidir", "mecburi değildir",
-            ]
+            # Check verdict tokens - use categorized tokens
+            all_verdict_tokens = self.STRONG_VERDICT_TOKENS + self.WEAK_VERDICT_TOKENS
 
             # Find verdict tokens in quote
-            quote_verdicts = [t for t in verdict_tokens if t in quote_norm]
+            quote_verdicts = [t for t in all_verdict_tokens if t in quote_norm]
             if quote_verdicts:
                 # Check if these EXACT verdict tokens exist in source
-                source_verdicts = [t for t in verdict_tokens if t in source_norm]
+                source_verdicts = [t for t in all_verdict_tokens if t in source_norm]
                 missing_verdicts = set(quote_verdicts) - set(source_verdicts)
                 if missing_verdicts:
+                    # Identify if missing tokens are STRONG (more critical)
+                    missing_strong = [v for v in missing_verdicts if v in self.STRONG_VERDICT_TOKENS]
+                    if missing_strong:
+                        return False, f"KRİTİK: Alıntıdaki zorunluluk ifadesi kaynak metinde yok: {missing_strong}"
                     return False, f"Alıntıdaki hüküm kelimesi kaynak metinde yok: {list(missing_verdicts)}"
 
             return False, "Alıntı kaynak metinde birebir bulunamadı"
@@ -742,8 +775,11 @@ class SemanticAnalyzerService:
     ) -> Tuple[bool, Optional[str]]:
         """Check if answer infers obligation from possibility (FORBIDDEN)
 
-        Rule: If question asks "zorunlu mu?" and source only contains "mümkündür",
-        answering with "zorunlu değildir" is an invalid inference.
+        Rule: If question asks "zorunlu mu?" and source only contains WEAK verdicts,
+        answering with STRONG obligation verdict is an invalid inference.
+
+        STRONG tokens: zorunludur, gerekmektedir, mecburidir (definitive obligation)
+        WEAK tokens: mümkündür, uygundur, yapılabilir (possibility/suitability)
 
         Returns:
             (is_valid, reason) - False if invalid inference detected
@@ -754,29 +790,20 @@ class SemanticAnalyzerService:
         if q_modality != Modality.ZORUNLU:
             return True, None
 
-        source_lower = source_text.lower()
-        answer_lower = answer.lower()
+        source_norm = self._normalize_text(source_text)
+        answer_norm = self._normalize_text(answer)
 
-        # Check what modality the source actually contains
-        source_has_obligation = bool(re.search(
-            r"zorunlu(dur|değildir)?|gerekmekte(dir)?|gerekmemekte|gerekmez|mecburi",
-            source_lower, re.IGNORECASE
-        ))
-        source_has_possibility = bool(re.search(
-            r"mümkün(dür)?|mümkün\s+değildir|yapılabilir|olabilir",
-            source_lower, re.IGNORECASE
-        ))
+        # Check if source contains STRONG verdict tokens
+        source_has_strong = any(t in source_norm for t in self.STRONG_VERDICT_TOKENS)
+        # Check if source contains WEAK verdict tokens
+        source_has_weak = any(t in source_norm for t in self.WEAK_VERDICT_TOKENS)
+        # Check if answer claims STRONG obligation
+        answer_has_strong = any(t in answer_norm for t in self.STRONG_VERDICT_TOKENS)
 
-        # Check what the answer claims
-        answer_claims_obligation = bool(re.search(
-            r"zorunlu(dur)?|zorunlu\s+değildir|gerek(mekte|li|mez)|mecburi",
-            answer_lower, re.IGNORECASE
-        ))
-
-        # INVALID: Question asks "zorunlu mu?", source only has "mümkündür",
-        # but answer claims something about obligation
-        if answer_claims_obligation and source_has_possibility and not source_has_obligation:
-            return False, "'Mümkün' içeren kaynaktan 'zorunlu' çıkarımı yapılamaz"
+        # INVALID: Question asks "zorunlu mu?", source only has WEAK tokens,
+        # but answer claims STRONG obligation
+        if answer_has_strong and source_has_weak and not source_has_strong:
+            return False, "'Mümkün/uygun' içeren kaynaktan 'zorunlu/gerekli' çıkarımı yapılamaz"
 
         return True, None
 
@@ -1011,7 +1038,8 @@ class SemanticAnalyzerService:
             issues=issues,
             suggested_answer=suggested_answer,
             confidence=max(0.0, confidence),
-            fail_reasons=fail_reasons
+            fail_reasons=fail_reasons,
+            config_version=self._config_version  # Track which config was used
         )
 
     async def filter_chunks_for_llm(
@@ -1073,6 +1101,62 @@ class SemanticAnalyzerService:
             "config_version": self._config_version,
             "config_timestamp": self._config_timestamp,
         }
+
+    def validate_source_text(self, source_text: Optional[str], chunk_sent_to_llm: str) -> Tuple[bool, Optional[str]]:
+        """Validate that source_text matches the chunk sent to LLM
+
+        CRITICAL: source_text MUST be the exact text that was sent to the LLM.
+        This ensures verbatim verification works correctly.
+
+        Args:
+            source_text: The source_text parameter passed to validate_quote
+            chunk_sent_to_llm: The actual chunk text that was sent to the LLM
+
+        Returns:
+            (is_valid, warning_message)
+
+        Usage in integration:
+            # In RAG service, before calling validate_quote:
+            is_valid, warning = semantic_analyzer.validate_source_text(
+                source_text=source_text_param,
+                chunk_sent_to_llm=chunk_for_llm
+            )
+            if not is_valid:
+                logger.warning(f"source_text mismatch: {warning}")
+        """
+        if not source_text:
+            return False, "source_text is required for verbatim verification"
+
+        if not chunk_sent_to_llm:
+            return False, "chunk_sent_to_llm is empty"
+
+        # Normalize both for comparison
+        source_norm = self._normalize_text(source_text)
+        chunk_norm = self._normalize_text(chunk_sent_to_llm)
+
+        # source_text should be exactly what was sent to LLM (or a substring of it)
+        if source_norm == chunk_norm:
+            return True, None
+
+        # Check if source_text is a substring (chunk might have extra metadata)
+        if source_norm in chunk_norm:
+            return True, "source_text is a subset of chunk (acceptable)"
+
+        # Mismatch - this could cause false positives/negatives in verbatim check
+        return False, "source_text does not match chunk sent to LLM - verbatim verification may be unreliable"
+
+    def get_verdict_token_category(self, text: str) -> Tuple[List[str], List[str]]:
+        """Get categorized verdict tokens found in text
+
+        Returns:
+            (strong_tokens, weak_tokens) - Lists of found tokens in each category
+
+        Useful for debugging and understanding what verdict types are in a text.
+        """
+        text_norm = self._normalize_text(text)
+        strong = [t for t in self.STRONG_VERDICT_TOKENS if t in text_norm]
+        weak = [t for t in self.WEAK_VERDICT_TOKENS if t in text_norm]
+        return strong, weak
 
 
 # Singleton instance

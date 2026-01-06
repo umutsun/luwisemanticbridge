@@ -115,6 +115,7 @@ class ValidateQuoteResponse(BaseModel):
     issues: List[Dict[str, str]]
     suggested_answer: Optional[str]
     confidence: float
+    config_version: Optional[str] = None  # Track which config was used
 
 
 class FilterChunksRequest(BaseModel):
@@ -248,7 +249,8 @@ async def validate_quote(request: ValidateQuoteRequest) -> ValidateQuoteResponse
             valid=validation.valid,
             issues=validation.issues,
             suggested_answer=validation.suggested_answer,
-            confidence=validation.confidence
+            confidence=validation.confidence,
+            config_version=validation.config_version
         )
 
     except Exception as e:
@@ -400,5 +402,64 @@ async def get_config():
         ],
         "verdict_patterns": semantic_analyzer.verdict_patterns,
         "verbatim_tolerance": semantic_analyzer._verbatim_tolerance,
-        "fail_messages": semantic_analyzer.fail_messages
+        "fail_messages": semantic_analyzer.fail_messages,
+        "verdict_token_categories": {
+            "strong": semantic_analyzer.STRONG_VERDICT_TOKENS,
+            "weak": semantic_analyzer.WEAK_VERDICT_TOKENS
+        }
+    }
+
+
+class ValidateSourceTextRequest(BaseModel):
+    """Request model for source_text validation"""
+    source_text: str = Field(..., description="The source_text to validate")
+    chunk_sent_to_llm: str = Field(..., description="The actual chunk text sent to LLM")
+
+
+@router.post(
+    "/validate/source-text",
+    summary="Validate source_text matches LLM chunk",
+    description="""
+    CRITICAL: Validates that source_text parameter matches the chunk sent to LLM.
+
+    This ensures verbatim verification works correctly. Call this before validate_quote
+    to catch integration errors where source_text might be different from what was sent to LLM.
+    """
+)
+async def validate_source_text(request: ValidateSourceTextRequest):
+    """Validate source_text matches the chunk sent to LLM"""
+    is_valid, warning = semantic_analyzer.validate_source_text(
+        source_text=request.source_text,
+        chunk_sent_to_llm=request.chunk_sent_to_llm
+    )
+    return {
+        "valid": is_valid,
+        "warning": warning,
+        "recommendation": "source_text MUST be the exact text sent to LLM for verbatim verification to work"
+    }
+
+
+class InspectTextRequest(BaseModel):
+    """Request model for text inspection"""
+    text: str = Field(..., description="Text to inspect for verdict tokens")
+
+
+@router.post(
+    "/inspect/verdict-tokens",
+    summary="Inspect text for verdict tokens",
+    description="Returns categorized verdict tokens (STRONG vs WEAK) found in the text"
+)
+async def inspect_verdict_tokens(request: InspectTextRequest):
+    """Inspect text for verdict tokens"""
+    strong, weak = semantic_analyzer.get_verdict_token_category(request.text)
+    return {
+        "strong_tokens": strong,
+        "weak_tokens": weak,
+        "has_strong": len(strong) > 0,
+        "has_weak": len(weak) > 0,
+        "can_answer_obligation": len(strong) > 0,  # Only STRONG tokens can answer "zorunlu mu?"
+        "explanation": {
+            "strong": "Kesin zorunluluk/yasak bildiren ifadeler (zorunludur, gerekmektedir, mecburidir)",
+            "weak": "İmkan/uygunluk bildiren ifadeler (mümkündür, uygundur, yapılabilir)"
+        }
     }
