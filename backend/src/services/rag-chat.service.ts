@@ -1166,58 +1166,40 @@ ${questionLabel}: ${message}`;
         console.log(`✅ STRICT MODE ACTIVE - Using simplified CEVAP/ALINTI format`);
 
         // Turkish strict mode prompt - loaded from database if customized
-        const defaultStrictInstructionTr = `Aşağıda [Kaynak 1], [Kaynak 2], [Kaynak 3] şeklinde numaralanmış kaynaklar var.
+        const defaultStrictInstructionTr = `Aşağıda numaralanmış kaynaklar var. Her kaynağın Tür ve Başlık bilgisi şemada yazılı.
 
 FORMAT:
 
 **CEVAP**
-[Cevap cümlesi] [Kaynak 1]
-[Ek bilgi] [Kaynak 1]
+[Tek sade cümle ile doğrudan cevap] [Kaynak X]
 
 **ALINTI**
-"[Tam alıntı cümlesi]" — Tür: SoruCevap, Başlık: [başlık] [Kaynak 3]
+"[Kaynaktan birebir alıntı]" — Tür: [ŞEMADAN AL], Başlık: [ŞEMADAN AL] [Kaynak X]
 
 KRİTİK:
-1. Her cümle sonuna [Kaynak 1] veya [Kaynak 2] veya [Kaynak 3] YAZ
-2. BOŞ [] YAZMA - numara şart: [Kaynak 1], [Kaynak 2], [Kaynak 3]
-3. Soru-Cevap (SoruCevap) kaynağı varsa ONU kullan - en güvenilir
-4. Document_embeddings içindekiler tablosu DEĞİL, asıl cevap içeren kaynağı seç
-
-ÖRNEK:
-Kaynak listesinde [Kaynak 3] SoruCevap "X zorunludur" diyorsa:
-
-**CEVAP**
-X zorunludur. [Kaynak 3]
-
-**ALINTI**
-"X zorunludur." — Tür: SoruCevap, Başlık: X zorunlu mu? [Kaynak 3]`;
+1. CEVAP kısa olsun - tekrar yok
+2. ALINTI'da Tür ve Başlık'ı ŞEMADAN KOPYALA (örn: Tür: csv_sorucevap, Başlık: Transfer fiyatlandırması...)
+3. Her cümle sonuna [Kaynak 1], [Kaynak 2] veya [Kaynak 3] YAZ
+4. BOŞ [] YAZMA
+5. SoruCevap/csv_sorucevap kaynağı varsa ONU tercih et`;
 
         // English strict mode prompt - loaded from database if customized
-        const defaultStrictInstructionEn = `Sources are numbered as [Source 1], [Source 2], [Source 3] below.
+        const defaultStrictInstructionEn = `Sources are numbered below. Each source has Type and Title in the schema.
 
 FORMAT:
 
 **ANSWER**
-[Answer sentence] [Source 1]
-[Additional info] [Source 1]
+[Single concise sentence with direct answer] [Source X]
 
 **QUOTE**
-"[Full quote sentence]" — Type: Q&A, Title: [title] [Source 3]
+"[Exact quote from source]" — Type: [COPY FROM SCHEMA], Title: [COPY FROM SCHEMA] [Source X]
 
 CRITICAL:
-1. Write [Source 1] or [Source 2] or [Source 3] after EVERY sentence
-2. NEVER write empty [] - number is required: [Source 1], [Source 2], [Source 3]
-3. If Q&A source exists, USE IT - most reliable
-4. Choose source with actual answer, NOT table of contents
-
-EXAMPLE:
-If [Source 3] Q&A says "X is mandatory":
-
-**ANSWER**
-X is mandatory. [Source 3]
-
-**QUOTE**
-"X is mandatory." — Type: Q&A, Title: Is X mandatory? [Source 3]`;
+1. ANSWER should be short - no repetition
+2. In QUOTE, copy Type and Title FROM THE SCHEMA (e.g., Type: csv_sorucevap, Title: Transfer pricing...)
+3. Write [Source 1], [Source 2] or [Source 3] after EVERY sentence
+4. NEVER write empty []
+5. Prefer Q&A/csv_sorucevap source if available`;
 
           // Load from database settings (per-tenant customization) or use defaults
           const strictInstructionTr = settingsMap.get('ragSettings.strictModeInstructionTr') || defaultStrictInstructionTr;
@@ -1831,18 +1813,16 @@ X is mandatory. [Source 3]
   /**
    * Fix empty source references [] in strict mode responses
    * LLM sometimes writes [] instead of [Kaynak 1], [Kaynak 2], etc.
-   * This post-processor finds the best matching source for each empty []
+   * Also fixes generic titles like "Başlık: Soru-Cevap" to actual source titles
    */
   private fixEmptySourceReferences(text: string, searchResults: any[]): string {
     if (!text || !searchResults.length) return text;
 
+    let fixedText = text;
+
     // Find all empty [] patterns
     const emptyRefPattern = /\[\s*\]/g;
     const emptyCount = (text.match(emptyRefPattern) || []).length;
-
-    if (emptyCount === 0) return text;
-
-    console.log(`🔧 POST-PROCESS: Found ${emptyCount} empty [] references, fixing...`);
 
     // Find the best source - prioritize SoruCevap/Q&A sources
     let bestSourceIdx = 0;
@@ -1855,20 +1835,49 @@ X is mandatory. [Source 3]
     }
 
     // Replace all empty [] with the best source reference
-    const sourceRef = `[Kaynak ${bestSourceIdx + 1}]`;
-    const fixedText = text.replace(emptyRefPattern, sourceRef);
+    if (emptyCount > 0) {
+      console.log(`🔧 POST-PROCESS: Found ${emptyCount} empty [] references, fixing...`);
+      const sourceRef = `[Kaynak ${bestSourceIdx + 1}]`;
+      fixedText = fixedText.replace(emptyRefPattern, sourceRef);
+      console.log(`✅ POST-PROCESS: Replaced ${emptyCount} empty [] with ${sourceRef}`);
+    }
 
-    console.log(`✅ POST-PROCESS: Replaced ${emptyCount} empty [] with ${sourceRef}`);
+    // Fix generic "Başlık: Soru-Cevap" or "Başlık: SoruCevap" to use actual title
+    // Match patterns like: "Başlık: Soru-Cevap [Kaynak 3]" or "Başlık: SoruCevap [Kaynak 3]"
+    const genericTitlePatterns = [
+      /Başlık:\s*Soru-?[Cc]evap\s*(\[Kaynak\s*\d+\])/gi,
+      /Başlık:\s*Q&A\s*(\[Kaynak\s*\d+\])/gi,
+      /Başlık:\s*Q&A\s*(\[Source\s*\d+\])/gi
+    ];
 
-    // Also fix "Başlık: Soru-Cevap" to use actual title from the source
-    const bestSource = searchResults[bestSourceIdx];
-    if (bestSource && bestSource.title) {
-      const genericTitlePattern = /Başlık:\s*Soru-Cevap\s*\[/gi;
-      const actualTitle = bestSource.title.replace(/^Soru-Cevap\s*/, '').trim() || bestSource.title;
-      const fixedWithTitle = fixedText.replace(genericTitlePattern, `Başlık: ${actualTitle} [`);
-      if (fixedWithTitle !== fixedText) {
-        console.log(`✅ POST-PROCESS: Fixed generic title to "${actualTitle}"`);
-        return fixedWithTitle;
+    for (const pattern of genericTitlePatterns) {
+      const matches = fixedText.match(pattern);
+      if (matches && matches.length > 0) {
+        // Extract source number from the match
+        const sourceNumMatch = matches[0].match(/\d+/);
+        const sourceNum = sourceNumMatch ? parseInt(sourceNumMatch[0]) - 1 : bestSourceIdx;
+        const source = searchResults[sourceNum] || searchResults[bestSourceIdx];
+
+        if (source && source.title) {
+          // Get actual title - remove "SoruCevap" prefix if present
+          let actualTitle = source.title
+            .replace(/^Soru-?[Cc]evap\s*[-:]\s*/i, '')
+            .replace(/^Q&A\s*[-:]\s*/i, '')
+            .trim();
+
+          // If title is still empty or just the type, use original title
+          if (!actualTitle || actualTitle.length < 5) {
+            actualTitle = source.title;
+          }
+
+          // Replace generic title with actual title
+          const oldText = fixedText;
+          fixedText = fixedText.replace(pattern, `Başlık: ${actualTitle} $1`);
+
+          if (fixedText !== oldText) {
+            console.log(`✅ POST-PROCESS: Fixed generic title to "${actualTitle}"`);
+          }
+        }
       }
     }
 
