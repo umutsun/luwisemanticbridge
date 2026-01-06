@@ -113,10 +113,15 @@ class ValidateQuoteRequest(BaseModel):
 
 
 class ValidateQuoteResponse(BaseModel):
-    """Response model for quote validation"""
+    """Response model for quote validation
+
+    When quote_is_system_message is detected, suggested_quote provides
+    a steril ALINTI replacement (e.g., "—" for "no quote available").
+    """
     valid: bool
     issues: List[Dict[str, str]]
     suggested_answer: Optional[str]
+    suggested_quote: Optional[str] = None  # NEW: steril ALINTI when system message detected
     confidence: float
     config_version: Optional[str] = None  # Track which config was used
 
@@ -255,6 +260,7 @@ async def validate_quote(request: ValidateQuoteRequest) -> ValidateQuoteResponse
             valid=validation.valid,
             issues=validation.issues,
             suggested_answer=validation.suggested_answer,
+            suggested_quote=validation.suggested_quote,  # NEW: steril ALINTI replacement
             confidence=validation.confidence,
             config_version=validation.config_version
         )

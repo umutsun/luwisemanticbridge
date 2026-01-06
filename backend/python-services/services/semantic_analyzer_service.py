@@ -138,11 +138,16 @@ class ChunkAnalysis:
 
 @dataclass
 class QuoteValidation:
-    """Validation result for a quote"""
+    """Validation result for a quote
+
+    When ALINTI contains a system message instead of real source text,
+    suggested_quote provides a steril replacement.
+    """
     valid: bool
     issues: List[Dict[str, str]]
     suggested_answer: Optional[str]
-    confidence: float
+    suggested_quote: Optional[str] = None  # NEW: steril ALINTI replacement when quote_is_system_message
+    confidence: float = 1.0
     fail_reasons: List[str] = field(default_factory=list)
     config_version: Optional[str] = None  # Track which config was used
 
@@ -903,11 +908,28 @@ class SemanticAnalyzerService:
                 return True, match.group(0).strip()
         return False, None
 
+    # Source indicators that suggest quote is from real legal source, not system message
+    SOURCE_INDICATORS = [
+        r"\bvuk\b", r"\bttk\b", r"\btmk\b", r"\btbk\b",  # Kanun kısaltmaları
+        r"\bmadde\s*\d+", r"\bmd\.\s*\d+",  # Madde referansları
+        r"\btebliğ\b", r"\bözelge\b", r"\bgenelge\b",  # Düzenleme tipleri
+        r"\bdanıştay\b", r"\byargıtay\b",  # Yüksek mahkemeler
+        r"\bkarar\s*(no|sayı)", r"\besas\s*(no|sayı)",  # Karar referansları
+        r"\btarih(li|inde)?\s*\d{1,2}[./]\d{1,2}[./]\d{2,4}",  # Tarih referansları
+        r"\bgib\b", r"\bgelir\s+idaresi\b",  # Kurumlar
+        r"\bsayılı\s+(kanun|yasa|tebliğ)",  # Sayılı mevzuat
+        r"\bfıkra\b", r"\bbent\b",  # Mevzuat alt birimleri
+    ]
+
     def _check_quote_is_system_message(self, quote: str) -> Tuple[bool, Optional[str]]:
         """Check if quote contains a system/fail-closed message instead of real source text
 
         CRITICAL: ALINTI must be verbatim text from source, NOT a system-generated message.
         This catches cases where LLM outputs fail-closed text as if it were a quote.
+
+        FALSE POSITIVE PROTECTION:
+        - If quote contains source indicators (VUK, tebliğ, madde X, etc.), it's likely real
+        - System messages typically don't have legal source references
 
         Example bad ALINTI:
         "Bu konuda kesin bir hüküm cümlesi bulunamadı, ancak ilgili kaynak incelenebilir."
@@ -919,6 +941,18 @@ class SemanticAnalyzerService:
         """
         quote_lower = quote.lower()
 
+        # FALSE POSITIVE PROTECTION: Check for source indicators first
+        # If quote has legal source references, it's probably a real quote
+        has_source_indicator = any(
+            re.search(pattern, quote_lower, re.IGNORECASE)
+            for pattern in self.SOURCE_INDICATORS
+        )
+
+        if has_source_indicator:
+            # Quote has source indicators - likely a real legal quote, not system message
+            return False, None
+
+        # Check for system message patterns
         for pattern, description in self.system_message_patterns:
             if re.search(pattern, quote_lower, re.IGNORECASE):
                 return True, f"ALINTI sistem mesajı içeriyor: {description}"
@@ -1333,10 +1367,14 @@ class SemanticAnalyzerService:
             confidence -= 0.2
 
         suggested_answer = None
+        suggested_quote = None  # NEW: steril ALINTI replacement
+
         if issues:
             # Priority: system_message > verbatim > inference > action > modality > forbidden > verdict
             if any(i["type"] == AnalysisIssue.QUOTE_IS_SYSTEM_MESSAGE.value for i in issues):
                 suggested_answer = self.fail_messages["quote_is_system_message"]
+                # STERIL ALINTI: Replace fake quote with proper non-quote message
+                suggested_quote = "—"  # UI should show this as "no quote available"
             elif any(i["type"] == AnalysisIssue.QUOTE_NOT_VERBATIM.value for i in issues):
                 suggested_answer = self.fail_messages["quote_not_verbatim"]
             elif any(i["type"] == AnalysisIssue.MODALITY_INFERENCE.value for i in issues):
@@ -1354,6 +1392,7 @@ class SemanticAnalyzerService:
             valid=len(issues) == 0,
             issues=issues,
             suggested_answer=suggested_answer,
+            suggested_quote=suggested_quote,  # NEW: steril ALINTI for system message cases
             confidence=max(0.0, confidence),
             fail_reasons=fail_reasons,
             config_version=self._config_version  # Track which config was used
