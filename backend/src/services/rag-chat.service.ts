@@ -1110,9 +1110,15 @@ ${questionLabel}: ${message}`;
       // Check if citation text should be disabled (sources shown but no [1], [2] in response)
       const disableCitationText = settingsMap.get('ragSettings.disableCitationText') === 'true';
 
-      // ⚡ FAST MODE or Citation Text Disabled: Simplified prompt without citation instructions
-      if (citationsDisabled || disableCitationText) {
-        console.log(`⚡ NO CITATIONS MODE: citationsDisabled=${citationsDisabled}, disableCitationText=${disableCitationText}`);
+      // Check if strict RAG mode is enabled (for legal/accurate responses)
+      // DEFAULT: true - Legal platforms require source-faithful responses by default
+      // NOTE: strictMode takes priority over citationsDisabled/disableCitationText
+      const strictRagMode = settingsMap.get('ragSettings.strictMode') !== 'false';
+      console.log(`🔍 RAG MODE CHECK: strictRagMode=${strictRagMode}, citationsDisabled=${citationsDisabled}, disableCitationText=${disableCitationText}`);
+
+      // ⚡ FAST MODE: Only when strict mode is OFF and citations are disabled
+      if (!strictRagMode && (citationsDisabled || disableCitationText)) {
+        console.log(`⚡ FAST MODE: citationsDisabled=${citationsDisabled}, disableCitationText=${disableCitationText}`);
 
         // 🔗 Add follow-up context instruction if this is a follow-up question
         // NOTE: Instruction loaded from settings (ragSettings.followUpInstructionTr/En)
@@ -1151,22 +1157,16 @@ ${questionLabel}: ${message}`;
         console.log(`⚡ FAST MODE: Using maxLength=${fastModeMaxLength} characters`);
 
         userPrompt = `${contextLabel}:\n${enhancedContext}${followUpInstruction}\n\n${questionLabel}: ${message}${fastModeInstruction}`;
-      } else {
-        // Check if strict RAG mode is enabled (for legal/accurate responses)
-        // DEFAULT: true - Legal platforms require source-faithful responses by default
-        const strictRagMode = settingsMap.get('ragSettings.strictMode') !== 'false';
+      } else if (strictRagMode) {
+        // ========================================
+        // STRICT RAG MODE - Source-faithful responses
+        // ========================================
+        // Prompts are loaded from database settings (customizable per tenant)
+        // Falls back to default if not set in database
+        console.log(`✅ STRICT MODE ACTIVE - Using simplified CEVAP/ALINTI format`);
 
-        console.log(`🔍 RAG MODE CHECK: strictRagMode=${strictRagMode}, settingValue='${settingsMap.get('ragSettings.strictMode')}'`);
-
-        if (strictRagMode) {
-          // ========================================
-          // STRICT RAG MODE - Source-faithful responses
-          // ========================================
-          // Prompts are loaded from database settings (customizable per tenant)
-          // Falls back to default if not set in database
-          console.log(`✅ STRICT MODE ACTIVE - Using simplified CEVAP/ALINTI format`);
-
-          const defaultStrictInstructionTr = `SEN BİR KAYNAK-SADIK YANITLAMA SİSTEMİSİN.
+        // Turkish strict mode prompt - loaded from database if customized
+        const defaultStrictInstructionTr = `SEN BİR KAYNAK-SADIK YANITLAMA SİSTEMİSİN.
 
 TEMEL KURAL: Sadece kaynaklarda yazanı söyle. Yorum yapma, ekleme yapma.
 
@@ -1191,7 +1191,8 @@ YAPMA:
 - Kaynak olmadan yorum yapma
 - Zorunlu/zorunlu değil gibi kesin hükümler verip sonra "mevzuat yok" deme`;
 
-          const defaultStrictInstructionEn = `YOU ARE A SOURCE-FAITHFUL RESPONSE SYSTEM.
+        // English strict mode prompt - loaded from database if customized
+        const defaultStrictInstructionEn = `YOU ARE A SOURCE-FAITHFUL RESPONSE SYSTEM.
 
 CORE RULE: Only state what's in the sources. No interpretation, no additions.
 
@@ -1290,7 +1291,6 @@ DO NOT:
 
           userPrompt = `${contextLabel}:\n${enhancedContext}\n\n${questionLabel}: ${message}${summaryInstruction}`;
         }
-      }
       console.log(` Best similarity score: ${(bestScore * 100).toFixed(1)}% (results sorted by relevance)`);
       console.log(`️ Sending temperature to LLM Manager: ${options.temperature} (type: ${typeof options.temperature})`);
       console.log(` Context length: ${enhancedContext.length}, sources: ${initialDisplayCount}`);
