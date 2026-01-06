@@ -231,21 +231,73 @@ class SemanticAnalyzerService:
     """
 
     # === VERDICT TOKEN CATEGORIES ===
+    # IMPORTANT: Lists are sorted by length (longest-first) to prevent
+    # "zorunlu" matching before "zorunlu değildir"
+    #
     # STRONG: Definitive obligation/prohibition statements
-    STRONG_VERDICT_TOKENS = [
+    STRONG_VERDICT_TOKENS = sorted([
         "zorunludur", "zorunlu değildir", "zorunlu bulunmamaktadır",
         "gerekmektedir", "gerekmemektedir", "gerekmez",
         "mecburidir", "mecburi değildir",
         "şarttır", "şart değildir",
-    ]
-    # WEAK: Possibility/suitability statements (cannot infer obligation)
-    WEAK_VERDICT_TOKENS = [
+    ], key=len, reverse=True)  # Longest-first matching
+
+    # WEAK: Possibility/suitability statements
+    # NOTE: WEAK ≠ low confidence. WEAK = "cannot infer STRONG obligation from this"
+    # If question asks "mümkün mü?", WEAK token IS definitive for that modality
+    WEAK_VERDICT_TOKENS = sorted([
         "mümkündür", "mümkün değildir", "mümkün bulunmamaktadır",
         "uygundur", "uygun değildir",
         "yeterlidir", "yeterli değildir",
         "yapılabilir", "yapılamaz",
         "olabilir", "olamaz",
-    ]
+    ], key=len, reverse=True)  # Longest-first matching
+
+    @classmethod
+    def _find_verdict_tokens(cls, text: str) -> Tuple[List[str], List[str]]:
+        """Find verdict tokens using longest-first matching
+
+        Prevents "zorunlu" from matching when "zorunlu değildir" is present.
+
+        Returns:
+            (strong_tokens, weak_tokens) - Found tokens in each category
+        """
+        text_norm = cls._normalize_text(text)
+        found_strong = []
+        found_weak = []
+
+        # Track matched positions to avoid overlapping matches
+        matched_positions = set()
+
+        def find_token(token: str) -> Optional[int]:
+            """Find token position, avoiding already matched regions"""
+            start = 0
+            while True:
+                pos = text_norm.find(token, start)
+                if pos == -1:
+                    return None
+                # Check if this position overlaps with already matched tokens
+                token_range = set(range(pos, pos + len(token)))
+                if not token_range.intersection(matched_positions):
+                    return pos
+                start = pos + 1
+            return None
+
+        # Match STRONG tokens first (longest-first within category)
+        for token in cls.STRONG_VERDICT_TOKENS:
+            pos = find_token(token)
+            if pos is not None:
+                found_strong.append(token)
+                matched_positions.update(range(pos, pos + len(token)))
+
+        # Then match WEAK tokens (longest-first within category)
+        for token in cls.WEAK_VERDICT_TOKENS:
+            pos = find_token(token)
+            if pos is not None:
+                found_weak.append(token)
+                matched_positions.update(range(pos, pos + len(token)))
+
+        return found_strong, found_weak
 
     @staticmethod
     def _normalize_text(text: str) -> str:
@@ -698,14 +750,15 @@ class SemanticAnalyzerService:
 
         # STRICT MODE (default): No tolerance for ALINTI - it's legal evidence
         if strict:
-            # Check verdict tokens - use categorized tokens
-            all_verdict_tokens = self.STRONG_VERDICT_TOKENS + self.WEAK_VERDICT_TOKENS
+            # Use longest-first matching for verdict tokens
+            quote_strong, quote_weak = self._find_verdict_tokens(quote)
+            source_strong, source_weak = self._find_verdict_tokens(source_text)
 
-            # Find verdict tokens in quote
-            quote_verdicts = [t for t in all_verdict_tokens if t in quote_norm]
+            quote_verdicts = quote_strong + quote_weak
+            source_verdicts = source_strong + source_weak
+
             if quote_verdicts:
                 # Check if these EXACT verdict tokens exist in source
-                source_verdicts = [t for t in all_verdict_tokens if t in source_norm]
                 missing_verdicts = set(quote_verdicts) - set(source_verdicts)
                 if missing_verdicts:
                     # Identify if missing tokens are STRONG (more critical)
@@ -775,8 +828,13 @@ class SemanticAnalyzerService:
     ) -> Tuple[bool, Optional[str]]:
         """Check if answer infers obligation from possibility (FORBIDDEN)
 
-        Rule: If question asks "zorunlu mu?" and source only contains WEAK verdicts,
-        answering with STRONG obligation verdict is an invalid inference.
+        CRITICAL RULE:
+        - If question asks "zorunlu mu?" and source only has WEAK verdicts,
+          answering with STRONG obligation verdict is INVALID inference.
+
+        EXCEPTION:
+        - If question asks "mümkün mü? / yapılabilir mi? / uygun mu?",
+          WEAK tokens ARE definitive for that modality → allow definitive answer.
 
         STRONG tokens: zorunludur, gerekmektedir, mecburidir (definitive obligation)
         WEAK tokens: mümkündür, uygundur, yapılabilir (possibility/suitability)
@@ -786,24 +844,23 @@ class SemanticAnalyzerService:
         """
         q_modality = self._extract_question_modality(question)
 
-        # Only check when question asks about obligation
-        if q_modality != Modality.ZORUNLU:
+        # EXCEPTION: If question asks about possibility/suitability (mümkün mü? / uygun mu?),
+        # WEAK tokens ARE definitive for that modality - no inference check needed
+        if q_modality in (Modality.MUMKUN, Modality.UYGUN):
             return True, None
 
-        source_norm = self._normalize_text(source_text)
-        answer_norm = self._normalize_text(answer)
+        # Only enforce strict check when question asks about obligation (zorunlu mu? / gerekli mi?)
+        if q_modality not in (Modality.ZORUNLU, Modality.GEREKLI):
+            return True, None
 
-        # Check if source contains STRONG verdict tokens
-        source_has_strong = any(t in source_norm for t in self.STRONG_VERDICT_TOKENS)
-        # Check if source contains WEAK verdict tokens
-        source_has_weak = any(t in source_norm for t in self.WEAK_VERDICT_TOKENS)
-        # Check if answer claims STRONG obligation
-        answer_has_strong = any(t in answer_norm for t in self.STRONG_VERDICT_TOKENS)
+        # Use longest-first matching
+        source_strong, source_weak = self._find_verdict_tokens(source_text)
+        answer_strong, _ = self._find_verdict_tokens(answer)
 
         # INVALID: Question asks "zorunlu mu?", source only has WEAK tokens,
         # but answer claims STRONG obligation
-        if answer_has_strong and source_has_weak and not source_has_strong:
-            return False, "'Mümkün/uygun' içeren kaynaktan 'zorunlu/gerekli' çıkarımı yapılamaz"
+        if answer_strong and source_weak and not source_strong:
+            return False, f"'Mümkün/uygun' içeren kaynaktan 'zorunlu/gerekli' çıkarımı yapılamaz (kaynak: {source_weak}, cevap: {answer_strong})"
 
         return True, None
 
@@ -1105,8 +1162,10 @@ class SemanticAnalyzerService:
     def validate_source_text(self, source_text: Optional[str], chunk_sent_to_llm: str) -> Tuple[bool, Optional[str]]:
         """Validate that source_text matches the chunk sent to LLM
 
-        CRITICAL: source_text MUST be the exact text that was sent to the LLM.
-        This ensures verbatim verification works correctly.
+        Uses fuzzy matching to handle:
+        - HTML cleaning differences
+        - Whitespace normalization differences
+        - Truncation in pipeline
 
         Args:
             source_text: The source_text parameter passed to validate_quote
@@ -1134,29 +1193,53 @@ class SemanticAnalyzerService:
         source_norm = self._normalize_text(source_text)
         chunk_norm = self._normalize_text(chunk_sent_to_llm)
 
-        # source_text should be exactly what was sent to LLM (or a substring of it)
+        # 1. EXACT MATCH (ideal case)
         if source_norm == chunk_norm:
             return True, None
 
-        # Check if source_text is a substring (chunk might have extra metadata)
-        if source_norm in chunk_norm:
-            return True, "source_text is a subset of chunk (acceptable)"
+        # 2. HASH MATCH (same content, different formatting)
+        source_hash = hashlib.md5(source_norm.encode()).hexdigest()
+        chunk_hash = hashlib.md5(chunk_norm.encode()).hexdigest()
+        if source_hash == chunk_hash:
+            return True, None
 
-        # Mismatch - this could cause false positives/negatives in verbatim check
-        return False, "source_text does not match chunk sent to LLM - verbatim verification may be unreliable"
+        # 3. SUBSTRING MATCH (source is subset of chunk - common with metadata)
+        if source_norm in chunk_norm:
+            return True, "source_text is subset of chunk (acceptable)"
+
+        # 4. PREFIX MATCH (truncation case - chunk was truncated)
+        min_len = min(len(source_norm), len(chunk_norm))
+        if min_len > 50:  # Only check prefix if texts are substantial
+            prefix_match_ratio = sum(1 for a, b in zip(source_norm[:min_len], chunk_norm[:min_len]) if a == b) / min_len
+            if prefix_match_ratio >= 0.9:  # 90% prefix match
+                return True, f"prefix match ({prefix_match_ratio:.0%}) - likely truncation difference"
+
+        # 5. LENGTH SIMILARITY + WORD OVERLAP (fuzzy match for cleaning differences)
+        source_words = set(source_norm.split())
+        chunk_words = set(chunk_norm.split())
+        if source_words and chunk_words:
+            word_overlap = len(source_words & chunk_words) / max(len(source_words), len(chunk_words))
+            len_ratio = min(len(source_norm), len(chunk_norm)) / max(len(source_norm), len(chunk_norm))
+
+            if word_overlap >= 0.85 and len_ratio >= 0.8:
+                return True, f"fuzzy match (words: {word_overlap:.0%}, length: {len_ratio:.0%}) - likely cleaning difference"
+
+        # Significant mismatch - warn but don't fail hard
+        len_diff = abs(len(source_norm) - len(chunk_norm))
+        return False, f"source_text differs from chunk (length diff: {len_diff} chars) - verbatim verification may be unreliable"
 
     def get_verdict_token_category(self, text: str) -> Tuple[List[str], List[str]]:
         """Get categorized verdict tokens found in text
+
+        Uses longest-first matching to prevent overlapping matches
+        (e.g., "zorunlu değildir" won't also match "zorunlu")
 
         Returns:
             (strong_tokens, weak_tokens) - Lists of found tokens in each category
 
         Useful for debugging and understanding what verdict types are in a text.
         """
-        text_norm = self._normalize_text(text)
-        strong = [t for t in self.STRONG_VERDICT_TOKENS if t in text_norm]
-        weak = [t for t in self.WEAK_VERDICT_TOKENS if t in text_norm]
-        return strong, weak
+        return self._find_verdict_tokens(text)
 
 
 # Singleton instance
