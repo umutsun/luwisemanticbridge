@@ -1321,10 +1321,15 @@ X is mandatory. [Source 3]
       // Clean response content - remove section headings that LLM might add despite instructions
       response.content = this.stripSectionHeadings(response.content);
 
+      // Fix empty source references [] in strict mode - replace with best matching source
+      if (strictRagMode && searchResults.length > 0) {
+        response.content = this.fixEmptySourceReferences(response.content, searchResults);
+      }
+
       // Strip citation markers when disableCitationText is enabled (sources shown separately)
       if (disableCitationText) {
         response.content = this.stripCitationMarkers(response.content);
-        console.log(' Citation markers stripped from response (disableCitationText=true)');
+        console.log('📝 Citation markers stripped from response (disableCitationText=true)');
       }
 
       // 5. Save messages to database with error handling
@@ -1819,6 +1824,53 @@ X is mandatory. [Source 3]
     }
 
     return cleaned;
+  }
+
+  /**
+   * Fix empty source references [] in strict mode responses
+   * LLM sometimes writes [] instead of [Kaynak 1], [Kaynak 2], etc.
+   * This post-processor finds the best matching source for each empty []
+   */
+  private fixEmptySourceReferences(text: string, searchResults: any[]): string {
+    if (!text || !searchResults.length) return text;
+
+    // Find all empty [] patterns
+    const emptyRefPattern = /\[\s*\]/g;
+    const emptyCount = (text.match(emptyRefPattern) || []).length;
+
+    if (emptyCount === 0) return text;
+
+    console.log(`🔧 POST-PROCESS: Found ${emptyCount} empty [] references, fixing...`);
+
+    // Find the best source - prioritize SoruCevap/Q&A sources
+    let bestSourceIdx = 0;
+    for (let i = 0; i < searchResults.length; i++) {
+      const sourceType = (searchResults[i].source_type || searchResults[i].source_table || '').toLowerCase();
+      if (sourceType.includes('sorucevap') || sourceType.includes('soru-cevap') || sourceType.includes('q&a')) {
+        bestSourceIdx = i;
+        break;
+      }
+    }
+
+    // Replace all empty [] with the best source reference
+    const sourceRef = `[Kaynak ${bestSourceIdx + 1}]`;
+    const fixedText = text.replace(emptyRefPattern, sourceRef);
+
+    console.log(`✅ POST-PROCESS: Replaced ${emptyCount} empty [] with ${sourceRef}`);
+
+    // Also fix "Başlık: Soru-Cevap" to use actual title from the source
+    const bestSource = searchResults[bestSourceIdx];
+    if (bestSource && bestSource.title) {
+      const genericTitlePattern = /Başlık:\s*Soru-Cevap\s*\[/gi;
+      const actualTitle = bestSource.title.replace(/^Soru-Cevap\s*/, '').trim() || bestSource.title;
+      const fixedWithTitle = fixedText.replace(genericTitlePattern, `Başlık: ${actualTitle} [`);
+      if (fixedWithTitle !== fixedText) {
+        console.log(`✅ POST-PROCESS: Fixed generic title to "${actualTitle}"`);
+        return fixedWithTitle;
+      }
+    }
+
+    return fixedText;
   }
 
   /**
