@@ -1177,13 +1177,12 @@ FORMAT:
 "[Kaynaktan birebir alıntı - TAM CÜMLE]" — Tür: [ŞEMADAN AL], Başlık: [ŞEMADAN AL] [Kaynak X]
 
 KRİTİK KURALLAR:
-1. CEVAP kısa olsun - SADECE kaynakta yazan bilgiyi ver, çıkarım yapma
-2. ALINTI tam cümle olmalı - başlık veya içindekiler satırı değil, ASIL İÇERİK
-3. ⚠️ İÇİNDEKİLER UYARISI olan kaynakları KULLANMA - bunlar sadece sayfa numaraları
-4. SoruCevap/csv_sorucevap kaynağını TERCİH ET - en güvenilir
+1. CEVAP kısa olsun - kaynakta yazan bilgiyi özetle
+2. ALINTI tam cümle olmalı - başlık değil, ASIL İÇERİK cümlesi
+3. ⚠️ İÇİNDEKİLER UYARISI olan kaynakları KULLANMA
+4. SoruCevap kaynağını TERCİH ET - en güvenilir
 5. Tür ve Başlık'ı ŞEMADAN KOPYALA
-6. Her cümle sonuna [Kaynak X] YAZ, BOŞ [] YAZMA
-7. Kaynakta yoksa UYDURMA - "Bu bilgi kaynaklarda bulunamadı" de`;
+6. Her cümle sonuna [Kaynak X] YAZ`;
 
         // English strict mode prompt - loaded from database if customized
         const defaultStrictInstructionEn = `Sources are numbered below. Each source has Type and Title in the schema.
@@ -1197,13 +1196,12 @@ FORMAT:
 "[Exact quote from source - FULL SENTENCE]" — Type: [COPY FROM SCHEMA], Title: [COPY FROM SCHEMA] [Source X]
 
 CRITICAL RULES:
-1. ANSWER must be short - ONLY state what's in the source, no inference
-2. QUOTE must be a full sentence - NOT a title or TOC line, ACTUAL CONTENT
-3. ⚠️ DO NOT use sources marked with TOC WARNING - they're just page numbers
-4. PREFER Q&A/csv_sorucevap sources - most reliable
+1. ANSWER must be short - summarize what's in the source
+2. QUOTE must be a full sentence - NOT a title, ACTUAL CONTENT sentence
+3. ⚠️ DO NOT use sources marked with TOC WARNING
+4. PREFER Q&A sources - most reliable
 5. Copy Type and Title FROM SCHEMA
-6. Write [Source X] after every sentence, NEVER empty []
-7. If not in sources, DON'T INVENT - say "This information was not found in sources"`;
+6. Write [Source X] after every sentence`;
 
           // Load from database settings (per-tenant customization) or use defaults
           const strictInstructionTr = settingsMap.get('ragSettings.strictModeInstructionTr') || defaultStrictInstructionTr;
@@ -1987,34 +1985,33 @@ CRITICAL RULES:
    * Detect if a source is a Table of Contents (TOC) entry
    * TOC entries should NOT be used for quotes - they don't contain actual content
    *
-   * Indicators:
-   * - Multiple dots "....." or "….." (TOC line filler)
-   * - Page numbers at end (e.g., "451", "123")
-   * - Section numbering patterns (e.g., "2.6.", "3.1.2.")
-   * - Very short content with mostly structure markers
+   * STRICT detection - only flag clear TOC patterns to avoid false positives
    */
   private isTableOfContents(title: string, content: string): boolean {
     const combined = `${title} ${content}`;
 
-    // Pattern 1: Multiple dots (TOC filler) - "....." or "….."
-    const hasDotFiller = /\.{3,}|…{2,}/.test(combined);
+    // Pattern 1: Heavy dot filler - at least 5 dots in a row (TOC line filler)
+    // Example: ".................. 451 2.6. Transfer Fiyatlandırması"
+    const hasHeavyDotFiller = /\.{5,}|…{3,}/.test(combined);
 
-    // Pattern 2: Ends with page number - "... 451" or ".... 123"
-    const endsWithPageNumber = /[.…]\s*\d{1,4}\s*$/.test(combined);
+    // Pattern 2: TOC line structure - dots followed by page number
+    // Example: "... 451" or "...... 737 5."
+    const hasTOCLineStructure = /\.{3,}\s*\d{2,4}\s+\d+\./.test(combined);
 
-    // Pattern 3: Section numbering at start - "2.6.", "3.1.2.", "1."
-    const hasSectionNumber = /^\s*\d+\.\d*/.test(title) || /^\s*\d+\.\d*/.test(content);
+    // Pattern 3: Title starts with dots (clear TOC indicator)
+    const titleStartsWithDots = /^\.{3,}/.test(title.trim());
 
-    // Pattern 4: Content is mostly structure (short, has dots/numbers, no actual sentences)
-    const hasShortStructuredContent = content.length < 200 &&
-      (hasDotFiller || /\d{3}\s+\d+\./.test(content));
+    // Pattern 4: Content is MOSTLY dots and numbers (>50% structural)
+    const dotCount = (combined.match(/\./g) || []).length;
+    const isMostlyStructural = combined.length < 300 && dotCount > combined.length * 0.1;
 
-    // Pattern 5: Title contains TOC indicators
-    const titleHasTOCIndicators = /içindekiler|index|contents|bölüm\s+\d/i.test(title);
+    // Only flag as TOC if CLEAR indicators present
+    const isTOC = hasHeavyDotFiller || hasTOCLineStructure || titleStartsWithDots ||
+      (isMostlyStructural && hasTOCLineStructure);
 
-    // It's TOC if it matches multiple indicators or has strong single indicator
-    const isTOC = hasDotFiller || endsWithPageNumber ||
-      (hasSectionNumber && hasShortStructuredContent) || titleHasTOCIndicators;
+    if (isTOC) {
+      console.log(`📋 TOC DETECTED: "${title.substring(0, 50)}..." (heavyDots=${hasHeavyDotFiller}, tocLine=${hasTOCLineStructure})`);
+    }
 
     return isTOC;
   }
