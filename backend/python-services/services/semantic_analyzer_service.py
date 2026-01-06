@@ -505,6 +505,27 @@ class SemanticAnalyzerService:
                 issues.append(f"low_relevance: {relevance:.2f}")
                 confidence -= 0.1
 
+            # 6. OBLIGATION PATTERN BONUS
+            # For "zorunlu mu?" questions, prioritize chunks with obligation verdicts
+            q_modality = self._extract_question_modality(question)
+            obligation_bonus = 0.0
+            if q_modality == Modality.ZORUNLU:
+                # Check if chunk contains obligation patterns
+                obligation_patterns = [
+                    r"zorunludur", r"zorunlus+değildir", r"zorunlus+bulunmamaktadır",
+                    r"yeterlidir", r"yeterlis+değildir",
+                    r"gerekmektedir", r"gerekmemektedir", r"gerekmez",
+                    r"mecburidir", r"mecburis+değildir",
+                ]
+                chunk_lower = chunk_text.lower()
+                for pattern in obligation_patterns:
+                    if re.search(pattern, chunk_lower, re.IGNORECASE):
+                        obligation_bonus = 0.3  # Significant bonus for matching modality
+                        break
+
+            # Apply bonus to confidence
+            confidence += obligation_bonus
+
             has_drift = not action_match
             drift_reason = action_reason
 
