@@ -1173,16 +1173,18 @@ Aşağıda numaralı kaynaklar var. SADECE bu kaynaklardaki bilgiyi kullan.
 FORMAT:
 
 **CEVAP**
-[Cevabı yaz] [Kaynak 1] veya [Kaynak 2] gibi numara ile referans ver.
+- Her kritik bilgi için ayrı cümle yaz + [Kaynak X] referans
+- Kaynakta birden fazla önemli bilgi varsa HEPSİNİ yaz (örn: "zorunludur" + "nasıl/ne zaman yapılır")
 
 **ALINTI**
-"[Birebir alıntı]" — Kaynak türü: [tür], Başlık: [başlık] [Kaynak X]
+- Kritik cümleleri TAM ver, kısaltma (...) kullanma
+- Birden fazla kritik cümle varsa hepsini alıntıla
+- Format: "[Tam cümle 1]. [Tam cümle 2]." — Tür: [tür], Başlık: [başlık] [Kaynak X]
 
-ÖNEMLİ:
-- Her iddia için [Kaynak 1], [Kaynak 2] gibi NUMARA yaz
-- Numara boş bırakma - hangi kaynaktan aldıysan o numarayı yaz
+KURALLAR:
+- Her iddia için [Kaynak 1], [Kaynak 2] NUMARA yaz - BOŞ BIRAKMA
 - SoruCevap, Makale, Özelge = geçerli kaynak
-- "Mevzuat yok" DEME - elindeki kaynakları kullan`;
+- "Mevzuat yok" DEME - kaynakları kullan`;
 
         // English strict mode prompt - loaded from database if customized
         const defaultStrictInstructionEn = `SOURCE-FAITHFUL RESPONSE SYSTEM
@@ -1192,14 +1194,16 @@ Numbered sources are provided below. Use ONLY information from these sources.
 FORMAT:
 
 **ANSWER**
-[Write answer] Reference with [Source 1] or [Source 2] etc.
+- Write separate sentence for each critical fact + [Source X] reference
+- If source has multiple important facts, include ALL (e.g., "mandatory" + "how/when to do it")
 
 **QUOTE**
-"[Direct quote]" — Source type: [type], Title: [title] [Source X]
+- Give critical sentences in FULL, no abbreviations (...)
+- If multiple critical sentences, quote all of them
+- Format: "[Full sentence 1]. [Full sentence 2]." — Type: [type], Title: [title] [Source X]
 
-IMPORTANT:
-- Write [Source 1], [Source 2] etc. for EVERY claim
-- Never leave source number empty - write the number of the source you used
+RULES:
+- Write [Source 1], [Source 2] NUMBER for every claim - NEVER EMPTY
 - Q&A, Articles, Rulings = valid sources
 - Do NOT say "no legislation" - use available sources`;
 
