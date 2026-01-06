@@ -59,9 +59,18 @@ const MARKER_COLORS = [
 function highlightKeywords(text: string, keywords: string[]): React.ReactNode[] {
   if (!keywords.length) return [text];
 
-  // Create regex pattern for keywords (case insensitive, Turkish)
+  // Sort keywords by length (longest first) to avoid partial matches
+  const sortedKeywords = [...keywords].sort((a, b) => b.length - a.length);
+
+  // Create regex pattern with word boundaries to avoid splitting words
+  // Use (?<![a-zA-ZğüşıöçĞÜŞİÖÇ]) and (?![a-zA-ZğüşıöçĞÜŞİÖÇ]) for Turkish word boundaries
+  const turkishWordBoundary = '(?<![a-zA-ZğüşıöçĞÜŞİÖÇ0-9])';
+  const turkishWordBoundaryEnd = '(?![a-zA-ZğüşıöçĞÜŞİÖÇ0-9])';
+
   const pattern = new RegExp(
-    `(${keywords.map(k => k.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|')})`,
+    `(${sortedKeywords.map(k =>
+      turkishWordBoundary + k.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + turkishWordBoundaryEnd
+    ).join('|')})`,
     'gi'
   );
 
@@ -72,7 +81,7 @@ function highlightKeywords(text: string, keywords: string[]): React.ReactNode[] 
   let colorIndex = 0;
 
   return parts.map((part, idx) => {
-    const matchedKeyword = keywords.find(k => k.toLowerCase() === part.toLowerCase());
+    const matchedKeyword = sortedKeywords.find(k => k.toLowerCase() === part.toLowerCase());
     if (matchedKeyword) {
       // Assign consistent color to each keyword
       const keyLower = matchedKeyword.toLowerCase();
