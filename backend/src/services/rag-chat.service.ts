@@ -2110,7 +2110,51 @@ ${questionLabel}: ${message}`;
       }
     }
 
-    // 10. Clean up multiple spaces
+    // 10. SEMANTIC DRIFT DETECTION
+    // Detect when quote talks about a DIFFERENT action/topic than the question
+    // e.g., Question: "bulundurmak" vs Quote: "asmak" - these are different actions!
+    if (originalQuestion) {
+      const questionLower = originalQuestion.toLowerCase();
+      const alintiMatch = fixedText.match(/\*\*ALINTI\*\*\s*\n?"([^"]+)"/i);
+
+      if (alintiMatch) {
+        const quoteText = alintiMatch[1].toLowerCase();
+
+        // Define semantic drift pairs - question term vs quote term that don't match
+        const semanticDriftPairs = [
+          // bulundurmak (keep/carry) vs asmak (hang/display)
+          { questionTerm: /bulundur|taşı|fotokopi/i, quoteTerm: /asmak|asma|asılma|asmaları/i, drift: '"bulundurmak/taşımak" ile "asmak" farklı eylemlerdir' },
+          // nakliye aracı vs turizm aracı
+          { questionTerm: /nakliye|kargo|taşıma/i, quoteTerm: /turizm|transfer|otel/i, drift: '"nakliye aracı" ile "turizm aracı" farklı sektörlerdir' },
+        ];
+
+        for (const pair of semanticDriftPairs) {
+          const questionHasTerm = pair.questionTerm.test(questionLower);
+          const quoteHasDifferentTerm = pair.quoteTerm.test(quoteText) && !pair.questionTerm.test(quoteText);
+
+          if (questionHasTerm && quoteHasDifferentTerm) {
+            console.log(`⚠️ POST-PROCESS: Semantic drift detected - ${pair.drift}`);
+
+            // Check if answer makes definitive claim
+            const cevapMatch = fixedText.match(/\*\*CEVAP\*\*\s*\n?([^\n]+)/i);
+            if (cevapMatch) {
+              const cevapText = cevapMatch[1];
+              // If definitive claim exists, add clarification
+              if (/zorunlu değildir|gerekmemektedir|zorunludur|gerekmektedir|mümkündür/i.test(cevapText)) {
+                const sourceRef = cevapText.match(/\[Kaynak\s*\d+\]/i)?.[0] || '[Kaynak 1]';
+                const driftWarning = `Mevcut kaynak farklı bir konuyu (örn. ${pair.drift.split(' ile ')[1]?.split(' ')[0] || 'başka eylem'}) ele alıyor. Sorulan konu hakkında doğrudan hüküm bulunamadı. ${sourceRef}`;
+                fixedText = fixedText.replace(cevapMatch[1], driftWarning);
+                console.log(`🔧 POST-PROCESS: Replaced drifted answer with clarification`);
+                fixCount++;
+                break;
+              }
+            }
+          }
+        }
+      }
+    }
+
+    // 11. Clean up multiple spaces
     fixedText = fixedText.replace(/\s{2,}/g, ' ').replace(/ +\./g, '.').replace(/ +,/g, ',');
 
     if (fixCount > 0) {
