@@ -1,7 +1,7 @@
 {
   "name": "n8n-nodes-luwi-semantic-bridge",
-  "version": "1.0.0",
-  "description": "N8N node for Luwi Semantic Bridge - Store and search semantic embeddings with PostgreSQL + pgvector",
+  "version": "1.1.0",
+  "description": "RAG-powered semantic search, chat completions, and bot message formatting for Telegram/WhatsApp",
   "main": "index.js",
   "license": "MIT",
   "author": "Luwi <info@luwi.dev>",
