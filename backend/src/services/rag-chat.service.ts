@@ -1156,12 +1156,15 @@ ${questionLabel}: ${message}`;
         // DEFAULT: true - Legal platforms require source-faithful responses by default
         const strictRagMode = settingsMap.get('ragSettings.strictMode') !== 'false';
 
+        console.log(`🔍 RAG MODE CHECK: strictRagMode=${strictRagMode}, settingValue='${settingsMap.get('ragSettings.strictMode')}'`);
+
         if (strictRagMode) {
           // ========================================
           // STRICT RAG MODE - Source-faithful responses
           // ========================================
           // Prompts are loaded from database settings (customizable per tenant)
           // Falls back to default if not set in database
+          console.log(`✅ STRICT MODE ACTIVE - Using simplified CEVAP/ALINTI format`);
 
           const defaultStrictInstructionTr = `SEN BİR KAYNAK-SADIK YANITLAMA SİSTEMİSİN.
 
@@ -1246,7 +1249,8 @@ DO NOT:
           }
 
           userPrompt = `${strictInstruction}\n\n--- ${contextLabel} ---\n${strictContext}\n--- KAYNAKLAR SONU ---\n\n${questionLabel}: ${message}`;
-          console.log(' STRICT RAG MODE: Using source-faithful prompt format');
+          console.log('📋 STRICT RAG MODE: Using source-faithful prompt format');
+          console.log(`📝 PROMPT PREVIEW (first 300 chars): ${userPrompt.substring(0, 300).replace(/\n/g, '\\n')}`);
         } else {
           // Normal mode with natural language summary instructions - loaded from settings
           // Supports {sourceCount} and {maxLength} placeholders for dynamic values
