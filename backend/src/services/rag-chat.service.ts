@@ -2054,10 +2054,17 @@ ${questionLabel}: ${message}`;
         if (cevapMatch) {
           const originalCevap = cevapMatch[1];
           // If CEVAP contains definitive words like "mümkündür" but quote is just a question
-          if (/mümkündür|zorunludur|uygundur|gerekmektedir/i.test(originalCevap)) {
+          // Check for ANY definitive claim (positive OR negative) - ALL must be replaced if quote is forbidden
+          if (/mümkündür|zorunludur|uygundur|gerekmektedir|zorunlu değildir|gerekmemektedir|gerekmez|zorunlu olmadığı|mümkün değildir|uygun değildir/i.test(originalCevap)) {
             // Extract source reference
             const sourceRef = originalCevap.match(/\[Kaynak\s*\d+\]/i)?.[0] || '[Kaynak 1]';
-            const cautionCevap = `Bu konuda ilgili özelge incelenebilir, ancak kesin hüküm cümlesi alıntılanamadı. ${sourceRef}`;
+            // Determine what type of question was asked to give appropriate cautious response
+            let cautionCevap;
+            if (/zorunlu|mecbur|gerekli/i.test(originalQuestion || '')) {
+              cautionCevap = `Mevcut kaynakta "zorunlu olup olmadığı" yönünde açık bir hüküm cümlesi bulunamadı. ${sourceRef}`;
+            } else {
+              cautionCevap = `Bu konuda ilgili özelge incelenebilir, ancak kesin hüküm cümlesi alıntılanamadı. ${sourceRef}`;
+            }
             fixedText = fixedText.replace(originalCevap, cautionCevap);
             console.log(`🔧 POST-PROCESS: Replaced definitive claim with cautious statement`);
             fixCount++;
