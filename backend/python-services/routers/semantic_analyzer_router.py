@@ -78,6 +78,8 @@ class ChunkAnalysisResponse(BaseModel):
     verdict_sentence: Optional[str]
     object_anchor_match: bool = True  # New: object/keyword anchor match
     object_anchor_details: Optional[str] = None  # New: anchor match details
+    partial_relevance: bool = False  # NEW: dual-action partial match
+    partial_relevance_details: Optional[str] = None  # NEW: partial match explanation
     issues: List[str]
     recommended: bool
     base_score: float = 1.0  # Core quality (0-1)
@@ -182,6 +184,8 @@ async def analyze_chunks(request: AnalyzeChunksRequest) -> AnalyzeChunksResponse
                 verdict_sentence=a.verdict_sentence,
                 object_anchor_match=a.object_anchor_match,
                 object_anchor_details=a.object_anchor_details,
+                partial_relevance=a.partial_relevance,
+                partial_relevance_details=a.partial_relevance_details,
                 issues=a.issues,
                 recommended=a.recommended,
                 base_score=a.base_score,

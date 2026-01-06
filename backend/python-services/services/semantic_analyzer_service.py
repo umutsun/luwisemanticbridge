@@ -109,6 +109,8 @@ class ChunkAnalysis:
     verdict_sentence: Optional[str]
     object_anchor_match: bool = True  # New: object/keyword anchor
     object_anchor_details: Optional[str] = None  # New: anchor details
+    partial_relevance: bool = False  # NEW: dual-action partial match
+    partial_relevance_details: Optional[str] = None  # NEW: partial match explanation
     issues: List[str] = field(default_factory=list)
     recommended: bool = False
     # Score breakdown
@@ -598,56 +600,108 @@ class SemanticAnalyzerService:
 
         return found_actions
 
-    def _extract_object_anchors(self, text: str) -> Set[str]:
+    def _extract_object_anchors(self, text: str) -> Tuple[Set[str], Dict[str, List[str]]]:
         """Extract object/keyword anchors from text
 
-        Returns normalized anchor names (e.g., "vergi_levhası", "fatura")
+        Returns:
+            (found_anchors, matched_keywords)
+            - found_anchors: Set of normalized anchor names (e.g., "vergi_levhası", "fatura")
+            - matched_keywords: Dict mapping anchor_name -> list of matched keywords
         """
         text_lower = text.lower()
         found_anchors = set()
+        matched_keywords: Dict[str, List[str]] = {}
 
         for anchor_name, keywords in self.object_anchors.items():
+            anchor_matches = []
             for keyword in keywords:
                 # Case-insensitive search for keyword
                 if keyword.lower() in text_lower:
-                    found_anchors.add(anchor_name)
-                    break  # Found one match for this anchor, move to next
+                    anchor_matches.append(keyword)
+            if anchor_matches:
+                found_anchors.add(anchor_name)
+                matched_keywords[anchor_name] = anchor_matches
 
-        return found_anchors
+        return found_anchors, matched_keywords
 
-    def _check_object_anchor_match(self, question: str, chunk: str) -> Tuple[bool, Optional[str], Set[str], Set[str]]:
+    def _check_object_anchor_match(
+        self,
+        question: str,
+        chunk: str
+    ) -> Tuple[bool, Optional[str], Set[str], Set[str], float]:
         """Check if object anchors in question match chunk
 
-        Returns: (match, reason, question_anchors, chunk_anchors)
+        SURET AMBIGUITY RULE:
+        "suret" can mean "certified copy" (onaylı suret) which is different from photocopy.
+        When "fotokopi" anchor matches via "suret" alone (without "fotokopi" or "kopya"),
+        lower confidence with a warning.
+
+        Returns: (match, reason, question_anchors, chunk_anchors, confidence_penalty)
+            - confidence_penalty: 0.0 for clean match, 0.1 for ambiguous "suret" match
         """
-        q_anchors = self._extract_object_anchors(question)
-        c_anchors = self._extract_object_anchors(chunk)
+        q_anchors, q_keywords = self._extract_object_anchors(question)
+        c_anchors, c_keywords = self._extract_object_anchors(chunk)
+
+        confidence_penalty = 0.0  # No penalty by default
 
         # If question has no specific object, consider it a match
         if not q_anchors:
-            return True, None, q_anchors, c_anchors
+            return True, None, q_anchors, c_anchors, 0.0
 
         # If chunk has no objects but question does, it's uncertain (not a mismatch)
         if not c_anchors:
-            return True, "Chunk'ta nesne belirtilmemiş", q_anchors, c_anchors
+            return True, "Chunk'ta nesne belirtilmemiş", q_anchors, c_anchors, 0.0
 
         # Check for intersection
         common = q_anchors.intersection(c_anchors)
         if common:
-            return True, None, q_anchors, c_anchors
+            # SURET AMBIGUITY CHECK: If "fotokopi" anchor matched via "suret" alone
+            if "fotokopi" in common:
+                q_fotokopi_keywords = q_keywords.get("fotokopi", [])
+                c_fotokopi_keywords = c_keywords.get("fotokopi", [])
+
+                # Check if EITHER question or chunk matched via "suret" alone
+                q_has_strong = any(k in ["fotokopi", "kopya"] for k in q_fotokopi_keywords)
+                c_has_strong = any(k in ["fotokopi", "kopya"] for k in c_fotokopi_keywords)
+                q_only_suret = "suret" in q_fotokopi_keywords and not q_has_strong
+                c_only_suret = "suret" in c_fotokopi_keywords and not c_has_strong
+
+                if q_only_suret or c_only_suret:
+                    # Ambiguous match - "suret" could mean "onaylı suret" (certified copy)
+                    confidence_penalty = 0.1
+                    warning = (
+                        '"suret" kelimesi bulundu ancak "fotokopi/kopya" ifadesi yok - '
+                        '"onaylı suret" farklı bir kavram olabilir'
+                    )
+                    return True, warning, q_anchors, c_anchors, confidence_penalty
+
+            return True, None, q_anchors, c_anchors, 0.0
 
         # Different objects - this is a mismatch
         q_obj = list(q_anchors)[0].replace("_", " ") if q_anchors else "?"
         c_obj = list(c_anchors)[0].replace("_", " ") if c_anchors else "?"
-        return False, f'Soru "{q_obj}" hakkında, chunk "{c_obj}" hakkında', q_anchors, c_anchors
+        return False, f'Soru "{q_obj}" hakkında, chunk "{c_obj}" hakkında', q_anchors, c_anchors, 0.0
 
-    def _check_action_match(self, question: str, quote: str) -> Tuple[bool, Optional[str], Optional[str], Optional[str]]:
-        """Check if action in question matches action in quote"""
+    def _check_action_match(
+        self,
+        question: str,
+        quote: str
+    ) -> Tuple[bool, Optional[str], Optional[str], Optional[str], bool, Optional[str]]:
+        """Check if action in question matches action in quote
+
+        DUAL-ACTION RULE:
+        If question contains TWO actions (e.g., "bulundurmak ve asmak yeterli mi?"),
+        and chunk covers ONLY ONE of them, return partial_relevance=True instead of
+        immediate action_mismatch.
+
+        Returns:
+            (match, reason, q_action, qt_action, partial_relevance, partial_details)
+        """
         question_actions = self._extract_actions(question)
         quote_actions = self._extract_actions(quote)
 
         if not question_actions:
-            return True, None, None, None
+            return True, None, None, None, False, None
 
         question_normalized = set(a.normalized for a in question_actions)
         quote_normalized = set(a.normalized for a in quote_actions)
@@ -658,6 +712,34 @@ class SemanticAnalyzerService:
             ("export", "import"),
         ]
 
+        # DUAL-ACTION CHECK: If question has 2+ actions from conflicting pairs
+        # and chunk covers one of them, it's partial_relevance (not full mismatch)
+        if len(question_normalized) >= 2:
+            # Check if question has actions from a conflicting pair
+            for pair in conflicting_pairs:
+                pair_set = set(pair)
+                question_pair_actions = question_normalized.intersection(pair_set)
+
+                # Question has BOTH actions from a conflicting pair (e.g., "keep" AND "hang")
+                if len(question_pair_actions) == 2:
+                    # Check if chunk covers at least one
+                    covered = quote_normalized.intersection(pair_set)
+                    if len(covered) == 1:
+                        # PARTIAL RELEVANCE: chunk covers only one action
+                        covered_action = list(covered)[0]
+                        missing_action = list(pair_set - covered)[0]
+                        covered_verb = next((a.verb for a in quote_actions if a.normalized == covered_action), covered_action)
+                        missing_verb = next((a.verb for a in question_actions if a.normalized == missing_action), missing_action)
+                        return (
+                            True,  # Not a full mismatch
+                            None,
+                            None,
+                            None,
+                            True,  # partial_relevance
+                            f'Kaynak sadece "{covered_verb}" eylemi için hüküm içeriyor, "{missing_verb}" hakkında bilgi yok'
+                        )
+
+        # Standard conflicting pair check (for single-action questions)
         for q_action in question_normalized:
             for qt_action in quote_normalized:
                 for pair in conflicting_pairs:
@@ -665,15 +747,15 @@ class SemanticAnalyzerService:
                        (q_action == pair[1] and qt_action == pair[0]):
                         q_verb = next((a.verb for a in question_actions if a.normalized == q_action), q_action)
                         qt_verb = next((a.verb for a in quote_actions if a.normalized == qt_action), qt_action)
-                        return False, f'"{q_verb}" ≠ "{qt_verb}"', q_verb, qt_verb
+                        return False, f'"{q_verb}" ≠ "{qt_verb}"', q_verb, qt_verb, False, None
 
         if question_normalized and quote_normalized:
             if not question_normalized.intersection(quote_normalized):
                 q_verb = question_actions[0].verb if question_actions else "?"
                 qt_verb = quote_actions[0].verb if quote_actions else "?"
-                return False, f'Soru "{q_verb}" hakkında, alıntı "{qt_verb}" hakkında', q_verb, qt_verb
+                return False, f'Soru "{q_verb}" hakkında, alıntı "{qt_verb}" hakkında', q_verb, qt_verb, False, None
 
-        return True, None, None, None
+        return True, None, None, None, False, None
 
     def _extract_question_modality(self, question: str) -> Modality:
         """Extract modality from question"""
@@ -923,17 +1005,26 @@ class SemanticAnalyzerService:
             base_score = 1.0  # Core quality score (0-1)
             bonus = 0.0  # Extra points for matching modality with anchor
 
-            # 1. ACTION MATCH
-            action_match, action_reason, q_action, qt_action = self._check_action_match(question, chunk_text)
+            # 1. ACTION MATCH (with dual-action partial relevance check)
+            action_match, action_reason, q_action, qt_action, partial_relevance, partial_details = self._check_action_match(question, chunk_text)
             if not action_match:
                 issues.append(f"action_mismatch: {action_reason}")
                 base_score -= 0.5
+            elif partial_relevance:
+                # PARTIAL RELEVANCE: chunk covers one action of a dual-action question
+                # Less penalty than full mismatch - chunk is still useful
+                issues.append(f"partial_relevance: {partial_details}")
+                base_score -= 0.15  # Smaller penalty for partial coverage
 
-            # 2. OBJECT ANCHOR MATCH (NEW)
-            object_anchor_match, anchor_reason, q_anchors, c_anchors = self._check_object_anchor_match(question, chunk_text)
+            # 2. OBJECT ANCHOR MATCH (with suret ambiguity check)
+            object_anchor_match, anchor_reason, q_anchors, c_anchors, anchor_penalty = self._check_object_anchor_match(question, chunk_text)
             if not object_anchor_match:
                 issues.append(f"object_mismatch: {anchor_reason}")
                 base_score -= 0.3
+            elif anchor_penalty > 0:
+                # Ambiguous anchor match (e.g., "suret" without "fotokopi/kopya")
+                issues.append(f"anchor_ambiguity: {anchor_reason}")
+                base_score -= anchor_penalty
 
             # 3. MODALITY ALIGNMENT
             has_verdict, verdict = self._check_verdict_sentence(chunk_text)
@@ -1013,6 +1104,8 @@ class SemanticAnalyzerService:
                 verdict_sentence=verdict,
                 object_anchor_match=object_anchor_match,
                 object_anchor_details=anchor_reason,
+                partial_relevance=partial_relevance,
+                partial_relevance_details=partial_details,
                 issues=issues,
                 recommended=recommended,
                 base_score=base_score,
@@ -1072,12 +1165,17 @@ class SemanticAnalyzerService:
                 fail_reasons.append(self.fail_messages["modality_inference"])
                 confidence -= 0.5  # Critical penalty for invalid inference
 
-        # 3. ACTION MATCH
-        action_match, action_reason, q_action, qt_action = self._check_action_match(question, quote)
+        # 3. ACTION MATCH (with dual-action partial relevance check)
+        action_match, action_reason, q_action, qt_action, partial_relevance, partial_details = self._check_action_match(question, quote)
         if not action_match:
             issues.append({"type": AnalysisIssue.ACTION_MISMATCH.value, "description": action_reason, "severity": "critical"})
             fail_reasons.append(self.fail_messages["action_mismatch"].format(question_action=q_action or "?", quote_action=qt_action or "?"))
             confidence -= 0.5
+        elif partial_relevance:
+            # PARTIAL RELEVANCE: quote covers one action of dual-action question
+            # Less severe than mismatch - still valid but with warning
+            issues.append({"type": "partial_relevance", "description": partial_details, "severity": "medium"})
+            confidence -= 0.15  # Smaller penalty
 
         # 4. MODALITY ALIGNMENT
         modality_match, modality_reason = self._check_modality_alignment(question, answer)
