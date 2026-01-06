@@ -43,8 +43,9 @@ class AnalysisIssue(Enum):
     MODALITY_MISMATCH = "modality_mismatch"
     NO_VERDICT_SENTENCE = "no_verdict_sentence"
     LOW_RELEVANCE = "low_relevance"
-    QUOTE_NOT_VERBATIM = "quote_not_verbatim"  # NEW: Quote doesn't exist in source
-    MODALITY_INFERENCE = "modality_inference"  # NEW: Inferred obligation from possibility
+    QUOTE_NOT_VERBATIM = "quote_not_verbatim"  # Quote doesn't exist in source
+    MODALITY_INFERENCE = "modality_inference"  # Inferred obligation from possibility
+    QUOTE_IS_SYSTEM_MESSAGE = "quote_is_system_message"  # NEW: Quote contains fail-closed message instead of real text
 
 
 class Modality(Enum):
@@ -473,7 +474,30 @@ class SemanticAnalyzerService:
             "generic": "Bu konuda kesin bir hüküm cümlesi bulunamadı.",
             # ALINTI-specific (synchronized with CEVAP)
             "alinti_empty": "Kaynak metin bu soru için doğrudan alıntılanabilir ifade içermiyor.",
+            # System message detection
+            "quote_is_system_message": "ALINTI alanında gerçek kaynak metni yerine sistem mesajı bulundu. "
+                                       "ALINTI, kaynaktan birebir alıntı olmalıdır.",
         }
+
+        # === SYSTEM MESSAGE PATTERNS ===
+        # These patterns detect when ALINTI contains a system/fail-closed message
+        # instead of an actual verbatim quote from source
+        self.system_message_patterns = [
+            # Fail-closed messages
+            (r"kesin\s+(bir\s+)?hüküm\s+cümlesi\s+bulunamadı", "fail-closed hüküm mesajı"),
+            (r"açık\s+hüküm\s+cümlesi\s+bulunamadı", "fail-closed hüküm mesajı"),
+            (r"doğrudan\s+hüküm\s+bulunamadı", "fail-closed hüküm mesajı"),
+            (r"bu\s+konuda.*bulunamadı", "fail-closed genel mesajı"),
+            (r"kaynak(lar)?\s+(bu\s+)?soru(yu)?\s+karşılamıyor", "kaynak yetersizliği mesajı"),
+            (r"ilgili\s+kaynak\s+incelenebilir", "kaynak yönlendirme mesajı"),
+            # System-generated phrases
+            (r"mevcut\s+kaynak(lar)?(da)?\s+.*\s+bulunamadı", "kaynak yetersizliği mesajı"),
+            (r"doğrudan\s+alıntılanabilir\s+ifade\s+içermiyor", "alıntı bulunamadı mesajı"),
+            (r"kaynağı\s+kontrol\s+ediniz", "kontrol yönlendirmesi"),
+            # Meta-commentary (not actual quotes)
+            (r"ancak\s+ilgili\s+kaynak", "meta-yorum"),
+            (r"kaynak\s+metin(de)?\s+.*\s+yok", "kaynak içerik yorumu"),
+        ]
 
     async def load_config_from_schema(self, config: dict):
         """Load configuration from database schema
@@ -879,6 +903,28 @@ class SemanticAnalyzerService:
                 return True, match.group(0).strip()
         return False, None
 
+    def _check_quote_is_system_message(self, quote: str) -> Tuple[bool, Optional[str]]:
+        """Check if quote contains a system/fail-closed message instead of real source text
+
+        CRITICAL: ALINTI must be verbatim text from source, NOT a system-generated message.
+        This catches cases where LLM outputs fail-closed text as if it were a quote.
+
+        Example bad ALINTI:
+        "Bu konuda kesin bir hüküm cümlesi bulunamadı, ancak ilgili kaynak incelenebilir."
+
+        This is NOT a real quote - it's a system message disguised as a quote.
+
+        Returns:
+            (is_system_message, description) - True if quote looks like system message
+        """
+        quote_lower = quote.lower()
+
+        for pattern, description in self.system_message_patterns:
+            if re.search(pattern, quote_lower, re.IGNORECASE):
+                return True, f"ALINTI sistem mesajı içeriyor: {description}"
+
+        return False, None
+
     def _verify_verbatim_quote(self, quote: str, source_text: str, strict: bool = True) -> Tuple[bool, Optional[str]]:
         """Verify that a quote exists VERBATIM in source text
 
@@ -1208,8 +1254,20 @@ class SemanticAnalyzerService:
         fail_reasons = []
         confidence = 1.0
 
-        # 1. VERBATIM QUOTE VERIFICATION (NEW - CRITICAL)
-        if source_text:
+        # 0. SYSTEM MESSAGE CHECK (CRITICAL - must be first)
+        # Detects when ALINTI contains fail-closed message instead of real source text
+        is_system_msg, system_msg_reason = self._check_quote_is_system_message(quote)
+        if is_system_msg:
+            issues.append({
+                "type": AnalysisIssue.QUOTE_IS_SYSTEM_MESSAGE.value,
+                "description": system_msg_reason,
+                "severity": "critical"
+            })
+            fail_reasons.append(self.fail_messages["quote_is_system_message"])
+            confidence -= 0.7  # Critical penalty - this is NOT a valid quote
+
+        # 1. VERBATIM QUOTE VERIFICATION (CRITICAL)
+        if source_text and not is_system_msg:  # Skip if already flagged as system message
             is_verbatim, verbatim_reason = self._verify_verbatim_quote(quote, source_text)
             if not is_verbatim:
                 issues.append({
@@ -1220,7 +1278,7 @@ class SemanticAnalyzerService:
                 fail_reasons.append(self.fail_messages["quote_not_verbatim"])
                 confidence -= 0.6  # Critical penalty for non-verbatim quote
 
-        # 2. MODALITY INFERENCE CHECK (NEW - CRITICAL)
+        # 2. MODALITY INFERENCE CHECK (CRITICAL)
         if source_text:
             is_valid_inference, inference_reason = self._check_modality_inference(question, source_text, answer)
             if not is_valid_inference:
@@ -1276,8 +1334,10 @@ class SemanticAnalyzerService:
 
         suggested_answer = None
         if issues:
-            # Priority: verbatim > inference > action > modality > forbidden > verdict
-            if any(i["type"] == AnalysisIssue.QUOTE_NOT_VERBATIM.value for i in issues):
+            # Priority: system_message > verbatim > inference > action > modality > forbidden > verdict
+            if any(i["type"] == AnalysisIssue.QUOTE_IS_SYSTEM_MESSAGE.value for i in issues):
+                suggested_answer = self.fail_messages["quote_is_system_message"]
+            elif any(i["type"] == AnalysisIssue.QUOTE_NOT_VERBATIM.value for i in issues):
                 suggested_answer = self.fail_messages["quote_not_verbatim"]
             elif any(i["type"] == AnalysisIssue.MODALITY_INFERENCE.value for i in issues):
                 suggested_answer = self.fail_messages["modality_inference"]
