@@ -853,8 +853,9 @@ ${questionLabel}: ${message}`;
       const startSettings = Date.now();
 
       // PERFORMANCE OPTIMIZATION: Batch fetch all settings in ONE query
-      // Includes all instruction/prompt settings for full customization
+      // ALL RAG configuration is loaded from database - no hardcoded values
       const settingsKeys = [
+        // Core settings
         'ragSettings.maxResults', 'maxResults',
         'ragSettings.minResults', 'minResults',
         'parallel_llm_batch_size',
@@ -862,24 +863,45 @@ ${questionLabel}: ${message}`;
         'parallel_llm_count',
         'ragSettings.similarityThreshold', 'similarityThreshold', 'semantic_search_threshold',
         'ragSettings.lowConfidenceThreshold', 'lowConfidenceThreshold', 'databaseconfidence',
+        'ragSettings.highConfidenceThreshold',
         'response_language',
         'llmSettings.activeChatModel',
-        // Instruction/prompt settings (customizable from admin panel)
+        // Prompt templates (fully configurable)
+        'ragSettings.strictModePromptTr',
+        'ragSettings.strictModePromptEn',
+        'ragSettings.fastModePromptTr',
+        'ragSettings.fastModePromptEn',
         'ragSettings.followUpInstructionTr',
         'ragSettings.followUpInstructionEn',
+        // Legacy keys (for backwards compatibility)
+        'ragSettings.strictModeInstructionTr',
+        'ragSettings.strictModeInstructionEn',
         'ragSettings.fastModeInstructionTr',
         'ragSettings.fastModeInstructionEn',
         'ragSettings.citationInstructionTr',
         'ragSettings.citationInstructionEn',
-        // Configurable messages (multi-tenant support)
+        // Messages
         'ragSettings.noResultsMessageTr',
         'ragSettings.noResultsMessageEn',
-        // Citation control
+        // Mode toggles
         'ragSettings.disableCitationText',
-        // Strict RAG mode (source-faithful responses for legal/accurate answers)
         'ragSettings.strictMode',
-        'ragSettings.strictModeInstructionTr',
-        'ragSettings.strictModeInstructionEn'
+        // JSON configurations
+        'ragSettings.sourceTypeNormalizations',
+        'ragSettings.preferredSourceTypes',
+        'ragSettings.tocDetection',
+        'ragSettings.htmlCleaningPatterns',
+        'ragSettings.quotePrefixPatterns',
+        'ragSettings.genericTitlePatterns',
+        'ragSettings.sectionHeadingsToStrip',
+        'ragSettings.fieldLabels',
+        'ragSettings.citationPriorityFields',
+        'ragSettings.strictContextTemplate',
+        // Numeric limits
+        'ragSettings.maxContextLength',
+        'ragSettings.maxExcerptLength',
+        'ragSettings.summaryMaxLength',
+        'ragSettings.excerptMaxLength'
       ];
 
       const settingsResult = await pool.query(
@@ -1161,118 +1183,112 @@ ${questionLabel}: ${message}`;
         // ========================================
         // STRICT RAG MODE - Source-faithful responses
         // ========================================
-        // Prompts are loaded from database settings (customizable per tenant)
-        // Falls back to default if not set in database
-        console.log(`✅ STRICT MODE ACTIVE - Using simplified CEVAP/ALINTI format`);
+        // ALL prompts loaded from database - no hardcoded defaults
+        console.log(`✅ STRICT MODE ACTIVE - Using database-configured prompts`);
 
-        // Turkish strict mode prompt - loaded from database if customized
-        const defaultStrictInstructionTr = `Aşağıda numaralanmış kaynaklar var. Her kaynağın Tür ve Başlık bilgisi şemada yazılı.
+        // Load strict mode prompts from database (new keys first, then legacy fallback)
+        const strictInstructionTr =
+          settingsMap.get('ragSettings.strictModePromptTr') ||
+          settingsMap.get('ragSettings.strictModeInstructionTr') ||
+          'Kaynakları kullanarak kısa ve öz cevap ver. [Kaynak X] formatında referans ekle.';
 
-FORMAT:
+        const strictInstructionEn =
+          settingsMap.get('ragSettings.strictModePromptEn') ||
+          settingsMap.get('ragSettings.strictModeInstructionEn') ||
+          'Provide a concise answer using sources. Add references in [Source X] format.';
 
-**CEVAP**
-[Tek sade cümle ile doğrudan cevap] [Kaynak X]
+        const strictInstruction = responseLanguage === 'en' ? strictInstructionEn : strictInstructionTr;
+        const isCustomPrompt = settingsMap.get('ragSettings.strictModePromptTr') || settingsMap.get('ragSettings.strictModeInstructionTr');
+        console.log(`📋 STRICT MODE: Using ${isCustomPrompt ? 'database' : 'minimal fallback'} prompt (${responseLanguage})`);
 
-**ALINTI**
-"[Kaynaktan birebir alıntı - TAM CÜMLE]" — Tür: [ŞEMADAN AL], Başlık: [ŞEMADAN AL] [Kaynak X]
+        // Load context template from database or use defaults
+        const contextTemplateRaw = settingsMap.get('ragSettings.strictContextTemplate');
+        const contextTemplate = contextTemplateRaw ? JSON.parse(contextTemplateRaw) : {
+          sourceHeader: '=== KAYNAK {n} ===',
+          schemaLabel: '📋 ŞEMA:',
+          typeLabel: '   Tür: {type}',
+          titleLabel: '   Başlık: {title}',
+          tocWarning: '   ⚠️ UYARI: Bu kaynak İÇİNDEKİLER TABLOSU - alıntı için KULLANMA!',
+          contentLabel: '📝 İÇERİK:',
+          sourceReminder: 'MEVCUT KAYNAKLAR: {sources}\nBu referanslardan birini MUTLAKA kullan.'
+        };
 
-KRİTİK KURALLAR:
-1. CEVAP kısa olsun - kaynakta yazan bilgiyi özetle
-2. ALINTI tam cümle olmalı - başlık değil, ASIL İÇERİK cümlesi
-3. ⚠️ İÇİNDEKİLER UYARISI olan kaynakları KULLANMA
-4. SoruCevap kaynağını TERCİH ET - en güvenilir
-5. Tür ve Başlık'ı ŞEMADAN KOPYALA
-6. Her cümle sonuna [Kaynak X] YAZ`;
+        // Load source type normalizations from database
+        const typeNormalizationsRaw = settingsMap.get('ragSettings.sourceTypeNormalizations');
+        const typeNormalizations: Record<string, string> = typeNormalizationsRaw
+          ? JSON.parse(typeNormalizationsRaw)
+          : {};
 
-        // English strict mode prompt - loaded from database if customized
-        const defaultStrictInstructionEn = `Sources are numbered below. Each source has Type and Title in the schema.
+        // Load quote prefix patterns from database
+        const quotePrefixPatternsRaw = settingsMap.get('ragSettings.quotePrefixPatterns');
+        const quotePrefixPatterns: string[] = quotePrefixPatternsRaw
+          ? JSON.parse(quotePrefixPatternsRaw)
+          : ['Cevap:', 'Soru:', 'Yanıt:'];
 
-FORMAT:
+        // Build enhanced context with source numbers for strict mode
+        let strictContext = '';
+        const sourceCount = Math.min(initialDisplayCount, searchResults.length);
 
-**ANSWER**
-[Single concise sentence with direct answer] [Source X]
+        // Track which sources are TOC (Table of Contents) vs actual content
+        const tocSources: number[] = [];
+        const contentSources: number[] = [];
 
-**QUOTE**
-"[Exact quote from source - FULL SENTENCE]" — Type: [COPY FROM SCHEMA], Title: [COPY FROM SCHEMA] [Source X]
+        for (let idx = 0; idx < sourceCount; idx++) {
+          const r = searchResults[idx];
+          const title = r.title || 'Untitled';
+          const rawSourceType = r.source_type || r.source_table || 'Unknown';
+          // Normalize source type using database configuration
+          const sourceType = typeNormalizations[rawSourceType.toLowerCase()] || rawSourceType;
+          let content = r.excerpt || r.content || '';
 
-CRITICAL RULES:
-1. ANSWER must be short - summarize what's in the source
-2. QUOTE must be a full sentence - NOT a title, ACTUAL CONTENT sentence
-3. ⚠️ DO NOT use sources marked with TOC WARNING
-4. PREFER Q&A sources - most reliable
-5. Copy Type and Title FROM SCHEMA
-6. Write [Source X] after every sentence`;
+          // Detect TOC using database-configured patterns
+          const isTOC = this.isTableOfContents(title, content, settingsMap);
 
-          // Load from database settings (per-tenant customization) or use defaults
-          const strictInstructionTr = settingsMap.get('ragSettings.strictModeInstructionTr') || defaultStrictInstructionTr;
-          const strictInstructionEn = settingsMap.get('ragSettings.strictModeInstructionEn') || defaultStrictInstructionEn;
-
-          const strictInstruction = responseLanguage === 'en' ? strictInstructionEn : strictInstructionTr;
-          console.log(`📋 STRICT MODE: Using ${settingsMap.get('ragSettings.strictModeInstructionTr') ? 'custom' : 'default'} prompt (${responseLanguage})`);
-
-          // Build enhanced context with source numbers for strict mode
-          let strictContext = '';
-          const sourceCount = Math.min(initialDisplayCount, searchResults.length);
-
-          // Track which sources are TOC (Table of Contents) vs actual content
-          const tocSources: number[] = [];
-          const contentSources: number[] = [];
-
-          for (let idx = 0; idx < sourceCount; idx++) {
-            const r = searchResults[idx];
-            const title = r.title || 'Untitled';
-            const sourceType = r.source_type || r.source_table || 'Unknown';
-            let content = r.excerpt || r.content || '';
-
-            // Detect TOC (Table of Contents) entries - these should NOT be used for quotes
-            // TOC indicators: "...", page numbers like "451", section numbers like "2.6."
-            const isTOC = this.isTableOfContents(title, content);
-
-            if (isTOC) {
-              tocSources.push(idx + 1);
-            } else {
-              contentSources.push(idx + 1);
-            }
-
-            // Clean content - remove prefixes and HTML tags for cleaner quotes
-            content = content
-              .replace(/^Cevap:\s*/i, '')
-              .replace(/^Soru:\s*/i, '')
-              .replace(/^Yanıt:\s*/i, '')
-              .replace(/<br\s*\/?>/gi, ' ')
-              .replace(/<\/?(p|div|span|strong|em|b|i)>/gi, '')
-              .replace(/&nbsp;/gi, ' ')
-              .replace(/\s{2,}/g, ' ')
-              .trim();
-
-            // Explicit schema format - LLM should copy these values
-            strictContext += `=== KAYNAK ${idx + 1} ===\n`;
-            strictContext += `📋 ŞEMA:\n`;
-            strictContext += `   Tür: ${sourceType}\n`;
-            strictContext += `   Başlık: ${title}\n`;
-            if (isTOC) {
-              strictContext += `   ⚠️ UYARI: Bu kaynak İÇİNDEKİLER TABLOSU - alıntı için KULLANMA!\n`;
-            }
-            strictContext += `📝 İÇERİK:\n${content}\n\n`;
+          if (isTOC) {
+            tocSources.push(idx + 1);
+          } else {
+            contentSources.push(idx + 1);
           }
 
-          // Log TOC detection
-          if (tocSources.length > 0) {
-            console.log(`⚠️ TOC DETECTED: Sources ${tocSources.join(', ')} are Table of Contents entries`);
-            console.log(`✅ CONTENT SOURCES: ${contentSources.join(', ') || 'None'}`);
+          // Clean content using database-configured patterns
+          for (const prefix of quotePrefixPatterns) {
+            const prefixRegex = new RegExp(`^${prefix}\\s*`, 'i');
+            content = content.replace(prefixRegex, '');
           }
+          // Clean HTML (always needed)
+          content = content
+            .replace(/<br\s*\/?>/gi, ' ')
+            .replace(/<\/?(p|div|span|strong|em|b|i)>/gi, '')
+            .replace(/&nbsp;/gi, ' ')
+            .replace(/\s{2,}/g, ' ')
+            .trim();
 
-          // Build available source numbers list dynamically
-          const sourceNumbers = Array.from({length: sourceCount}, (_, i) => `[Kaynak ${i + 1}]`).join(', ');
+          // Build context using template
+          strictContext += contextTemplate.sourceHeader.replace('{n}', String(idx + 1)) + '\n';
+          strictContext += contextTemplate.schemaLabel + '\n';
+          strictContext += contextTemplate.typeLabel.replace('{type}', sourceType) + '\n';
+          strictContext += contextTemplate.titleLabel.replace('{title}', title) + '\n';
+          if (isTOC) {
+            strictContext += contextTemplate.tocWarning + '\n';
+          }
+          strictContext += contextTemplate.contentLabel + '\n' + content + '\n\n';
+        }
 
-          // Add explicit reminder about available source numbers
-          const sourceReminder = responseLanguage === 'en'
-            ? `\n\nAVAILABLE SOURCES: ${sourceNumbers.replace(/Kaynak/g, 'Source')}\nYou MUST use one of these exact references. NEVER write empty [].`
-            : `\n\nMEVCUT KAYNAKLAR: ${sourceNumbers}\nBu referanslardan birini MUTLAKA kullan. ASLA boş [] yazma.`;
+        // Log TOC detection
+        if (tocSources.length > 0) {
+          console.log(`⚠️ TOC DETECTED: Sources ${tocSources.join(', ')} are Table of Contents entries`);
+          console.log(`✅ CONTENT SOURCES: ${contentSources.join(', ') || 'None'}`);
+        }
 
-          userPrompt = `${strictInstruction}${sourceReminder}\n\n--- ${contextLabel} ---\n${strictContext}\n--- KAYNAKLAR SONU ---\n\n${questionLabel}: ${message}`;
-          console.log('📋 STRICT RAG MODE: Using source-faithful prompt format');
-          console.log(`📝 PROMPT PREVIEW (first 300 chars): ${userPrompt.substring(0, 300).replace(/\n/g, '\\n')}`);
+        // Build available source numbers list dynamically
+        const sourceNumbers = Array.from({length: sourceCount}, (_, i) => `[Kaynak ${i + 1}]`).join(', ');
+
+        // Build source reminder from template
+        const sourceReminder = '\n\n' + contextTemplate.sourceReminder.replace('{sources}', sourceNumbers);
+
+        userPrompt = `${strictInstruction}${sourceReminder}\n\n--- ${contextLabel} ---\n${strictContext}\n--- KAYNAKLAR SONU ---\n\n${questionLabel}: ${message}`;
+        console.log('📋 STRICT RAG MODE: Using database-configured context format');
+        console.log(`📝 PROMPT PREVIEW (first 300 chars): ${userPrompt.substring(0, 300).replace(/\n/g, '\\n')}`);
         } else {
           // Normal mode with natural language summary instructions - loaded from settings
           // Supports {sourceCount} and {maxLength} placeholders for dynamic values
@@ -1338,7 +1354,7 @@ CRITICAL RULES:
       console.log(`⏱️ LLM response in ${timings.llm}ms | TOTAL: ${timings.total}ms (settings: ${timings.settings}, history: ${timings.history}, search: ${timings.search}, llm: ${timings.llm})`);
 
       // Clean response content - remove section headings that LLM might add despite instructions
-      response.content = this.stripSectionHeadings(response.content);
+      response.content = this.stripSectionHeadings(response.content, settingsMap);
 
       // Strip citation markers when disableCitationText is enabled AND strict mode is OFF
       // In strict mode, we NEED the [Kaynak X] references for source verification
@@ -1350,7 +1366,7 @@ CRITICAL RULES:
       // Fix empty source references [] in strict mode - replace with best matching source
       // This runs AFTER strip to ensure [Kaynak X] references are preserved
       if (strictRagMode && searchResults.length > 0) {
-        response.content = this.fixEmptySourceReferences(response.content, searchResults);
+        response.content = this.fixEmptySourceReferences(response.content, searchResults, settingsMap);
       }
 
       // 5. Save messages to database with error handling
@@ -1850,18 +1866,77 @@ CRITICAL RULES:
   /**
    * Post-process strict mode responses to ensure quality output
    * Fixes: empty [], generic titles, quote prefixes
+   * Configuration loaded from database for all patterns
    */
-  private fixEmptySourceReferences(text: string, searchResults: any[]): string {
+  private fixEmptySourceReferences(text: string, searchResults: any[], settingsMap?: Map<string, string>): string {
     if (!text || !searchResults.length) return text;
 
     let fixedText = text;
     let fixCount = 0;
 
-    // 1. Find the best source - prioritize SoruCevap/Q&A sources
+    // Load configurations from database
+    let preferredSourceTypes = ['sorucevap', 'csv_sorucevap', 'soru-cevap', 'q&a', 'ozelge', 'csv_ozelge'];
+    let quotePrefixPatterns = ['Cevap:', 'Soru:', 'Yanıt:', 'Answer:', 'Question:', 'Response:'];
+    let genericTitlePatterns = ['Soru-Cevap', 'SoruCevap', 'csv_sorucevap', 'Q&A', 'Soru-cevap'];
+    let htmlCleaningPatterns = [
+      { pattern: '<br\\s*/?>', replacement: ' ' },
+      { pattern: '</?(p|div|span|strong|em|b|i)>', replacement: '' },
+      { pattern: '&nbsp;', replacement: ' ' },
+      { pattern: '&amp;', replacement: '&' },
+      { pattern: '&lt;', replacement: '<' },
+      { pattern: '&gt;', replacement: '>' },
+      { pattern: '&quot;', replacement: '"' }
+    ];
+    let sourceTypeNormalizations: Record<string, string> = {
+      csv_sorucevap: 'SoruCevap',
+      sorucevap: 'SoruCevap',
+      csv_ozelge: 'Özelge',
+      csv_danistaykararlari: 'Danıştay Kararı',
+      csv_makale: 'Makale',
+      csv_makale_arsiv_2021: 'Makale',
+      csv_makale_arsiv_2022: 'Makale',
+      document_embeddings: 'Döküman',
+      crawler: 'Web Kaynağı'
+    };
+
+    if (settingsMap) {
+      // Load preferred source types
+      const preferredRaw = settingsMap.get('ragSettings.preferredSourceTypes');
+      if (preferredRaw) {
+        try { preferredSourceTypes = JSON.parse(preferredRaw); } catch (e) { /* use default */ }
+      }
+
+      // Load quote prefix patterns
+      const quotePrefixRaw = settingsMap.get('ragSettings.quotePrefixPatterns');
+      if (quotePrefixRaw) {
+        try { quotePrefixPatterns = JSON.parse(quotePrefixRaw); } catch (e) { /* use default */ }
+      }
+
+      // Load generic title patterns
+      const genericTitlesRaw = settingsMap.get('ragSettings.genericTitlePatterns');
+      if (genericTitlesRaw) {
+        try { genericTitlePatterns = JSON.parse(genericTitlesRaw); } catch (e) { /* use default */ }
+      }
+
+      // Load HTML cleaning patterns
+      const htmlPatternsRaw = settingsMap.get('ragSettings.htmlCleaningPatterns');
+      if (htmlPatternsRaw) {
+        try { htmlCleaningPatterns = JSON.parse(htmlPatternsRaw); } catch (e) { /* use default */ }
+      }
+
+      // Load source type normalizations
+      const typeNormRaw = settingsMap.get('ragSettings.sourceTypeNormalizations');
+      if (typeNormRaw) {
+        try { sourceTypeNormalizations = JSON.parse(typeNormRaw); } catch (e) { /* use default */ }
+      }
+    }
+
+    // 1. Find the best source - prioritize based on configured preferred types
     let bestSourceIdx = 0;
     for (let i = 0; i < searchResults.length; i++) {
       const sourceType = (searchResults[i].source_type || searchResults[i].source_table || '').toLowerCase();
-      if (sourceType.includes('sorucevap') || sourceType.includes('soru-cevap') || sourceType.includes('q&a')) {
+      const isPreferred = preferredSourceTypes.some(pt => sourceType.includes(pt.toLowerCase()));
+      if (isPreferred) {
         bestSourceIdx = i;
         break;
       }
@@ -1877,9 +1952,9 @@ CRITICAL RULES:
       fixCount++;
     }
 
-    // 3. Fix generic titles - comprehensive pattern matching
-    // Matches: "Başlık: Soru-Cevap", "Başlık: SoruCevap", "Başlık: csv_sorucevap", "Başlık: Q&A"
-    const genericTitlePattern = /Başlık:\s*(?:Soru-?[Cc]evap|csv_sorucevap|Q&A)\s*(\[(?:Kaynak|Source)\s*(\d+)\])/gi;
+    // 3. Fix generic titles - build pattern from configured generic titles
+    const genericTitlesEscaped = genericTitlePatterns.map(t => t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|');
+    const genericTitlePattern = new RegExp(`Başlık:\\s*(?:${genericTitlesEscaped})\\s*(\\[(?:Kaynak|Source)\\s*(\\d+)\\])`, 'gi');
 
     let match;
     while ((match = genericTitlePattern.exec(fixedText)) !== null) {
@@ -1890,9 +1965,8 @@ CRITICAL RULES:
       const source = searchResults[sourceNum] || searchResults[bestSourceIdx];
       if (source && source.title) {
         // Clean the title - remove type prefixes
-        let actualTitle = source.title
-          .replace(/^(?:Soru-?[Cc]evap|SoruCevap|Q&A|csv_sorucevap)\s*[-:]\s*/i, '')
-          .trim();
+        const prefixPattern = new RegExp(`^(?:${genericTitlesEscaped})\\s*[-:]\\s*`, 'i');
+        let actualTitle = source.title.replace(prefixPattern, '').trim();
 
         // Fallback to original if cleaning made it too short
         if (!actualTitle || actualTitle.length < 5) {
@@ -1906,64 +1980,42 @@ CRITICAL RULES:
       }
     }
 
-    // 4. Clean quote prefixes - remove "Cevap:", "Soru:", "Yanıt:" from quotes
-    // Pattern: "Cevap: actual text" → "actual text"
-    const quotePrefixPatterns = [
-      { pattern: /"Cevap:\s*/gi, replacement: '"' },
-      { pattern: /"Soru:\s*/gi, replacement: '"' },
-      { pattern: /"Yanıt:\s*/gi, replacement: '"' },
-      { pattern: /"Answer:\s*/gi, replacement: '"' },
-      { pattern: /"Question:\s*/gi, replacement: '"' },
-      { pattern: /"Response:\s*/gi, replacement: '"' }
-    ];
-
-    for (const { pattern, replacement } of quotePrefixPatterns) {
+    // 4. Clean quote prefixes - using configured patterns
+    for (const prefix of quotePrefixPatterns) {
+      const escaped = prefix.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const pattern = new RegExp(`"${escaped}\\s*`, 'gi');
       const beforeFix = fixedText;
-      fixedText = fixedText.replace(pattern, replacement);
+      fixedText = fixedText.replace(pattern, '"');
       if (fixedText !== beforeFix) {
         console.log(`🔧 POST-PROCESS: Cleaned quote prefix`);
         fixCount++;
       }
     }
 
-    // 5. Clean HTML tags from response - <br />, <br/>, <br>, etc.
-    const htmlPatterns = [
-      { pattern: /<br\s*\/?>/gi, replacement: ' ' },
-      { pattern: /<\/?(p|div|span|strong|em|b|i)>/gi, replacement: '' },
-      { pattern: /&nbsp;/gi, replacement: ' ' },
-      { pattern: /&amp;/gi, replacement: '&' },
-      { pattern: /&lt;/gi, replacement: '<' },
-      { pattern: /&gt;/gi, replacement: '>' },
-      { pattern: /&quot;/gi, replacement: '"' }
-    ];
-
-    for (const { pattern, replacement } of htmlPatterns) {
-      const beforeFix = fixedText;
-      fixedText = fixedText.replace(pattern, replacement);
-      if (fixedText !== beforeFix && !fixedText.includes('<br')) {
-        console.log(`🔧 POST-PROCESS: Cleaned HTML tags`);
-        fixCount++;
+    // 5. Clean HTML tags from response - using configured patterns
+    for (const { pattern, replacement } of htmlCleaningPatterns) {
+      try {
+        const regex = new RegExp(pattern, 'gi');
+        const beforeFix = fixedText;
+        fixedText = fixedText.replace(regex, replacement);
+        if (fixedText !== beforeFix && !fixedText.includes('<br')) {
+          console.log(`🔧 POST-PROCESS: Cleaned HTML tags`);
+          fixCount++;
+        }
+      } catch (e) {
+        console.warn(`Invalid HTML cleaning pattern: ${pattern}`);
       }
     }
 
-    // 6. Clean "Tür:" field - normalize source type display
-    // "Tür: csv_sorucevap" → "Tür: SoruCevap" (more readable)
-    const typeNormalizations = [
-      { pattern: /Tür:\s*csv_sorucevap/gi, replacement: 'Tür: SoruCevap' },
-      { pattern: /Tür:\s*csv_ozelge/gi, replacement: 'Tür: Özelge' },
-      { pattern: /Tür:\s*csv_danistaykararlari/gi, replacement: 'Tür: Danıştay Kararı' },
-      { pattern: /Tür:\s*csv_makale/gi, replacement: 'Tür: Makale' },
-      { pattern: /Tür:\s*document_embeddings/gi, replacement: 'Tür: Döküman' },
-      { pattern: /Tür:\s*sorucevap/gi, replacement: 'Tür: SoruCevap' }
-    ];
-
-    for (const { pattern, replacement } of typeNormalizations) {
-      fixedText = fixedText.replace(pattern, replacement);
+    // 6. Clean "Tür:" field - normalize source type display using configured normalizations
+    for (const [sourceType, displayName] of Object.entries(sourceTypeNormalizations)) {
+      const escaped = sourceType.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const pattern = new RegExp(`Tür:\\s*${escaped}`, 'gi');
+      fixedText = fixedText.replace(pattern, `Tür: ${displayName}`);
     }
 
     // 7. Fix "Başlık: Soru-Cevap" without source reference (fallback fix)
-    // Pattern: "Başlık: Soru-Cevap" at end of line or before punctuation
-    const genericTitleFallback = /Başlık:\s*Soru-?[Cc]evap(?!\s*\[)/gi;
+    const genericTitleFallback = new RegExp(`Başlık:\\s*(?:${genericTitlesEscaped})(?!\\s*\\[)`, 'gi');
     if (genericTitleFallback.test(fixedText) && searchResults[bestSourceIdx]?.title) {
       const actualTitle = searchResults[bestSourceIdx].title;
       fixedText = fixedText.replace(genericTitleFallback, `Başlık: ${actualTitle}`);
@@ -1986,24 +2038,44 @@ CRITICAL RULES:
    * TOC entries should NOT be used for quotes - they don't contain actual content
    *
    * STRICT detection - only flag clear TOC patterns to avoid false positives
+   * Configuration loaded from database via ragSettings.tocDetection
    */
-  private isTableOfContents(title: string, content: string): boolean {
+  private isTableOfContents(title: string, content: string, settingsMap?: Map<string, string>): boolean {
     const combined = `${title} ${content}`;
 
-    // Pattern 1: Heavy dot filler - at least 5 dots in a row (TOC line filler)
-    // Example: ".................. 451 2.6. Transfer Fiyatlandırması"
-    const hasHeavyDotFiller = /\.{5,}|…{3,}/.test(combined);
+    // Load TOC detection config from database
+    let tocConfig = {
+      minDotSequence: 5,
+      minDotRatio: 0.1,
+      maxContentLength: 300,
+      patterns: ['\\.{5,}', '…{3,}', '\\.{3,}\\s*\\d{2,4}\\s+\\d+\\.']
+    };
+
+    if (settingsMap) {
+      const tocConfigRaw = settingsMap.get('ragSettings.tocDetection');
+      if (tocConfigRaw) {
+        try {
+          tocConfig = { ...tocConfig, ...JSON.parse(tocConfigRaw) };
+        } catch (e) {
+          console.warn('Failed to parse TOC detection config:', e);
+        }
+      }
+    }
+
+    // Pattern 1: Heavy dot filler - configurable minimum dots in a row
+    const heavyDotPattern = new RegExp(`\\.{${tocConfig.minDotSequence},}|…{3,}`);
+    const hasHeavyDotFiller = heavyDotPattern.test(combined);
 
     // Pattern 2: TOC line structure - dots followed by page number
-    // Example: "... 451" or "...... 737 5."
     const hasTOCLineStructure = /\.{3,}\s*\d{2,4}\s+\d+\./.test(combined);
 
     // Pattern 3: Title starts with dots (clear TOC indicator)
     const titleStartsWithDots = /^\.{3,}/.test(title.trim());
 
-    // Pattern 4: Content is MOSTLY dots and numbers (>50% structural)
+    // Pattern 4: Content is MOSTLY dots and numbers (configurable ratio)
     const dotCount = (combined.match(/\./g) || []).length;
-    const isMostlyStructural = combined.length < 300 && dotCount > combined.length * 0.1;
+    const isMostlyStructural = combined.length < tocConfig.maxContentLength &&
+      dotCount > combined.length * tocConfig.minDotRatio;
 
     // Only flag as TOC if CLEAR indicators present
     const isTOC = hasHeavyDotFiller || hasTOCLineStructure || titleStartsWithDots ||
@@ -2019,54 +2091,42 @@ CRITICAL RULES:
   /**
    * Strip section headings from LLM response
    * Removes headings like "KISA GİRİŞ:", "ANA BİLGİ:", "UYGULAMA:", "KAYNAKÇA:", etc.
+   * Configuration loaded from database via ragSettings.sectionHeadingsToStrip
    */
-  private stripSectionHeadings(text: string): string {
+  private stripSectionHeadings(text: string, settingsMap?: Map<string, string>): string {
     if (!text) return '';
 
-    // Turkish headings (most common)
-    const turkishHeadings = [
-      /\*\*KISA GİRİŞ:\*\*/gi,
-      /\*\*ANA BİLGİ:\*\*/gi,
-      /\*\*UYGULAMA:\*\*/gi,
-      /\*\*KAYNAKÇA:\*\*/gi,
-      /\*\*GİRİŞ:\*\*/gi,
-      /\*\*SONUÇ:\*\*/gi,
-      /\*\*DETAYLAR:\*\*/gi,
-      /KISA GİRİŞ:/gi,
-      /ANA BİLGİ:/gi,
-      /UYGULAMA:/gi,
-      /KAYNAKÇA:/gi,
-      /GİRİŞ:/gi,
-      /SONUÇ:/gi,
-      /DETAYLAR:/gi
-    ];
+    // Load headings config from database
+    let headingsConfig: { tr: string[]; en: string[] } = {
+      tr: ['KISA GİRİŞ:', 'ANA BİLGİ:', 'UYGULAMA:', 'KAYNAKÇA:', 'GİRİŞ:', 'SONUÇ:', 'DETAYLAR:', 'ÖZET:'],
+      en: ['INTRODUCTION:', 'MAIN POINTS:', 'APPLICATION:', 'REFERENCES:', 'SOURCES:', 'CONCLUSION:', 'SUMMARY:', 'DETAILS:']
+    };
 
-    // English headings
-    const englishHeadings = [
-      /\*\*INTRODUCTION:\*\*/gi,
-      /\*\*MAIN POINTS:\*\*/gi,
-      /\*\*APPLICATION:\*\*/gi,
-      /\*\*REFERENCES:\*\*/gi,
-      /\*\*SOURCES:\*\*/gi,
-      /\*\*CONCLUSION:\*\*/gi,
-      /INTRODUCTION:/gi,
-      /MAIN POINTS:/gi,
-      /APPLICATION:/gi,
-      /REFERENCES:/gi,
-      /SOURCES:/gi,
-      /CONCLUSION:/gi
-    ];
+    if (settingsMap) {
+      const headingsRaw = settingsMap.get('ragSettings.sectionHeadingsToStrip');
+      if (headingsRaw) {
+        try {
+          headingsConfig = { ...headingsConfig, ...JSON.parse(headingsRaw) };
+        } catch (e) {
+          console.warn('Failed to parse section headings config:', e);
+        }
+      }
+    }
 
     let cleanedText = text;
 
-    // Remove Turkish headings
-    turkishHeadings.forEach(heading => {
-      cleanedText = cleanedText.replace(heading, '');
+    // Remove Turkish headings (with and without bold markers)
+    headingsConfig.tr.forEach(heading => {
+      const escaped = heading.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      cleanedText = cleanedText.replace(new RegExp(`\\*\\*${escaped}\\*\\*`, 'gi'), '');
+      cleanedText = cleanedText.replace(new RegExp(escaped, 'gi'), '');
     });
 
-    // Remove English headings
-    englishHeadings.forEach(heading => {
-      cleanedText = cleanedText.replace(heading, '');
+    // Remove English headings (with and without bold markers)
+    headingsConfig.en.forEach(heading => {
+      const escaped = heading.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      cleanedText = cleanedText.replace(new RegExp(`\\*\\*${escaped}\\*\\*`, 'gi'), '');
+      cleanedText = cleanedText.replace(new RegExp(escaped, 'gi'), '');
     });
 
     // Clean up excessive whitespace
