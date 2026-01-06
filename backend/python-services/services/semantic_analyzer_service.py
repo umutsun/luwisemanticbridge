@@ -319,14 +319,18 @@ class SemanticAnalyzerService:
             self._degraded_mode = True
 
     def _extract_actions(self, text: str) -> List[ActionExtraction]:
-        """Extract actions/verbs from text"""
+        """Extract actions/verbs from text with word boundary matching"""
         text_lower = text.lower()
         found_actions = []
 
         for group_name, verbs in self.action_groups.items():
             for verb in verbs:
-                if verb in text_lower:
-                    idx = text_lower.find(verb)
+                # Use word boundary regex to avoid false positives
+                # e.g., "as" should not match "levhası"
+                pattern = rf'\b{re.escape(verb)}\w*'
+                match = re.search(pattern, text_lower)
+                if match:
+                    idx = match.start()
                     start = max(0, idx - 30)
                     end = min(len(text), idx + len(verb) + 30)
                     context = text[start:end]
