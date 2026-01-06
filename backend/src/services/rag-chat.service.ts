@@ -1166,56 +1166,42 @@ ${questionLabel}: ${message}`;
         console.log(`✅ STRICT MODE ACTIVE - Using simplified CEVAP/ALINTI format`);
 
         // Turkish strict mode prompt - loaded from database if customized
-        const defaultStrictInstructionTr = `SEN BİR KAYNAK-SADIK YANITLAMA SİSTEMİSİN.
+        const defaultStrictInstructionTr = `KAYNAK-SADIK YANITLAMA SİSTEMİ
 
-TEMEL KURAL: Sadece kaynaklarda yazanı söyle. Yorum yapma, ekleme yapma.
+Aşağıda numaralı kaynaklar var. SADECE bu kaynaklardaki bilgiyi kullan.
 
-FORMAT (her yanıt için bu formatı kullan):
+FORMAT:
 
 **CEVAP**
-[Kaynaklarda NE YAZIYORSA onu yaz. Her cümlenin sonunda referans göster: [Kaynak X]]
+[Cevabı yaz] [Kaynak 1] veya [Kaynak 2] gibi numara ile referans ver.
 
 **ALINTI**
-"[Kaynaktan birebir alıntı]" — [Kaynak X]
+"[Birebir alıntı]" — Kaynak türü: [tür], Başlık: [başlık] [Kaynak X]
 
-KURALLAR:
-1. Kaynakta varsa → yaz ve referans göster
-2. Kaynakta yoksa → "Bu konuda kaynaklarda bilgi bulunamadı" de
-3. Makale, Özelge, SoruCevap, Danıştay Kararı = GEÇERLİ KAYNAK (mevzuat şart değil!)
-4. "Mevzuat yok" veya "bağlayıcı mevzuat yok" DEME - elindeki kaynakları KULLAN
-5. Çelişki varsa → her iki görüşü de yaz, hangisinin hangi kaynakta olduğunu belirt
-
-YAPMA:
-- Kendi bilginden ekleme
-- "HUKUKİ SONUÇ", "İLGİLİ MEVZUAT", "İÇTİHAT" başlıkları kullanma
-- Kaynak olmadan yorum yapma
-- Zorunlu/zorunlu değil gibi kesin hükümler verip sonra "mevzuat yok" deme`;
+ÖNEMLİ:
+- Her iddia için [Kaynak 1], [Kaynak 2] gibi NUMARA yaz
+- Numara boş bırakma - hangi kaynaktan aldıysan o numarayı yaz
+- SoruCevap, Makale, Özelge = geçerli kaynak
+- "Mevzuat yok" DEME - elindeki kaynakları kullan`;
 
         // English strict mode prompt - loaded from database if customized
-        const defaultStrictInstructionEn = `YOU ARE A SOURCE-FAITHFUL RESPONSE SYSTEM.
+        const defaultStrictInstructionEn = `SOURCE-FAITHFUL RESPONSE SYSTEM
 
-CORE RULE: Only state what's in the sources. No interpretation, no additions.
+Numbered sources are provided below. Use ONLY information from these sources.
 
-FORMAT (use this for every response):
+FORMAT:
 
 **ANSWER**
-[Write EXACTLY what the sources say. Reference each statement: [Source X]]
+[Write answer] Reference with [Source 1] or [Source 2] etc.
 
 **QUOTE**
-"[Direct quote from source]" — [Source X]
+"[Direct quote]" — Source type: [type], Title: [title] [Source X]
 
-RULES:
-1. If in source → write it and cite
-2. If not in source → say "No information found in sources on this topic"
-3. Articles, Rulings, Q&A, Court Decisions = VALID SOURCES (legislation not required!)
-4. Do NOT say "no legislation" or "no binding law" - USE the available sources
-5. If conflicting info → present both views with their respective sources
-
-DO NOT:
-- Add from your own knowledge
-- Use headers like "LEGAL CONCLUSION", "RELEVANT LEGISLATION", "CASE LAW"
-- Make judgments without sources
-- State "mandatory/not mandatory" then say "no legislation exists"`;
+IMPORTANT:
+- Write [Source 1], [Source 2] etc. for EVERY claim
+- Never leave source number empty - write the number of the source you used
+- Q&A, Articles, Rulings = valid sources
+- Do NOT say "no legislation" - use available sources`;
 
           // Load from database settings (per-tenant customization) or use defaults
           const strictInstructionTr = settingsMap.get('ragSettings.strictModeInstructionTr') || defaultStrictInstructionTr;
@@ -1228,25 +1214,15 @@ DO NOT:
           let strictContext = '';
           for (let idx = 0; idx < Math.min(initialDisplayCount, searchResults.length); idx++) {
             const r = searchResults[idx];
-            const title = r.title || `Kaynak ${idx + 1}`;
-            const sourceTable = r.source_table || r.record_type || 'unknown';
-            const sourceId = r.source_id || r.id || 'N/A';
+            const title = r.title || 'Untitled';
+            const sourceType = r.source_type || r.source_table || 'Unknown';
             const content = r.excerpt || r.content || '';
 
-            // Add metadata for verification
-            let metadataStr = '';
-            if (r.metadata) {
-              const fields = ['madde_numarasi', 'sayi', 'tarih', 'esas_no', 'karar_no', 'yil']
-                .filter(f => r.metadata[f])
-                .map(f => `${f}: ${r.metadata[f]}`);
-              if (fields.length > 0) {
-                metadataStr = `\n   [${fields.join(', ')}]`;
-              }
-            }
-
-            strictContext += `[Kaynak ${idx + 1}] ${title}${metadataStr}\n`;
-            strictContext += `Tablo: ${sourceTable} | ID: ${sourceId}\n`;
-            strictContext += `Icerik: ${content}\n\n`;
+            // Clear source label format for LLM to reference
+            strictContext += `=== [Kaynak ${idx + 1}] ===\n`;
+            strictContext += `Tür: ${sourceType}\n`;
+            strictContext += `Başlık: ${title}\n`;
+            strictContext += `İçerik: ${content}\n\n`;
           }
 
           userPrompt = `${strictInstruction}\n\n--- ${contextLabel} ---\n${strictContext}\n--- KAYNAKLAR SONU ---\n\n${questionLabel}: ${message}`;
