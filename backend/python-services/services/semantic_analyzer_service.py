@@ -48,12 +48,27 @@ class AnalysisIssue(Enum):
 
 
 class Modality(Enum):
-    """Question/Answer modality types"""
+    """Question/Answer modality types
+
+    STRONG family (obligation): ZORUNLU, GEREKLI, YETERLI
+    WEAK family (possibility): MUMKUN, UYGUN
+    """
     ZORUNLU = "zorunlu"
     MUMKUN = "mumkun"
     UYGUN = "uygun"
     GEREKLI = "gerekli"
+    YETERLI = "yeterli"  # NEW: "yeterli mi?" is STRONG modality
     UNKNOWN = "unknown"
+
+    @classmethod
+    def is_strong(cls, modality: "Modality") -> bool:
+        """Check if modality is in STRONG family (obligation-related)"""
+        return modality in (cls.ZORUNLU, cls.GEREKLI, cls.YETERLI)
+
+    @classmethod
+    def is_weak(cls, modality: "Modality") -> bool:
+        """Check if modality is in WEAK family (possibility-related)"""
+        return modality in (cls.MUMKUN, cls.UYGUN)
 
 
 class Polarity(Enum):
@@ -234,21 +249,22 @@ class SemanticAnalyzerService:
     # IMPORTANT: Lists are sorted by length (longest-first) to prevent
     # "zorunlu" matching before "zorunlu değildir"
     #
-    # STRONG: Definitive obligation/prohibition statements
+    # STRONG: Definitive obligation/sufficiency statements
+    # Includes: zorunlu, gerekli, yeterli (all answer obligation questions)
     STRONG_VERDICT_TOKENS = sorted([
         "zorunludur", "zorunlu değildir", "zorunlu bulunmamaktadır",
         "gerekmektedir", "gerekmemektedir", "gerekmez",
         "mecburidir", "mecburi değildir",
         "şarttır", "şart değildir",
+        "yeterlidir", "yeterli değildir",  # MOVED from WEAK - answers "yeterli mi?"
     ], key=len, reverse=True)  # Longest-first matching
 
-    # WEAK: Possibility/suitability statements
-    # NOTE: WEAK ≠ low confidence. WEAK = "cannot infer STRONG obligation from this"
+    # WEAK: Possibility/suitability statements (cannot infer STRONG from these)
+    # NOTE: WEAK ≠ low confidence. WEAK = "cannot infer obligation from this"
     # If question asks "mümkün mü?", WEAK token IS definitive for that modality
     WEAK_VERDICT_TOKENS = sorted([
         "mümkündür", "mümkün değildir", "mümkün bulunmamaktadır",
         "uygundur", "uygun değildir",
-        "yeterlidir", "yeterli değildir",
         "yapılabilir", "yapılamaz",
         "olabilir", "olamaz",
     ], key=len, reverse=True)  # Longest-first matching
@@ -355,12 +371,16 @@ class SemanticAnalyzerService:
             "ödeme": ["ödeme", "tahsilat", "para", "nakit"],
             "taşınmaz": ["taşınmaz", "gayrimenkul", "arsa", "arazi", "bina", "konut", "işyeri"],
             "araç": ["araç", "otomobil", "taşıt", "motorlu taşıt"],
+            "fotokopi": ["fotokopi", "kopya", "suret"],  # NEW: for decoy tests
         }
 
         # === MODALITY PATTERNS ===
+        # STRONG family: ZORUNLU, GEREKLI, YETERLI (obligation-related)
+        # WEAK family: MUMKUN, UYGUN (possibility-related)
         self.modality_question_patterns = {
             Modality.ZORUNLU: [
                 r"zorunlu\s*(mu|mudur|mıdır|mı)",
+                r"zorunlulu[gğ]u\s+var\s*(mı|mıdır)",  # "zorunluluğu var mı"
                 r"mecburi\s*(mi|midir)",
                 r"şart\s*(mı|mıdır)",
             ],
@@ -375,19 +395,27 @@ class SemanticAnalyzerService:
             ],
             Modality.GEREKLI: [
                 r"gerekli\s*(mi|midir)",
+                r"gerek(ir|iyor)\s*(mi|mı)",  # "gerekir mi"
+                r"gerek\s+var\s*(mı|mıdır)",  # "gerek var mı"
                 r"lazım\s*(mı|mıdır)",
+            ],
+            Modality.YETERLI: [  # NEW: STRONG family
+                r"yeterli\s*(mi|midir)",
+                r"yeter\s*(mi|midir)",
             ],
         }
 
         self.modality_answer_patterns = {
             (Modality.ZORUNLU, Polarity.POSITIVE): [r"zorunludur", r"mecburidir"],
-            (Modality.ZORUNLU, Polarity.NEGATIVE): [r"zorunlu\s+değildir", r"mecburi\s+değildir"],
+            (Modality.ZORUNLU, Polarity.NEGATIVE): [r"zorunlu\s+değildir", r"mecburi\s+değildir", r"zorunlu\s+bulunmamaktadır"],
             (Modality.MUMKUN, Polarity.POSITIVE): [r"mümkündür", r"yapılabilir"],
             (Modality.MUMKUN, Polarity.NEGATIVE): [r"mümkün\s+değildir", r"yapılamaz"],
             (Modality.UYGUN, Polarity.POSITIVE): [r"uygundur"],
             (Modality.UYGUN, Polarity.NEGATIVE): [r"uygun\s+değildir"],
             (Modality.GEREKLI, Polarity.POSITIVE): [r"gerekmektedir", r"gereklidir"],
             (Modality.GEREKLI, Polarity.NEGATIVE): [r"gerekmemektedir", r"gerekmez"],
+            (Modality.YETERLI, Polarity.POSITIVE): [r"yeterlidir", r"yeter"],  # NEW
+            (Modality.YETERLI, Polarity.NEGATIVE): [r"yeterli\s+değildir", r"yetmez"],  # NEW
         }
 
         # === FORBIDDEN PATTERNS ===
@@ -829,38 +857,38 @@ class SemanticAnalyzerService:
         """Check if answer infers obligation from possibility (FORBIDDEN)
 
         CRITICAL RULE:
-        - If question asks "zorunlu mu?" and source only has WEAK verdicts,
+        - If question is STRONG family (zorunlu/gerekli/yeterli) and source only has WEAK verdicts,
           answering with STRONG obligation verdict is INVALID inference.
 
         EXCEPTION:
-        - If question asks "mümkün mü? / yapılabilir mi? / uygun mu?",
+        - If question is WEAK family (mümkün/uygun),
           WEAK tokens ARE definitive for that modality → allow definitive answer.
 
-        STRONG tokens: zorunludur, gerekmektedir, mecburidir (definitive obligation)
-        WEAK tokens: mümkündür, uygundur, yapılabilir (possibility/suitability)
+        STRONG family: ZORUNLU, GEREKLI, YETERLI (obligation-related)
+        WEAK family: MUMKUN, UYGUN (possibility-related)
 
         Returns:
             (is_valid, reason) - False if invalid inference detected
         """
         q_modality = self._extract_question_modality(question)
 
-        # EXCEPTION: If question asks about possibility/suitability (mümkün mü? / uygun mu?),
+        # EXCEPTION: If question is WEAK family (mümkün mü? / uygun mu?),
         # WEAK tokens ARE definitive for that modality - no inference check needed
-        if q_modality in (Modality.MUMKUN, Modality.UYGUN):
+        if Modality.is_weak(q_modality):
             return True, None
 
-        # Only enforce strict check when question asks about obligation (zorunlu mu? / gerekli mi?)
-        if q_modality not in (Modality.ZORUNLU, Modality.GEREKLI):
+        # Only enforce strict check when question is STRONG family
+        if not Modality.is_strong(q_modality):
             return True, None
 
         # Use longest-first matching
         source_strong, source_weak = self._find_verdict_tokens(source_text)
         answer_strong, _ = self._find_verdict_tokens(answer)
 
-        # INVALID: Question asks "zorunlu mu?", source only has WEAK tokens,
+        # INVALID: Question is STRONG family, source only has WEAK tokens,
         # but answer claims STRONG obligation
         if answer_strong and source_weak and not source_strong:
-            return False, f"'Mümkün/uygun' içeren kaynaktan 'zorunlu/gerekli' çıkarımı yapılamaz (kaynak: {source_weak}, cevap: {answer_strong})"
+            return False, f"'{source_weak}' içeren kaynaktan '{answer_strong}' çıkarımı yapılamaz"
 
         return True, None
 
@@ -1214,19 +1242,22 @@ class SemanticAnalyzerService:
             if prefix_match_ratio >= 0.9:  # 90% prefix match
                 return True, f"prefix match ({prefix_match_ratio:.0%}) - likely truncation difference"
 
-        # 5. LENGTH SIMILARITY + WORD OVERLAP (fuzzy match for cleaning differences)
+        # 5. LENGTH SIMILARITY + WORD OVERLAP (FAIL-CLOSED: return warning, not valid)
+        # This stage is too loose - could validate wrong chunks
+        # Return valid=False but with informative warning for debugging
         source_words = set(source_norm.split())
         chunk_words = set(chunk_norm.split())
         if source_words and chunk_words:
             word_overlap = len(source_words & chunk_words) / max(len(source_words), len(chunk_words))
             len_ratio = min(len(source_norm), len(chunk_norm)) / max(len(source_norm), len(chunk_norm))
 
+            # High similarity but not exact - WARN but don't validate
             if word_overlap >= 0.85 and len_ratio >= 0.8:
-                return True, f"fuzzy match (words: {word_overlap:.0%}, length: {len_ratio:.0%}) - likely cleaning difference"
+                return False, f"FUZZY_MATCH_WARNING: High similarity (words: {word_overlap:.0%}, length: {len_ratio:.0%}) but not exact - verbatim check may be unreliable"
 
-        # Significant mismatch - warn but don't fail hard
+        # Significant mismatch - definitely fail
         len_diff = abs(len(source_norm) - len(chunk_norm))
-        return False, f"source_text differs from chunk (length diff: {len_diff} chars) - verbatim verification may be unreliable"
+        return False, f"source_text differs from chunk (length diff: {len_diff} chars) - verbatim verification unreliable"
 
     def get_verdict_token_category(self, text: str) -> Tuple[List[str], List[str]]:
         """Get categorized verdict tokens found in text
