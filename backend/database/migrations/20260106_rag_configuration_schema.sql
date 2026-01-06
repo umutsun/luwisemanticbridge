@@ -19,18 +19,22 @@ VALUES (
 - "Dilekçenizde ... sorulmaktadır"
 - "... hususu sorulmaktadır"
 - "... mümkün olup olmadığı sorulmaktadır"
-Bu cümleler SORU, kanıt değil! Bunları alıntılarsan BAŞARISIZ sayılırsın.
+Bu cümleler SORU, kanıt değil!
 
 ✅ SADECE HÜKÜM CÜMLESİ ALINTILANABİLİR:
-Alıntı şu kelimelerden birini İÇERMELİ:
-- "mümkündür" / "mümkün bulunmaktadır"
-- "uygundur" / "uygun görülmektedir"
-- "gerekmektedir" / "zorunludur"
-- "öngörülmüştür" / "belirlenmiştir"
+Alıntı şu kalıplardan birini İÇERMELİ (olumlu VEYA olumsuz):
+OLUMLU: "mümkündür", "uygundur", "gerekmektedir", "zorunludur", "öngörülmüştür", "belirlenmiştir", "yapılmalıdır", "bulunmaktadır"
+OLUMSUZ: "mümkün değildir", "uygun değildir", "gerekmemektedir", "zorunlu değildir", "bulunmamaktadır", "yapılamaz"
+
+⚠️ KRİTİK: BİREBİR ALINTI KURALI
+- ALINTI, kaynak metninde AYNEN (kelimesi kelimesine) bulunmalı
+- "..." ile başlayan/biten kısaltmalar kabul edilir
+- AMA uydurma/parafraz YASAK
+- Eğer tam cümle bulamazsan, "kesin hüküm cümlesi bulunamadı" de
 
 HÜKÜM CÜMLESİ NASIL BULUNUR:
-1. Kaynakta "Bilindiği üzere..." veya "Bu itibarla..." sonrasına bak
-2. "...dır/...dir/...tır/...tir" ile biten sonuç cümlelerini ara
+1. "Bilindiği üzere..." veya "Bu itibarla..." sonrasına bak
+2. "...dır/...dir/...tır/...tir" veya "...maz/...mez" ile biten cümleleri ara
 3. Giriş paragrafını (dilekçenizde, KONU, İLGİ) ATLA
 
 FORMAT:
@@ -39,20 +43,12 @@ FORMAT:
 [Tek cümle cevap] [Kaynak X]
 
 **ALINTI**
-"[mümkündür/uygundur/gerekmektedir içeren HÜKÜM cümlesi]" — Tür: [tür], Başlık: [başlık] [Kaynak X]
-
-❌ YANLIŞ ÖRNEK:
-ALINTI: "...mümkün olup olmadığı hususu sorulmaktadır."
-Bu SORU, kanıt değil! BAŞARISIZ!
-
-✅ DOĞRU ÖRNEK:
-ALINTI: "...vergi levhanızın fotokopilerinin bulundurulması mümkündür."
-Bu HÜKÜM cümlesi! BAŞARILI!
+"[Kaynaktan BİREBİR alınmış HÜKÜM cümlesi]" — Tür: [tür], Başlık: [başlık] [Kaynak X]
 
 EĞER HÜKÜM CÜMLESİ BULAMAZSAN:
 "Bu konuda kesin bir hüküm cümlesi bulunamadı, ancak ilgili kaynak incelenebilir." de.',
   'rag',
-  'Turkish strict mode - explicit forbidden patterns'
+  'Turkish strict mode - verdict patterns including negative'
 )
 ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, description = EXCLUDED.description;
 
