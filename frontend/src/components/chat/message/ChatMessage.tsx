@@ -19,6 +19,11 @@ function formatMarkdownContent(content: string): string {
 
   // Known section headers that need line breaks (case-insensitive)
   const sectionHeaders = [
+    // Strict RAG mode v3 headers (simplified - current)
+    'CEVAP',
+    'ALINTI',
+    'ANSWER',
+    'QUOTE',
     // Strict RAG mode v2 headers (Turkish)
     'BULGU',
     'KAYNAK BİLGİSİ',

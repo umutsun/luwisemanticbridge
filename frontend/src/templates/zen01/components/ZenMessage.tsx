@@ -107,7 +107,12 @@ function highlightKeywords(text: string, keywords: string[]): React.ReactNode[] 
 function preprocessMarkdown(content: string): string {
   // Known section header patterns in Turkish legal/tax documents
   const sectionHeaders = [
-    // Strict RAG mode headers (new)
+    // Simple strict RAG mode headers (v2 - simplified)
+    'CEVAP',
+    'ALINTI',
+    'ANSWER',
+    'QUOTE',
+    // Previous strict RAG mode headers (v1)
     'BULGU',
     'KAYNAK BİLGİSİ',
     'KAYNAK BILGISI',
