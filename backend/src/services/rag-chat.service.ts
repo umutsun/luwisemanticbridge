@@ -1174,14 +1174,16 @@ FORMAT:
 [Tek sade cümle ile doğrudan cevap] [Kaynak X]
 
 **ALINTI**
-"[Kaynaktan birebir alıntı]" — Tür: [ŞEMADAN AL], Başlık: [ŞEMADAN AL] [Kaynak X]
+"[Kaynaktan birebir alıntı - TAM CÜMLE]" — Tür: [ŞEMADAN AL], Başlık: [ŞEMADAN AL] [Kaynak X]
 
-KRİTİK:
-1. CEVAP kısa olsun - tekrar yok
-2. ALINTI'da Tür ve Başlık'ı ŞEMADAN KOPYALA (örn: Tür: csv_sorucevap, Başlık: Transfer fiyatlandırması...)
-3. Her cümle sonuna [Kaynak 1], [Kaynak 2] veya [Kaynak 3] YAZ
-4. BOŞ [] YAZMA
-5. SoruCevap/csv_sorucevap kaynağı varsa ONU tercih et`;
+KRİTİK KURALLAR:
+1. CEVAP kısa olsun - SADECE kaynakta yazan bilgiyi ver, çıkarım yapma
+2. ALINTI tam cümle olmalı - başlık veya içindekiler satırı değil, ASIL İÇERİK
+3. ⚠️ İÇİNDEKİLER UYARISI olan kaynakları KULLANMA - bunlar sadece sayfa numaraları
+4. SoruCevap/csv_sorucevap kaynağını TERCİH ET - en güvenilir
+5. Tür ve Başlık'ı ŞEMADAN KOPYALA
+6. Her cümle sonuna [Kaynak X] YAZ, BOŞ [] YAZMA
+7. Kaynakta yoksa UYDURMA - "Bu bilgi kaynaklarda bulunamadı" de`;
 
         // English strict mode prompt - loaded from database if customized
         const defaultStrictInstructionEn = `Sources are numbered below. Each source has Type and Title in the schema.
@@ -1192,14 +1194,16 @@ FORMAT:
 [Single concise sentence with direct answer] [Source X]
 
 **QUOTE**
-"[Exact quote from source]" — Type: [COPY FROM SCHEMA], Title: [COPY FROM SCHEMA] [Source X]
+"[Exact quote from source - FULL SENTENCE]" — Type: [COPY FROM SCHEMA], Title: [COPY FROM SCHEMA] [Source X]
 
-CRITICAL:
-1. ANSWER should be short - no repetition
-2. In QUOTE, copy Type and Title FROM THE SCHEMA (e.g., Type: csv_sorucevap, Title: Transfer pricing...)
-3. Write [Source 1], [Source 2] or [Source 3] after EVERY sentence
-4. NEVER write empty []
-5. Prefer Q&A/csv_sorucevap source if available`;
+CRITICAL RULES:
+1. ANSWER must be short - ONLY state what's in the source, no inference
+2. QUOTE must be a full sentence - NOT a title or TOC line, ACTUAL CONTENT
+3. ⚠️ DO NOT use sources marked with TOC WARNING - they're just page numbers
+4. PREFER Q&A/csv_sorucevap sources - most reliable
+5. Copy Type and Title FROM SCHEMA
+6. Write [Source X] after every sentence, NEVER empty []
+7. If not in sources, DON'T INVENT - say "This information was not found in sources"`;
 
           // Load from database settings (per-tenant customization) or use defaults
           const strictInstructionTr = settingsMap.get('ragSettings.strictModeInstructionTr') || defaultStrictInstructionTr;
@@ -1212,11 +1216,25 @@ CRITICAL:
           let strictContext = '';
           const sourceCount = Math.min(initialDisplayCount, searchResults.length);
 
+          // Track which sources are TOC (Table of Contents) vs actual content
+          const tocSources: number[] = [];
+          const contentSources: number[] = [];
+
           for (let idx = 0; idx < sourceCount; idx++) {
             const r = searchResults[idx];
             const title = r.title || 'Untitled';
             const sourceType = r.source_type || r.source_table || 'Unknown';
             let content = r.excerpt || r.content || '';
+
+            // Detect TOC (Table of Contents) entries - these should NOT be used for quotes
+            // TOC indicators: "...", page numbers like "451", section numbers like "2.6."
+            const isTOC = this.isTableOfContents(title, content);
+
+            if (isTOC) {
+              tocSources.push(idx + 1);
+            } else {
+              contentSources.push(idx + 1);
+            }
 
             // Clean content - remove prefixes and HTML tags for cleaner quotes
             content = content
@@ -1234,7 +1252,16 @@ CRITICAL:
             strictContext += `📋 ŞEMA:\n`;
             strictContext += `   Tür: ${sourceType}\n`;
             strictContext += `   Başlık: ${title}\n`;
+            if (isTOC) {
+              strictContext += `   ⚠️ UYARI: Bu kaynak İÇİNDEKİLER TABLOSU - alıntı için KULLANMA!\n`;
+            }
             strictContext += `📝 İÇERİK:\n${content}\n\n`;
+          }
+
+          // Log TOC detection
+          if (tocSources.length > 0) {
+            console.log(`⚠️ TOC DETECTED: Sources ${tocSources.join(', ')} are Table of Contents entries`);
+            console.log(`✅ CONTENT SOURCES: ${contentSources.join(', ') || 'None'}`);
           }
 
           // Build available source numbers list dynamically
@@ -1954,6 +1981,42 @@ CRITICAL:
     }
 
     return fixedText;
+  }
+
+  /**
+   * Detect if a source is a Table of Contents (TOC) entry
+   * TOC entries should NOT be used for quotes - they don't contain actual content
+   *
+   * Indicators:
+   * - Multiple dots "....." or "….." (TOC line filler)
+   * - Page numbers at end (e.g., "451", "123")
+   * - Section numbering patterns (e.g., "2.6.", "3.1.2.")
+   * - Very short content with mostly structure markers
+   */
+  private isTableOfContents(title: string, content: string): boolean {
+    const combined = `${title} ${content}`;
+
+    // Pattern 1: Multiple dots (TOC filler) - "....." or "….."
+    const hasDotFiller = /\.{3,}|…{2,}/.test(combined);
+
+    // Pattern 2: Ends with page number - "... 451" or ".... 123"
+    const endsWithPageNumber = /[.…]\s*\d{1,4}\s*$/.test(combined);
+
+    // Pattern 3: Section numbering at start - "2.6.", "3.1.2.", "1."
+    const hasSectionNumber = /^\s*\d+\.\d*/.test(title) || /^\s*\d+\.\d*/.test(content);
+
+    // Pattern 4: Content is mostly structure (short, has dots/numbers, no actual sentences)
+    const hasShortStructuredContent = content.length < 200 &&
+      (hasDotFiller || /\d{3}\s+\d+\./.test(content));
+
+    // Pattern 5: Title contains TOC indicators
+    const titleHasTOCIndicators = /içindekiler|index|contents|bölüm\s+\d/i.test(title);
+
+    // It's TOC if it matches multiple indicators or has strong single indicator
+    const isTOC = hasDotFiller || endsWithPageNumber ||
+      (hasSectionNumber && hasShortStructuredContent) || titleHasTOCIndicators;
+
+    return isTOC;
   }
 
   /**
