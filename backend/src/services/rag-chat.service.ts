@@ -875,7 +875,9 @@ ${questionLabel}: ${message}`;
         'ragSettings.noResultsMessageTr',
         'ragSettings.noResultsMessageEn',
         // Citation control
-        'ragSettings.disableCitationText'
+        'ragSettings.disableCitationText',
+        // Strict RAG mode (source-faithful responses for legal/accurate answers)
+        'ragSettings.strictMode'
       ];
 
       const settingsResult = await pool.query(
@@ -1148,43 +1150,184 @@ ${questionLabel}: ${message}`;
 
         userPrompt = `${contextLabel}:\n${enhancedContext}${followUpInstruction}\n\n${questionLabel}: ${message}${fastModeInstruction}`;
       } else {
-        // Normal mode with natural language summary instructions - loaded from settings
-        // Supports {sourceCount} and {maxLength} placeholders for dynamic values
-        const defaultSummaryEn =
-          `RESPONSE INSTRUCTIONS:\n` +
-          ` Write a comprehensive natural language summary that synthesizes ALL {sourceCount} sources provided above\n` +
-          ` DO NOT use citation markers like [1], [2], [3] - write as a cohesive narrative\n` +
-          ` Aim for approximately {maxLength} characters (adjust as needed for completeness)\n` +
-          ` Write ONLY natural paragraphs like an expert explaining the topic\n` +
-          ` Combine related information from multiple sources into unified insights\n` +
-          ` NEVER add section headings or labels like "SUMMARY:" or "CONCLUSION:"\n` +
-          `Provide a flowing, informative overview that addresses the question comprehensively.`;
+        // Check if strict RAG mode is enabled (for legal/accurate responses)
+        // DEFAULT: true - Legal platforms require source-faithful responses by default
+        const strictRagMode = settingsMap.get('ragSettings.strictMode') !== 'false';
 
-        const defaultSummaryTr =
-          `YANIT TALİMATLARI:\n` +
-          ` Yukarıda verilen TÜM {sourceCount} kaynağı sentezleyen kapsamlı bir doğal dil özeti yaz\n` +
-          ` [1], [2], [3] gibi kaynak işaretleri KULLANMA - tutarlı bir anlatım olarak yaz\n` +
-          ` Yaklaşık {maxLength} karakter hedefle (bütünlük için gerekirse ayarla)\n` +
-          ` SADECE doğal paragraflar yaz, bir uzman konuyu anlatıyormuş gibi\n` +
-          ` Birden fazla kaynaktan ilgili bilgileri birleşik içgörüler halinde birleştir\n` +
-          ` ASLA "ÖZET:" veya "SONUÇ:" gibi bölüm başlıkları ekleme\n` +
-          `Soruyu kapsamlı bir şekilde ele alan akıcı, bilgilendirici bir genel bakış sun.`;
+        if (strictRagMode) {
+          // ========================================
+          // STRICT RAG MODE - Source-faithful responses
+          // ========================================
+          // This mode ensures:
+          // 1. Only information from sources is used
+          // 2. Direct quotes are provided
+          // 3. Structured format for verification
+          // 4. Clear source attribution
 
-        // Get max summary length from settings (used in citation excerpt generation)
-        const maxSummaryLength = parseInt(
-          settingsMap.get('ragSettings.summaryMaxLength') || '800'
-        );
+          const strictInstructionTr = `YANITLAMA KURALLARI (KESİNLİKLE UYULMALI):
 
-        // Get instruction from settings or use default, then replace placeholders
-        let summaryTemplate = responseLanguage === 'en'
-          ? (settingsMap.get('ragSettings.citationInstructionEn') || defaultSummaryEn)
-          : (settingsMap.get('ragSettings.citationInstructionTr') || defaultSummaryTr);
+🚨 EN ÖNEMLİ KURAL: KAYNAK KALİTESİNİ DEĞERLENDIR
 
-        const summaryInstruction = `\n\n${summaryTemplate
-          .replace(/{sourceCount}/g, String(initialDisplayCount))
-          .replace(/{maxLength}/g, String(maxSummaryLength))}`;
+ÖNCE şunu kontrol et:
+1. Sağlanan kaynaklar DOĞRUDAN soruyla ilgili mi?
+2. Kaynaklar birincil mevzuat mı (kanun metni, yönetmelik) yoksa ikincil mi (makale, tez, yorum)?
+3. Kaynaklarda sorulan kavramın TANIMI veya DÜZENLEMESİ var mı?
 
-        userPrompt = `${contextLabel}:\n${enhancedContext}\n\n${questionLabel}: ${message}${summaryInstruction}`;
+EĞER KAYNAKLAR YETERSİZ veya ALAKASIZ İSE:
+Şu şekilde yanıt ver:
+"⚠️ KAYNAK YETERSİZLİĞİ
+
+Sağlanan kaynaklarda [SORU KONUSU] hakkında doğrudan mevzuat metni veya yeterli bilgi bulunamadı.
+
+Bulunan kaynaklar (makale, tez vb.) bu konuya dolaylı olarak değiniyor ancak birincil kaynak (kanun metni) sağlanamadığı için kesin hukuki tanım veremiyorum.
+
+Önerilen: Bu konu için ilgili kanun metnine (örn. VUK, GVK vb.) doğrudan başvurunuz."
+
+VE BURADA DUR. Tanım uydurma, yorum yapma.
+
+---
+
+EĞER KAYNAKLAR YETERLİ VE DOĞRUDAN İLGİLİ İSE:
+
+**KAYNAK DEĞERLENDİRMESİ**
+[Bulunan kaynakların türünü belirt: Kanun metni / Özelge / Danıştay Kararı / Makale vb.]
+
+**HUKUKİ SONUÇ**
+[SADECE kaynaklarda AYNEN yazan bilgiyi özetle. Her cümle için [Kaynak X] göster.]
+
+**DOĞRUDAN ALINTILAR**
+[Kaynaktan birebir alıntı yap - tırnak içinde göster]
+"..." [Kaynak X]
+
+**SINIRLAR**
+[Sadece kaynakta açıkça belirtilen sınırları yaz. Yoksa bu bölümü YAZMA.]
+
+---
+
+YASAKLAR (KESİNLİKLE YAPMA):
+❌ Kaynakta olmayan bilgi ekleme
+❌ "Genel olarak", "genellikle", "muhtemelen" gibi ifadeler kullanma
+❌ Kendi bilginden tanım yapma
+❌ Alakasız kaynaklardan sonuç çıkarma
+❌ "Mevzuat yok" deme - bunun yerine "Sağlanan kaynaklarda mevzuat metni bulunamadı" de
+❌ Boş bölüm açma (İçtihat yoksa o bölümü hiç yazma)`;
+
+          const strictInstructionEn = `RESPONSE RULES (STRICTLY ENFORCED):
+
+🚨 MOST IMPORTANT RULE: EVALUATE SOURCE QUALITY FIRST
+
+CHECK these before answering:
+1. Are the provided sources DIRECTLY related to the question?
+2. Are sources primary legislation (law text, regulation) or secondary (article, thesis, commentary)?
+3. Do sources contain the DEFINITION or REGULATION of the asked concept?
+
+IF SOURCES ARE INSUFFICIENT or IRRELEVANT:
+Respond with:
+"⚠️ INSUFFICIENT SOURCES
+
+No direct legislation text or sufficient information about [QUESTION TOPIC] was found in the provided sources.
+
+The found sources (articles, theses, etc.) only indirectly mention this topic. Since primary source (law text) is not available, I cannot provide a definitive legal definition.
+
+Recommendation: Please refer directly to the relevant legislation (e.g., Tax Procedure Law, Income Tax Law, etc.)."
+
+AND STOP HERE. Do not invent definitions or interpret.
+
+---
+
+IF SOURCES ARE SUFFICIENT AND DIRECTLY RELEVANT:
+
+**SOURCE EVALUATION**
+[State the type of sources found: Law text / Tax Ruling / Court Decision / Article, etc.]
+
+**LEGAL CONCLUSION**
+[ONLY summarize what is EXACTLY written in sources. Show [Source X] for each sentence.]
+
+**DIRECT QUOTES**
+[Quote directly from source - show in quotation marks]
+"..." [Source X]
+
+**LIMITATIONS**
+[Only write limitations explicitly stated in source. If none, DO NOT write this section.]
+
+---
+
+PROHIBITIONS (NEVER DO):
+❌ Add information not in sources
+❌ Use phrases like "generally", "usually", "probably"
+❌ Create definitions from your own knowledge
+❌ Draw conclusions from irrelevant sources
+❌ Say "no legislation exists" - instead say "legislation text not found in provided sources"
+❌ Create empty sections (if no case law, don't write that section)`;
+
+          const strictInstruction = responseLanguage === 'en' ? strictInstructionEn : strictInstructionTr;
+
+          // Build enhanced context with source numbers for strict mode
+          let strictContext = '';
+          for (let idx = 0; idx < Math.min(initialDisplayCount, searchResults.length); idx++) {
+            const r = searchResults[idx];
+            const title = r.title || `Kaynak ${idx + 1}`;
+            const sourceTable = r.source_table || r.record_type || 'unknown';
+            const sourceId = r.source_id || r.id || 'N/A';
+            const content = r.excerpt || r.content || '';
+
+            // Add metadata for verification
+            let metadataStr = '';
+            if (r.metadata) {
+              const fields = ['madde_numarasi', 'sayi', 'tarih', 'esas_no', 'karar_no', 'yil']
+                .filter(f => r.metadata[f])
+                .map(f => `${f}: ${r.metadata[f]}`);
+              if (fields.length > 0) {
+                metadataStr = `\n   [${fields.join(', ')}]`;
+              }
+            }
+
+            strictContext += `[Kaynak ${idx + 1}] ${title}${metadataStr}\n`;
+            strictContext += `Tablo: ${sourceTable} | ID: ${sourceId}\n`;
+            strictContext += `Icerik: ${content}\n\n`;
+          }
+
+          userPrompt = `${strictInstruction}\n\n--- ${contextLabel} ---\n${strictContext}\n--- KAYNAKLAR SONU ---\n\n${questionLabel}: ${message}`;
+          console.log(' STRICT RAG MODE: Using source-faithful prompt format');
+        } else {
+          // Normal mode with natural language summary instructions - loaded from settings
+          // Supports {sourceCount} and {maxLength} placeholders for dynamic values
+          const defaultSummaryEn =
+            `RESPONSE INSTRUCTIONS:\n` +
+            ` Write a comprehensive natural language summary that synthesizes ALL {sourceCount} sources provided above\n` +
+            ` DO NOT use citation markers like [1], [2], [3] - write as a cohesive narrative\n` +
+            ` Aim for approximately {maxLength} characters (adjust as needed for completeness)\n` +
+            ` Write ONLY natural paragraphs like an expert explaining the topic\n` +
+            ` Combine related information from multiple sources into unified insights\n` +
+            ` NEVER add section headings or labels like "SUMMARY:" or "CONCLUSION:"\n` +
+            `Provide a flowing, informative overview that addresses the question comprehensively.`;
+
+          const defaultSummaryTr =
+            `YANIT TALİMATLARI:\n` +
+            ` Yukarıda verilen TÜM {sourceCount} kaynağı sentezleyen kapsamlı bir doğal dil özeti yaz\n` +
+            ` [1], [2], [3] gibi kaynak işaretleri KULLANMA - tutarlı bir anlatım olarak yaz\n` +
+            ` Yaklaşık {maxLength} karakter hedefle (bütünlük için gerekirse ayarla)\n` +
+            ` SADECE doğal paragraflar yaz, bir uzman konuyu anlatıyormuş gibi\n` +
+            ` Birden fazla kaynaktan ilgili bilgileri birleşik içgörüler halinde birleştir\n` +
+            ` ASLA "ÖZET:" veya "SONUÇ:" gibi bölüm başlıkları ekleme\n` +
+            `Soruyu kapsamlı bir şekilde ele alan akıcı, bilgilendirici bir genel bakış sun.`;
+
+          // Get max summary length from settings (used in citation excerpt generation)
+          const maxSummaryLength = parseInt(
+            settingsMap.get('ragSettings.summaryMaxLength') || '800'
+          );
+
+          // Get instruction from settings or use default, then replace placeholders
+          let summaryTemplate = responseLanguage === 'en'
+            ? (settingsMap.get('ragSettings.citationInstructionEn') || defaultSummaryEn)
+            : (settingsMap.get('ragSettings.citationInstructionTr') || defaultSummaryTr);
+
+          const summaryInstruction = `\n\n${summaryTemplate
+            .replace(/{sourceCount}/g, String(initialDisplayCount))
+            .replace(/{maxLength}/g, String(maxSummaryLength))}`;
+
+          userPrompt = `${contextLabel}:\n${enhancedContext}\n\n${questionLabel}: ${message}${summaryInstruction}`;
+        }
       }
       console.log(` Best similarity score: ${(bestScore * 100).toFixed(1)}% (results sorted by relevance)`);
       console.log(`️ Sending temperature to LLM Manager: ${options.temperature} (type: ${typeof options.temperature})`);
@@ -1307,6 +1450,7 @@ ${questionLabel}: ${message}`;
           originalModel: activeModel,
           actualProvider: response.provider,
           fastMode: true, // Flag for frontend
+          strictMode: false, // Fast mode is not strict mode
           usage: response.usage // Token usage from LLM
         };
       }
@@ -1359,6 +1503,7 @@ ${questionLabel}: ${message}`;
         originalModel: activeModel,
         actualProvider: response.provider,
         fastMode: false,
+        strictMode: settingsMap.get('ragSettings.strictMode') === 'true',
         usage: response.usage // Token usage from LLM
       };
     } catch (error) {

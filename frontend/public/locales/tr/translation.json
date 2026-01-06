@@ -393,6 +393,8 @@
       "batchSizeHelp": "\"Daha Fazla Yükle\" tıklandığında yüklenecek öğe sayısı (önerilen: 3-5)",
       "summaryMaxLength": "Özet Maksimum Uzunluk",
       "summaryMaxLengthHelp": "AI tarafından oluşturulan özetler için maksimum karakter sayısı (önerilen: 800-1200 markdown formatı için)",
+      "strictMode": "Sıkı RAG Modu (Hukuki/Hassas)",
+      "strictModeHelp": "Sadece kaynaklarda bulunan bilgileri kullanır. Yorum veya ek içerik eklemez. Hukuki/doğruluk gerektiren yanıtlar için doğrudan alıntılar ve yapılandırılmış format sağlar.",
       "enableHybridSearch": "Hibrit Aramayı Etkinleştir",
       "hybridSearchHelp": "Etkinleştirildiğinde, daha iyi sonuçlar için semantik benzerliği anahtar kelime aramasıyla birleştirir",
       "enableKeywordBoost": "Anahtar Kelime Vurgulamayı Etkinleştir",

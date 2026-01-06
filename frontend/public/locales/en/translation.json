@@ -343,6 +343,8 @@
       "batchSizeHelp": "Number of items to load when clicking \"Load More\" (recommended: 3-5)",
       "summaryMaxLength": "Summary Max Length",
       "summaryMaxLengthHelp": "Maximum characters for AI-generated summaries (recommended: 800-1200 for markdown formatting)",
+      "strictMode": "Strict RAG Mode (Legal/Accurate)",
+      "strictModeHelp": "Only use information from sources. No interpretation or added content. Provides direct quotes and structured format for legal/accurate responses.",
       "enableHybridSearch": "Enable Hybrid Search",
       "hybridSearchHelp": "When enabled, combines semantic similarity with keyword search for better results",
       "enableKeywordBoost": "Enable Keyword Boost",

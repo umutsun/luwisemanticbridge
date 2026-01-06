@@ -2509,7 +2509,8 @@ function RAGSettings() {
     enableMessageEmbeddings: false, // Don't include chat history
     enableDocumentEmbeddings: false,// Don't include uploaded docs
     enableScrapeEmbeddings: false,  // Don't include scraped content
-    unifiedEmbeddingsPriority: 8    // High priority for database content
+    unifiedEmbeddingsPriority: 8,   // High priority for database content
+    strictMode: true                // Strict RAG mode - DEFAULT ON for legal platforms
   };
 
   // Load source tables for table priorities
@@ -2865,6 +2866,25 @@ function RAGSettings() {
             <div className="space-y-4">
               <h3 className="text-lg font-medium">{t('settings.rag.searchOptions')}</h3>
               <div className="space-y-3">
+                {/* Strict RAG Mode - Source-faithful responses */}
+                <div className="flex items-center justify-between py-2 border-b border-yellow-200 dark:border-yellow-900 bg-yellow-50 dark:bg-yellow-900/20 rounded-lg px-3 mb-2">
+                  <div className="flex-1">
+                    <Label className="text-yellow-800 dark:text-yellow-200 font-medium">
+                      {t('settings.rag.strictMode') || 'Strict RAG Mode (Legal/Accurate)'}
+                    </Label>
+                    <p className="text-xs text-yellow-700 dark:text-yellow-300 mt-1">
+                      {t('settings.rag.strictModeHelp') || 'Only use information from sources. No interpretation or added content. Provides direct quotes and structured format for legal/accurate responses.'}
+                    </p>
+                  </div>
+                  <Switch
+                    checked={tempRAGConfig?.ragSettings?.strictMode ?? ragConfig?.ragSettings?.strictMode ?? false}
+                    onCheckedChange={(checked) => {
+                      updateRAGSetting('strictMode', checked);
+                      debug.log(`📝 [RAG SETTINGS] Strict mode toggled to: ${checked}`);
+                    }}
+                  />
+                </div>
+
                 <div className="flex items-center justify-between py-2">
                   <div className="flex-1">
                     <Label>{t('settings.rag.enableHybridSearch')}</Label>
