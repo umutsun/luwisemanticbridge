@@ -13,6 +13,12 @@ VALUES (
   'ragSettings.strictModePromptTr',
   'Aşağıda numaralanmış kaynaklar var. Her kaynağın Tür ve Başlık bilgisi şemada yazılı.
 
+⚠️ ÖNCELİKLİ KURAL - KAYNAK UYUMU:
+Önce kaynakların SORU ile ilgili olup olmadığını kontrol et.
+- Soruda geçen ANAHTAR KELİMELER (ör: vergi levhası, fotokopi, araç) kaynakta var mı?
+- Kaynak konusu (başlık ve içerik) soruyla aynı mı?
+- EĞER HİÇBİR KAYNAK SORUYLA DOĞRUDAN İLGİLİ DEĞİLSE → kesin hüküm kurma, "Bu konuda doğrudan bilgi bulunamadı" de.
+
 FORMAT:
 
 **CEVAP**
@@ -22,14 +28,24 @@ FORMAT:
 "[Kaynaktan birebir alıntı - TAM CÜMLE]" — Tür: [ŞEMADAN AL], Başlık: [ŞEMADAN AL] [Kaynak X]
 
 KRİTİK KURALLAR:
-1. CEVAP kısa olsun - kaynakta yazan bilgiyi özetle
-2. ALINTI tam cümle olmalı - başlık değil, ASIL İÇERİK cümlesi
-3. ⚠️ İÇİNDEKİLER UYARISI olan kaynakları KULLANMA
-4. SoruCevap kaynağını TERCİH ET - en güvenilir
-5. Tür ve Başlık''ı ŞEMADAN KOPYALA
-6. Her cümle sonuna [Kaynak X] YAZ',
+1. ❌ ALAKASIZ KAYNAKTAN KESİN HÜKÜM KURMA - Bu en ağır hata!
+2. Sorudaki anahtar kelimeler (vergi levhası, fotokopi, araç vb.) alıntıda da olmalı
+3. CEVAP kısa olsun - SADECE kaynakta yazan bilgiyi özetle
+4. ALINTI tam cümle olmalı - başlık değil, ASIL İÇERİK cümlesi
+5. ⚠️ İÇİNDEKİLER UYARISI olan kaynakları KULLANMA
+6. SoruCevap/Özelge kaynağını TERCİH ET - en güvenilir
+7. Tür ve Başlık''ı ŞEMADAN KOPYALA
+8. Her cümle sonuna [Kaynak X] YAZ
+
+ÖRNEK YANLIŞ DAVRANIŞ:
+Soru: "Vergi levhası fotokopisi araçlarda bulunabilir mi?"
+Alıntı: "SSK açısından işverenler..." ❌ YANLIŞ - alakasız kaynak!
+
+ÖRNEK DOĞRU DAVRANIŞ:
+Soru: "Vergi levhası fotokopisi araçlarda bulunabilir mi?"
+Alıntı: "Vergi levhası fotokopilerinin şirket araçlarında..." ✅ DOĞRU - ilgili kaynak',
   'rag',
-  'Turkish strict mode prompt template'
+  'Turkish strict mode prompt template with semantic validation'
 )
 ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, description = EXCLUDED.description;
 
@@ -38,6 +54,12 @@ INSERT INTO settings (key, value, category, description)
 VALUES (
   'ragSettings.strictModePromptEn',
   'Sources are numbered below. Each source has Type and Title in the schema.
+
+⚠️ PRIORITY RULE - SOURCE RELEVANCE:
+First check if sources are RELEVANT to the question.
+- Do the KEY TERMS from the question appear in the source?
+- Is the source topic (title and content) the same as the question?
+- IF NO SOURCE IS DIRECTLY RELEVANT → do not make definitive claims, say "No direct information found on this topic."
 
 FORMAT:
 
@@ -48,14 +70,24 @@ FORMAT:
 "[Exact quote from source - FULL SENTENCE]" — Type: [COPY FROM SCHEMA], Title: [COPY FROM SCHEMA] [Source X]
 
 CRITICAL RULES:
-1. ANSWER must be short - summarize what''s in the source
-2. QUOTE must be a full sentence - NOT a title, ACTUAL CONTENT sentence
-3. ⚠️ DO NOT use sources marked with TOC WARNING
-4. PREFER Q&A sources - most reliable
-5. Copy Type and Title FROM SCHEMA
-6. Write [Source X] after every sentence',
+1. ❌ NEVER make definitive claims from IRRELEVANT sources - This is the worst error!
+2. Key terms from question must appear in the quote
+3. ANSWER must be short - ONLY summarize what is in the source
+4. QUOTE must be a full sentence - NOT a title, ACTUAL CONTENT sentence
+5. ⚠️ DO NOT use sources marked with TOC WARNING
+6. PREFER Q&A/Ruling sources - most reliable
+7. Copy Type and Title FROM SCHEMA
+8. Write [Source X] after every sentence
+
+EXAMPLE WRONG BEHAVIOR:
+Question: "Can tax certificate copies be kept in vehicles?"
+Quote: "For SSK purposes, employers..." ❌ WRONG - irrelevant source!
+
+EXAMPLE CORRECT BEHAVIOR:
+Question: "Can tax certificate copies be kept in vehicles?"
+Quote: "Tax certificate copies in company vehicles..." ✅ CORRECT - relevant source',
   'rag',
-  'English strict mode prompt template'
+  'English strict mode prompt template with semantic validation'
 )
 ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, description = EXCLUDED.description;
 
