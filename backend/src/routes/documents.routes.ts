@@ -322,9 +322,8 @@ router.get('/', authenticateToken, async (req: AuthenticatedRequest, res: Respon
         whereConditions.push(`NOT EXISTS(SELECT 1 FROM document_embeddings de WHERE de.document_id = d.id)`);
         break;
       case 'analyzed':
-        // Only show analyzed docs that are NOT yet embedded
+        // Show all docs with processing_status = 'analyzed' (regardless of embedding status)
         whereConditions.push(`d.processing_status = 'analyzed'`);
-        whereConditions.push(`NOT EXISTS(SELECT 1 FROM document_embeddings de WHERE de.document_id = d.id)`);
         break;
       case 'pending':
         whereConditions.push(`(d.processing_status = 'pending' OR d.processing_status IS NULL)`);
