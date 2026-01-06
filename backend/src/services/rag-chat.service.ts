@@ -1216,13 +1216,21 @@ CRITICAL:
             const r = searchResults[idx];
             const title = r.title || 'Untitled';
             const sourceType = r.source_type || r.source_table || 'Unknown';
-            const content = r.excerpt || r.content || '';
+            let content = r.excerpt || r.content || '';
 
-            // Clear source label format for LLM to reference
-            strictContext += `=== [Kaynak ${idx + 1}] ===\n`;
-            strictContext += `Tür: ${sourceType}\n`;
-            strictContext += `Başlık: ${title}\n`;
-            strictContext += `İçerik: ${content}\n\n`;
+            // Clean content - remove "Cevap:", "Soru:" prefixes for cleaner quotes
+            content = content
+              .replace(/^Cevap:\s*/i, '')
+              .replace(/^Soru:\s*/i, '')
+              .replace(/^Yanıt:\s*/i, '')
+              .trim();
+
+            // Explicit schema format - LLM should copy these values
+            strictContext += `=== KAYNAK ${idx + 1} ===\n`;
+            strictContext += `📋 ŞEMA:\n`;
+            strictContext += `   Tür: ${sourceType}\n`;
+            strictContext += `   Başlık: ${title}\n`;
+            strictContext += `📝 İÇERİK:\n${content}\n\n`;
           }
 
           // Build available source numbers list dynamically
@@ -1811,20 +1819,16 @@ CRITICAL:
   }
 
   /**
-   * Fix empty source references [] in strict mode responses
-   * LLM sometimes writes [] instead of [Kaynak 1], [Kaynak 2], etc.
-   * Also fixes generic titles like "Başlık: Soru-Cevap" to actual source titles
+   * Post-process strict mode responses to ensure quality output
+   * Fixes: empty [], generic titles, quote prefixes
    */
   private fixEmptySourceReferences(text: string, searchResults: any[]): string {
     if (!text || !searchResults.length) return text;
 
     let fixedText = text;
+    let fixCount = 0;
 
-    // Find all empty [] patterns
-    const emptyRefPattern = /\[\s*\]/g;
-    const emptyCount = (text.match(emptyRefPattern) || []).length;
-
-    // Find the best source - prioritize SoruCevap/Q&A sources
+    // 1. Find the best source - prioritize SoruCevap/Q&A sources
     let bestSourceIdx = 0;
     for (let i = 0; i < searchResults.length; i++) {
       const sourceType = (searchResults[i].source_type || searchResults[i].source_table || '').toLowerCase();
@@ -1834,51 +1838,81 @@ CRITICAL:
       }
     }
 
-    // Replace all empty [] with the best source reference
+    // 2. Fix empty [] references
+    const emptyRefPattern = /\[\s*\]/g;
+    const emptyCount = (text.match(emptyRefPattern) || []).length;
     if (emptyCount > 0) {
-      console.log(`🔧 POST-PROCESS: Found ${emptyCount} empty [] references, fixing...`);
       const sourceRef = `[Kaynak ${bestSourceIdx + 1}]`;
       fixedText = fixedText.replace(emptyRefPattern, sourceRef);
-      console.log(`✅ POST-PROCESS: Replaced ${emptyCount} empty [] with ${sourceRef}`);
+      console.log(`🔧 POST-PROCESS: Fixed ${emptyCount} empty [] → ${sourceRef}`);
+      fixCount++;
     }
 
-    // Fix generic "Başlık: Soru-Cevap" or "Başlık: SoruCevap" to use actual title
-    // Match patterns like: "Başlık: Soru-Cevap [Kaynak 3]" or "Başlık: SoruCevap [Kaynak 3]"
-    const genericTitlePatterns = [
-      /Başlık:\s*Soru-?[Cc]evap\s*(\[Kaynak\s*\d+\])/gi,
-      /Başlık:\s*Q&A\s*(\[Kaynak\s*\d+\])/gi,
-      /Başlık:\s*Q&A\s*(\[Source\s*\d+\])/gi
+    // 3. Fix generic titles - comprehensive pattern matching
+    // Matches: "Başlık: Soru-Cevap", "Başlık: SoruCevap", "Başlık: csv_sorucevap", "Başlık: Q&A"
+    const genericTitlePattern = /Başlık:\s*(?:Soru-?[Cc]evap|csv_sorucevap|Q&A)\s*(\[(?:Kaynak|Source)\s*(\d+)\])/gi;
+
+    let match;
+    while ((match = genericTitlePattern.exec(fixedText)) !== null) {
+      const fullMatch = match[0];
+      const sourceRef = match[1]; // [Kaynak 3]
+      const sourceNum = parseInt(match[2]) - 1; // 2 (0-indexed)
+
+      const source = searchResults[sourceNum] || searchResults[bestSourceIdx];
+      if (source && source.title) {
+        // Clean the title - remove type prefixes
+        let actualTitle = source.title
+          .replace(/^(?:Soru-?[Cc]evap|SoruCevap|Q&A|csv_sorucevap)\s*[-:]\s*/i, '')
+          .trim();
+
+        // Fallback to original if cleaning made it too short
+        if (!actualTitle || actualTitle.length < 5) {
+          actualTitle = source.title;
+        }
+
+        const replacement = `Başlık: ${actualTitle} ${sourceRef}`;
+        fixedText = fixedText.replace(fullMatch, replacement);
+        console.log(`🔧 POST-PROCESS: Fixed title → "${actualTitle.substring(0, 50)}..."`);
+        fixCount++;
+      }
+    }
+
+    // 4. Clean quote prefixes - remove "Cevap:", "Soru:", "Yanıt:" from quotes
+    // Pattern: "Cevap: actual text" → "actual text"
+    const quotePrefixPatterns = [
+      { pattern: /"Cevap:\s*/gi, replacement: '"' },
+      { pattern: /"Soru:\s*/gi, replacement: '"' },
+      { pattern: /"Yanıt:\s*/gi, replacement: '"' },
+      { pattern: /"Answer:\s*/gi, replacement: '"' },
+      { pattern: /"Question:\s*/gi, replacement: '"' },
+      { pattern: /"Response:\s*/gi, replacement: '"' }
     ];
 
-    for (const pattern of genericTitlePatterns) {
-      const matches = fixedText.match(pattern);
-      if (matches && matches.length > 0) {
-        // Extract source number from the match
-        const sourceNumMatch = matches[0].match(/\d+/);
-        const sourceNum = sourceNumMatch ? parseInt(sourceNumMatch[0]) - 1 : bestSourceIdx;
-        const source = searchResults[sourceNum] || searchResults[bestSourceIdx];
-
-        if (source && source.title) {
-          // Get actual title - remove "SoruCevap" prefix if present
-          let actualTitle = source.title
-            .replace(/^Soru-?[Cc]evap\s*[-:]\s*/i, '')
-            .replace(/^Q&A\s*[-:]\s*/i, '')
-            .trim();
-
-          // If title is still empty or just the type, use original title
-          if (!actualTitle || actualTitle.length < 5) {
-            actualTitle = source.title;
-          }
-
-          // Replace generic title with actual title
-          const oldText = fixedText;
-          fixedText = fixedText.replace(pattern, `Başlık: ${actualTitle} $1`);
-
-          if (fixedText !== oldText) {
-            console.log(`✅ POST-PROCESS: Fixed generic title to "${actualTitle}"`);
-          }
-        }
+    for (const { pattern, replacement } of quotePrefixPatterns) {
+      const beforeFix = fixedText;
+      fixedText = fixedText.replace(pattern, replacement);
+      if (fixedText !== beforeFix) {
+        console.log(`🔧 POST-PROCESS: Cleaned quote prefix`);
+        fixCount++;
       }
+    }
+
+    // 5. Clean "Tür:" field - normalize source type display
+    // "Tür: csv_sorucevap" → "Tür: SoruCevap" (more readable)
+    const typeNormalizations = [
+      { pattern: /Tür:\s*csv_sorucevap/gi, replacement: 'Tür: SoruCevap' },
+      { pattern: /Tür:\s*csv_ozelge/gi, replacement: 'Tür: Özelge' },
+      { pattern: /Tür:\s*csv_danistaykararlari/gi, replacement: 'Tür: Danıştay Kararı' },
+      { pattern: /Tür:\s*csv_makale/gi, replacement: 'Tür: Makale' },
+      { pattern: /Tür:\s*document_embeddings/gi, replacement: 'Tür: Döküman' }
+    ];
+
+    for (const { pattern, replacement } of typeNormalizations) {
+      fixedText = fixedText.replace(pattern, replacement);
+    }
+
+    if (fixCount > 0) {
+      console.log(`✅ POST-PROCESS: Applied ${fixCount} fixes to response`);
     }
 
     return fixedText;
