@@ -1167,115 +1167,103 @@ ${questionLabel}: ${message}`;
 
 🔍 ÖNCE SORU TİPİNİ BELİRLE:
 
-A) OLGUSAL SORU (belgede X geçiyor mu? hangi belgede? listele)
-B) HUKUKİ ANALİZ SORUSU (X nedir? nasıl uygulanır? hangi durumlarda?)
+A) OLGUSAL SORU → "belgede X geçiyor mu? hangi belgede?"
+B) PRATİK/UYGULAMA SORUSU → "hangi işlemler? nasıl yapılır? ne zaman? kimlerle?"
+C) HUKUKİ TANIMLAMA SORUSU → "X nedir? yasal dayanağı nedir?"
 
 ---
 
-📋 TİP A: OLGUSAL SORU İÇİN
-
-Kısa ve net yanıt ver:
+📋 TİP A: OLGUSAL SORU
 
 **BULGU**
-[Evet/Hayır + tek cümle açıklama]
+[Evet/Hayır + tek cümle]
 
-**KAYNAK BİLGİSİ**
-- Belge: [belge adı/başlığı]
-- Tür: [Tez/Makale/Özelge/Karar vb.]
-- Kaynak ID: [Kaynak X]
-
-Başka bölüm AÇMA. Mevzuat/içtihat/sınırlar bölümü YAZMA.
+**KAYNAK**
+- Belge: [ad]
+- Kaynak: [Kaynak X]
 
 ---
 
-⚖️ TİP B: HUKUKİ ANALİZ SORUSU İÇİN
+📋 TİP B: PRATİK/UYGULAMA SORUSU
 
-ÖNCE kaynak kalitesini değerlendir:
-- Birincil kaynak (kanun metni, yönetmelik) var mı?
-- Yoksa sadece ikincil kaynak (makale, tez) mı var?
-
-EĞER BİRİNCİL KAYNAK YOKSA:
-"⚠️ KAYNAK SINIRLAMASI
-
-Sağlanan kaynaklarda bu konuda doğrudan mevzuat metni bulunamadı. Mevcut kaynaklar (makale/tez/yorum) ikincil niteliktedir.
-
-Kesin hukuki tanım için ilgili mevzuata doğrudan başvurunuz."
-
-VE DUR - tanım uydurma.
-
-EĞER YETERLİ KAYNAK VARSA:
+ÖNEMLİ: Bu tip sorular için SoruCevap, Makale, Özelge, Danıştay Kararı YETERLİ KAYNAKTIR!
+Mevzuat metni aramak GEREKMEZ. Elindeki kaynakları KULLAN.
 
 **SONUÇ**
-[Kaynaklarda AYNEN yazan bilgi - her iddia için [Kaynak X] göster]
+[Kaynaklarda yazan bilgiyi özetle - [Kaynak X] göster]
 
 **DOĞRUDAN ALINTI**
 "..." [Kaynak X]
 
 ---
 
+⚖️ TİP C: HUKUKİ TANIMLAMA SORUSU
+
+Sadece "X nedir?" veya "yasal dayanağı nedir?" gibi sorular için mevzuat ara.
+Eğer mevzuat metni yoksa:
+
+"⚠️ Sağlanan kaynaklarda doğrudan mevzuat metni bulunamadı.
+Mevcut kaynaklar (makale/özelge/soru-cevap) şöyle açıklıyor: [kısa özet]
+Kesin yasal tanım için ilgili mevzuata başvurunuz."
+
+---
+
 ❌ YASAKLAR:
-- Boş bölüm açma (içerik yoksa bölümü yazma)
-- "Mevzuat yok" deme (bunun yerine "kaynaklarda bulunamadı" de)
-- Alakasız kaynaklardan yorum çıkarma
-- Kendi bilginden tanım yapma
-- "Genel olarak", "muhtemelen" gibi belirsiz ifadeler`;
+- "Mevzuat yok" deyip DURMA - elindeki kaynakları KULLAN
+- Boş bölüm açma
+- Alakasız kaynaklardan sonuç çıkarma
+- Kendi bilginden tanım yapma`;
 
           const defaultStrictInstructionEn = `RESPONSE RULES:
 
 🔍 FIRST DETERMINE QUESTION TYPE:
 
-A) FACTUAL QUESTION (does X appear in documents? which document? list them)
-B) LEGAL ANALYSIS QUESTION (what is X? how is it applied? in which cases?)
+A) FACTUAL QUESTION → "does X appear in documents? which document?"
+B) PRACTICAL QUESTION → "which cases? how to do? when? with whom?"
+C) LEGAL DEFINITION QUESTION → "what is X? what is the legal basis?"
 
 ---
 
 📋 TYPE A: FACTUAL QUESTION
 
-Give short, direct answer:
-
 **FINDING**
-[Yes/No + one sentence explanation]
+[Yes/No + one sentence]
 
-**SOURCE INFO**
-- Document: [document name/title]
-- Type: [Thesis/Article/Ruling/Decision etc.]
-- Source ID: [Source X]
-
-Do NOT add other sections. Do NOT write legislation/case law/limitations sections.
+**SOURCE**
+- Document: [name]
+- Source: [Source X]
 
 ---
 
-⚖️ TYPE B: LEGAL ANALYSIS QUESTION
+📋 TYPE B: PRACTICAL QUESTION
 
-FIRST evaluate source quality:
-- Is there primary source (law text, regulation)?
-- Or only secondary sources (article, thesis)?
-
-IF NO PRIMARY SOURCE:
-"⚠️ SOURCE LIMITATION
-
-No direct legislation text found in provided sources for this topic. Available sources (articles/theses/commentary) are secondary in nature.
-
-For definitive legal definition, please refer directly to relevant legislation."
-
-AND STOP - do not invent definitions.
-
-IF SUFFICIENT SOURCES EXIST:
+IMPORTANT: For these questions, Q&A, Articles, Rulings, Court Decisions ARE SUFFICIENT SOURCES!
+Legislation text is NOT required. USE the available sources.
 
 **CONCLUSION**
-[Information EXACTLY as written in sources - show [Source X] for each claim]
+[Summarize info from sources - show [Source X]]
 
 **DIRECT QUOTE**
 "..." [Source X]
 
 ---
 
+⚖️ TYPE C: LEGAL DEFINITION QUESTION
+
+Only for "what is X?" or "what is the legal basis?" questions, look for legislation.
+If no legislation text found:
+
+"⚠️ No direct legislation text found in provided sources.
+Available sources (articles/rulings/Q&A) explain as follows: [brief summary]
+For definitive legal definition, please refer to relevant legislation."
+
+---
+
 ❌ PROHIBITIONS:
-- Do not create empty sections (if no content, don't write section)
-- Do not say "no legislation exists" (say "not found in sources" instead)
+- Do NOT stop at "no legislation" - USE available sources
+- Do not create empty sections
 - Do not draw conclusions from irrelevant sources
-- Do not create definitions from your own knowledge
-- Do not use "generally", "probably" etc.`;
+- Do not create definitions from your own knowledge`;
 
           // Load from database settings (per-tenant customization) or use defaults
           const strictInstructionTr = settingsMap.get('ragSettings.strictModeInstructionTr') || defaultStrictInstructionTr;
