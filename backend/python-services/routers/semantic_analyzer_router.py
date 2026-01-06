@@ -372,6 +372,8 @@ async def update_config(request: ConfigUpdateRequest):
         return {
             "status": "updated",
             "updated_fields": list(config.keys()),
+            "config_version": semantic_analyzer._config_version,
+            "config_timestamp": semantic_analyzer._config_timestamp,
             "message": "Configuration updated and cached in Redis"
         }
 
@@ -388,6 +390,8 @@ async def update_config(request: ConfigUpdateRequest):
 async def get_config():
     """Get current analyzer configuration"""
     return {
+        "config_version": semantic_analyzer._config_version,
+        "config_timestamp": semantic_analyzer._config_timestamp,
         "action_groups": semantic_analyzer.action_groups,
         "object_anchors": semantic_analyzer.object_anchors,
         "forbidden_patterns": [

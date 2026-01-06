@@ -17,10 +17,12 @@ import os
 import asyncio
 import hashlib
 import json
+import uuid
 from typing import List, Dict, Optional, Tuple, Set
 from dataclasses import dataclass, field, asdict
 from enum import Enum
 import time
+from datetime import datetime
 
 from loguru import logger
 
@@ -239,6 +241,10 @@ class SemanticAnalyzerService:
         self._cache = RedisCache()
         self._verbatim_tolerance = 0.85  # Default, can be overridden by schema
 
+        # Config versioning for debugging/tracking
+        self._config_version: Optional[str] = None
+        self._config_timestamp: Optional[str] = None
+
         # === TURKISH VERBS/ACTIONS ===
         self.action_groups = {
             "keep": ["bulundur", "bulundurmak", "taşı", "taşımak", "muhafaza", "sakla", "saklama"],
@@ -389,8 +395,19 @@ class SemanticAnalyzerService:
             self._verbatim_tolerance = float(config["verbatim_tolerance"])
             logger.info(f"Set verbatim_tolerance from schema: {self._verbatim_tolerance}")
 
-        # Cache the config in Redis
-        await self._cache.set_config(config)
+        # Generate config version hash for tracking
+        config_str = json.dumps(config, sort_keys=True, ensure_ascii=False)
+        self._config_version = hashlib.sha256(config_str.encode()).hexdigest()[:12]
+        self._config_timestamp = datetime.now().isoformat()
+        logger.info(f"Config version: {self._config_version} @ {self._config_timestamp}")
+
+        # Cache the config in Redis (with version info)
+        config_with_meta = {
+            **config,
+            "_version": self._config_version,
+            "_timestamp": self._config_timestamp
+        }
+        await self._cache.set_config(config_with_meta)
 
     async def initialize(self):
         """Initialize with timeout and degraded mode"""
@@ -613,62 +630,75 @@ class SemanticAnalyzerService:
                 return True, match.group(0).strip()
         return False, None
 
-    def _verify_verbatim_quote(self, quote: str, source_text: str, tolerance: Optional[float] = None) -> Tuple[bool, Optional[str]]:
-        """Verify that a quote exists verbatim (or near-verbatim) in source text
+    def _verify_verbatim_quote(self, quote: str, source_text: str, strict: bool = True) -> Tuple[bool, Optional[str]]:
+        """Verify that a quote exists VERBATIM in source text
+
+        CRITICAL: ALINTI is legal evidence - must be EXACT substring match.
+        Tolerance-based matching is DISABLED for quote verification.
 
         Args:
-            quote: The quoted text to verify
-            source_text: The source text to search in
-            tolerance: Minimum word overlap ratio (0-1) to consider a match (uses schema default if not provided)
+            quote: The quoted text to verify (ALINTI content)
+            source_text: The source chunk text (MUST be exact chunk sent to LLM)
+            strict: If True, require exact match (default). If False, allow tolerance.
 
         Returns:
             (is_verbatim, reason)
         """
-        # Use schema-configured tolerance or default
-        if tolerance is None:
-            tolerance = self._verbatim_tolerance
-
         if not quote or not source_text:
             return False, "Boş alıntı veya kaynak"
 
-        # Normalize both texts for comparison
+        # Normalize both texts for comparison (whitespace only, preserve words)
         def normalize(text: str) -> str:
-            # Remove extra whitespace, normalize Turkish characters
+            # Remove extra whitespace but preserve exact words
             text = re.sub(r'\s+', ' ', text.strip().lower())
             return text
 
         quote_norm = normalize(quote)
         source_norm = normalize(source_text)
 
-        # Check for exact substring match
+        # PRIMARY CHECK: Exact substring match (REQUIRED for strict mode)
         if quote_norm in source_norm:
             return True, None
 
-        # Check for near-verbatim match using sliding window
+        # STRICT MODE (default): No tolerance for ALINTI - it's legal evidence
+        if strict:
+            # Check if verdict tokens exist in both (critical words must match)
+            verdict_tokens = [
+                "zorunludur", "zorunlu değildir", "zorunlu bulunmamaktadır",
+                "gerekmektedir", "gerekmemektedir", "gerekmez",
+                "mümkündür", "mümkün değildir", "mümkün bulunmamaktadır",
+                "uygundur", "uygun değildir",
+                "yeterlidir", "yeterli değildir",
+                "mecburidir", "mecburi değildir",
+            ]
+
+            # Find verdict tokens in quote
+            quote_verdicts = [t for t in verdict_tokens if t in quote_norm]
+            if quote_verdicts:
+                # Check if these EXACT verdict tokens exist in source
+                source_verdicts = [t for t in verdict_tokens if t in source_norm]
+                missing_verdicts = set(quote_verdicts) - set(source_verdicts)
+                if missing_verdicts:
+                    return False, f"Alıntıdaki hüküm kelimesi kaynak metinde yok: {list(missing_verdicts)}"
+
+            return False, "Alıntı kaynak metinde birebir bulunamadı"
+
+        # NON-STRICT MODE: Use tolerance (only for internal extraction, NOT for ALINTI validation)
         quote_words = quote_norm.split()
         if len(quote_words) < 5:
-            # For very short quotes, require exact match
             return False, "Kısa alıntı kaynak metinde bulunamadı"
 
-        # Try to find a window in source that matches most of the quote words
         source_words = source_norm.split()
         window_size = len(quote_words)
+        tolerance = self._verbatim_tolerance
 
         best_overlap = 0.0
         for i in range(len(source_words) - window_size + 1):
             window = source_words[i:i + window_size]
-            # Count matching words (order doesn't matter for tolerance check)
             overlap = len(set(quote_words) & set(window)) / len(quote_words)
             best_overlap = max(best_overlap, overlap)
-
             if overlap >= tolerance:
                 return True, None
-
-        # Also check if quote words appear in sequence (with some gaps allowed)
-        # This handles cases where minor words are added/removed
-        seq_match = self._check_sequence_match(quote_words, source_words)
-        if seq_match:
-            return True, None
 
         return False, f"Alıntı kaynak metinde bulunamadı (benzerlik: {best_overlap:.0%})"
 
@@ -1033,13 +1063,15 @@ class SemanticAnalyzerService:
         }
 
     def get_status(self) -> Dict:
-        """Get analyzer status"""
+        """Get analyzer status including config version"""
         return {
             "initialized": self._initialized,
             "degraded_mode": self._degraded_mode,
             "model": self.model_name if not self._degraded_mode else "fallback",
             "cache_connected": self._cache._connected,
             "init_time": self._init_time,
+            "config_version": self._config_version,
+            "config_timestamp": self._config_timestamp,
         }
 
 
