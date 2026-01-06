@@ -1321,15 +1321,17 @@ X is mandatory. [Source 3]
       // Clean response content - remove section headings that LLM might add despite instructions
       response.content = this.stripSectionHeadings(response.content);
 
-      // Fix empty source references [] in strict mode - replace with best matching source
-      if (strictRagMode && searchResults.length > 0) {
-        response.content = this.fixEmptySourceReferences(response.content, searchResults);
+      // Strip citation markers when disableCitationText is enabled AND strict mode is OFF
+      // In strict mode, we NEED the [Kaynak X] references for source verification
+      if (disableCitationText && !strictRagMode) {
+        response.content = this.stripCitationMarkers(response.content);
+        console.log('📝 Citation markers stripped from response (disableCitationText=true, strictMode=false)');
       }
 
-      // Strip citation markers when disableCitationText is enabled (sources shown separately)
-      if (disableCitationText) {
-        response.content = this.stripCitationMarkers(response.content);
-        console.log('📝 Citation markers stripped from response (disableCitationText=true)');
+      // Fix empty source references [] in strict mode - replace with best matching source
+      // This runs AFTER strip to ensure [Kaynak X] references are preserved
+      if (strictRagMode && searchResults.length > 0) {
+        response.content = this.fixEmptySourceReferences(response.content, searchResults);
       }
 
       // 5. Save messages to database with error handling
