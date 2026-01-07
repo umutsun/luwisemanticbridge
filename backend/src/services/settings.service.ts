@@ -695,6 +695,174 @@ export class SettingsService {
       return { success: false, error: error.message };
     }
   }
+
+  // =============================================
+  // SEMANTIC ANALYZER CONFIG SYNC
+  // =============================================
+
+  /**
+   * Load all semantic analyzer settings from database
+   * and sync to Redis for Python service consumption
+   */
+  async syncSemanticAnalyzerConfig(): Promise<{ success: boolean; config?: any; error?: string }> {
+    try {
+      const client = await lsembPool.connect();
+
+      try {
+        // Load all semanticAnalyzer.* settings from DB
+        const result = await client.query(`
+          SELECT key, value
+          FROM settings
+          WHERE key LIKE 'semanticAnalyzer.%'
+        `);
+
+        if (result.rows.length === 0) {
+          logger.warn('No semantic analyzer settings found in database');
+          return { success: false, error: 'No settings found - run migration first' };
+        }
+
+        // Transform to Python-expected format
+        const config: any = {};
+
+        for (const row of result.rows) {
+          const shortKey = row.key.replace('semanticAnalyzer.', '');
+          let value = row.value;
+
+          // Parse JSON if stored as string
+          if (typeof value === 'string') {
+            try {
+              value = JSON.parse(value);
+            } catch {
+              // Keep as string if not JSON
+            }
+          }
+
+          // Map DB keys to Python config keys
+          switch (shortKey) {
+            case 'actionGroups':
+              config.action_groups = value;
+              break;
+            case 'objectAnchors':
+              config.object_anchors = value;
+              break;
+            case 'verdictPatterns':
+              config.verdict_patterns = value;
+              break;
+            case 'forbiddenPatterns':
+              config.forbidden_patterns = value;
+              break;
+            case 'failMessages':
+              config.fail_messages = value;
+              break;
+            case 'systemMessagePatterns':
+              config.system_message_patterns = value;
+              break;
+            case 'modalityQuestionPatterns':
+              config.modality_question_patterns = value;
+              break;
+            case 'modalityAnswerPatterns':
+              config.modality_answer_patterns = value;
+              break;
+            case 'verbatimTolerance':
+              config.verbatim_tolerance = parseFloat(value) || 0.85;
+              break;
+            case 'penalties':
+              config.penalties = value;
+              break;
+            case 'temporalPatterns':
+              config.temporal_patterns = value;
+              break;
+            case 'intentPatterns':
+              config.intent_patterns = value;
+              break;
+            case 'tocPatterns':
+              config.toc_patterns = value;
+              break;
+            case 'certifiedCopyPatterns':
+              config.certified_copy_patterns = value;
+              break;
+            default:
+              // Store other settings as-is
+              config[shortKey] = value;
+          }
+        }
+
+        // Add metadata
+        config._synced_from = 'database';
+        config._synced_at = new Date().toISOString();
+
+        // Write to Redis for Python service
+        const { safeRedis } = await import('../config/redis-simplified');
+        const SEMANTIC_ANALYZER_CONFIG_KEY = 'semantic_analyzer_config';
+
+        const written = await safeRedis.set(
+          SEMANTIC_ANALYZER_CONFIG_KEY,
+          JSON.stringify(config),
+          3600 // 1 hour TTL
+        );
+
+        if (!written) {
+          logger.warn('Failed to write semantic analyzer config to Redis');
+        } else {
+          logger.info(`Semantic analyzer config synced to Redis (${Object.keys(config).length} keys)`);
+        }
+
+        return { success: true, config };
+
+      } finally {
+        client.release();
+      }
+
+    } catch (error: any) {
+      logger.error('Failed to sync semantic analyzer config:', error);
+      return { success: false, error: error.message };
+    }
+  }
+
+  /**
+   * Get current semantic analyzer config from Redis
+   */
+  async getSemanticAnalyzerConfig(): Promise<any | null> {
+    try {
+      const { safeRedis } = await import('../config/redis-simplified');
+      const data = await safeRedis.get('semantic_analyzer_config');
+      if (data) {
+        return JSON.parse(data);
+      }
+      return null;
+    } catch (error) {
+      logger.error('Failed to get semantic analyzer config:', error);
+      return null;
+    }
+  }
+
+  /**
+   * Update a specific semantic analyzer setting and re-sync to Redis
+   */
+  async updateSemanticAnalyzerSetting(key: string, value: any): Promise<{ success: boolean; error?: string }> {
+    try {
+      const fullKey = key.startsWith('semanticAnalyzer.') ? key : `semanticAnalyzer.${key}`;
+
+      const client = await lsembPool.connect();
+      try {
+        await client.query(`
+          INSERT INTO settings (key, value, category, description)
+          VALUES ($1, $2::jsonb, 'semantic_analyzer', $3)
+          ON CONFLICT (key) DO UPDATE SET value = $2::jsonb, updated_at = CURRENT_TIMESTAMP
+        `, [fullKey, JSON.stringify(value), `Semantic analyzer: ${key}`]);
+
+        // Re-sync to Redis
+        await this.syncSemanticAnalyzerConfig();
+
+        return { success: true };
+      } finally {
+        client.release();
+      }
+    } catch (error: any) {
+      logger.error('Failed to update semantic analyzer setting:', error);
+      return { success: false, error: error.message };
+    }
+  }
 }
 // Export singleton instance
 export const settingsService = SettingsService.getInstance();

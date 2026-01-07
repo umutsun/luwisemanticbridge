@@ -791,4 +791,133 @@ router.post('/set-active-template', async (req: Request, res: Response) => {
   }
 });
 
+// =============================================
+// SEMANTIC ANALYZER CONFIG SYNC ENDPOINTS
+// =============================================
+
+import { settingsService } from '../services/settings.service';
+
+/**
+ * @swagger
+ * /settings/semantic-analyzer/sync:
+ *   post:
+ *     summary: Sync semantic analyzer config from DB to Redis
+ *     description: Loads semantic analyzer settings from database and writes to Redis for Python service
+ *     tags: [Settings, SemanticAnalyzer]
+ *     responses:
+ *       200:
+ *         description: Config synced successfully
+ *       500:
+ *         description: Sync failed
+ */
+router.post('/semantic-analyzer/sync', async (req: Request, res: Response) => {
+  try {
+    console.log('🔄 [SEMANTIC] Syncing semantic analyzer config to Redis...');
+    const result = await settingsService.syncSemanticAnalyzerConfig();
+
+    if (result.success) {
+      console.log('✅ [SEMANTIC] Config synced successfully');
+      res.json({
+        success: true,
+        message: 'Semantic analyzer config synced to Redis',
+        keys: result.config ? Object.keys(result.config).length : 0
+      });
+    } else {
+      console.warn('⚠️ [SEMANTIC] Sync failed:', result.error);
+      res.status(500).json({
+        success: false,
+        error: result.error
+      });
+    }
+  } catch (error: any) {
+    console.error('❌ [SEMANTIC] Sync error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * @swagger
+ * /settings/semantic-analyzer/config:
+ *   get:
+ *     summary: Get current semantic analyzer config from Redis
+ *     description: Returns the current semantic analyzer configuration cached in Redis
+ *     tags: [Settings, SemanticAnalyzer]
+ *     responses:
+ *       200:
+ *         description: Config retrieved successfully
+ *       404:
+ *         description: No config found in Redis
+ */
+router.get('/semantic-analyzer/config', async (req: Request, res: Response) => {
+  try {
+    const config = await settingsService.getSemanticAnalyzerConfig();
+
+    if (config) {
+      res.json({
+        success: true,
+        config,
+        syncedAt: config._synced_at
+      });
+    } else {
+      res.status(404).json({
+        success: false,
+        error: 'No semantic analyzer config found in Redis. Run POST /settings/semantic-analyzer/sync first.'
+      });
+    }
+  } catch (error: any) {
+    console.error('❌ [SEMANTIC] Get config error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * @swagger
+ * /settings/semantic-analyzer/{key}:
+ *   put:
+ *     summary: Update a specific semantic analyzer setting
+ *     description: Updates a setting in DB and re-syncs to Redis
+ *     tags: [Settings, SemanticAnalyzer]
+ *     parameters:
+ *       - in: path
+ *         name: key
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Setting key (e.g., verdictPatterns, failMessages)
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               value:
+ *                 description: New value for the setting
+ *     responses:
+ *       200:
+ *         description: Setting updated successfully
+ *       500:
+ *         description: Update failed
+ */
+router.put('/semantic-analyzer/:key', async (req: Request, res: Response) => {
+  try {
+    const { key } = req.params;
+    const { value } = req.body;
+
+    console.log(`🔄 [SEMANTIC] Updating setting: ${key}`);
+    const result = await settingsService.updateSemanticAnalyzerSetting(key, value);
+
+    if (result.success) {
+      console.log(`✅ [SEMANTIC] Setting ${key} updated and synced`);
+      res.json({ success: true, key });
+    } else {
+      console.warn(`⚠️ [SEMANTIC] Update failed:`, result.error);
+      res.status(500).json({ success: false, error: result.error });
+    }
+  } catch (error: any) {
+    console.error('❌ [SEMANTIC] Update error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 export default router;
