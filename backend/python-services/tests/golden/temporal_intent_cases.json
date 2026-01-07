@@ -1,0 +1,109 @@
+{
+  "name": "Temporal and Intent Alignment Golden Tests",
+  "description": "Test cases for temporal mismatch (year-specific) and intent mismatch (how vs what). These are WARNING issues that don't invalidate the quote but help LLM produce better responses.",
+  "version": "1.0.0",
+  "categories": {
+    "temporal_mismatch": "Genel soru ↔ yıl-spesifik cevap (WARNING)",
+    "intent_mismatch": "Nasıl (prosedür) ↔ Nedir (bilgi) (WARNING)",
+    "temporal_aligned": "Yıl belirtilmiş sorular",
+    "intent_aligned": "Eşleşen niyet"
+  },
+  "test_cases": [
+    {
+      "id": "TEMPORAL_001",
+      "category": "temporal_mismatch",
+      "description": "General question, year-specific answer (2013) - WITH verdict",
+      "question": "Gelir vergisi tarifesi zorunlu mu?",
+      "quote": "2013 yılında elde edilen gelirlere bu tarifenin uygulanması zorunludur.",
+      "answer": "2013 tarifesi zorunludur",
+      "source_text": "Gelir Vergisi Kanununa göre 2013 yılında elde edilen gelirlere bu tarifenin uygulanması zorunludur.",
+      "expected": {
+        "quote_valid": true,
+        "answer_mode": "cautious",
+        "issues_contains": ["temporal_mismatch"],
+        "max_confidence": 0.85
+      },
+      "tags": ["regression", "temporal_mismatch", "critical"]
+    },
+    {
+      "id": "TEMPORAL_002",
+      "category": "temporal_mismatch",
+      "description": "General KDV question, 2024-specific answer - WITH verdict",
+      "question": "KDV beyannamesi vermek zorunlu mu?",
+      "quote": "2024 yılı için KDV beyannamesi verilmesi zorunludur.",
+      "answer": "2024 için zorunludur",
+      "source_text": "2024 yılı için KDV beyannamesi verilmesi zorunludur.",
+      "expected": {
+        "quote_valid": true,
+        "answer_mode": "cautious",
+        "issues_contains": ["temporal_mismatch"],
+        "max_confidence": 0.85
+      },
+      "tags": ["regression", "temporal_mismatch"]
+    },
+    {
+      "id": "TEMPORAL_003",
+      "category": "temporal_aligned",
+      "description": "Year-specific question, matching answer - NO mismatch",
+      "question": "2024 yılı için gelir vergisi tarifesi zorunlu mu?",
+      "quote": "2024 yılı gelir vergisi tarifesinin uygulanması zorunludur.",
+      "answer": "2024 için zorunludur",
+      "source_text": "2024 yılı gelir vergisi tarifesinin uygulanması zorunludur.",
+      "expected": {
+        "quote_valid": true,
+        "answer_mode": "definitive",
+        "issues_not_contains": ["temporal_mismatch"],
+        "min_confidence": 0.7
+      },
+      "tags": ["regression", "temporal_aligned"]
+    },
+    {
+      "id": "TEMPORAL_004",
+      "category": "temporal_aligned",
+      "description": "Question with 'bu yıl' - year implicit, no mismatch",
+      "question": "Bu yıl için asgari ücret zorunlu mu?",
+      "quote": "2024 yılı için asgari ücret uygulanması zorunludur.",
+      "answer": "zorunludur",
+      "source_text": "2024 yılı için asgari ücret uygulanması zorunludur.",
+      "expected": {
+        "quote_valid": true,
+        "answer_mode": "definitive",
+        "issues_not_contains": ["temporal_mismatch"],
+        "min_confidence": 0.7
+      },
+      "tags": ["regression", "temporal_aligned"]
+    },
+    {
+      "id": "TEMPORAL_005",
+      "category": "temporal_mismatch",
+      "description": "General procedure question, old regulation year - WITH verdict",
+      "question": "Vergi levhası tasdik zorunlu mu?",
+      "quote": "2012 yılından itibaren vergi levhası tasdik zorunluluğu kaldırılmıştır.",
+      "answer": "zorunluluğu kaldırılmıştır",
+      "source_text": "2012 yılından itibaren vergi levhası tasdik zorunluluğu kaldırılmıştır.",
+      "expected": {
+        "quote_valid": true,
+        "answer_mode": "cautious",
+        "issues_contains": ["temporal_mismatch"],
+        "max_confidence": 0.85
+      },
+      "tags": ["regression", "temporal_mismatch"]
+    },
+    {
+      "id": "TEMPORAL_006",
+      "category": "temporal_aligned",
+      "description": "Geçen yıl question - year implicit",
+      "question": "Geçen yıl için vergi beyannamesi zorunlu muydu?",
+      "quote": "2023 yılı için vergi beyannamesi verilmesi zorunlu idi.",
+      "answer": "zorunlu idi",
+      "source_text": "2023 yılı için vergi beyannamesi verilmesi zorunlu idi.",
+      "expected": {
+        "quote_valid": true,
+        "answer_mode": "definitive",
+        "issues_not_contains": ["temporal_mismatch"],
+        "min_confidence": 0.7
+      },
+      "tags": ["regression", "temporal_aligned"]
+    }
+  ]
+}

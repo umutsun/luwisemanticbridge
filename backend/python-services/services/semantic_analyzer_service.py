@@ -47,6 +47,8 @@ class AnalysisIssue(Enum):
     MODALITY_INFERENCE = "modality_inference"  # Inferred obligation from possibility
     QUOTE_IS_SYSTEM_MESSAGE = "quote_is_system_message"  # Quote contains fail-closed message instead of real text
     TOC_CONTENT = "toc_content"  # Chunk is table of contents / header-only content
+    TEMPORAL_MISMATCH = "temporal_mismatch"  # Question is general but answer is year-specific
+    INTENT_MISMATCH = "intent_mismatch"  # Question asks "how" but answer is "what" (procedure vs fact)
 
 
 class Modality(Enum):
@@ -485,9 +487,11 @@ class SemanticAnalyzerService:
             r"uygundur", r"uygun\s+değildir",
             r"gerekmektedir", r"gerekmemektedir", r"gerekmez",
             r"zorunludur", r"zorunlu\s+değildir",
+            r"zorunlu\s+idi", r"zorunlu\s+değil\s+idi",  # Past tense
             r"yeterlidir", r"yeterli\s+değildir", r"yetmez",  # YETERLI modality
             r"yapılmalıdır", r"yapılamaz",
             r"bulunmaktadır", r"bulunmamaktadır",
+            r"kaldırılmıştır", r"kaldırılmamıştır",  # "was removed/lifted"
         ]
 
         # === FAIL-CLOSED MESSAGES ===
@@ -577,6 +581,34 @@ class SemanticAnalyzerService:
         self.toc_min_pattern_count = 2  # Need 2+ TOC patterns to flag as TOC
         self.toc_max_word_count = 50  # Very short chunks are more likely TOC
         self.toc_no_verdict_penalty = 0.3  # If no verdict, TOC patterns matter more
+
+        # === TEMPORAL ALIGNMENT PATTERNS ===
+        # Detect year-specific content when question is general
+        self.year_pattern = re.compile(r'\b(19|20)\d{2}\b')  # Matches years 1900-2099
+        self.temporal_question_indicators = [
+            r"\bhangi\s+yıl\b",
+            r"\b\d{4}\s*yılı\b",
+            r"\bbu\s+yıl\b",
+            r"\bgeçen\s+yıl\b",
+            r"\bgelecek\s+yıl\b",
+            r"\b(19|20)\d{2}\b",  # Year in question
+        ]
+
+        # === INTENT CLASSIFICATION PATTERNS ===
+        # Detect question intent: procedural (nasıl) vs factual (nedir)
+        self.procedural_question_patterns = [
+            r"\bnasıl\s+(uygulanır|hesaplanır|yapılır|işler|çalışır)",
+            r"\bne\s+şekilde\b",
+            r"\bhangi\s+şekilde\b",
+            r"\buygulama\s+(usul|yöntem)",
+            r"\bhesaplama\s+(usul|yöntem)",
+        ]
+        self.factual_answer_patterns = [
+            r"\bnedir\b.*\bcevap\b",  # "X nedir? Cevap:"
+            r"\btarife\s+nedir\b",
+            r"\boran(ı|lar)?\s*:?\s*%",  # Rate tables
+            r"^\s*%\s*\d+",  # Starting with percentage
+        ]
 
     async def load_config_from_schema(self, config: dict):
         """Load configuration from database schema
@@ -1056,6 +1088,115 @@ class SemanticAnalyzerService:
         is_toc = toc_score >= 0.5 and len(matched_patterns) >= self.toc_min_pattern_count
 
         return is_toc, matched_patterns, toc_score
+
+    def _check_temporal_alignment(
+        self,
+        question: str,
+        quote: str,
+        source_text: Optional[str] = None
+    ) -> Tuple[bool, Optional[str], Optional[str]]:
+        """Check for temporal mismatch: general question vs year-specific answer
+
+        RULE: If question doesn't mention a specific year but the QUOTE itself
+        contains a contextual year reference like "2013 yılında", this is a
+        temporal mismatch warning.
+
+        IMPORTANT: Only check the quote itself, not source_text. Source documents
+        often have historical year references that don't affect answer validity.
+
+        Example:
+        - Question: "Gelir vergisi tarifesi nasıl uygulanır?" (no year)
+        - Quote: "2013 yılında elde edilen gelirlere..." (year-specific)
+        → TEMPORAL_MISMATCH
+
+        Returns:
+            (is_aligned, reason, detected_year)
+        """
+        question_lower = question.lower()
+
+        # Check if question mentions a specific year/time
+        question_has_temporal = False
+        for pattern in self.temporal_question_indicators:
+            if re.search(pattern, question_lower, re.IGNORECASE):
+                question_has_temporal = True
+                break
+
+        if question_has_temporal:
+            # Question is already time-specific, no mismatch possible
+            return True, None, None
+
+        # IMPORTANT: Only check the QUOTE for year references, not source_text
+        # Source documents often have historical years that don't affect validity
+        quote_lower = quote.lower()
+
+        # Look for contextual year patterns that make the answer year-specific
+        # Patterns like "2013 yılında", "2024 yılı için", "2012 yılından itibaren"
+        year_context_patterns = [
+            r'\b(19|20)\d{2}\s*yılı?\s*(için|içinde|nda|nde|dan|den|itibaren)',  # "2024 yılı için", "2024 yılında"
+            r'\b(19|20)\d{2}\s*yılı\b',  # "2024 yılı" alone
+            r'\b(19|20)\d{2}\s*(senesinde|senesi)',  # Alternative: "2024 senesinde"
+        ]
+
+        for pattern in year_context_patterns:
+            match = re.search(pattern, quote_lower)
+            if match:
+                # Extract the year
+                year_match = re.search(r'\b((?:19|20)\d{2})\b', match.group(0))
+                if year_match:
+                    detected_year = year_match.group(1)
+                    return (
+                        False,
+                        f'Soru genel ("yıl belirtilmemiş") ama alıntı "{detected_year} yılı" spesifik.',
+                        detected_year
+                    )
+
+        return True, None, None
+
+    def _check_intent_alignment(
+        self,
+        question: str,
+        quote: str,
+        source_text: Optional[str] = None
+    ) -> Tuple[bool, Optional[str]]:
+        """Check for intent mismatch: procedural question vs factual answer
+
+        RULE: If question asks "how" (nasıl uygulanır) but answer provides
+        "what" (tarife nedir/rates), this is an intent mismatch.
+
+        Example:
+        - Question: "Gelir vergisi tarifesi nasıl uygulanır?" (procedural)
+        - Answer: "2013 tarifesi: %15, %20..." (factual/table)
+        → INTENT_MISMATCH
+
+        Returns:
+            (is_aligned, reason)
+        """
+        question_lower = question.lower()
+
+        # Check if question is procedural ("how")
+        is_procedural_question = False
+        for pattern in self.procedural_question_patterns:
+            if re.search(pattern, question_lower, re.IGNORECASE):
+                is_procedural_question = True
+                break
+
+        if not is_procedural_question:
+            # Not a procedural question, no mismatch check needed
+            return True, None
+
+        # Check if answer is factual (table/rates) instead of procedural
+        text_to_check = quote
+        if source_text:
+            text_to_check = f"{quote} {source_text}"
+
+        for pattern in self.factual_answer_patterns:
+            if re.search(pattern, text_to_check, re.IGNORECASE | re.MULTILINE):
+                return (
+                    False,
+                    'Soru "nasıl uygulanır" (prosedür) soruyor, kaynak "nedir/tarife tablosu" (bilgi) içeriyor.'
+                )
+
+        return True, None
 
     async def compute_retrieval_quality_score(
         self,
@@ -1629,6 +1770,30 @@ class SemanticAnalyzerService:
             issues.append({"type": AnalysisIssue.NO_VERDICT_SENTENCE.value, "description": "Alıntıda hüküm cümlesi bulunamadı", "severity": "medium"})
             fail_reasons.append(self.fail_messages["no_verdict"])
             confidence -= 0.2
+
+        # 7. TEMPORAL ALIGNMENT (WARNING - helps LLM produce better response)
+        # Detects when question is general but answer is year-specific
+        # Higher penalty (0.35) to trigger cautious mode for year-specific answers
+        temporal_aligned, temporal_reason, detected_year = self._check_temporal_alignment(question, quote, source_text)
+        if not temporal_aligned:
+            issues.append({
+                "type": AnalysisIssue.TEMPORAL_MISMATCH.value,
+                "description": temporal_reason,
+                "severity": "medium",
+                "detected_year": detected_year
+            })
+            confidence -= 0.35  # Higher penalty to trigger cautious mode
+
+        # 8. INTENT ALIGNMENT (WARNING - helps LLM produce better response)
+        # Detects when question asks "how" but answer provides "what"
+        intent_aligned, intent_reason = self._check_intent_alignment(question, quote, source_text)
+        if not intent_aligned:
+            issues.append({
+                "type": AnalysisIssue.INTENT_MISMATCH.value,
+                "description": intent_reason,
+                "severity": "medium"
+            })
+            confidence -= 0.25  # Penalty to trigger cautious mode
 
         suggested_answer = None
         suggested_quote = None  # NEW: steril ALINTI replacement
