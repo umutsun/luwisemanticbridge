@@ -10,8 +10,12 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Switch } from '@/components/ui/switch';
 import { Badge } from '@/components/ui/badge';
 import {
-  Database, Plus, Trash2, Check, Save, RefreshCw, Search, Copy, MoreVertical, Download, Upload
+  Database, Plus, Trash2, Check, Save, RefreshCw, Search, Copy, MoreVertical, Download, Upload,
+  Shield, AlertTriangle, Scale, Clock, ChevronDown, ChevronRight
 } from 'lucide-react';
+import {
+  Collapsible, CollapsibleContent, CollapsibleTrigger
+} from '@/components/ui/collapsible';
 import { DataSchema, SchemaField, FieldType, FIELD_TYPE_LABELS, EMPTY_FIELD } from '@/types/data-schema';
 import apiClient from '@/lib/api/client';
 import { toast } from 'sonner';
@@ -49,6 +53,17 @@ interface EditedSchema extends DataSchema {
   isPreset?: boolean;
 }
 
+// Semantic Analyzer Configuration Interface
+interface SemanticAnalyzerConfig {
+  verdictPatterns?: string[];
+  forbiddenPatterns?: string[];
+  actionGroups?: Record<string, string[]>;
+  modalityPatterns?: Record<string, string[]>;
+  temporalPatterns?: string[];
+  penalties?: Record<string, number>;
+  failMessages?: Record<string, string>;
+}
+
 export default function DataSchemaSettings() {
   const [allSchemas, setAllSchemas] = useState<UnifiedSchema[]>([]);
   const [activeSchemaId, setActiveSchemaId] = useState<string | null>(null);
@@ -59,6 +74,12 @@ export default function DataSchemaSettings() {
   const [editedSchema, setEditedSchema] = useState<EditedSchema | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [fileInputRef, setFileInputRef] = useState<HTMLInputElement | null>(null);
+
+  // Semantic Analyzer states
+  const [analyzerConfig, setAnalyzerConfig] = useState<SemanticAnalyzerConfig | null>(null);
+  const [analyzerExpanded, setAnalyzerExpanded] = useState(false);
+  const [analyzerLoading, setAnalyzerLoading] = useState(false);
+  const [analyzerSaving, setAnalyzerSaving] = useState(false);
 
   useEffect(() => { loadData(); }, []);
 
@@ -85,6 +106,9 @@ export default function DataSchemaSettings() {
         if (active) selectSchema(active);
       }
       console.log('🔍 [SCHEMA] Loaded', schemasData.length, 'schemas');
+
+      // Load Semantic Analyzer config
+      loadAnalyzerConfig();
     } catch (error: any) {
       console.error('🔍 [SCHEMA] Failed to load:', error);
       const errorMsg = error?.response?.status === 401
@@ -95,6 +119,61 @@ export default function DataSchemaSettings() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const loadAnalyzerConfig = async () => {
+    try {
+      setAnalyzerLoading(true);
+      const res = await apiClient.get('/api/settings/semantic-analyzer/config');
+      if (res?.data?.config) {
+        setAnalyzerConfig(res.data.config);
+        console.log('🔍 [ANALYZER] Config loaded:', res.data.config);
+      }
+    } catch (error) {
+      console.warn('🔍 [ANALYZER] Config not available:', error);
+      // Not critical - analyzer config is optional
+    } finally {
+      setAnalyzerLoading(false);
+    }
+  };
+
+  const saveAnalyzerConfig = async () => {
+    if (!analyzerConfig) return;
+    try {
+      setAnalyzerSaving(true);
+      // Save each setting
+      const updates = [
+        { key: 'verdictPatterns', value: analyzerConfig.verdictPatterns },
+        { key: 'forbiddenPatterns', value: analyzerConfig.forbiddenPatterns },
+        { key: 'penalties', value: analyzerConfig.penalties }
+      ];
+
+      for (const update of updates) {
+        if (update.value !== undefined) {
+          await apiClient.put(`/api/settings/semantic-analyzer/${update.key}`, { value: update.value });
+        }
+      }
+
+      // Sync to Redis
+      await apiClient.post('/api/settings/semantic-analyzer/sync');
+      toast.success('Analiz kuralları kaydedildi ve senkronize edildi');
+    } catch (error: any) {
+      console.error('Save analyzer error:', error);
+      toast.error('Kaydetme hatası: ' + (error?.response?.data?.error || error?.message));
+    } finally {
+      setAnalyzerSaving(false);
+    }
+  };
+
+  const updateAnalyzerPenalty = (key: string, value: number) => {
+    if (!analyzerConfig) return;
+    setAnalyzerConfig({
+      ...analyzerConfig,
+      penalties: {
+        ...analyzerConfig.penalties,
+        [key]: value
+      }
+    });
   };
 
   const selectSchema = (schema: UnifiedSchema) => {
@@ -471,6 +550,106 @@ export default function DataSchemaSettings() {
               </Button>
             </div>
           )}
+
+          {/* Semantic Analyzer Configuration - Collapsible */}
+          <Collapsible open={analyzerExpanded} onOpenChange={setAnalyzerExpanded} className="border-t pt-3 mt-3">
+            <CollapsibleTrigger asChild>
+              <Button variant="ghost" className="w-full justify-between h-8 px-2 text-sm">
+                <div className="flex items-center gap-2">
+                  <Shield className="w-4 h-4 text-primary" />
+                  <span className="font-medium">Analiz Kuralları</span>
+                  {analyzerConfig && <Badge variant="secondary" className="text-xs">Aktif</Badge>}
+                </div>
+                {analyzerExpanded ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
+              </Button>
+            </CollapsibleTrigger>
+            <CollapsibleContent className="pt-3 space-y-3">
+              {analyzerLoading ? (
+                <div className="text-center py-4 text-muted-foreground text-sm">Yükleniyor...</div>
+              ) : analyzerConfig ? (
+                <>
+                  {/* Verdict Patterns */}
+                  <div>
+                    <Label className="text-xs flex items-center gap-1">
+                      <Scale className="w-3 h-3" /> Hüküm Kalıpları
+                    </Label>
+                    <p className="text-[10px] text-muted-foreground mb-1">Geçerli alıntı için gerekli ifadeler</p>
+                    <Textarea
+                      value={analyzerConfig.verdictPatterns?.join('\n') || ''}
+                      onChange={e => setAnalyzerConfig({
+                        ...analyzerConfig,
+                        verdictPatterns: e.target.value.split('\n').filter(Boolean)
+                      })}
+                      placeholder="zorunludur&#10;gerekmektedir&#10;mümkündür"
+                      rows={3}
+                      className="text-xs font-mono"
+                    />
+                  </div>
+
+                  {/* Forbidden Patterns */}
+                  <div>
+                    <Label className="text-xs flex items-center gap-1">
+                      <AlertTriangle className="w-3 h-3 text-destructive" /> Yasaklı Kalıplar
+                    </Label>
+                    <p className="text-[10px] text-muted-foreground mb-1">Alıntılanmaması gereken soru cümleleri</p>
+                    <Textarea
+                      value={analyzerConfig.forbiddenPatterns?.join('\n') || ''}
+                      onChange={e => setAnalyzerConfig({
+                        ...analyzerConfig,
+                        forbiddenPatterns: e.target.value.split('\n').filter(Boolean)
+                      })}
+                      placeholder="sorulmaktadır&#10;mümkün olup olmadığı&#10;dilekçenizde"
+                      rows={3}
+                      className="text-xs font-mono"
+                    />
+                  </div>
+
+                  {/* Penalties */}
+                  <div>
+                    <Label className="text-xs flex items-center gap-1">
+                      <Clock className="w-3 h-3" /> Güven Düşürme Katsayıları
+                    </Label>
+                    <p className="text-[10px] text-muted-foreground mb-1">Issue başına confidence penalty (0-1)</p>
+                    <div className="grid grid-cols-2 gap-2 mt-1">
+                      {Object.entries(analyzerConfig.penalties || {}).map(([key, value]) => (
+                        <div key={key} className="flex items-center gap-1.5">
+                          <span className="text-[10px] text-muted-foreground truncate flex-1">{key}</span>
+                          <Input
+                            type="number"
+                            step="0.05"
+                            min="0"
+                            max="1"
+                            value={value}
+                            onChange={e => updateAnalyzerPenalty(key, parseFloat(e.target.value) || 0)}
+                            className="h-6 w-14 text-xs"
+                          />
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Save Analyzer Button */}
+                  <div className="flex justify-end pt-2">
+                    <Button size="sm" onClick={saveAnalyzerConfig} disabled={analyzerSaving} className="h-7 text-xs">
+                      {analyzerSaving ? (
+                        <><RefreshCw className="w-3 h-3 mr-1 animate-spin" /> Kaydediliyor</>
+                      ) : (
+                        <><Save className="w-3 h-3 mr-1" /> Kuralları Kaydet</>
+                      )}
+                    </Button>
+                  </div>
+                </>
+              ) : (
+                <div className="text-center py-4 text-muted-foreground">
+                  <AlertTriangle className="w-6 h-6 mx-auto mb-2 opacity-50" />
+                  <p className="text-xs">Analiz kuralları yüklenemedi</p>
+                  <Button size="sm" variant="outline" onClick={loadAnalyzerConfig} className="mt-2 h-6 text-xs">
+                    <RefreshCw className="w-3 h-3 mr-1" /> Yeniden Dene
+                  </Button>
+                </div>
+              )}
+            </CollapsibleContent>
+          </Collapsible>
         </CardContent>
       </Card>
 
