@@ -324,6 +324,76 @@ const RealtimeSettings = () => {
         </CardContent>
       </Card>
 
+      {/* Retrieval Penalties */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Retrieval Penalties</CardTitle>
+          <CardDescription>
+            Configurable penalties applied at retrieval level to demote low-quality results.
+            Negative weights reduce the score of matching content.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label>Temporal Mismatch Penalty: {((config.ragSettings?.penalties?.temporal_penalty_weight || -0.15) * 100).toFixed(0)}%</Label>
+              <Slider
+                value={[config.ragSettings?.penalties?.temporal_penalty_weight || -0.15]}
+                onValueChange={(value) => updateSetting('ragSettings.penalties.temporal_penalty_weight', value[0])}
+                min={-0.5}
+                max={0}
+                step={0.05}
+              />
+              <p className="text-xs text-muted-foreground">
+                Penalty for year-specific content when question is general
+              </p>
+            </div>
+            <div className="space-y-2">
+              <Label>TOC/Header Penalty: {((config.ragSettings?.penalties?.toc_penalty_weight || -0.25) * 100).toFixed(0)}%</Label>
+              <Slider
+                value={[config.ragSettings?.penalties?.toc_penalty_weight || -0.25]}
+                onValueChange={(value) => updateSetting('ragSettings.penalties.toc_penalty_weight', value[0])}
+                min={-0.5}
+                max={0}
+                step={0.05}
+              />
+              <p className="text-xs text-muted-foreground">
+                Penalty for table of contents or header-only content
+              </p>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label>TOC Score Threshold: {((config.ragSettings?.penalties?.toc_score_threshold || 0.5) * 100).toFixed(0)}%</Label>
+              <Slider
+                value={[config.ragSettings?.penalties?.toc_score_threshold || 0.5]}
+                onValueChange={(value) => updateSetting('ragSettings.penalties.toc_score_threshold', value[0])}
+                min={0.1}
+                max={1.0}
+                step={0.1}
+              />
+              <p className="text-xs text-muted-foreground">
+                TOC detection score threshold to apply penalty
+              </p>
+            </div>
+            <div className="space-y-2">
+              <Label>TOC Min Patterns: {config.ragSettings?.penalties?.toc_min_pattern_count || 2}</Label>
+              <Slider
+                value={[config.ragSettings?.penalties?.toc_min_pattern_count || 2]}
+                onValueChange={(value) => updateSetting('ragSettings.penalties.toc_min_pattern_count', value[0])}
+                min={1}
+                max={5}
+                step={1}
+              />
+              <p className="text-xs text-muted-foreground">
+                Minimum patterns to flag content as TOC
+              </p>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
       {/* Settings Import/Export */}
       <Card>
         <CardHeader>

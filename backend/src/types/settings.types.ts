@@ -47,12 +47,79 @@ export interface RedisConfig {
 }
 
 export interface RAGSettings {
+    // Core Search
+    similarityThreshold?: number;
+    minResults?: number;
+    maxResults?: number;
+    enableHybridSearch?: boolean;
+    enableKeywordBoost?: boolean;
+
+    // Embedding Sources
+    enableUnifiedEmbeddings?: boolean;
+    enableDocumentEmbeddings?: boolean;
+    enableScrapeEmbeddings?: boolean;
+    enableMessageEmbeddings?: boolean;
+
+    // Source Priorities (0-10)
+    databasePriority?: number;
+    documentsPriority?: number;
+    chatPriority?: number;
+    webPriority?: number;
+
+    // Evidence Gate (Quality Control)
+    evidenceGateEnabled?: boolean;
+    evidenceGateMinScore?: number;
+    evidenceGateMinChunks?: number;
+    evidenceGateRefusalTr?: string;
+    evidenceGateRefusalEn?: string;
+
+    // Retrieval Penalties
+    penalties?: {
+        temporal_penalty_weight?: number;
+        toc_penalty_weight?: number;
+        toc_score_threshold?: number;
+        toc_min_pattern_count?: number;
+    };
+
+    // Response Mode
+    strictMode?: boolean;
+    citationsDisabled?: boolean;
+    disableCitationText?: boolean;
+
+    // Context Limits
+    maxContextLength?: number;
+    maxExcerptLength?: number;
+    summaryMaxLength?: number;
+    excerptMaxLength?: number;
+
+    // No Results Messages
+    noResultsMessageTr?: string;
+    noResultsMessageEn?: string;
+
+    // Instructions
+    strictModePromptTr?: string;
+    strictModePromptEn?: string;
+    citationInstructionTr?: string;
+    citationInstructionEn?: string;
+    followUpInstructionTr?: string;
+    followUpInstructionEn?: string;
+
+    // PDF Settings
+    pdfEnableRag?: boolean;
+    pdfRagMaxResults?: number;
+    pdfMaxLength?: number;
+
+    // Content Processing (JSON patterns)
+    sourceTypeNormalizations?: Record<string, string>;
+    preferredSourceTypes?: string[];
+    tocDetection?: any;
+    htmlCleaningPatterns?: string[];
+
+    // Legacy
     aiProvider?: string;
     fallbackEnabled?: boolean;
     chunkSize?: number;
     chunkOverlap?: number;
-    similarityThreshold?: number;
-    maxResults?: number;
 }
 
 export interface AppSettings {
