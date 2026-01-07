@@ -1063,7 +1063,11 @@ ${questionLabel}: ${message}`;
       console.log(`📊 Context built: ${contextParts.length} sources, ${enhancedContext.length} chars (max: ${maxContextLength})`);
 
       // Check confidence levels based on similarity scores
-      const bestScore = searchResults.length > 0 ? (searchResults[0].score || 0) : 0;
+      // NOTE: Python returns final_score and similarity_score in 0-100 range, normalize to 0-1
+      const rawBestScore = searchResults.length > 0
+        ? (searchResults[0].final_score || searchResults[0].score || searchResults[0].similarity_score || 0)
+        : 0;
+      const bestScore = rawBestScore > 1 ? rawBestScore / 100 : rawBestScore; // Normalize to 0-1
 
       // Get threshold settings (0-1 range, e.g., 0.25 = 25%, 0.75 = 75%)
       const HIGH_CONFIDENCE_THRESHOLD = 0.50; // 50% similarity = strong match
@@ -1135,17 +1139,25 @@ ${questionLabel}: ${message}`;
       const evidenceGateMinChunks = parseInt(settingsMap.get('ragSettings.evidenceGateMinChunks') || '2');
 
       // Check if results pass the evidence gate
+      // NOTE: Python returns final_score/similarity_score in 0-100 range
       const qualityChunks = searchResults.filter(r => {
-        const score = r.score || (r.similarity_score * 100) || 0;
-        // Normalize score to 0-1 range if it's in percentage form
-        const normalizedScore = score > 1 ? score / 100 : score;
+        // Use final_score (preferred) or similarity_score - both are 0-100 from Python
+        const rawScore = r.final_score || r.score || r.similarity_score || 0;
+        // Normalize to 0-1 range for comparison with evidenceGateMinScore
+        const normalizedScore = rawScore > 1 ? rawScore / 100 : rawScore;
         return normalizedScore >= evidenceGateMinScore;
       });
 
       const passesEvidenceGate = qualityChunks.length >= evidenceGateMinChunks;
 
-      console.log(`🚪 EVIDENCE GATE: enabled=${evidenceGateEnabled}, minScore=${evidenceGateMinScore}, minChunks=${evidenceGateMinChunks}`);
-      console.log(`   Results: ${qualityChunks.length}/${searchResults.length} pass threshold, gate=${passesEvidenceGate ? 'PASS' : 'FAIL'}`);
+      // Debug: Show actual scores being evaluated
+      const scoreDebug = searchResults.slice(0, 3).map(r => {
+        const raw = r.final_score || r.score || r.similarity_score || 0;
+        const normalized = raw > 1 ? raw / 100 : raw;
+        return `${(normalized * 100).toFixed(1)}%`;
+      });
+      console.log(`🚪 EVIDENCE GATE: enabled=${evidenceGateEnabled}, minScore=${(evidenceGateMinScore * 100).toFixed(0)}%, minChunks=${evidenceGateMinChunks}`);
+      console.log(`   Top3 scores: [${scoreDebug.join(', ')}], qualityPassing: ${qualityChunks.length}/${searchResults.length}, gate=${passesEvidenceGate ? 'PASS' : 'FAIL'}`);
 
       // If evidence gate is enabled and fails, return clean refusal
       if (evidenceGateEnabled && !passesEvidenceGate && !citationsDisabled) {
@@ -1157,7 +1169,11 @@ ${questionLabel}: ${message}`;
         const refusalMessage = responseLanguage === 'en' ? refusalEn : refusalTr;
 
         console.log(`🚫 EVIDENCE GATE REFUSAL: ${qualityChunks.length} quality chunks < ${evidenceGateMinChunks} required`);
-        console.log(`   Top scores: ${searchResults.slice(0, 3).map(r => ((r.score || r.similarity_score * 100 || 0) > 1 ? (r.score || r.similarity_score * 100 || 0) : (r.score || r.similarity_score * 100 || 0) * 100).toFixed(1) + '%').join(', ')}`);
+        const topScores = searchResults.slice(0, 3).map(r => {
+          const raw = r.final_score || r.score || r.similarity_score || 0;
+          return (raw > 1 ? raw : raw * 100).toFixed(1) + '%';
+        });
+        console.log(`   Top scores: ${topScores.join(', ')}`);
 
         return {
           response: refusalMessage,
