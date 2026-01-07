@@ -1134,7 +1134,80 @@ class SemanticSearchService:
     # ========================================================================
     # RETRIEVAL-LEVEL QUALITY PENALTIES
     # Applied during search scoring to filter low-quality chunks BEFORE ranking
+    # Configurable via database settings (ragSettings.penalties.*)
     # ========================================================================
+
+    # Default penalty weights (can be overridden via settings)
+    DEFAULT_PENALTY_CONFIG = {
+        "temporal_penalty_weight": -0.15,  # Year-specific content for general question
+        "toc_penalty_weight": -0.25,       # Table of contents / header-only content
+        "toc_score_threshold": 0.5,        # TOC score threshold to apply penalty
+        "toc_min_pattern_count": 2,        # Min patterns to flag as TOC
+        "table_parser_enabled": True,      # Enable HTML table preprocessing
+        "config_version": "v1.0.0"         # Track config version for debugging
+    }
+
+    # Instance-level penalty config (loaded from DB)
+    _penalty_config: Dict[str, Any] = None
+    _penalty_config_loaded: bool = False
+
+    async def _load_penalty_config(self) -> Dict[str, Any]:
+        """Load penalty configuration from database settings.
+
+        Falls back to DEFAULT_PENALTY_CONFIG if not configured.
+        Config keys: ragSettings.penalties.*
+        """
+        if self._penalty_config_loaded and self._penalty_config:
+            return self._penalty_config
+
+        try:
+            pool = await get_db()
+
+            # Load penalty settings from database
+            rows = await pool.fetch("""
+                SELECT key, value FROM settings
+                WHERE key LIKE 'ragSettings.penalties.%'
+            """)
+
+            config = dict(self.DEFAULT_PENALTY_CONFIG)  # Start with defaults
+
+            for row in rows:
+                key = row['key'].replace('ragSettings.penalties.', '')
+                value = row['value']
+
+                # Parse numeric values
+                if key in ['temporal_penalty_weight', 'toc_penalty_weight', 'toc_score_threshold']:
+                    try:
+                        config[key] = float(value)
+                    except (ValueError, TypeError):
+                        pass
+                elif key in ['toc_min_pattern_count']:
+                    try:
+                        config[key] = int(value)
+                    except (ValueError, TypeError):
+                        pass
+                elif key == 'table_parser_enabled':
+                    config[key] = value.lower() in ('true', '1', 'yes')
+                elif key == 'config_version':
+                    config[key] = value
+
+            self._penalty_config = config
+            self._penalty_config_loaded = True
+            logger.info(f"Penalty config loaded: {config}")
+            return config
+
+        except Exception as e:
+            logger.warning(f"Failed to load penalty config, using defaults: {e}")
+            self._penalty_config = dict(self.DEFAULT_PENALTY_CONFIG)
+            self._penalty_config_loaded = True
+            return self._penalty_config
+
+    def get_penalty_config_sync(self) -> Dict[str, Any]:
+        """Get penalty config synchronously (for non-async contexts).
+        Returns cached config or defaults."""
+        if self._penalty_config:
+            return self._penalty_config
+        return dict(self.DEFAULT_PENALTY_CONFIG)
 
     # Year pattern for temporal detection
     _YEAR_PATTERN = re.compile(r'\b(19|20)\d{2}\b')
@@ -1188,37 +1261,59 @@ class SemanticSearchService:
         self,
         query: str,
         content: str,
-        metadata: Optional[Dict[str, Any]] = None
+        metadata: Optional[Dict[str, Any]] = None,
+        config: Optional[Dict[str, Any]] = None
     ) -> Tuple[float, Dict[str, Any]]:
         """
         Calculate retrieval-level penalties for a chunk.
+
+        Args:
+            query: User question
+            content: Chunk content
+            metadata: Optional chunk metadata
+            config: Penalty configuration (from _load_penalty_config or defaults)
 
         Returns:
             (total_penalty, penalty_details)
             - total_penalty: 0.0 to -0.50 (negative = reduce score)
             - penalty_details: Dict with breakdown for debugging
         """
+        # Use provided config or get from sync cache/defaults
+        cfg = config or self.get_penalty_config_sync()
+
         total_penalty = 0.0
         details = {
             "temporal_penalty": 0.0,
             "toc_penalty": 0.0,
             "temporal_reason": None,
             "toc_reason": None,
-            "has_verdict": False
+            "has_verdict": False,
+            "config_version": cfg.get("config_version", "unknown")
         }
 
         if not content:
             return 0.0, details
 
         # 1. TEMPORAL MISMATCH PENALTY
-        temporal_penalty, temporal_reason = self._detect_temporal_mismatch_retrieval(query, content)
+        temporal_weight = cfg.get("temporal_penalty_weight", -0.15)
+        temporal_penalty, temporal_reason = self._detect_temporal_mismatch_retrieval(
+            query, content, penalty_weight=temporal_weight
+        )
         if temporal_penalty < 0:
             total_penalty += temporal_penalty
             details["temporal_penalty"] = temporal_penalty
             details["temporal_reason"] = temporal_reason
 
         # 2. TOC CONTENT PENALTY
-        toc_penalty, toc_reason, has_verdict = self._detect_toc_content_retrieval(content)
+        toc_weight = cfg.get("toc_penalty_weight", -0.25)
+        toc_threshold = cfg.get("toc_score_threshold", 0.5)
+        toc_min_patterns = cfg.get("toc_min_pattern_count", 2)
+        toc_penalty, toc_reason, has_verdict = self._detect_toc_content_retrieval(
+            content,
+            penalty_weight=toc_weight,
+            score_threshold=toc_threshold,
+            min_pattern_count=toc_min_patterns
+        )
         if toc_penalty < 0:
             total_penalty += toc_penalty
             details["toc_penalty"] = toc_penalty
@@ -1230,7 +1325,8 @@ class SemanticSearchService:
     def _detect_temporal_mismatch_retrieval(
         self,
         query: str,
-        content: str
+        content: str,
+        penalty_weight: float = -0.15
     ) -> Tuple[float, Optional[str]]:
         """
         Detect temporal mismatch at retrieval level.
@@ -1238,9 +1334,14 @@ class SemanticSearchService:
         RULE: If question has no year but content has year-specific context,
         apply penalty to reduce ranking of potentially outdated/mismatched content.
 
+        Args:
+            query: User question
+            content: Chunk content
+            penalty_weight: Configurable penalty weight (default: -0.15)
+
         Returns:
             (penalty, reason)
-            - penalty: 0.0 or -0.15
+            - penalty: 0.0 or penalty_weight
         """
         query_lower = query.lower()
 
@@ -1264,13 +1365,16 @@ class SemanticSearchService:
                 year_match = self._YEAR_PATTERN.search(match.group(0))
                 if year_match:
                     detected_year = year_match.group(0)
-                    return -0.15, f"İçerik '{detected_year}' yılına özgü, soru genel"
+                    return penalty_weight, f"İçerik '{detected_year}' yılına özgü, soru genel"
 
         return 0.0, None
 
     def _detect_toc_content_retrieval(
         self,
-        content: str
+        content: str,
+        penalty_weight: float = -0.25,
+        score_threshold: float = 0.5,
+        min_pattern_count: int = 2
     ) -> Tuple[float, Optional[str], bool]:
         """
         Detect TOC (Table of Contents) or header-only content at retrieval level.
@@ -1278,9 +1382,15 @@ class SemanticSearchService:
         TOC chunks are navigation/index content without actual legal substance.
         They should be penalized heavily to improve retrieval quality.
 
+        Args:
+            content: Chunk content
+            penalty_weight: Configurable penalty weight (default: -0.25)
+            score_threshold: TOC score threshold to apply penalty (default: 0.5)
+            min_pattern_count: Minimum patterns to flag as TOC (default: 2)
+
         Returns:
             (penalty, reason, has_verdict)
-            - penalty: 0.0 or -0.25
+            - penalty: 0.0 or penalty_weight
             - has_verdict: True if content has verdict patterns
         """
         if not content:
@@ -1303,12 +1413,12 @@ class SemanticSearchService:
                 matched_patterns.append(pattern_name)
 
         # TOC detection heuristics:
-        # - Need 2+ patterns to flag as TOC
+        # - Need min_pattern_count+ patterns to flag as TOC
         # - Very short content (< 50 words) with TOC patterns is likely TOC
         # - No verdict sentence increases TOC likelihood
         toc_score = 0.0
 
-        if len(matched_patterns) >= 2:
+        if len(matched_patterns) >= min_pattern_count:
             toc_score += 0.4
 
         if word_count < 50 and len(matched_patterns) >= 1:
@@ -1318,9 +1428,9 @@ class SemanticSearchService:
             toc_score += 0.3
 
         # Apply penalty if TOC score is high enough
-        if toc_score >= 0.5:
+        if toc_score >= score_threshold:
             reason = f"TOC içeriği: {', '.join(matched_patterns[:3])}"
-            return -0.25, reason, has_verdict
+            return penalty_weight, reason, has_verdict
 
         return 0.0, None, has_verdict
 
@@ -1657,6 +1767,9 @@ class SemanticSearchService:
         settings = await self.get_rag_settings()
         limit = limit or settings.max_results
 
+        # Load penalty configuration (from DB or defaults)
+        penalty_config = await self._load_penalty_config()
+
         # Check search result cache
         if use_cache:
             cache_key = self._get_search_cache_key(query, limit)
@@ -1752,11 +1865,12 @@ class SemanticSearchService:
                 weighted_similarity = similarity * source_priority * table_weight
 
                 # === RETRIEVAL-LEVEL QUALITY PENALTIES ===
-                # Apply temporal mismatch and TOC content penalties
+                # Apply temporal mismatch and TOC content penalties (with loaded config)
                 retrieval_penalty, penalty_details = self._calculate_retrieval_penalties(
                     query,
                     result["content"] or "",
-                    result.get("metadata")
+                    result.get("metadata"),
+                    config=penalty_config
                 )
 
                 # Track penalty statistics
