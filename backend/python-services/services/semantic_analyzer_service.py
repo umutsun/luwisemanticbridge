@@ -927,37 +927,47 @@ class SemanticAnalyzerService:
         CRITICAL: ALINTI must be verbatim text from source, NOT a system-generated message.
         This catches cases where LLM outputs fail-closed text as if it were a quote.
 
-        FALSE POSITIVE PROTECTION:
-        - If quote contains source indicators (VUK, tebliğ, madde X, etc.), it's likely real
-        - System messages typically don't have legal source references
+        SOFTENING (not bypass) for source indicators:
+        - If quote has source indicators (VUK, tebliğ, etc.), require 2+ system patterns to trigger
+        - This prevents false positives on real legal quotes
+        - But still catches "VUK madde X... kesin hüküm bulunamadı" hybrids
 
         Example bad ALINTI:
         "Bu konuda kesin bir hüküm cümlesi bulunamadı, ancak ilgili kaynak incelenebilir."
-
-        This is NOT a real quote - it's a system message disguised as a quote.
 
         Returns:
             (is_system_message, description) - True if quote looks like system message
         """
         quote_lower = quote.lower()
 
-        # FALSE POSITIVE PROTECTION: Check for source indicators first
-        # If quote has legal source references, it's probably a real quote
-        has_source_indicator = any(
-            re.search(pattern, quote_lower, re.IGNORECASE)
-            for pattern in self.SOURCE_INDICATORS
+        # Count source indicators present
+        source_indicator_count = sum(
+            1 for pattern in self.SOURCE_INDICATORS
+            if re.search(pattern, quote_lower, re.IGNORECASE)
         )
 
-        if has_source_indicator:
-            # Quote has source indicators - likely a real legal quote, not system message
-            return False, None
-
-        # Check for system message patterns
+        # Count system message patterns matched
+        matched_patterns = []
         for pattern, description in self.system_message_patterns:
             if re.search(pattern, quote_lower, re.IGNORECASE):
-                return True, f"ALINTI sistem mesajı içeriyor: {description}"
+                matched_patterns.append(description)
 
-        return False, None
+        if not matched_patterns:
+            return False, None
+
+        # SOFTENING LOGIC:
+        # - No source indicators → 1 system pattern triggers
+        # - Has source indicators → need 2+ system patterns (prevents VUK sprinkling bypass)
+        if source_indicator_count > 0:
+            # Has source indicators - require stronger evidence
+            if len(matched_patterns) >= 2:
+                return True, f"ALINTI sistem mesajı içeriyor (kaynak göstergesi var ama {len(matched_patterns)} sistem kalıbı eşleşti): {', '.join(matched_patterns[:2])}"
+            else:
+                # Single pattern + source indicator = probably real quote, don't flag
+                return False, None
+        else:
+            # No source indicators - single pattern is enough
+            return True, f"ALINTI sistem mesajı içeriyor: {matched_patterns[0]}"
 
     def _verify_verbatim_quote(self, quote: str, source_text: str, strict: bool = True) -> Tuple[bool, Optional[str]]:
         """Verify that a quote exists VERBATIM in source text
