@@ -1,0 +1,463 @@
+{
+  "name": "Real User Golden Cases",
+  "description": "Golden test cases from real user queries - 30 cases across 3 categories",
+  "version": "1.0.0",
+  "categories": {
+    "fatura_irsaliye": "Vergi levhası, irsaliye, fatura, e-fatura soruları",
+    "defter_tasdik": "Yevmiye, kebir, envanter, karar defteri tasdik soruları",
+    "modality_questions": "Zorunlu mu/gerekli mi/yeterli mi modalite soruları"
+  },
+  "test_cases": [
+    {
+      "id": "REAL_FATURA_001",
+      "category": "fatura_irsaliye",
+      "description": "Vergi levhası bulundurma zorunluluğu",
+      "question": "İşyerimde vergi levhası bulundurmam zorunlu mu?",
+      "quote": "işyerinde vergi levhası bulundurulması artık zorunlu değildir.",
+      "answer": "zorunlu değildir",
+      "source_text": "Sonuç olarak, 2012 yılından itibaren işyerinde vergi levhası bulundurulması artık zorunlu değildir. Bu düzenleme tüm mükellefleri kapsamaktadır.",
+      "expected": {
+        "quote_valid": true,
+        "answer_mode": "definitive",
+        "min_confidence": 0.7
+      },
+      "tags": ["regression", "fatura_irsaliye", "vergi_levhasi"]
+    },
+    {
+      "id": "REAL_FATURA_002",
+      "category": "fatura_irsaliye",
+      "description": "Sevk irsaliyesi düzenleme zorunluluğu",
+      "question": "Mal satışında sevk irsaliyesi düzenlemek zorunlu mu?",
+      "quote": "Mal hareketlerinde sevk irsaliyesi düzenlenmesi zorunludur.",
+      "answer": "zorunludur",
+      "source_text": "Mal hareketlerinde sevk irsaliyesi düzenlenmesi zorunludur. Satıcı veya alıcı tarafından düzenlenebilir.",
+      "expected": {
+        "quote_valid": true,
+        "answer_mode": "definitive",
+        "min_confidence": 0.7
+      },
+      "tags": ["regression", "fatura_irsaliye", "irsaliye"]
+    },
+    {
+      "id": "REAL_FATURA_003",
+      "category": "fatura_irsaliye",
+      "description": "E-fatura zorunluluğu - ciro şartı",
+      "question": "E-fatura kullanmak zorunlu mu?",
+      "quote": "Brüt satış hasılatı 5 milyon TL'yi aşan mükellefler için e-fatura zorunludur.",
+      "answer": "zorunludur",
+      "source_text": "509 Sıra No.lu VUK Genel Tebliği gereğince, brüt satış hasılatı 5 milyon TL'yi aşan mükellefler için e-fatura zorunludur.",
+      "expected": {
+        "quote_valid": true,
+        "answer_mode": "definitive",
+        "min_confidence": 0.7
+      },
+      "tags": ["regression", "fatura_irsaliye", "e_fatura"]
+    },
+    {
+      "id": "REAL_FATURA_004",
+      "category": "fatura_irsaliye",
+      "description": "İrsaliyeli fatura - sevk irsaliyesi yerine",
+      "question": "İrsaliyeli fatura düzenlemek sevk irsaliyesi yerine geçer mi?",
+      "quote": "İrsaliyeli faturanın sevk irsaliyesi yerine kullanılması mümkün bulunmamaktadır.",
+      "answer": "geçmez",
+      "source_text": "İrsaliyeli faturanın sevk irsaliyesi yerine kullanılması mümkün bulunmamaktadır. Ayrıca sevk irsaliyesi düzenlenmesi gerekmektedir.",
+      "expected": {
+        "quote_valid": true,
+        "answer_mode": "definitive",
+        "min_confidence": 0.7
+      },
+      "tags": ["regression", "fatura_irsaliye", "irsaliyeli_fatura"]
+    },
+    {
+      "id": "REAL_FATURA_005",
+      "category": "fatura_irsaliye",
+      "description": "Fatura düzenleme süresi - informational (no verdict)",
+      "question": "Fatura ne zaman düzenlenmeli?",
+      "quote": "fatura, malın teslimi veya hizmetin yapılmasından itibaren azami yedi gün içinde düzenlenir.",
+      "answer": "yedi gün içinde",
+      "source_text": "VUK'un 231. maddesi gereğince fatura, malın teslimi veya hizmetin yapılmasından itibaren azami yedi gün içinde düzenlenir.",
+      "expected": {
+        "quote_valid": false,
+        "answer_mode": "cautious",
+        "issues_contains": ["no_verdict_sentence"]
+      },
+      "tags": ["regression", "fatura_irsaliye", "informational"]
+    },
+    {
+      "id": "REAL_FATURA_006",
+      "category": "fatura_irsaliye",
+      "description": "Perakende satış fişi sınırı - informational (kesilebilir = weak)",
+      "question": "Ne zamana kadar perakende satış fişi kesebilirim?",
+      "quote": "perakende satışlarda 6.900 TL'ye kadar fiş kesilebilir.",
+      "answer": "6.900 TL'ye kadar",
+      "source_text": "2024 yılı için perakende satışlarda 6.900 TL'ye kadar fiş kesilebilir. Bu tutarı aşan satışlarda fatura düzenlenmesi zorunludur.",
+      "expected": {
+        "quote_valid": false,
+        "answer_mode": "cautious",
+        "issues_contains": ["no_verdict_sentence"]
+      },
+      "tags": ["regression", "fatura_irsaliye", "informational"]
+    },
+    {
+      "id": "REAL_FATURA_007",
+      "category": "fatura_irsaliye",
+      "description": "E-arşiv fatura zorunluluğu",
+      "question": "E-arşiv fatura kullanmak zorunlu mu?",
+      "quote": "E-fatura uygulamasına dahil olmayan mükellefler için e-arşiv fatura zorunlu değildir.",
+      "answer": "zorunlu değildir",
+      "source_text": "E-fatura uygulamasına dahil olmayan mükellefler için e-arşiv fatura zorunlu değildir. Ancak isteğe bağlı olarak kullanılabilir.",
+      "expected": {
+        "quote_valid": true,
+        "answer_mode": "definitive",
+        "min_confidence": 0.7
+      },
+      "tags": ["regression", "fatura_irsaliye", "e_arsiv"]
+    },
+    {
+      "id": "REAL_FATURA_008",
+      "category": "fatura_irsaliye",
+      "description": "Fatura iptal prosedürü - informational (edilmeli = no verdict)",
+      "question": "Hatalı düzenlenen fatura nasıl iptal edilir?",
+      "quote": "Hatalı düzenlenen fatura, karşı tarafça onaylanmadan iade edilmeli ve yeni fatura düzenlenmelidir.",
+      "answer": "iade edilmeli",
+      "source_text": "Hatalı düzenlenen fatura, karşı tarafça onaylanmadan iade edilmeli ve yeni fatura düzenlenmelidir. İptal edilen faturanın aslı saklanmalıdır.",
+      "expected": {
+        "quote_valid": false,
+        "answer_mode": "cautious",
+        "issues_contains": ["no_verdict_sentence"]
+      },
+      "tags": ["regression", "fatura_irsaliye", "informational"]
+    },
+    {
+      "id": "REAL_FATURA_009",
+      "category": "fatura_irsaliye",
+      "description": "Vergi levhası fotokopisini bulundurmak",
+      "question": "Vergi levhası fotokopisi bulundurmak yeterli mi?",
+      "quote": "Vergi levhası fotokopisinin bulundurulması yeterli değildir.",
+      "answer": "yeterli değildir",
+      "source_text": "Vergi levhası fotokopisinin bulundurulması yeterli değildir. Ancak 2012 sonrası bu zorunluluk tamamen kaldırılmıştır.",
+      "expected": {
+        "quote_valid": true,
+        "answer_mode": "definitive",
+        "min_confidence": 0.7
+      },
+      "tags": ["regression", "fatura_irsaliye", "vergi_levhasi", "yeterli"]
+    },
+    {
+      "id": "REAL_FATURA_010",
+      "category": "fatura_irsaliye",
+      "description": "Nakliyeci sevk irsaliyesi",
+      "question": "Nakliyeci sevk irsaliyesi düzenleyebilir mi?",
+      "quote": "Nakliyeciler tarafından taşıma irsaliyesi düzenlenmesi mümkündür.",
+      "answer": "mümkündür",
+      "source_text": "Nakliyeciler tarafından taşıma irsaliyesi düzenlenmesi mümkündür. Bu durumda satıcının ayrıca sevk irsaliyesi düzenlemesine gerek yoktur.",
+      "expected": {
+        "quote_valid": true,
+        "answer_mode": "definitive",
+        "min_confidence": 0.7
+      },
+      "tags": ["regression", "fatura_irsaliye", "nakliye"]
+    },
+    {
+      "id": "REAL_DEFTER_001",
+      "category": "defter_tasdik",
+      "description": "Yevmiye defteri kapanış tasdiki",
+      "question": "Yevmiye defterinin kapanış tasdiki zorunlu mu?",
+      "quote": "Yevmiye defterinin kapanış tasdiki zorunludur.",
+      "answer": "zorunludur",
+      "source_text": "TTK'nın 64. maddesi gereğince yevmiye defterinin kapanış tasdiki zorunludur. Kapanış tasdiki izleyen faaliyet döneminin altıncı ayının sonuna kadar yaptırılmalıdır.",
+      "expected": {
+        "quote_valid": true,
+        "answer_mode": "definitive",
+        "min_confidence": 0.7
+      },
+      "tags": ["regression", "defter_tasdik", "yevmiye"]
+    },
+    {
+      "id": "REAL_DEFTER_002",
+      "category": "defter_tasdik",
+      "description": "Kebir defteri açılış tasdiki - informational (yaptırılır = no verdict)",
+      "question": "Kebir defterinin açılış tasdiki gerekli mi?",
+      "quote": "Defterlerin açılış tasdiki kullanılmaya başlanmadan önce notere yaptırılır.",
+      "answer": "gereklidir",
+      "source_text": "TTK gereğince defterlerin açılış tasdiki kullanılmaya başlanmadan önce notere yaptırılır. Kebir defteri de bu kapsamdadır.",
+      "expected": {
+        "quote_valid": false,
+        "answer_mode": "cautious",
+        "issues_contains": ["no_verdict_sentence"]
+      },
+      "tags": ["regression", "defter_tasdik", "informational"]
+    },
+    {
+      "id": "REAL_DEFTER_003",
+      "category": "defter_tasdik",
+      "description": "Envanter defteri kapanış tasdiki",
+      "question": "Envanter defterinin kapanış tasdiki zorunlu mu?",
+      "quote": "Envanter defterinin kapanış tasdiki zorunlu değildir.",
+      "answer": "zorunlu değildir",
+      "source_text": "Envanter defterinin kapanış tasdiki zorunlu değildir. Sadece yevmiye defteri için kapanış tasdiki zorunluluğu bulunmaktadır.",
+      "expected": {
+        "quote_valid": true,
+        "answer_mode": "definitive",
+        "min_confidence": 0.7
+      },
+      "tags": ["regression", "defter_tasdik", "envanter"]
+    },
+    {
+      "id": "REAL_DEFTER_004",
+      "category": "defter_tasdik",
+      "description": "Karar defteri tasdiki",
+      "question": "Limited şirket karar defteri noter tasdiki zorunlu mu?",
+      "quote": "Limited şirketlerde karar defterinin noter tasdiki zorunludur.",
+      "answer": "zorunludur",
+      "source_text": "TTK'nın 64. maddesi gereğince limited şirketlerde karar defterinin noter tasdiki zorunludur.",
+      "expected": {
+        "quote_valid": true,
+        "answer_mode": "definitive",
+        "min_confidence": 0.7
+      },
+      "tags": ["regression", "defter_tasdik", "karar_defteri"]
+    },
+    {
+      "id": "REAL_DEFTER_005",
+      "category": "defter_tasdik",
+      "description": "E-defter kapanış tasdiki",
+      "question": "E-defter kapanış tasdiki gerekiyor mu?",
+      "quote": "E-defter kullananlar için ayrıca kapanış tasdiki gerekmemektedir.",
+      "answer": "gerekmemektedir",
+      "source_text": "E-defter kullananlar için ayrıca kapanış tasdiki gerekmemektedir. E-defter beratları zaten noter tasdiki yerine geçmektedir.",
+      "expected": {
+        "quote_valid": true,
+        "answer_mode": "definitive",
+        "min_confidence": 0.7
+      },
+      "tags": ["regression", "defter_tasdik", "e_defter"]
+    },
+    {
+      "id": "REAL_DEFTER_006",
+      "category": "defter_tasdik",
+      "description": "Defter tasdik süresi - yıl sonu",
+      "question": "Defter tasdiki ne zamana kadar yapılmalı?",
+      "quote": "Ticari defterlerin açılış onayı, defterin kullanılacağı faaliyet döneminin ilk ayından önce yapılmalıdır.",
+      "answer": "ilk ayından önce",
+      "source_text": "TTK'nın 64/3 maddesi gereğince ticari defterlerin açılış onayı, defterin kullanılacağı faaliyet döneminin ilk ayından önce yapılmalıdır.",
+      "expected": {
+        "quote_valid": true,
+        "answer_mode": "definitive",
+        "min_confidence": 0.7
+      },
+      "tags": ["regression", "defter_tasdik", "tasdik_sure"]
+    },
+    {
+      "id": "REAL_DEFTER_007",
+      "category": "defter_tasdik",
+      "description": "Bilanço esası defter zorunluluğu - informational (zorundadır in different context)",
+      "question": "Bilanço esasında hangi defterler tutulmalı?",
+      "quote": "bilanço esasına göre defter tutanlar yevmiye, kebir ve envanter defteri tutmak zorundadır.",
+      "answer": "yevmiye, kebir ve envanter",
+      "source_text": "VUK'un 182. maddesi gereğince bilanço esasına göre defter tutanlar yevmiye, kebir ve envanter defteri tutmak zorundadır.",
+      "expected": {
+        "quote_valid": false,
+        "answer_mode": "cautious",
+        "issues_contains": ["no_verdict_sentence"]
+      },
+      "tags": ["regression", "defter_tasdik", "informational"]
+    },
+    {
+      "id": "REAL_DEFTER_008",
+      "category": "defter_tasdik",
+      "description": "İşletme hesabı defteri - verbatim mismatch (İ/i)",
+      "question": "İşletme hesabı defteri tutmak zorunlu mu?",
+      "quote": "işletme hesabı esasına göre defter tutanlar işletme hesabı defteri tutmak zorundadır.",
+      "answer": "zorundadır",
+      "source_text": "VUK'un 193. maddesi gereğince işletme hesabı esasına göre defter tutanlar işletme hesabı defteri tutmak zorundadır.",
+      "expected": {
+        "quote_valid": false,
+        "answer_mode": "cautious",
+        "issues_contains": ["no_verdict_sentence"]
+      },
+      "tags": ["regression", "defter_tasdik", "informational"]
+    },
+    {
+      "id": "REAL_DEFTER_009",
+      "category": "defter_tasdik",
+      "description": "Yevmiye kapanış tasdik süresi - informational (yaptırılmalıdır = no verdict)",
+      "question": "Yevmiye defteri kapanış tasdiki ne zamana kadar yaptırılmalı?",
+      "quote": "Kapanış tasdiki izleyen faaliyet döneminin altıncı ayının sonuna kadar yaptırılmalıdır.",
+      "answer": "altıncı ayının sonuna kadar",
+      "source_text": "TTK gereğince kapanış tasdiki izleyen faaliyet döneminin altıncı ayının sonuna kadar yaptırılmalıdır. Yani Haziran sonuna kadar.",
+      "expected": {
+        "quote_valid": false,
+        "answer_mode": "cautious",
+        "issues_contains": ["no_verdict_sentence"]
+      },
+      "tags": ["regression", "defter_tasdik", "informational"]
+    },
+    {
+      "id": "REAL_DEFTER_010",
+      "category": "defter_tasdik",
+      "description": "Defter saklama süresi - informational (saklanmalıdır = no verdict)",
+      "question": "Ticari defterler ne kadar süre saklanmalı?",
+      "quote": "Ticari defterler 10 yıl süreyle saklanmalıdır.",
+      "answer": "10 yıl",
+      "source_text": "TTK'nın 82. maddesi gereğince ticari defterler 10 yıl süreyle saklanmalıdır.",
+      "expected": {
+        "quote_valid": false,
+        "answer_mode": "cautious",
+        "issues_contains": ["no_verdict_sentence"]
+      },
+      "tags": ["regression", "defter_tasdik", "informational"]
+    },
+    {
+      "id": "REAL_MOD_001",
+      "category": "modality_questions",
+      "description": "Stopaj oranı sorgulama - zorunluluk",
+      "question": "Kira ödemelerinde stopaj kesmek zorunlu mu?",
+      "quote": "Kira ödemelerinde stopaj kesintisi yapılması zorunludur.",
+      "answer": "zorunludur",
+      "source_text": "GVK'nın 94. maddesi gereğince kira ödemelerinde stopaj kesintisi yapılması zorunludur. Stopaj oranı %20'dir.",
+      "expected": {
+        "quote_valid": true,
+        "answer_mode": "definitive",
+        "min_confidence": 0.7
+      },
+      "tags": ["regression", "modality", "stopaj", "zorunlu"]
+    },
+    {
+      "id": "REAL_MOD_002",
+      "category": "modality_questions",
+      "description": "KDV tevkifatı zorunluluğu - verbatim match (lowercase)",
+      "question": "İnşaat hizmetlerinde KDV tevkifatı yapmak gerekli mi?",
+      "quote": "inşaat hizmetlerinde KDV tevkifatı yapılması gerekmektedir.",
+      "answer": "gerekmektedir",
+      "source_text": "117 Seri No.lu KDV Genel Tebliği gereğince inşaat hizmetlerinde KDV tevkifatı yapılması gerekmektedir. Tevkifat oranı 4/10'dur.",
+      "expected": {
+        "quote_valid": true,
+        "answer_mode": "definitive",
+        "min_confidence": 0.7
+      },
+      "tags": ["regression", "modality", "tevkifat", "gerekli"]
+    },
+    {
+      "id": "REAL_MOD_003",
+      "category": "modality_questions",
+      "description": "KDV iadesi - belge yeterliliği",
+      "question": "KDV iadesi için fatura yeterli mi?",
+      "quote": "KDV iadesi için sadece fatura yeterli değildir.",
+      "answer": "yeterli değildir",
+      "source_text": "KDV iadesi için sadece fatura yeterli değildir. Gümrük beyannamesi, banka dekontu gibi ek belgeler de gerekmektedir.",
+      "expected": {
+        "quote_valid": true,
+        "answer_mode": "definitive",
+        "min_confidence": 0.7
+      },
+      "tags": ["regression", "modality", "kdv_iade", "yeterli"]
+    },
+    {
+      "id": "REAL_MOD_004",
+      "category": "modality_questions",
+      "description": "Muhtasar beyanname verme zorunluluğu",
+      "question": "Muhtasar beyanname vermek zorunlu mu?",
+      "quote": "Stopaj yapan mükellefler için muhtasar beyanname vermek zorunludur.",
+      "answer": "zorunludur",
+      "source_text": "GVK'nın 98. maddesi gereğince stopaj yapan mükellefler için muhtasar beyanname vermek zorunludur.",
+      "expected": {
+        "quote_valid": true,
+        "answer_mode": "definitive",
+        "min_confidence": 0.7
+      },
+      "tags": ["regression", "modality", "muhtasar", "zorunlu"]
+    },
+    {
+      "id": "REAL_MOD_005",
+      "category": "modality_questions",
+      "description": "Ba-Bs bildirimi zorunluluğu",
+      "question": "Ba-Bs bildirimi vermek zorunlu mu?",
+      "quote": "Belirli hadleri aşan mükellefler için Ba-Bs bildirimi vermek zorunludur.",
+      "answer": "zorunludur",
+      "source_text": "362 Sıra No.lu VUK Genel Tebliği gereğince belirli hadleri aşan mükellefler için Ba-Bs bildirimi vermek zorunludur.",
+      "expected": {
+        "quote_valid": true,
+        "answer_mode": "definitive",
+        "min_confidence": 0.7
+      },
+      "tags": ["regression", "modality", "ba_bs", "zorunlu"]
+    },
+    {
+      "id": "REAL_MOD_006",
+      "category": "modality_questions",
+      "description": "Banka dekontu yeterliliği - KDV indirimi",
+      "question": "KDV indirimi için banka dekontu yeterli mi?",
+      "quote": "KDV indirimi için sadece banka dekontu yeterli değildir.",
+      "answer": "yeterli değildir",
+      "source_text": "KDV indirimi için sadece banka dekontu yeterli değildir. Mutlaka fatura veya fatura yerine geçen belge gerekmektedir.",
+      "expected": {
+        "quote_valid": true,
+        "answer_mode": "definitive",
+        "min_confidence": 0.7
+      },
+      "tags": ["regression", "modality", "kdv_indirim", "yeterli"]
+    },
+    {
+      "id": "REAL_MOD_007",
+      "category": "modality_questions",
+      "description": "Damga vergisi ödeme zorunluluğu",
+      "question": "Sözleşmelerde damga vergisi ödemek zorunlu mu?",
+      "quote": "Yazılı sözleşmelerde damga vergisi ödenmesi zorunludur.",
+      "answer": "zorunludur",
+      "source_text": "488 sayılı Damga Vergisi Kanunu gereğince yazılı sözleşmelerde damga vergisi ödenmesi zorunludur.",
+      "expected": {
+        "quote_valid": true,
+        "answer_mode": "definitive",
+        "min_confidence": 0.7
+      },
+      "tags": ["regression", "modality", "damga", "zorunlu"]
+    },
+    {
+      "id": "REAL_MOD_008",
+      "category": "modality_questions",
+      "description": "Geçici vergi ödeme zorunluluğu",
+      "question": "Geçici vergi ödemek zorunlu mu?",
+      "quote": "Ticari ve mesleki kazanç sahipleri için geçici vergi ödemesi zorunludur.",
+      "answer": "zorunludur",
+      "source_text": "GVK mükerrer 120. madde gereğince ticari ve mesleki kazanç sahipleri için geçici vergi ödemesi zorunludur.",
+      "expected": {
+        "quote_valid": true,
+        "answer_mode": "definitive",
+        "min_confidence": 0.7
+      },
+      "tags": ["regression", "modality", "gecici_vergi", "zorunlu"]
+    },
+    {
+      "id": "REAL_MOD_009",
+      "category": "modality_questions",
+      "description": "İhracat KDV iadesi - action mismatch (almak vs iade)",
+      "question": "İhracatta KDV iadesi almak mümkün mü?",
+      "quote": "ihracatta yüklenilen KDV'nin iadesi mümkündür.",
+      "answer": "mümkündür",
+      "source_text": "KDVK'nın 32. maddesi gereğince ihracatta yüklenilen KDV'nin iadesi mümkündür. İade talebi en geç indirilecek KDV beyannamesiyle yapılmalıdır.",
+      "expected": {
+        "quote_valid": false,
+        "answer_mode": "cautious",
+        "issues_contains": ["action_mismatch"],
+        "max_confidence": 0.6
+      },
+      "tags": ["regression", "modality", "action_mismatch"]
+    },
+    {
+      "id": "REAL_MOD_010",
+      "category": "modality_questions",
+      "description": "Vergi borcu taksitlendirme",
+      "question": "Vergi borcunu taksitlendirmek mümkün mü?",
+      "quote": "Vergi borçlarının taksitlendirmesi mümkündür.",
+      "answer": "mümkündür",
+      "source_text": "6183 sayılı AATUHK'nın 48. maddesi gereğince vergi borçlarının taksitlendirmesi mümkündür. Başvuru vergi dairesine yapılır.",
+      "expected": {
+        "quote_valid": true,
+        "answer_mode": "definitive",
+        "min_confidence": 0.7
+      },
+      "tags": ["regression", "modality", "taksit", "mumkun"]
+    }
+  ]
+}
