@@ -50,6 +50,7 @@ export interface VectorizerConfig {
 export interface SemanticSearchOptions {
   limit?: number;
   useCache?: boolean;
+  debug?: boolean;  // Include detailed debug info (_debug key in response)
 }
 
 export interface SemanticSearchResult {
@@ -86,6 +87,25 @@ export interface SemanticSearchResponse {
     keyword_boost: boolean;
   };
   error?: string;
+  _debug?: {
+    penalty_config?: Record<string, any>;
+    penalty_stats?: Record<string, number>;
+    embedding_provider?: string;
+    query_embedding_dims?: number;
+    raw_results_count?: number;
+    scored_results_count?: number;
+    filtered_count?: number;
+    top_penalized?: Array<{
+      id: string;
+      title: string;
+      source_table: string;
+      retrieval_penalty: number;
+      temporal_reason?: string;
+      toc_reason?: string;
+    }>;
+    search_mode?: string;
+    source_table_weights?: Record<string, number>;
+  };
 }
 
 export class PythonIntegrationService {
@@ -584,7 +604,8 @@ export class PythonIntegrationService {
       const response = await this.axiosClient.post('/api/python/semantic-search/search', {
         query,
         limit: options.limit || 25,
-        use_cache: options.useCache !== false
+        use_cache: options.useCache !== false,
+        debug: options.debug || false
       }, {
         timeout: 30000 // 30 second timeout
       });

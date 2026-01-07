@@ -19,6 +19,7 @@ class SearchRequest(BaseModel):
     query: str = Field(..., min_length=1, max_length=8000, description="Search query text")
     limit: Optional[int] = Field(25, ge=1, le=100, description="Maximum results to return")
     use_cache: Optional[bool] = Field(True, description="Use Redis cache for results")
+    debug: Optional[bool] = Field(False, description="Include detailed debug info in response")
 
 
 class EmbeddingRequest(BaseModel):
@@ -57,12 +58,16 @@ async def semantic_search(request: SearchRequest):
     Performance:
     - Cached queries: <50ms
     - New queries: 200-400ms
+
+    Debug mode (?debug=1 or debug=true in body):
+    - Returns _debug object with penalty config, stats, and top penalized results
     """
     try:
         result = await semantic_search_service.semantic_search(
             query=request.query,
             limit=request.limit,
-            use_cache=request.use_cache
+            use_cache=request.use_cache,
+            debug=request.debug or False
         )
         return SearchResponse(**result)
 
@@ -75,16 +80,24 @@ async def semantic_search(request: SearchRequest):
 async def semantic_search_get(
     query: str = Query(..., min_length=1, max_length=8000),
     limit: int = Query(25, ge=1, le=100),
-    use_cache: bool = Query(True)
+    use_cache: bool = Query(True),
+    debug: bool = Query(False, description="Include detailed debug info (_debug key)")
 ):
     """
     Semantic search via GET (for easy testing)
+
+    Add ?debug=1 or ?debug=true to get detailed debug info:
+    - penalty_config: Current penalty weights
+    - penalty_stats: Applied penalty counts (temporal, toc)
+    - top_penalized: Top 5 most penalized results
+    - raw_results_count, scored_results_count, filtered_count
     """
     try:
         result = await semantic_search_service.semantic_search(
             query=query,
             limit=limit,
-            use_cache=use_cache
+            use_cache=use_cache,
+            debug=debug
         )
         return result
 

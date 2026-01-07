@@ -866,6 +866,12 @@ ${questionLabel}: ${message}`;
         'ragSettings.highConfidenceThreshold',
         'response_language',
         'llmSettings.activeChatModel',
+        // Evidence Gate settings (for quality control)
+        'ragSettings.evidenceGateEnabled',
+        'ragSettings.evidenceGateMinScore',
+        'ragSettings.evidenceGateMinChunks',
+        'ragSettings.evidenceGateRefusalTr',
+        'ragSettings.evidenceGateRefusalEn',
         // Prompt templates (fully configurable)
         'ragSettings.strictModePromptTr',
         'ragSettings.strictModePromptEn',
@@ -1118,6 +1124,58 @@ ${questionLabel}: ${message}`;
           lowConfidence: true
         };
       }
+
+      // ========================================
+      // EVIDENCE GATE: Quality control for search results
+      // ========================================
+      // Prevents showing irrelevant citations when top results don't meet quality threshold
+      // If gate fails: Return clean refusal WITHOUT any sources (no misleading citations)
+      const evidenceGateEnabled = settingsMap.get('ragSettings.evidenceGateEnabled') !== 'false'; // Default: true
+      const evidenceGateMinScore = parseFloat(settingsMap.get('ragSettings.evidenceGateMinScore') || '0.55');
+      const evidenceGateMinChunks = parseInt(settingsMap.get('ragSettings.evidenceGateMinChunks') || '2');
+
+      // Check if results pass the evidence gate
+      const qualityChunks = searchResults.filter(r => {
+        const score = r.score || (r.similarity_score * 100) || 0;
+        // Normalize score to 0-1 range if it's in percentage form
+        const normalizedScore = score > 1 ? score / 100 : score;
+        return normalizedScore >= evidenceGateMinScore;
+      });
+
+      const passesEvidenceGate = qualityChunks.length >= evidenceGateMinChunks;
+
+      console.log(`🚪 EVIDENCE GATE: enabled=${evidenceGateEnabled}, minScore=${evidenceGateMinScore}, minChunks=${evidenceGateMinChunks}`);
+      console.log(`   Results: ${qualityChunks.length}/${searchResults.length} pass threshold, gate=${passesEvidenceGate ? 'PASS' : 'FAIL'}`);
+
+      // If evidence gate is enabled and fails, return clean refusal
+      if (evidenceGateEnabled && !passesEvidenceGate && !citationsDisabled) {
+        const refusalTr = settingsMap.get('ragSettings.evidenceGateRefusalTr') ||
+          'Bu konuda yeterince güvenilir kaynak bulunamadı. Sorunuzu farklı anahtar kelimelerle veya daha spesifik şekilde sormayı deneyin.';
+        const refusalEn = settingsMap.get('ragSettings.evidenceGateRefusalEn') ||
+          'No sufficiently relevant sources found for this topic. Please try rephrasing your question or using different keywords.';
+
+        const refusalMessage = responseLanguage === 'en' ? refusalEn : refusalTr;
+
+        console.log(`🚫 EVIDENCE GATE REFUSAL: ${qualityChunks.length} quality chunks < ${evidenceGateMinChunks} required`);
+        console.log(`   Top scores: ${searchResults.slice(0, 3).map(r => ((r.score || r.similarity_score * 100 || 0) > 1 ? (r.score || r.similarity_score * 100 || 0) : (r.score || r.similarity_score * 100 || 0) * 100).toFixed(1) + '%').join(', ')}`);
+
+        return {
+          response: refusalMessage,
+          sources: [],  // CRITICAL: No sources when gate fails
+          relatedTopics: [],
+          conversationId: convId,
+          provider: 'system',
+          model: 'evidence-gate',
+          providerDisplayName: 'System',
+          language: options.language || 'tr',
+          fallbackUsed: false,
+          originalModel: activeModel || 'none',
+          actualProvider: 'system',
+          lowConfidence: true,
+          refusalReason: 'INSUFFICIENT_EVIDENCE'
+        };
+      }
+      // ========================================
 
       // CASE 2 & 3: Has results (either high confidence or partial match)
       // Let LLM generate response, but add instruction for partial matches

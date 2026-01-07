@@ -1745,7 +1745,8 @@ class SemanticSearchService:
         self,
         query: str,
         limit: Optional[int] = None,
-        use_cache: bool = True
+        use_cache: bool = True,
+        debug: bool = False
     ) -> Dict[str, Any]:
         """
         Full semantic search pipeline with all features
@@ -1756,6 +1757,23 @@ class SemanticSearchService:
         3. Hybrid scoring (semantic + keyword boost)
         4. Content formatting for Turkish legal/tax content
         5. Keyword search fallback when embedding fails
+
+        Args:
+            query: Search query text
+            limit: Maximum results (default from settings)
+            use_cache: Use Redis cache for results
+            debug: Include detailed debug info in response (_debug key)
+
+        Debug Response (when debug=True):
+            _debug: {
+                "penalty_config": {...},  # Current penalty weights
+                "penalty_stats": {...},   # Applied penalty counts
+                "embedding_provider": "openai|gemini",
+                "query_embedding_dims": 1536,
+                "raw_results_count": N,
+                "filtered_count": N,
+                "top_penalties": [...]   # Top 5 penalized results
+            }
 
         Performance target: <300ms for cached queries, <500ms for new queries
         """
@@ -1943,7 +1961,8 @@ class SemanticSearchService:
             # Load prompt settings for response context
             prompt_settings = await self.get_prompt_settings()
 
-            return {
+            # Build response
+            response = {
                 "success": True,
                 "cached": False,
                 "query": query,
@@ -1969,6 +1988,39 @@ class SemanticSearchService:
                     "system_prompt_preview": prompt_settings.system_prompt[:200] if prompt_settings.system_prompt else None
                 }
             }
+
+            # Add debug info when requested
+            if debug:
+                # Get top penalized results (those with retrieval_penalty < 0)
+                penalized_results = [
+                    {
+                        "id": r["id"],
+                        "title": r.get("title", "")[:50],
+                        "source_table": r.get("source_table"),
+                        "retrieval_penalty": r.get("_debug", {}).get("retrieval_penalty", 0),
+                        "temporal_reason": r.get("_debug", {}).get("temporal_reason"),
+                        "toc_reason": r.get("_debug", {}).get("toc_reason"),
+                    }
+                    for r in scored_results
+                    if r.get("_debug", {}).get("retrieval_penalty", 0) < 0
+                ]
+                # Sort by penalty (most penalized first)
+                penalized_results.sort(key=lambda x: x["retrieval_penalty"])
+
+                response["_debug"] = {
+                    "penalty_config": penalty_config,
+                    "penalty_stats": penalty_stats,
+                    "embedding_provider": self._embedding_config.provider if self._embedding_config else "unknown",
+                    "query_embedding_dims": len(query_embedding) if not use_keyword_fallback else 0,
+                    "raw_results_count": len(raw_results),
+                    "scored_results_count": len(scored_results),
+                    "filtered_count": len(final_results),
+                    "top_penalized": penalized_results[:5],
+                    "search_mode": "keyword_fallback" if use_keyword_fallback else "vector",
+                    "source_table_weights": settings.source_table_weights or {}
+                }
+
+            return response
 
         except Exception as e:
             logger.error(f"Semantic search error: {e}")
