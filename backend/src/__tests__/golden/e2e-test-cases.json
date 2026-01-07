@@ -1,0 +1,140 @@
+{
+  "name": "E2E RAG Response Golden Tests",
+  "description": "End-to-end tests for RAG response validation flow",
+  "version": "1.0.0",
+  "test_cases": [
+    {
+      "id": "E2E_001",
+      "description": "Valid quote with definitive answer - should pass through unchanged",
+      "input": {
+        "question": "Vergi levhası zorunlu mu?",
+        "llm_response": "**CEVAP**\nVergi levhası bulundurma zorunluluğu 2012 yılından itibaren kaldırılmıştır. [Kaynak 1]\n\n**ALINTI**\n\"İşyerinde vergi levhası bulundurulması artık zorunlu değildir.\" [Kaynak 1]\n\n**Tür:** Özelge\n**Başlık:** Vergi Levhası Hakkında",
+        "candidates": [
+          {
+            "source_id": "ozelge_12345",
+            "content": "Sonuç olarak, 2012 yılından itibaren işyerinde vergi levhası bulundurulması artık zorunlu değildir. Bu düzenleme tüm mükellefleri kapsamaktadır.",
+            "title": "Vergi Levhası Hakkında",
+            "source_type": "ozelge"
+          }
+        ]
+      },
+      "expected": {
+        "answer_mode": "definitive",
+        "alinti_preserved": true,
+        "alinti_contains": "zorunlu değildir",
+        "cevap_contains": "zorunlu"
+      },
+      "tags": ["regression", "valid_quote"]
+    },
+    {
+      "id": "E2E_002",
+      "description": "KONU header as quote - should be replaced with cautious message",
+      "input": {
+        "question": "E-fatura zorunlu mu?",
+        "llm_response": "**CEVAP**\nE-fatura kullanımı belirli mükellefler için zorunludur. [Kaynak 1]\n\n**ALINTI**\n\"KONU: E-fatura kullanımının zorunlu olup olmadığı hk.\" [Kaynak 1]\n\n**Tür:** Özelge\n**Başlık:** E-Fatura Hakkında",
+        "candidates": [
+          {
+            "source_id": "ozelge_67890",
+            "content": "KONU: E-fatura kullanımının zorunlu olup olmadığı hk.\nİLGİ: 15.03.2024 tarihli dilekçeniz.\nDilekçenizde e-fatura kullanımının zorunlu olup olmadığı sorulmaktadır.",
+            "title": "E-Fatura Hakkında",
+            "source_type": "ozelge"
+          }
+        ]
+      },
+      "expected": {
+        "answer_mode": "cautious",
+        "alinti_preserved": false,
+        "alinti_contains": "bulunamadı",
+        "cevap_contains": "açık bir hüküm cümlesi bulunamadı"
+      },
+      "tags": ["regression", "forbidden_pattern", "critical"]
+    },
+    {
+      "id": "E2E_003",
+      "description": "Modality mismatch - zorunlu mu? answered with mümkündür",
+      "input": {
+        "question": "Sevk irsaliyesi düzenlemek zorunlu mu?",
+        "llm_response": "**CEVAP**\nSevk irsaliyesi yerine irsaliyeli fatura düzenlenmesi mümkündür. [Kaynak 1]\n\n**ALINTI**\n\"İrsaliyeli fatura düzenlenmesi mümkün bulunmaktadır.\" [Kaynak 1]\n\n**Tür:** Özelge\n**Başlık:** İrsaliyeli Fatura",
+        "candidates": [
+          {
+            "source_id": "ozelge_11111",
+            "content": "Bu konuda irsaliyeli fatura düzenlenmesi mümkün bulunmaktadır. Ancak bu durum istisnai hallerde geçerlidir.",
+            "title": "İrsaliyeli Fatura",
+            "source_type": "ozelge"
+          }
+        ]
+      },
+      "expected": {
+        "answer_mode": "cautious",
+        "alinti_preserved": true,
+        "cevap_contains": "zorunlu olup olmadığı"
+      },
+      "tags": ["regression", "modality_mismatch", "critical"]
+    },
+    {
+      "id": "E2E_004",
+      "description": "Quote not verbatim in source - quote contains verdict not in source",
+      "input": {
+        "question": "KDV iadesi alabilir miyim?",
+        "llm_response": "**CEVAP**\nKDV iadesi almanız mümkündür. [Kaynak 1]\n\n**ALINTI**\n\"KDV iadesi almak zorunludur.\" [Kaynak 1]\n\n**Tür:** Özelge\n**Başlık:** KDV İadesi",
+        "candidates": [
+          {
+            "source_id": "ozelge_22222",
+            "content": "KDV iadesi konusunda başvuru yapılabilir. Gerekli belgeler tamamlandığında değerlendirme yapılacaktır.",
+            "title": "KDV İadesi",
+            "source_type": "ozelge"
+          }
+        ]
+      },
+      "expected": {
+        "answer_mode": "cautious",
+        "semantic_analyzer_issues": ["quote_not_verbatim"],
+        "alinti_should_change": true
+      },
+      "tags": ["regression", "verbatim", "critical"]
+    },
+    {
+      "id": "E2E_005",
+      "description": "Semantic drift - question about bulundurmak, quote about asmak",
+      "input": {
+        "question": "Vergi levhası bulundurmak zorunlu mu?",
+        "llm_response": "**CEVAP**\nVergi levhası asma zorunluluğu kaldırılmıştır. [Kaynak 1]\n\n**ALINTI**\n\"Vergi levhasının iş yerine asılması zorunlu değildir.\" [Kaynak 1]\n\n**Tür:** Özelge\n**Başlık:** Vergi Levhası Asma",
+        "candidates": [
+          {
+            "source_id": "ozelge_33333",
+            "content": "Vergi levhasının iş yerine asılması zorunlu değildir. Bu düzenleme 2012 yılında yapılmıştır.",
+            "title": "Vergi Levhası Asma",
+            "source_type": "ozelge"
+          }
+        ]
+      },
+      "expected": {
+        "answer_mode": "cautious",
+        "cevap_contains": "farklı bir konuyu"
+      },
+      "tags": ["regression", "semantic_drift"]
+    },
+    {
+      "id": "E2E_006",
+      "description": "Dilekçenizde sorulmaktadır pattern - forbidden",
+      "input": {
+        "question": "Stopaj oranı nedir?",
+        "llm_response": "**CEVAP**\nStopaj oranı %20'dir. [Kaynak 1]\n\n**ALINTI**\n\"Dilekçenizde stopaj oranının ne olduğu sorulmaktadır.\" [Kaynak 1]\n\n**Tür:** Özelge\n**Başlık:** Stopaj Oranı",
+        "candidates": [
+          {
+            "source_id": "ozelge_44444",
+            "content": "Dilekçenizde stopaj oranının ne olduğu sorulmaktadır. Bu konuda yapılan değerlendirmeler aşağıda açıklanmıştır.",
+            "title": "Stopaj Oranı",
+            "source_type": "ozelge"
+          }
+        ]
+      },
+      "expected": {
+        "answer_mode": "cautious",
+        "alinti_preserved": false,
+        "alinti_contains": "bulunamadı"
+      },
+      "tags": ["regression", "forbidden_pattern"]
+    }
+  ]
+}
