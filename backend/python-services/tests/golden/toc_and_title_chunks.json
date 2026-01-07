@@ -1,0 +1,67 @@
+{
+  "name": "TOC and Title Chunk Tests",
+  "description": "Tests for detecting and penalizing TOC/title chunks",
+  "version": "1.0.0",
+  "test_cases": [
+    {
+      "id": "TOC_001",
+      "description": "Pure TOC chunk - no verdict sentence, quote not in source",
+      "question": "Bilanço esasına göre defter tutuyorum. Yevmiye defterinin kapanış tasdiki zorunlu mu?",
+      "quote": "3.2.2. Bilanço Esasına Göre Defter",
+      "answer": "Bu konuda kesin bir hüküm cümlesi bulunamadı",
+      "source_text": "..................................151 3. ZİRAİ KAZANCIN TESPİT ŞEKİLLERİ ...........................................................................................155 3.1. Gerçek Usulde Vergilendirme.........................................................................................................155 3.1.1. Zirai İşletme Hesabı Esasına Göre Kazancın Tespiti.....................................................156 3.1.2. Bilanço Esasına Göre Zirai Kazancın Tespiti ......",
+      "expected": {
+        "quote_valid": false,
+        "answer_mode": "cautious",
+        "issues_contains": ["quote_not_verbatim"],
+        "max_confidence": 0.5
+      },
+      "tags": ["regression", "toc", "verbatim"]
+    },
+    {
+      "id": "TOC_002",
+      "description": "KONU/İLGİ header - forbidden pattern",
+      "question": "Vergi levhası zorunlu mu?",
+      "quote": "KONU: Vergi levhası bulundurma zorunluluğu hk.",
+      "answer": "Bu konuda kesin bir hüküm cümlesi bulunamadı",
+      "source_text": "KONU: Vergi levhası bulundurma zorunluluğu hk.\nİLGİ: 15.03.2024 tarihli dilekçeniz.\nDilekçenizde vergi levhası bulundurma zorunluluğu sorulmaktadır.",
+      "expected": {
+        "quote_valid": false,
+        "answer_mode": "cautious",
+        "issues_contains": ["forbidden_pattern"],
+        "max_confidence": 0.5
+      },
+      "tags": ["regression", "forbidden_pattern", "header"]
+    },
+    {
+      "id": "TOC_003",
+      "description": "Dilekçe soru kalıbı - forbidden pattern",
+      "question": "E-fatura zorunlu mu?",
+      "quote": "Dilekçenizde e-fatura kullanımının zorunlu olup olmadığı sorulmaktadır.",
+      "answer": "zorunludur",
+      "source_text": "Dilekçenizde e-fatura kullanımının zorunlu olup olmadığı sorulmaktadır. Bu konuda aşağıdaki açıklamalar yapılmıştır.",
+      "expected": {
+        "quote_valid": false,
+        "answer_mode": "cautious",
+        "issues_contains": ["forbidden_pattern"],
+        "max_confidence": 0.5
+      },
+      "tags": ["regression", "forbidden_pattern", "dilekce"]
+    },
+    {
+      "id": "TOC_004",
+      "description": "Real verdict sentence - should be valid",
+      "question": "Vergi levhası zorunlu mu?",
+      "quote": "işyerinde vergi levhası bulundurulması artık zorunlu değildir.",
+      "answer": "zorunlu değildir",
+      "source_text": "Sonuç olarak, 2012 yılından itibaren işyerinde vergi levhası bulundurulması artık zorunlu değildir. Bu düzenleme tüm mükellefleri kapsamaktadır.",
+      "expected": {
+        "quote_valid": true,
+        "answer_mode": "definitive",
+        "issues_not_contains": ["forbidden_pattern"],
+        "min_confidence": 0.7
+      },
+      "tags": ["regression", "verdict_extraction"]
+    }
+  ]
+}

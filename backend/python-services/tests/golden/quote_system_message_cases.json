@@ -1,0 +1,68 @@
+{
+  "name": "Quote System Message Detection Tests",
+  "description": "Tests for detecting system/fail-closed messages in ALINTI field",
+  "version": "1.0.0",
+  "test_cases": [
+    {
+      "id": "SYS_MSG_001",
+      "description": "Pure system message as ALINTI - should be detected",
+      "question": "Yevmiye defterinin kapanış tasdikini yaptırmak zorunda mıyım?",
+      "quote": "Bu konuda kesin bir hüküm cümlesi bulunamadı, ancak ilgili kaynak incelenebilir.",
+      "answer": "Bu konuda kesin bir hüküm cümlesi bulunamadı",
+      "expected": {
+        "quote_valid": false,
+        "answer_mode": "cautious",
+        "issues_contains": ["quote_is_system_message"],
+        "suggested_quote": "—",
+        "max_confidence": 0.5
+      },
+      "tags": ["regression", "critical", "system_message"]
+    },
+    {
+      "id": "SYS_MSG_002",
+      "description": "System message with different wording - should be detected",
+      "question": "Vergi levhası bulundurmak zorunlu mu?",
+      "quote": "Mevcut kaynaklarda bu konuda açık hüküm cümlesi bulunamadı.",
+      "answer": "Açık hüküm cümlesi bulunamadı",
+      "expected": {
+        "quote_valid": false,
+        "answer_mode": "cautious",
+        "issues_contains": ["quote_is_system_message"],
+        "suggested_quote": "—",
+        "max_confidence": 0.5
+      },
+      "tags": ["regression", "system_message"]
+    },
+    {
+      "id": "SYS_MSG_003",
+      "description": "VUK sprinkling attack - system message with source indicator should still be detected (2+ patterns)",
+      "question": "Yevmiye defteri tasdiki zorunlu mu?",
+      "quote": "VUK madde 219 kapsamında bu konuda kesin bir hüküm cümlesi bulunamadı, ancak ilgili kaynak incelenebilir.",
+      "answer": "Bu konuda kesin bir hüküm cümlesi bulunamadı",
+      "expected": {
+        "quote_valid": false,
+        "answer_mode": "cautious",
+        "issues_contains": ["quote_is_system_message"],
+        "issues_not_contains": [],
+        "suggested_quote": "—",
+        "max_confidence": 0.5
+      },
+      "tags": ["regression", "critical", "vuk_sprinkling", "security"]
+    },
+    {
+      "id": "SYS_MSG_004",
+      "description": "Real VUK quote with single system-like word - should NOT be flagged (softening)",
+      "question": "Yevmiye defteri tasdiki zorunlu mu?",
+      "quote": "VUK madde 219 uyarınca yevmiye defteri tasdiki yapılmalıdır.",
+      "answer": "zorunludur",
+      "expected": {
+        "quote_valid": true,
+        "answer_mode": "definitive",
+        "issues_not_contains": ["quote_is_system_message"],
+        "suggested_quote": null,
+        "min_confidence": 0.7
+      },
+      "tags": ["regression", "critical", "false_positive_protection"]
+    }
+  ]
+}

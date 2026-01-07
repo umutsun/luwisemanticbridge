@@ -449,8 +449,9 @@ class SemanticAnalyzerService:
         self.verdict_patterns = [
             r"mümkündür", r"mümkün\s+değildir",
             r"uygundur", r"uygun\s+değildir",
-            r"gerekmektedir", r"gerekmemektedir",
+            r"gerekmektedir", r"gerekmemektedir", r"gerekmez",
             r"zorunludur", r"zorunlu\s+değildir",
+            r"yeterlidir", r"yeterli\s+değildir", r"yetmez",  # YETERLI modality
             r"yapılmalıdır", r"yapılamaz",
             r"bulunmaktadır", r"bulunmamaktadır",
         ]

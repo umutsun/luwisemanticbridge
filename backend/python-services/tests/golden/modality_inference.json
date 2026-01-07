@@ -1,0 +1,67 @@
+{
+  "name": "Modality Inference Tests",
+  "description": "Tests for WEAK→STRONG modality inference detection",
+  "version": "1.0.0",
+  "test_cases": [
+    {
+      "id": "MOD_INF_001",
+      "description": "STRONG question (zorunlu mu?) with WEAK source (mümkündür) - inference fail",
+      "question": "İrsaliyeli fatura kullanımı halinde ayrıca sevk irsaliyesi düzenlemek zorunlu mu?",
+      "quote": "İrsaliyeli faturanın sevk irsaliyesi yerine kullanılması mümkün bulunmamaktadır.",
+      "answer": "gerekmemektedir",
+      "source_text": "İrsaliyeli faturanın sevk irsaliyesi yerine kullanılması mümkün bulunmamaktadır. Bu nedenle ayrı sevk irsaliyesi düzenlenmesi uygun olacaktır.",
+      "expected": {
+        "quote_valid": false,
+        "answer_mode": "cautious",
+        "issues_contains": ["modality_inference"],
+        "max_confidence": 0.5
+      },
+      "tags": ["regression", "critical", "modality"]
+    },
+    {
+      "id": "MOD_INF_002",
+      "description": "WEAK question (mümkün mü?) with WEAK source (mümkündür) - valid",
+      "question": "E-fatura yerine kağıt fatura kullanmak mümkün mü?",
+      "quote": "Belirli koşullarda kağıt fatura kullanılması mümkündür.",
+      "answer": "mümkündür",
+      "source_text": "Belirli koşullarda kağıt fatura kullanılması mümkündür. Ancak bu durum istisnai hallerde geçerlidir.",
+      "expected": {
+        "quote_valid": true,
+        "answer_mode": "definitive",
+        "issues_not_contains": ["modality_inference"],
+        "min_confidence": 0.7
+      },
+      "tags": ["regression", "modality", "weak_family"]
+    },
+    {
+      "id": "MOD_INF_003",
+      "description": "STRONG question (yeterli mi?) with STRONG source (yeterlidir) - valid",
+      "question": "Perakende satışlarda fiş kesmek yeterli mi?",
+      "quote": "Fiş kesmek yeterlidir.",
+      "answer": "yeterlidir",
+      "source_text": "Perakende satışlarda belirli tutar altında fiş kesmek yeterlidir. Fiş kesmek yeterlidir. Bu tutar her yıl güncellenmektedir.",
+      "expected": {
+        "quote_valid": true,
+        "answer_mode": "definitive",
+        "issues_not_contains": ["modality_inference"],
+        "min_confidence": 0.7
+      },
+      "tags": ["regression", "modality", "strong_family"]
+    },
+    {
+      "id": "MOD_INF_004",
+      "description": "STRONG question (yeterli mi?) with WEAK source (mümkündür) - inference fail",
+      "question": "Sadece banka dekontu yeterli mi?",
+      "quote": "Banka dekontu ile ödeme yapılması mümkündür.",
+      "answer": "yeterlidir",
+      "source_text": "Banka dekontu ile ödeme yapılması mümkündür. Ancak ek belgeler de istenebilir.",
+      "expected": {
+        "quote_valid": false,
+        "answer_mode": "cautious",
+        "issues_contains": ["modality_inference"],
+        "max_confidence": 0.5
+      },
+      "tags": ["regression", "critical", "modality", "strong_family"]
+    }
+  ]
+}

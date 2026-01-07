@@ -1,0 +1,66 @@
+{
+  "name": "Verbatim and Truncated Quote Tests",
+  "description": "Tests for strict verbatim quote verification",
+  "version": "1.0.0",
+  "test_cases": [
+    {
+      "id": "VERBATIM_001",
+      "description": "Truncated quote - not verbatim in source",
+      "question": "Vergi levhası zorunlu mu?",
+      "quote": "Vergi levhası zorunlu değildir.",
+      "answer": "zorunlu değildir",
+      "source_text": "Vergi levhası bulundurma zorunluluğu 2012 yılından itibaren kaldırılmıştır. İşyerinde vergi levhası bulundurulması artık zorunlu değildir.",
+      "expected": {
+        "quote_valid": false,
+        "answer_mode": "cautious",
+        "issues_contains": ["quote_not_verbatim"],
+        "max_confidence": 0.5
+      },
+      "tags": ["regression", "critical", "verbatim"]
+    },
+    {
+      "id": "VERBATIM_002",
+      "description": "Exact verbatim quote with verdict token - should pass",
+      "question": "Vergi levhası zorunlu mu?",
+      "quote": "İşyerinde vergi levhası bulundurulması artık zorunlu değildir.",
+      "answer": "zorunlu değildir",
+      "source_text": "Vergi levhası bulundurma zorunluluğu 2012 yılından itibaren kaldırılmıştır. İşyerinde vergi levhası bulundurulması artık zorunlu değildir.",
+      "expected": {
+        "quote_valid": true,
+        "answer_mode": "definitive",
+        "issues_not_contains": ["quote_not_verbatim"],
+        "min_confidence": 0.7
+      },
+      "tags": ["regression", "verbatim"]
+    },
+    {
+      "id": "VERBATIM_003",
+      "description": "Quote has STRONG verdict token not in source - critical fail",
+      "question": "E-fatura zorunlu mu?",
+      "quote": "E-fatura kullanımı zorunludur.",
+      "answer": "zorunludur",
+      "source_text": "E-fatura uygulaması belirli mükellef grupları için uygulanmaktadır. Kapsama giren mükellefler için e-fatura kullanımı önerilmektedir.",
+      "expected": {
+        "quote_valid": false,
+        "answer_mode": "cautious",
+        "issues_contains": ["quote_not_verbatim"],
+        "max_confidence": 0.5
+      },
+      "tags": ["regression", "critical", "verdict_token", "hallucination"]
+    },
+    {
+      "id": "VERBATIM_004",
+      "description": "Empty source_text - verbatim check skipped, only no_verdict checked",
+      "question": "KDV oranı nedir?",
+      "quote": "KDV oranı %18'dir.",
+      "answer": "%18",
+      "source_text": "",
+      "expected": {
+        "quote_valid": false,
+        "issues_contains": ["no_verdict_sentence"],
+        "issues_not_contains": ["quote_not_verbatim"]
+      },
+      "tags": ["edge_case", "verbatim"]
+    }
+  ]
+}

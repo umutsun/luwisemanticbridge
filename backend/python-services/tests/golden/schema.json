@@ -1,0 +1,101 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Golden Test Case Schema",
+  "description": "Schema for semantic analyzer golden test cases",
+  "type": "object",
+  "required": ["id", "question", "expected"],
+  "properties": {
+    "id": {
+      "type": "string",
+      "description": "Unique test case identifier (e.g., 'SYS_MSG_001')"
+    },
+    "question": {
+      "type": "string",
+      "description": "The user's question"
+    },
+    "candidates": {
+      "type": "array",
+      "description": "Chunks sent to LLM (for e2e tests)",
+      "items": {
+        "type": "object",
+        "properties": {
+          "source_id": { "type": "string" },
+          "source_type": { "type": "string", "enum": ["ozelge", "teblig", "makale", "rehber", "danistay", "sorucevap", "toc"] },
+          "title": { "type": "string" },
+          "source_text": { "type": "string", "description": "Exact text sent to LLM" }
+        }
+      }
+    },
+    "llm_output": {
+      "type": "object",
+      "description": "LLM response (for e2e tests only)",
+      "properties": {
+        "cevap": { "type": "string" },
+        "alinti": { "type": "string" },
+        "cited_source_id": { "type": "string" }
+      }
+    },
+    "quote": {
+      "type": "string",
+      "description": "The ALINTI to validate (for unit tests)"
+    },
+    "answer": {
+      "type": "string",
+      "description": "The CEVAP to validate (for unit tests)"
+    },
+    "source_text": {
+      "type": "string",
+      "description": "Source text for verbatim verification (for unit tests)"
+    },
+    "expected": {
+      "type": "object",
+      "required": ["quote_valid"],
+      "properties": {
+        "selected_source_id": {
+          "type": ["string", "null"],
+          "description": "Expected source to be selected (null if none)"
+        },
+        "answer_mode": {
+          "type": "string",
+          "enum": ["definitive", "cautious"],
+          "description": "Expected answer mode"
+        },
+        "quote_valid": {
+          "type": "boolean",
+          "description": "Expected quote validation result"
+        },
+        "issues_contains": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Expected issues to be present (e.g., ['QUOTE_IS_SYSTEM_MESSAGE'])"
+        },
+        "issues_not_contains": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Issues that should NOT be present"
+        },
+        "suggested_quote": {
+          "type": ["string", "null"],
+          "description": "Expected suggested_quote value"
+        },
+        "min_confidence": {
+          "type": "number",
+          "description": "Minimum expected confidence score"
+        },
+        "max_confidence": {
+          "type": "number",
+          "description": "Maximum expected confidence score"
+        }
+      }
+    },
+    "description": {
+      "type": "string",
+      "description": "Human-readable description of test case"
+    },
+    "tags": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Tags for filtering tests (e.g., ['regression', 'critical'])"
+    }
+  }
+}
