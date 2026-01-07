@@ -1131,6 +1131,330 @@ class SemanticSearchService:
 
         return 1.0  # Default weight
 
+    # ========================================================================
+    # RETRIEVAL-LEVEL QUALITY PENALTIES
+    # Applied during search scoring to filter low-quality chunks BEFORE ranking
+    # ========================================================================
+
+    # Year pattern for temporal detection
+    _YEAR_PATTERN = re.compile(r'\b(19|20)\d{2}\b')
+    _YEAR_CONTEXT_PATTERNS = [
+        re.compile(r'\b(19|20)\d{2}\s*yılı?\s*(için|içinde|nda|nde|dan|den|itibaren)', re.IGNORECASE),
+        re.compile(r'\b(19|20)\d{2}\s*yılı\b', re.IGNORECASE),
+        re.compile(r'\b(19|20)\d{2}\s*(senesinde|senesi)', re.IGNORECASE),
+    ]
+    _TEMPORAL_QUESTION_INDICATORS = [
+        re.compile(r'\bhangi\s+yıl\b', re.IGNORECASE),
+        re.compile(r'\b\d{4}\s*yılı\b', re.IGNORECASE),
+        re.compile(r'\bbu\s+yıl\b', re.IGNORECASE),
+        re.compile(r'\bgeçen\s+yıl\b', re.IGNORECASE),
+        re.compile(r'\bgelecek\s+yıl\b', re.IGNORECASE),
+        re.compile(r'\b(19|20)\d{2}\b'),  # Year in question
+    ]
+
+    # TOC detection patterns
+    _TOC_PATTERNS = [
+        # Structure indicators
+        (re.compile(r'^\d+\.\s*[A-ZÜÖÇŞĞİ]', re.MULTILINE), "numaralı başlık"),
+        (re.compile(r'^\d+\.\d+\s+[A-ZÜÖÇŞĞİ]', re.MULTILINE), "bölüm numarası"),
+        (re.compile(r'^[a-zıöüçşğ]\)\s+', re.MULTILINE), "harf listesi"),
+        (re.compile(r'^-\s+[A-ZÜÖÇŞĞİ]', re.MULTILINE), "tire listesi"),
+        # Meta indicators
+        (re.compile(r'içindekiler\b', re.IGNORECASE), "içindekiler"),
+        (re.compile(r'bkz\.\s*', re.IGNORECASE), "bakınız referansı"),
+        (re.compile(r'sayfa\s*\d+', re.IGNORECASE), "sayfa referansı"),
+        (re.compile(r'(bölüm|kısım)\s*\d+', re.IGNORECASE), "bölüm referansı"),
+        # Dot sequences (table of contents formatting)
+        (re.compile(r'\.{5,}'), "nokta dizisi"),
+        (re.compile(r'…{3,}'), "ellipsis dizisi"),
+    ]
+
+    # Verdict patterns (chunks with these are valuable)
+    _VERDICT_PATTERNS = [
+        re.compile(r'mümkündür', re.IGNORECASE),
+        re.compile(r'mümkün\s+değildir', re.IGNORECASE),
+        re.compile(r'uygundur', re.IGNORECASE),
+        re.compile(r'uygun\s+değildir', re.IGNORECASE),
+        re.compile(r'gerekmektedir', re.IGNORECASE),
+        re.compile(r'gerekmemektedir', re.IGNORECASE),
+        re.compile(r'zorunludur', re.IGNORECASE),
+        re.compile(r'zorunlu\s+değildir', re.IGNORECASE),
+        re.compile(r'yeterlidir', re.IGNORECASE),
+        re.compile(r'yapılmalıdır', re.IGNORECASE),
+        re.compile(r'bulunmaktadır', re.IGNORECASE),
+    ]
+
+    def _calculate_retrieval_penalties(
+        self,
+        query: str,
+        content: str,
+        metadata: Optional[Dict[str, Any]] = None
+    ) -> Tuple[float, Dict[str, Any]]:
+        """
+        Calculate retrieval-level penalties for a chunk.
+
+        Returns:
+            (total_penalty, penalty_details)
+            - total_penalty: 0.0 to -0.50 (negative = reduce score)
+            - penalty_details: Dict with breakdown for debugging
+        """
+        total_penalty = 0.0
+        details = {
+            "temporal_penalty": 0.0,
+            "toc_penalty": 0.0,
+            "temporal_reason": None,
+            "toc_reason": None,
+            "has_verdict": False
+        }
+
+        if not content:
+            return 0.0, details
+
+        # 1. TEMPORAL MISMATCH PENALTY
+        temporal_penalty, temporal_reason = self._detect_temporal_mismatch_retrieval(query, content)
+        if temporal_penalty < 0:
+            total_penalty += temporal_penalty
+            details["temporal_penalty"] = temporal_penalty
+            details["temporal_reason"] = temporal_reason
+
+        # 2. TOC CONTENT PENALTY
+        toc_penalty, toc_reason, has_verdict = self._detect_toc_content_retrieval(content)
+        if toc_penalty < 0:
+            total_penalty += toc_penalty
+            details["toc_penalty"] = toc_penalty
+            details["toc_reason"] = toc_reason
+        details["has_verdict"] = has_verdict
+
+        return total_penalty, details
+
+    def _detect_temporal_mismatch_retrieval(
+        self,
+        query: str,
+        content: str
+    ) -> Tuple[float, Optional[str]]:
+        """
+        Detect temporal mismatch at retrieval level.
+
+        RULE: If question has no year but content has year-specific context,
+        apply penalty to reduce ranking of potentially outdated/mismatched content.
+
+        Returns:
+            (penalty, reason)
+            - penalty: 0.0 or -0.15
+        """
+        query_lower = query.lower()
+
+        # Check if question already mentions a year
+        question_has_temporal = False
+        for pattern in self._TEMPORAL_QUESTION_INDICATORS:
+            if pattern.search(query_lower):
+                question_has_temporal = True
+                break
+
+        if question_has_temporal:
+            # Question is already time-specific, no mismatch
+            return 0.0, None
+
+        # Check if content has year-specific context
+        content_lower = content.lower()
+        for pattern in self._YEAR_CONTEXT_PATTERNS:
+            match = pattern.search(content_lower)
+            if match:
+                # Extract the year
+                year_match = self._YEAR_PATTERN.search(match.group(0))
+                if year_match:
+                    detected_year = year_match.group(0)
+                    return -0.15, f"İçerik '{detected_year}' yılına özgü, soru genel"
+
+        return 0.0, None
+
+    def _detect_toc_content_retrieval(
+        self,
+        content: str
+    ) -> Tuple[float, Optional[str], bool]:
+        """
+        Detect TOC (Table of Contents) or header-only content at retrieval level.
+
+        TOC chunks are navigation/index content without actual legal substance.
+        They should be penalized heavily to improve retrieval quality.
+
+        Returns:
+            (penalty, reason, has_verdict)
+            - penalty: 0.0 or -0.25
+            - has_verdict: True if content has verdict patterns
+        """
+        if not content:
+            return 0.0, None, False
+
+        content_lower = content.lower()
+        word_count = len(content.split())
+
+        # Check for verdict patterns (valuable content)
+        has_verdict = False
+        for pattern in self._VERDICT_PATTERNS:
+            if pattern.search(content_lower):
+                has_verdict = True
+                break
+
+        # Count TOC pattern matches
+        matched_patterns = []
+        for pattern, pattern_name in self._TOC_PATTERNS:
+            if pattern.search(content):
+                matched_patterns.append(pattern_name)
+
+        # TOC detection heuristics:
+        # - Need 2+ patterns to flag as TOC
+        # - Very short content (< 50 words) with TOC patterns is likely TOC
+        # - No verdict sentence increases TOC likelihood
+        toc_score = 0.0
+
+        if len(matched_patterns) >= 2:
+            toc_score += 0.4
+
+        if word_count < 50 and len(matched_patterns) >= 1:
+            toc_score += 0.3
+
+        if not has_verdict and len(matched_patterns) >= 1:
+            toc_score += 0.3
+
+        # Apply penalty if TOC score is high enough
+        if toc_score >= 0.5:
+            reason = f"TOC içeriği: {', '.join(matched_patterns[:3])}"
+            return -0.25, reason, has_verdict
+
+        return 0.0, None, has_verdict
+
+    def parse_html_tables(self, content: str) -> List[Dict[str, Any]]:
+        """
+        Deterministic HTML table parser.
+
+        Extracts tables from HTML content and converts to structured data.
+        This is used for preprocessing content before sending to LLM,
+        ensuring consistent table parsing regardless of LLM behavior.
+
+        Returns:
+            List of parsed tables with headers and rows
+        """
+        tables = []
+
+        # Find all <table> elements
+        table_pattern = re.compile(r'<table[^>]*>(.*?)</table>', re.DOTALL | re.IGNORECASE)
+
+        for table_match in table_pattern.finditer(content):
+            table_html = table_match.group(1)
+            parsed_table = {
+                "headers": [],
+                "rows": [],
+                "raw_html": table_match.group(0)
+            }
+
+            # Extract headers from <th> or first <tr> with <td>
+            header_pattern = re.compile(r'<th[^>]*>(.*?)</th>', re.DOTALL | re.IGNORECASE)
+            headers = [self._clean_html_text(h.group(1)) for h in header_pattern.finditer(table_html)]
+
+            if headers:
+                parsed_table["headers"] = headers
+            else:
+                # Try first row as headers
+                first_row = re.search(r'<tr[^>]*>(.*?)</tr>', table_html, re.DOTALL | re.IGNORECASE)
+                if first_row:
+                    td_pattern = re.compile(r'<td[^>]*>(.*?)</td>', re.DOTALL | re.IGNORECASE)
+                    headers = [self._clean_html_text(td.group(1)) for td in td_pattern.finditer(first_row.group(1))]
+                    parsed_table["headers"] = headers
+
+            # Extract data rows
+            row_pattern = re.compile(r'<tr[^>]*>(.*?)</tr>', re.DOTALL | re.IGNORECASE)
+            td_pattern = re.compile(r'<td[^>]*>(.*?)</td>', re.DOTALL | re.IGNORECASE)
+
+            for row_match in row_pattern.finditer(table_html):
+                cells = [self._clean_html_text(td.group(1)) for td in td_pattern.finditer(row_match.group(1))]
+                if cells:
+                    # Skip if this is the header row
+                    if cells == parsed_table["headers"]:
+                        continue
+                    parsed_table["rows"].append(cells)
+
+            if parsed_table["rows"] or parsed_table["headers"]:
+                tables.append(parsed_table)
+
+        return tables
+
+    def _clean_html_text(self, html: str) -> str:
+        """Clean HTML tags and entities from text"""
+        # Remove HTML tags
+        text = re.sub(r'<[^>]+>', '', html)
+        # Decode common entities
+        text = text.replace('&nbsp;', ' ')
+        text = text.replace('&amp;', '&')
+        text = text.replace('&lt;', '<')
+        text = text.replace('&gt;', '>')
+        text = text.replace('&quot;', '"')
+        text = text.replace('&#39;', "'")
+        # Clean whitespace
+        text = re.sub(r'\s+', ' ', text).strip()
+        return text
+
+    def format_parsed_tables(self, tables: List[Dict[str, Any]]) -> str:
+        """
+        Format parsed tables into readable text for LLM context.
+
+        Converts structured table data into a consistent text representation
+        that can be included in RAG context.
+        """
+        if not tables:
+            return ""
+
+        formatted_parts = []
+
+        for i, table in enumerate(tables, 1):
+            lines = [f"\n[Tablo {i}]"]
+
+            # Add headers
+            if table["headers"]:
+                lines.append("| " + " | ".join(table["headers"]) + " |")
+                lines.append("|" + "|".join(["---"] * len(table["headers"])) + "|")
+
+            # Add rows
+            for row in table["rows"]:
+                if row:
+                    lines.append("| " + " | ".join(str(cell) for cell in row) + " |")
+
+            formatted_parts.append("\n".join(lines))
+
+        return "\n".join(formatted_parts)
+
+    def preprocess_content_for_rag(self, content: str) -> str:
+        """
+        Preprocess content before sending to RAG/LLM.
+
+        1. Parse HTML tables deterministically
+        2. Replace table HTML with formatted text
+        3. Clean up other HTML artifacts
+
+        This ensures consistent content regardless of LLM table parsing ability.
+        """
+        if not content:
+            return content
+
+        # Parse and format tables
+        tables = self.parse_html_tables(content)
+        if tables:
+            formatted_tables = self.format_parsed_tables(tables)
+
+            # Replace original table HTML with formatted version
+            for table in tables:
+                content = content.replace(table["raw_html"], "")
+
+            # Append formatted tables at the end
+            content = content.strip() + "\n" + formatted_tables
+
+        # Clean remaining HTML
+        content = re.sub(r'<br\s*/?>', '\n', content)
+        content = re.sub(r'</?(?:p|div|span|strong|em|b|i|u)>', '', content)
+        content = self._clean_html_text(content)
+
+        return content
+
     def _format_content(self, result: Dict[str, Any]) -> Dict[str, str]:
         """
         Format search result for human-readable display
@@ -1392,9 +1716,10 @@ class SemanticSearchService:
                             existing_ids.add(kr["id"])
                     logger.info(f"Hybrid search: {len(keyword_results)} keyword augment results added")
 
-            # Apply hybrid scoring with table weights
+            # Apply hybrid scoring with table weights and retrieval-level penalties
             score_start = datetime.now()
             scored_results = []
+            penalty_stats = {"temporal_count": 0, "toc_count": 0}
 
             for result in raw_results:
                 # Format content for human-readable display
@@ -1426,8 +1751,23 @@ class SemanticSearchService:
                 similarity = result["similarity_score"]
                 weighted_similarity = similarity * source_priority * table_weight
 
-                # Calculate final score (includes keyword boost)
-                final_score = weighted_similarity + keyword_boost
+                # === RETRIEVAL-LEVEL QUALITY PENALTIES ===
+                # Apply temporal mismatch and TOC content penalties
+                retrieval_penalty, penalty_details = self._calculate_retrieval_penalties(
+                    query,
+                    result["content"] or "",
+                    result.get("metadata")
+                )
+
+                # Track penalty statistics
+                if penalty_details["temporal_penalty"] < 0:
+                    penalty_stats["temporal_count"] += 1
+                if penalty_details["toc_penalty"] < 0:
+                    penalty_stats["toc_count"] += 1
+
+                # Calculate final score (includes keyword boost and penalties)
+                # Penalty is negative, so adding it reduces the score
+                final_score = max(0, weighted_similarity + keyword_boost + retrieval_penalty)
 
                 scored_results.append({
                     "id": result["id"],
@@ -1451,9 +1791,19 @@ class SemanticSearchService:
                         "source_priority": round(source_priority, 2),
                         "table_weight": round(table_weight, 2),
                         "keyword_boost": round(keyword_boost * 100, 2),
+                        "retrieval_penalty": round(retrieval_penalty * 100, 2),
+                        "temporal_penalty": round(penalty_details["temporal_penalty"] * 100, 2),
+                        "toc_penalty": round(penalty_details["toc_penalty"] * 100, 2),
+                        "temporal_reason": penalty_details["temporal_reason"],
+                        "toc_reason": penalty_details["toc_reason"],
+                        "has_verdict": penalty_details["has_verdict"],
                         "final": round(final_score * 100, 2)
                     }
                 })
+
+            # Log penalty statistics
+            if penalty_stats["temporal_count"] > 0 or penalty_stats["toc_count"] > 0:
+                logger.info(f"Retrieval penalties applied: temporal={penalty_stats['temporal_count']}, toc={penalty_stats['toc_count']}")
 
             # Sort by final score and limit
             scored_results.sort(key=lambda x: x["final_score"], reverse=True)
