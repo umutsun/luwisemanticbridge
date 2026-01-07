@@ -12,6 +12,7 @@ from .document_analyzer_router import router as document_analyzer_router
 from .semantic_search_router import router as semantic_search_router
 from .devops_router import router as devops_router
 from .semantic_analyzer_router import router as semantic_analyzer_router
+from .pdf_vision_router import router as pdf_vision_router
 
 __all__ = [
     'crawl_router',
@@ -26,5 +27,6 @@ __all__ = [
     'document_analyzer_router',
     'semantic_search_router',
     'devops_router',
-    'semantic_analyzer_router'
+    'semantic_analyzer_router',
+    'pdf_vision_router'
 ]

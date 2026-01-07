@@ -339,6 +339,9 @@ export default function ServicesPage() {
 
           {/* DevOps Card */}
           <DevOpsCard />
+
+          {/* Microservices Card */}
+          <MicroservicesCard />
         </div>
       </div>
 
@@ -1623,6 +1626,165 @@ function DevOpsCard() {
       {/* DevOps Terminal Modal */}
       <DeploymentModal isOpen={showModal} onOpenChange={setShowModal} />
     </>
+  );
+}
+
+// Microservices Card - Shows Python microservices health status
+function MicroservicesCard() {
+  const [microservices, setMicroservices] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [overallStatus, setOverallStatus] = useState<string>('unknown');
+  const [systemMetrics, setSystemMetrics] = useState<{ cpu_percent?: number; memory_percent?: number } | null>(null);
+
+  const fetchMicroservices = async () => {
+    setLoading(true);
+    try {
+      // Try Python service health endpoint
+      const pythonUrl = process.env.NEXT_PUBLIC_PYTHON_URL || 'http://localhost:8002';
+      const response = await fetch(`${pythonUrl}/health/services`);
+
+      if (response.ok) {
+        const data = await response.json();
+        setMicroservices(data.microservices || []);
+        setOverallStatus(data.overall_status || 'unknown');
+        setSystemMetrics(data.system || null);
+      } else {
+        // Fallback: Try via backend proxy
+        const backendResponse = await fetch('/api/v2/integrations/python-health');
+        if (backendResponse.ok) {
+          const data = await backendResponse.json();
+          setMicroservices(data.microservices || []);
+          setOverallStatus(data.overall_status || 'unknown');
+          setSystemMetrics(data.system || null);
+        }
+      }
+    } catch (error) {
+      console.error('Failed to fetch microservices:', error);
+      setOverallStatus('error');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchMicroservices();
+    // Refresh every 30 seconds
+    const interval = setInterval(fetchMicroservices, 30000);
+    return () => clearInterval(interval);
+  }, []);
+
+  const getStatusIcon = (status: string) => {
+    switch (status) {
+      case 'available':
+      case 'running':
+        return <CheckCircle className="h-3 w-3 text-green-500" />;
+      case 'idle':
+        return <Activity className="h-3 w-3 text-blue-500" />;
+      case 'degraded':
+      case 'not_configured':
+        return <AlertTriangle className="h-3 w-3 text-yellow-500" />;
+      case 'error':
+      case 'unavailable':
+        return <XCircle className="h-3 w-3 text-red-500" />;
+      default:
+        return <Activity className="h-3 w-3 text-gray-400" />;
+    }
+  };
+
+  const getOverallStatusBadge = () => {
+    switch (overallStatus) {
+      case 'healthy':
+        return <Badge className="bg-green-500 text-[10px]"><CheckCircle2 className="h-2.5 w-2.5 mr-1" />Healthy</Badge>;
+      case 'degraded':
+        return <Badge className="bg-yellow-500 text-[10px]"><AlertTriangle className="h-2.5 w-2.5 mr-1" />Degraded</Badge>;
+      case 'partial':
+        return <Badge className="bg-blue-500 text-[10px]"><Activity className="h-2.5 w-2.5 mr-1" />Partial</Badge>;
+      case 'error':
+        return <Badge className="bg-red-500 text-[10px]"><XCircle className="h-2.5 w-2.5 mr-1" />Error</Badge>;
+      default:
+        return <Badge variant="outline" className="text-[10px]">Unknown</Badge>;
+    }
+  };
+
+  return (
+    <Card className="border-gray-200/60 dark:bg-card/80">
+      <CardHeader className="pb-2">
+        <CardTitle className="text-sm flex items-center gap-2">
+          <Brain className="h-4 w-4" />
+          Mikroservisler
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-5 w-5 p-0 ml-auto"
+            onClick={fetchMicroservices}
+            disabled={loading}
+          >
+            {loading ? <Loader2 className="h-3 w-3 animate-spin" /> : <RefreshCw className="h-3 w-3" />}
+          </Button>
+        </CardTitle>
+        <div className="flex items-center justify-between mt-1">
+          <span className="text-xs text-muted-foreground">Python Services</span>
+          {getOverallStatusBadge()}
+        </div>
+      </CardHeader>
+      <CardContent className="pt-0">
+        {/* System Metrics */}
+        {systemMetrics && (
+          <div className="flex items-center gap-3 mb-2 p-1.5 rounded bg-muted/30">
+            <div className="flex items-center gap-1 text-[10px]">
+              <Zap className="h-2.5 w-2.5 text-muted-foreground" />
+              <span>CPU {systemMetrics.cpu_percent?.toFixed(0)}%</span>
+            </div>
+            <div className="flex items-center gap-1 text-[10px]">
+              <Database className="h-2.5 w-2.5 text-muted-foreground" />
+              <span>RAM {systemMetrics.memory_percent?.toFixed(0)}%</span>
+            </div>
+          </div>
+        )}
+
+        {/* Microservices List */}
+        <ScrollArea className="h-[200px] pr-2">
+          <div className="space-y-1.5">
+            {microservices.map((service, index) => (
+              <div
+                key={index}
+                className="flex items-center justify-between p-1.5 rounded-md bg-muted/30 hover:bg-muted/50 transition-colors"
+              >
+                <div className="flex items-center gap-2 min-w-0">
+                  {getStatusIcon(service.status)}
+                  <div className="min-w-0">
+                    <span className="text-[11px] font-medium truncate block">{service.name}</span>
+                    {service.description && (
+                      <span className="text-[9px] text-muted-foreground truncate block max-w-[150px]">
+                        {service.description}
+                      </span>
+                    )}
+                  </div>
+                </div>
+                <Badge
+                  variant="outline"
+                  className={`text-[9px] shrink-0 ${
+                    service.status === 'available' || service.status === 'running'
+                      ? 'border-green-500/50 text-green-600'
+                      : service.status === 'error'
+                        ? 'border-red-500/50 text-red-600'
+                        : ''
+                  }`}
+                >
+                  {service.status}
+                </Badge>
+              </div>
+            ))}
+
+            {microservices.length === 0 && !loading && (
+              <div className="text-center py-4 text-xs text-muted-foreground">
+                Python servisleri erişilemez
+              </div>
+            )}
+          </div>
+        </ScrollArea>
+      </CardContent>
+    </Card>
   );
 }
 

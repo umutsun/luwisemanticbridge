@@ -235,7 +235,7 @@ async def microservices_status() -> Dict[str, Any]:
             "error": str(e)
         })
 
-    # 7. PDF Service
+    # 7. PDF Service (Basic)
     try:
         status["microservices"].append({
             "name": "PDF Service",
@@ -243,11 +243,123 @@ async def microservices_status() -> Dict[str, Any]:
             "status": "available",
             "details": {},
             "endpoints": [
-                "/api/python/pdf/extract"
+                "/api/python/pdf/extract-text"
             ]
         })
     except Exception:
         pass
+
+    # 8. Semantic Search Service
+    try:
+        from services.semantic_search_service import semantic_search_service
+        rag_settings = semantic_search_service._settings_cache
+        status["microservices"].append({
+            "name": "Semantic Search",
+            "description": "Yüksek performanslı vektör araması (pgvector + Redis cache)",
+            "status": "available",
+            "details": {
+                "cache_enabled": True,
+                "hybrid_search": True,
+                "embedding_provider": "openai/gemini"
+            },
+            "endpoints": [
+                "/api/python/semantic-search/search",
+                "/api/python/semantic-search/embedding",
+                "/api/python/semantic-search/stats"
+            ]
+        })
+    except Exception as e:
+        status["microservices"].append({
+            "name": "Semantic Search",
+            "status": "error",
+            "error": str(e)
+        })
+
+    # 9. Semantic Analyzer Service
+    try:
+        from services.semantic_analyzer_service import semantic_analyzer
+        status["microservices"].append({
+            "name": "Semantic Analyzer",
+            "description": "RAG kalite kontrolü: alıntı doğrulama, temporal analiz",
+            "status": "available",
+            "details": {
+                "features": [
+                    "quote_validation",
+                    "temporal_mismatch_detection",
+                    "verdict_extraction",
+                    "action_modality_matching"
+                ]
+            },
+            "endpoints": [
+                "/api/v2/semantic/validate-quote",
+                "/api/v2/semantic/analyze/chunks",
+                "/api/v2/semantic/filter"
+            ]
+        })
+    except Exception as e:
+        status["microservices"].append({
+            "name": "Semantic Analyzer",
+            "status": "error",
+            "error": str(e)
+        })
+
+    # 10. PDF Vision Analyzer Service
+    try:
+        from services.pdf_vision_analyzer import pdf_vision_analyzer, DocumentType
+        openai_configured = bool(os.getenv("OPENAI_API_KEY"))
+        gemini_configured = bool(os.getenv("GOOGLE_API_KEY"))
+        status["microservices"].append({
+            "name": "PDF Vision Analyzer",
+            "description": "Akıllı PDF görsel analizi (tapu, fatura, harita, vs.)",
+            "status": "available" if (openai_configured or gemini_configured) else "not_configured",
+            "details": {
+                "providers": {
+                    "openai": openai_configured,
+                    "gemini": gemini_configured
+                },
+                "supported_types": [t.value for t in DocumentType],
+                "features": [
+                    "visual_analysis",
+                    "schema_based_extraction",
+                    "auto_document_detection"
+                ]
+            },
+            "endpoints": [
+                "/api/python/pdf-vision/analyze",
+                "/api/python/pdf-vision/analyze/chat",
+                "/api/python/pdf-vision/types"
+            ]
+        })
+    except Exception as e:
+        status["microservices"].append({
+            "name": "PDF Vision Analyzer",
+            "status": "error",
+            "error": str(e)
+        })
+
+    # 11. Scheduler Service
+    try:
+        from scheduler import get_scheduler
+        scheduler = get_scheduler()
+        status["microservices"].append({
+            "name": "Scheduler",
+            "description": "APScheduler tabanlı zamanlanmış görevler",
+            "status": "running" if scheduler.running else "stopped",
+            "details": {
+                "running": scheduler.running,
+                "job_count": len(scheduler.jobs) if hasattr(scheduler, 'jobs') else 0
+            },
+            "endpoints": [
+                "/api/python/scheduler/jobs",
+                "/api/python/scheduler/jobs/{job_id}/run"
+            ]
+        })
+    except Exception as e:
+        status["microservices"].append({
+            "name": "Scheduler",
+            "status": "unavailable",
+            "error": str(e)
+        })
 
     # Calculate overall status
     service_statuses = [s.get("status", "unknown") for s in status["microservices"]]

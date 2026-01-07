@@ -43,7 +43,7 @@ logger.add(
 )
 
 # Import routers
-from routers import crawl_router, pgai_router, health_router, whisper_router, import_router, worker_router, pdf_router, csv_transform_router, embedding_router, document_analyzer_router, semantic_search_router, devops_router, semantic_analyzer_router
+from routers import crawl_router, pgai_router, health_router, whisper_router, import_router, worker_router, pdf_router, csv_transform_router, embedding_router, document_analyzer_router, semantic_search_router, devops_router, semantic_analyzer_router, pdf_vision_router
 from routers.scheduler_router import router as scheduler_router
 
 @asynccontextmanager
@@ -233,6 +233,12 @@ app.include_router(
     tags=["semantic-analyzer"]
     # RAG quality control: quote validation, chunk analysis
 )
+app.include_router(
+    pdf_vision_router,
+    prefix="/api/python",
+    tags=["pdf-vision"]
+    # Intelligent PDF visual analysis: tapu, fatura, harita, etc.
+)
 
 # Global exception handler
 @app.exception_handler(Exception)
@@ -262,6 +268,7 @@ async def root():
             "documents": "/api/python/documents",
             "semantic_search": "/api/python/semantic-search",
             "semantic_analyzer": "/api/v2/semantic",
+            "pdf_vision": "/api/python/pdf-vision",
             "scheduler": "/api/python/scheduler",
             "devops": "/api/python/devops",
             "docs": "/docs"
