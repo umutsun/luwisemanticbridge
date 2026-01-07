@@ -43,7 +43,7 @@ logger.add(
 )
 
 # Import routers
-from routers import crawl_router, pgai_router, health_router, whisper_router, import_router, worker_router, pdf_router, csv_transform_router, embedding_router, document_analyzer_router, semantic_search_router, devops_router
+from routers import crawl_router, pgai_router, health_router, whisper_router, import_router, worker_router, pdf_router, csv_transform_router, embedding_router, document_analyzer_router, semantic_search_router, devops_router, semantic_analyzer_router
 from routers.scheduler_router import router as scheduler_router
 
 @asynccontextmanager
@@ -227,6 +227,12 @@ app.include_router(
     tags=["devops"]
     # DevOps Dashboard: SSH, security scanning, deployments
 )
+app.include_router(
+    semantic_analyzer_router,
+    prefix="/api/v2/semantic",
+    tags=["semantic-analyzer"]
+    # RAG quality control: quote validation, chunk analysis
+)
 
 # Global exception handler
 @app.exception_handler(Exception)
@@ -255,6 +261,7 @@ async def root():
             "embedding": "/api/python/embedding",
             "documents": "/api/python/documents",
             "semantic_search": "/api/python/semantic-search",
+            "semantic_analyzer": "/api/v2/semantic",
             "scheduler": "/api/python/scheduler",
             "devops": "/api/python/devops",
             "docs": "/docs"
