@@ -1,0 +1,186 @@
+{
+  "name": "Dual-Action Partial Relevance Golden Tests",
+  "description": "Test cases for questions with two actions where chunk covers only one",
+  "version": "1.0.0",
+  "categories": {
+    "dual_action_keep_hang": "Bulundurmak + asmak combined questions",
+    "dual_action_rent_sell": "Kiralamak + satmak combined questions",
+    "dual_action_export_import": "İhraç + ithal combined questions",
+    "toc_detection": "TOC content detection tests"
+  },
+  "test_cases": [
+    {
+      "id": "DUAL_001",
+      "category": "dual_action_keep_hang",
+      "description": "Dual-action question (bulundurmak + asmak) - chunk covers only 'asmak'",
+      "question": "Vergi levhasını işyerimde bulundurmak ve asmak zorunlu mu?",
+      "quote": "vergi levhasının işyerine asılması zorunlu değildir.",
+      "answer": "asma zorunlu değildir",
+      "source_text": "2012 yılından itibaren vergi levhasının işyerine asılması zorunlu değildir. Ancak vergi dairesinden talep edildiğinde ibraz edilmesi gerekmektedir.",
+      "expected": {
+        "quote_valid": true,
+        "answer_mode": "definitive",
+        "issues_contains": ["partial_relevance"],
+        "min_confidence": 0.7
+      },
+      "tags": ["regression", "dual_action", "partial_relevance", "critical"]
+    },
+    {
+      "id": "DUAL_002",
+      "category": "dual_action_keep_hang",
+      "description": "Dual-action question (bulundurmak + asmak) - chunk covers only 'bulundurmak'",
+      "question": "Vergi levhasını bulundurmak ve asmak gerekli mi?",
+      "quote": "vergi levhası bulundurulması gerekmemektedir.",
+      "answer": "bulundurma zorunlu değil",
+      "source_text": "Vergi mükellefleri için işyerinde vergi levhası bulundurulması gerekmemektedir. Bu düzenleme 2012 yılında yürürlüğe girmiştir.",
+      "expected": {
+        "quote_valid": true,
+        "answer_mode": "definitive",
+        "issues_contains": ["partial_relevance"],
+        "min_confidence": 0.7
+      },
+      "tags": ["regression", "dual_action", "partial_relevance"]
+    },
+    {
+      "id": "DUAL_003",
+      "category": "dual_action_keep_hang",
+      "description": "Dual-action question - chunk covers BOTH actions",
+      "question": "Vergi levhasını bulundurmak ve asmak zorunlu mu?",
+      "quote": "vergi levhasının bulundurulması ve asılması zorunlu değildir.",
+      "answer": "ne bulundurma ne asma zorunludur",
+      "source_text": "2012 düzenlemesi ile birlikte vergi levhasının bulundurulması ve asılması zorunlu değildir. Mükelleflerin bu yükümlülüğü kaldırılmıştır.",
+      "expected": {
+        "quote_valid": true,
+        "answer_mode": "definitive",
+        "issues_not_contains": ["partial_relevance"],
+        "min_confidence": 0.8
+      },
+      "tags": ["regression", "dual_action", "full_coverage"]
+    },
+    {
+      "id": "DUAL_004",
+      "category": "dual_action_rent_sell",
+      "description": "Dual-action question (kiralamak + satmak) - chunk covers only 'kiralamak'",
+      "question": "Taşınmazı kiralamak veya satmak için vergi numarası gerekli mi?",
+      "quote": "taşınmaz kiralamalarında vergi numarası gerekmektedir.",
+      "answer": "kiralama için gerekli",
+      "source_text": "Taşınmaz kiralamalarında vergi numarası gerekmektedir. Kiracı ve kiraya veren arasındaki sözleşmede belirtilmelidir.",
+      "expected": {
+        "quote_valid": true,
+        "answer_mode": "definitive",
+        "issues_contains": ["partial_relevance"],
+        "min_confidence": 0.7
+      },
+      "tags": ["regression", "dual_action", "partial_relevance"]
+    },
+    {
+      "id": "DUAL_005",
+      "category": "dual_action_rent_sell",
+      "description": "Dual-action question (kiralamak + satmak) - chunk covers only 'satmak'",
+      "question": "Gayrimenkulü kiralamak veya satmak için tapu gerekli mi?",
+      "quote": "gayrimenkul satışlarında tapu zorunludur.",
+      "answer": "satış için tapu zorunlu",
+      "source_text": "Gayrimenkul satışlarında tapu zorunludur. Satış işlemi tapu dairesinde gerçekleştirilmelidir.",
+      "expected": {
+        "quote_valid": true,
+        "answer_mode": "definitive",
+        "issues_contains": ["partial_relevance"],
+        "min_confidence": 0.7
+      },
+      "tags": ["regression", "dual_action", "partial_relevance"]
+    },
+    {
+      "id": "DUAL_006",
+      "category": "dual_action_export_import",
+      "description": "Dual-action question (ihraç + ithal) - chunk covers only 'ihraç'",
+      "question": "Ürünleri ihraç etmek veya ithal etmek için gümrük beyannamesi zorunlu mu?",
+      "quote": "ihracat işlemlerinde gümrük beyannamesi zorunludur.",
+      "answer": "ihracat için zorunlu",
+      "source_text": "4458 sayılı Gümrük Kanunu gereğince, ihracat işlemlerinde gümrük beyannamesi zorunludur.",
+      "expected": {
+        "quote_valid": true,
+        "answer_mode": "definitive",
+        "issues_contains": ["partial_relevance"],
+        "min_confidence": 0.7
+      },
+      "tags": ["regression", "dual_action", "partial_relevance"]
+    },
+    {
+      "id": "TOC_001",
+      "category": "toc_detection",
+      "description": "Pure TOC content - numbered list headers only",
+      "question": "E-fatura zorunlu mu?",
+      "quote": "1. E-Fatura Genel Bilgiler\n2. E-Arşiv Fatura Uygulaması\n3. E-Defter Zorunluluğu",
+      "answer": "e-fatura zorunlu",
+      "source_text": "İçindekiler:\n1. E-Fatura Genel Bilgiler\n2. E-Arşiv Fatura Uygulaması\n3. E-Defter Zorunluluğu\n4. Geçiş Süreçleri\nbkz. sayfa 45",
+      "expected": {
+        "quote_valid": false,
+        "answer_mode": "cautious",
+        "issues_contains": ["no_verdict_sentence"]
+      },
+      "tags": ["regression", "toc_detection"]
+    },
+    {
+      "id": "TOC_002",
+      "category": "toc_detection",
+      "description": "Section header with page reference - should be TOC",
+      "question": "Vergi levhası gerekli mi?",
+      "quote": "bölüm 3: vergi levhası uygulamaları",
+      "answer": "gerekli değil",
+      "source_text": "Bölüm 3: Vergi Levhası Uygulamaları\nbkz. sayfa 12\nDevamı için bkz. Bölüm 4",
+      "expected": {
+        "quote_valid": false,
+        "answer_mode": "cautious",
+        "issues_contains": ["no_verdict_sentence"]
+      },
+      "tags": ["regression", "toc_detection"]
+    },
+    {
+      "id": "TOC_003",
+      "category": "toc_detection",
+      "description": "Real content with verdict - should NOT be TOC despite numbering",
+      "question": "Fatura kesme süresi ne kadar?",
+      "quote": "fatura, malın tesliminden itibaren yedi gün içinde düzenlenmesi zorunludur.",
+      "answer": "yedi gün içinde zorunlu",
+      "source_text": "VUK Madde 231 gereğince, fatura, malın tesliminden itibaren yedi gün içinde düzenlenmesi zorunludur. 1. Mal teslimi yapılır. 2. Fatura kesilir.",
+      "expected": {
+        "quote_valid": true,
+        "answer_mode": "definitive",
+        "min_confidence": 0.7
+      },
+      "tags": ["regression", "toc_detection", "false_positive_guard"]
+    },
+    {
+      "id": "DUAL_007",
+      "category": "dual_action_keep_hang",
+      "description": "Dual-action with WEAK verdict only - partial relevance + no strong verdict",
+      "question": "Vergi levhasını bulundurmak veya asmak mümkün mü?",
+      "quote": "vergi levhasının asılması mümkün bulunmaktadır.",
+      "answer": "asılması mümkündür",
+      "source_text": "İsteğe bağlı olarak vergi levhasının asılması mümkün bulunmaktadır. Zorunlu değildir ancak tercih edilebilir.",
+      "expected": {
+        "quote_valid": true,
+        "answer_mode": "definitive",
+        "issues_contains": ["partial_relevance"],
+        "min_confidence": 0.6
+      },
+      "tags": ["regression", "dual_action", "weak_verdict"]
+    },
+    {
+      "id": "DUAL_008",
+      "category": "dual_action_keep_hang",
+      "description": "Single-action question - no partial relevance expected",
+      "question": "Vergi levhasını asmak zorunlu mu?",
+      "quote": "vergi levhasının asılması zorunlu değildir.",
+      "answer": "zorunlu değildir",
+      "source_text": "2012 yılından itibaren vergi levhasının asılması zorunlu değildir.",
+      "expected": {
+        "quote_valid": true,
+        "answer_mode": "definitive",
+        "issues_not_contains": ["partial_relevance"],
+        "min_confidence": 0.8
+      },
+      "tags": ["regression", "single_action", "baseline"]
+    }
+  ]
+}

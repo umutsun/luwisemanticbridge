@@ -45,7 +45,8 @@ class AnalysisIssue(Enum):
     LOW_RELEVANCE = "low_relevance"
     QUOTE_NOT_VERBATIM = "quote_not_verbatim"  # Quote doesn't exist in source
     MODALITY_INFERENCE = "modality_inference"  # Inferred obligation from possibility
-    QUOTE_IS_SYSTEM_MESSAGE = "quote_is_system_message"  # NEW: Quote contains fail-closed message instead of real text
+    QUOTE_IS_SYSTEM_MESSAGE = "quote_is_system_message"  # Quote contains fail-closed message instead of real text
+    TOC_CONTENT = "toc_content"  # Chunk is table of contents / header-only content
 
 
 class Modality(Enum):
@@ -84,6 +85,39 @@ class PartialRelevanceReason(Enum):
     DUAL_ACTION_ONLY_ONE_COVERED = "dual_action_only_one_covered"
     ANCHOR_AMBIGUITY_SURET = "anchor_ambiguity_suret"
     ANCHOR_CERTIFIED_COPY = "anchor_certified_copy"  # onaylı/tasdikli suret
+
+
+@dataclass
+class RetrievalQualityScore:
+    """Retrieval quality metrics for RAG monitoring
+
+    This score helps identify:
+    - TOC-heavy retrievals (chunks are just headers/navigation)
+    - Low verdict coverage (chunks lack definitive statements)
+    - Modality drift (retrieved chunks answer different question type)
+
+    Score ranges:
+    - quality_score: 0-1 (higher = better retrieval)
+    - toc_rate: 0-1 (lower = better, 0.3+ is problematic)
+    - verdict_coverage: 0-1 (higher = more verdict sentences found)
+    """
+    quality_score: float  # Overall retrieval quality (0-1)
+    toc_rate: float  # Ratio of TOC-like chunks (0-1)
+    verdict_coverage: float  # Ratio of chunks with verdict sentences (0-1)
+    action_match_rate: float  # Ratio of action-matching chunks (0-1)
+    modality_match_rate: float  # Ratio of modality-matching chunks (0-1)
+    total_chunks: int  # Total chunks analyzed
+    toc_chunks: int  # Number of TOC-like chunks
+    verdict_chunks: int  # Number of chunks with verdicts
+    issues: List[str] = field(default_factory=list)  # Quality warnings
+
+    def to_dict(self) -> dict:
+        return asdict(self)
+
+    @property
+    def is_acceptable(self) -> bool:
+        """Check if retrieval quality is acceptable for RAG"""
+        return self.quality_score >= 0.5 and self.toc_rate < 0.4
 
 
 @dataclass
@@ -505,6 +539,45 @@ class SemanticAnalyzerService:
             (r"kaynak\s+metin(de)?\s+.*\s+yok", "kaynak içerik yorumu"),
         ]
 
+        # === TOC (TABLE OF CONTENTS) DETECTION PATTERNS ===
+        # These patterns detect when a chunk is header/navigation content
+        # without actual verdict or legal substance. High TOC rate = poor retrieval.
+        #
+        # Structure indicators: Numbered lists, section headers, navigation
+        # Meta indicators: Table of contents markers, index references
+        # Question indicators: Stand-alone questions without answers
+        self.toc_patterns = [
+            # STRUCTURE INDICATORS (numbered items, headers)
+            (r"^\d+\.\s*[A-ZÜÖÇŞĞİ]", "numaralı başlık"),  # "1. Vergi Levhası"
+            (r"^\d+\.\d+\s+[A-ZÜÖÇŞĞİ]", "bölüm numarası"),  # "1.2 E-Fatura"
+            (r"^[a-zıöüçşğ]\)\s+", "harf listesi"),  # "a) İşyeri..."
+            (r"^-\s+[A-ZÜÖÇŞĞİ]", "tire listesi"),  # "- Vergi Levhası"
+            (r"^\*\s+", "yıldız listesi"),  # "* Madde..."
+
+            # META INDICATORS (table of contents, index)
+            (r"içindekiler\b", "içindekiler"),
+            (r"bkz\.\s*", "bakınız referansı"),  # "bkz. sayfa 12"
+            (r"sayfa\s*\d+", "sayfa referansı"),  # "sayfa 45"
+            (r"(bölüm|kısım)\s*\d+", "bölüm referansı"),  # "Bölüm 3"
+            (r"^madde\s+\d+\s*[-:]\s*$", "tek madde başlığı"),  # "Madde 5 -"
+
+            # HEADER-ONLY CONTENT (short, no verb/verdict)
+            (r"^[A-ZÜÖÇŞĞİ][A-ZÜÖÇŞĞİa-züöçşğı\s]{5,50}$", "tek satır başlık"),  # Title-case only
+
+            # NAVIGATION PATTERNS
+            (r"devam(ı|eden)", "devam navigasyonu"),
+            (r"yukarıda\s+belirtilen", "yukarı referansı"),
+            (r"aşağıda\s+(belirtilen|açıklanan)", "aşağı referansı"),
+
+            # QUESTION-ONLY (no answer in chunk)
+            (r"\?\s*$", "soru işareti sonu"),  # Ends with question mark only
+        ]
+
+        # TOC thresholds for classification
+        self.toc_min_pattern_count = 2  # Need 2+ TOC patterns to flag as TOC
+        self.toc_max_word_count = 50  # Very short chunks are more likely TOC
+        self.toc_no_verdict_penalty = 0.3  # If no verdict, TOC patterns matter more
+
     async def load_config_from_schema(self, config: dict):
         """Load configuration from database schema
 
@@ -789,6 +862,7 @@ class SemanticAnalyzerService:
 
         # DUAL-ACTION CHECK: If question has 2+ actions from conflicting pairs
         # and chunk covers one of them, it's partial_relevance (not full mismatch)
+        question_has_dual_from_pair = False  # Track if question has both from a pair
         if len(question_normalized) >= 2:
             # Check if question has actions from a conflicting pair
             for pair in conflicting_pairs:
@@ -797,8 +871,14 @@ class SemanticAnalyzerService:
 
                 # Question has BOTH actions from a conflicting pair (e.g., "keep" AND "hang")
                 if len(question_pair_actions) == 2:
-                    # Check if chunk covers at least one
+                    question_has_dual_from_pair = True
+                    # Check how many the quote covers
                     covered = quote_normalized.intersection(pair_set)
+
+                    if len(covered) == 2:
+                        # FULL COVERAGE: quote covers BOTH actions - this is a match!
+                        return True, None, None, None, False, None, None
+
                     if len(covered) == 1:
                         # PARTIAL RELEVANCE: chunk covers only one action
                         covered_action = list(covered)[0]
@@ -815,15 +895,17 @@ class SemanticAnalyzerService:
                             PartialRelevanceReason.DUAL_ACTION_ONLY_ONE_COVERED.value
                         )
 
-        # Standard conflicting pair check (for single-action questions)
-        for q_action in question_normalized:
-            for qt_action in quote_normalized:
-                for pair in conflicting_pairs:
-                    if (q_action == pair[0] and qt_action == pair[1]) or \
-                       (q_action == pair[1] and qt_action == pair[0]):
-                        q_verb = next((a.verb for a in question_actions if a.normalized == q_action), q_action)
-                        qt_verb = next((a.verb for a in quote_actions if a.normalized == qt_action), qt_action)
-                        return False, f'"{q_verb}" ≠ "{qt_verb}"', q_verb, qt_verb, False, None, None
+        # Standard conflicting pair check (for single-action questions ONLY)
+        # Skip this check if question has BOTH actions from a conflicting pair
+        if not question_has_dual_from_pair:
+            for q_action in question_normalized:
+                for qt_action in quote_normalized:
+                    for pair in conflicting_pairs:
+                        if (q_action == pair[0] and qt_action == pair[1]) or \
+                           (q_action == pair[1] and qt_action == pair[0]):
+                            q_verb = next((a.verb for a in question_actions if a.normalized == q_action), q_action)
+                            qt_verb = next((a.verb for a in quote_actions if a.normalized == qt_action), qt_action)
+                            return False, f'"{q_verb}" ≠ "{qt_verb}"', q_verb, qt_verb, False, None, None
 
         if question_normalized and quote_normalized:
             if not question_normalized.intersection(quote_normalized):
@@ -908,6 +990,177 @@ class SemanticAnalyzerService:
             if match:
                 return True, match.group(0).strip()
         return False, None
+
+    def _check_toc_content(self, text: str) -> Tuple[bool, List[str], float]:
+        """Check if text is TOC/header content without legal substance
+
+        TOC Detection Algorithm:
+        1. Count matching TOC patterns
+        2. Check word count (short = more likely TOC)
+        3. Check for verdict sentences (presence = NOT TOC)
+        4. Combine signals with weighted scoring
+
+        Returns:
+            (is_toc, matched_patterns, toc_score)
+            - is_toc: True if chunk appears to be TOC content
+            - matched_patterns: List of matched TOC pattern descriptions
+            - toc_score: 0-1 score (higher = more TOC-like)
+        """
+        if not text:
+            return False, [], 0.0
+
+        text_lower = text.lower()
+        text_lines = text.strip().split('\n')
+        word_count = len(text.split())
+
+        matched_patterns = []
+        pattern_score = 0.0
+
+        # Check each TOC pattern
+        for pattern, description in self.toc_patterns:
+            # Check multiline patterns against each line
+            for line in text_lines:
+                if re.search(pattern, line.strip(), re.IGNORECASE):
+                    if description not in matched_patterns:
+                        matched_patterns.append(description)
+                        pattern_score += 0.15  # Each pattern adds 0.15
+                    break
+
+        # Check verdict presence (presence = NOT TOC)
+        has_verdict, _ = self._check_verdict_sentence(text)
+
+        # CALCULATE TOC SCORE
+        toc_score = 0.0
+
+        # 1. Pattern-based score (max 0.6 from patterns)
+        toc_score += min(pattern_score, 0.6)
+
+        # 2. Word count penalty (short chunks more likely TOC)
+        if word_count < 20:
+            toc_score += 0.25  # Very short = high TOC likelihood
+        elif word_count < self.toc_max_word_count:
+            toc_score += 0.15  # Short = moderate TOC likelihood
+
+        # 3. Verdict bonus (has verdict = likely NOT TOC)
+        if has_verdict:
+            toc_score -= 0.4  # Strong negative signal
+
+        # 4. Multiple patterns compound
+        if len(matched_patterns) >= 3:
+            toc_score += 0.15  # Multiple patterns = stronger signal
+
+        # Clamp to 0-1
+        toc_score = max(0.0, min(1.0, toc_score))
+
+        # Final decision: is_toc if score > 0.5 AND has 2+ patterns
+        is_toc = toc_score >= 0.5 and len(matched_patterns) >= self.toc_min_pattern_count
+
+        return is_toc, matched_patterns, toc_score
+
+    async def compute_retrieval_quality_score(
+        self,
+        question: str,
+        chunks: List[Dict],
+    ) -> RetrievalQualityScore:
+        """Compute overall retrieval quality for RAG monitoring
+
+        FORMULA:
+        quality_score = (
+            (1 - toc_rate) * 0.25 +        # TOC penalty weight
+            verdict_coverage * 0.35 +       # Verdict importance
+            action_match_rate * 0.25 +      # Action relevance
+            modality_match_rate * 0.15      # Modality alignment
+        )
+
+        Returns:
+            RetrievalQualityScore with detailed metrics
+
+        Usage:
+            quality = await analyzer.compute_retrieval_quality_score(question, chunks)
+            if not quality.is_acceptable:
+                logger.warning(f"Poor retrieval quality: {quality.issues}")
+        """
+        await self.initialize()
+
+        if not chunks:
+            return RetrievalQualityScore(
+                quality_score=0.0,
+                toc_rate=1.0,
+                verdict_coverage=0.0,
+                action_match_rate=0.0,
+                modality_match_rate=0.0,
+                total_chunks=0,
+                toc_chunks=0,
+                verdict_chunks=0,
+                issues=["No chunks provided"]
+            )
+
+        total = len(chunks)
+        toc_chunks = 0
+        verdict_chunks = 0
+        action_match_chunks = 0
+        modality_match_chunks = 0
+        issues = []
+
+        for chunk in chunks:
+            chunk_text = chunk.get("text", "")
+
+            # TOC Detection
+            is_toc, toc_patterns, toc_score = self._check_toc_content(chunk_text)
+            if is_toc:
+                toc_chunks += 1
+
+            # Verdict Detection
+            has_verdict, _ = self._check_verdict_sentence(chunk_text)
+            if has_verdict:
+                verdict_chunks += 1
+
+            # Action Match Detection
+            action_match, _, _, _, _, _, _ = self._check_action_match(question, chunk_text)
+            if action_match:
+                action_match_chunks += 1
+
+            # Modality Match Detection (check verdict against question)
+            if has_verdict:
+                modality_match, _ = self._check_modality_alignment(question, chunk_text)
+                if modality_match:
+                    modality_match_chunks += 1
+
+        # Calculate rates
+        toc_rate = toc_chunks / total
+        verdict_coverage = verdict_chunks / total
+        action_match_rate = action_match_chunks / total
+        modality_match_rate = modality_match_chunks / total if verdict_chunks > 0 else 0.0
+
+        # QUALITY SCORE FORMULA
+        quality_score = (
+            (1 - toc_rate) * 0.25 +      # TOC penalty (lower TOC = better)
+            verdict_coverage * 0.35 +     # Verdict presence (higher = better)
+            action_match_rate * 0.25 +    # Action alignment (higher = better)
+            modality_match_rate * 0.15    # Modality alignment (higher = better)
+        )
+
+        # Collect issues
+        if toc_rate >= 0.4:
+            issues.append(f"HIGH_TOC_RATE: {toc_rate:.0%} of chunks are TOC/header content")
+        if verdict_coverage < 0.3:
+            issues.append(f"LOW_VERDICT_COVERAGE: Only {verdict_coverage:.0%} of chunks have verdict sentences")
+        if action_match_rate < 0.5:
+            issues.append(f"LOW_ACTION_MATCH: Only {action_match_rate:.0%} of chunks match question action")
+        if modality_match_rate < 0.3 and verdict_chunks > 0:
+            issues.append(f"LOW_MODALITY_MATCH: Only {modality_match_rate:.0%} modality alignment")
+
+        return RetrievalQualityScore(
+            quality_score=quality_score,
+            toc_rate=toc_rate,
+            verdict_coverage=verdict_coverage,
+            action_match_rate=action_match_rate,
+            modality_match_rate=modality_match_rate,
+            total_chunks=total,
+            toc_chunks=toc_chunks,
+            verdict_chunks=verdict_chunks,
+            issues=issues
+        )
 
     # Source indicators that suggest quote is from real legal source, not system message
     SOURCE_INDICATORS = [
@@ -1399,8 +1652,22 @@ class SemanticAnalyzerService:
             else:
                 suggested_answer = self.fail_messages["generic"]
 
+        # VALIDITY DETERMINATION:
+        # partial_relevance is a WARNING, not an invalidation
+        # The quote IS valid for what it covers, just incomplete for dual-action questions
+        invalidating_issue_types = {
+            AnalysisIssue.QUOTE_IS_SYSTEM_MESSAGE.value,
+            AnalysisIssue.QUOTE_NOT_VERBATIM.value,
+            AnalysisIssue.MODALITY_INFERENCE.value,
+            AnalysisIssue.ACTION_MISMATCH.value,
+            AnalysisIssue.MODALITY_MISMATCH.value,
+            AnalysisIssue.FORBIDDEN_PATTERN.value,
+            AnalysisIssue.NO_VERDICT_SENTENCE.value,
+        }
+        invalidating_issues = [i for i in issues if i.get("type") in invalidating_issue_types]
+
         return QuoteValidation(
-            valid=len(issues) == 0,
+            valid=len(invalidating_issues) == 0,  # partial_relevance doesn't invalidate
             issues=issues,
             suggested_answer=suggested_answer,
             suggested_quote=suggested_quote,  # NEW: steril ALINTI for system message cases
