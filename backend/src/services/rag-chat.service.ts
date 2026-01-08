@@ -1570,7 +1570,7 @@ FORMAT:
       // 🎯 GUARDRAILS - Validate response quality in strict mode
       // This prevents "wrong quote from right document" and "unsupported claims" problems
       if (strictRagMode && searchResults.length > 0) {
-        // 1. Quote Selection Guardrail - Check if ALINTI contains relevant keywords
+        // 1. Quote Selection Guardrail - Check if ALINTI contains relevant keywords + topic entities
         const quoteValidation = this.validateQuoteRelevance(
           message,
           response.content,
@@ -1578,8 +1578,17 @@ FORMAT:
           responseLanguage
         );
 
+        // 🚨 HARD FAIL: If quote doesn't match topic, REMOVE the ALINTI section entirely
+        // "Yanlış alıntı göstermek, alıntı yok demekten çok daha kötü."
         if (!quoteValidation.valid) {
-          console.log(`🎯 QUOTE GUARDRAIL: ${quoteValidation.reason}`);
+          console.log(`🚨 QUOTE GUARDRAIL HARD FAIL: ${quoteValidation.reason}`);
+
+          // Remove ALINTI section from response to prevent showing irrelevant quotes
+          const cleanedResponse = this.removeInvalidQuote(response.content, responseLanguage);
+          if (cleanedResponse !== response.content) {
+            console.log(`🧹 ALINTI REMOVED: Topic mismatch - showing answer without misleading quote`);
+            response.content = cleanedResponse;
+          }
         }
 
         // 2. Answer-Evidence Consistency - Check if claims are supported by ALINTI
@@ -1589,12 +1598,8 @@ FORMAT:
         );
 
         if (!consistencyCheck.consistent) {
-          console.log(`🎯 CONSISTENCY GUARDRAIL: ${consistencyCheck.issue}`);
-
-          // Note: For now, we only LOG warnings. In production, these could:
-          // 1. Trigger a refusal if evidence doesn't support claims
-          // 2. Add a disclaimer to the response
-          // 3. Request a retry with stricter quote selection
+          console.log(`⚠️ CONSISTENCY GUARDRAIL: ${consistencyCheck.issue}`);
+          // Note: For now, only log. Future: could add disclaimer or retry
         }
       }
 
@@ -1869,6 +1874,54 @@ FORMAT:
     cleaned = cleaned.trim();
 
     return cleaned;
+  }
+
+  /**
+   * 🧹 REMOVE INVALID QUOTE (Hard Fail)
+   * Removes ALINTI/QUOTE section from response when topic mismatch is detected
+   * Replaces with a clean "no relevant quote found" message
+   *
+   * "Yanlış alıntı göstermek, alıntı yok demekten çok daha kötü."
+   */
+  private removeInvalidQuote(responseText: string, language: string = 'tr'): string {
+    let cleaned = responseText;
+
+    // Message to show instead of invalid quote
+    const noQuoteMessage = language === 'tr'
+      ? '**ALINTI**\n_Bu soru için uygun alıntı bulunamadı. Yukarıdaki cevap, kaynaklardaki bilgilerden çıkarım yapılarak oluşturulmuştur._'
+      : '**QUOTE**\n_No suitable quote found for this question. The answer above was derived from available sources._';
+
+    // Pattern to match ALINTI section (Turkish)
+    const alintıPattern = /\*\*ALINTI\*\*[\s\S]*?(?=\*\*[A-ZÇĞİÖŞÜ][A-ZÇĞİÖŞÜa-zçğıöşü]*\*\*|\n\n\n|$)/gi;
+
+    // Pattern to match QUOTE section (English)
+    const quotePattern = /\*\*QUOTE\*\*[\s\S]*?(?=\*\*[A-Z][A-Za-z]*\*\*|\n\n\n|$)/gi;
+
+    // Check if there's an ALINTI section
+    const hasAlinti = alintıPattern.test(cleaned);
+    alintıPattern.lastIndex = 0; // Reset regex state
+
+    const hasQuote = quotePattern.test(cleaned);
+    quotePattern.lastIndex = 0;
+
+    if (hasAlinti) {
+      // Replace ALINTI section with clean message
+      cleaned = cleaned.replace(alintıPattern, noQuoteMessage + '\n\n');
+      console.log(`🧹 Removed invalid ALINTI section`);
+    } else if (hasQuote) {
+      // Replace QUOTE section with clean message
+      cleaned = cleaned.replace(quotePattern, noQuoteMessage + '\n\n');
+      console.log(`🧹 Removed invalid QUOTE section`);
+    }
+
+    // Clean up any orphaned citation references that pointed to the removed quote
+    // e.g., [Kaynak 1] references that no longer have context
+    // Keep [Kaynak X] in CEVAP section as they reference the source list
+
+    // Clean up multiple newlines
+    cleaned = cleaned.replace(/\n{3,}/g, '\n\n');
+
+    return cleaned.trim();
   }
 
   /**
