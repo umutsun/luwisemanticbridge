@@ -114,6 +114,35 @@ export interface RAGSettings {
     preferredSourceTypes?: string[];
     tocDetection?: any;
     htmlCleaningPatterns?: string[];
+    quotePrefixPatterns?: string[];
+    genericTitlePatterns?: string[];
+    sectionHeadingsToStrip?: Record<string, string[]>;
+    fieldLabels?: Record<string, string>;
+    citationPriorityFields?: string[];
+    strictContextTemplate?: any;
+
+    // Source Type Priority (dynamic ordering)
+    sourceTypePriority?: string[];
+    sourceTypePriorityEnabled?: boolean;
+
+    // Refusal Policy
+    refusalPolicy?: {
+        clearSourcesOnRefusal?: boolean;
+        cleanResponseTextOnRefusal?: boolean;
+        patterns?: string[];
+    };
+
+    // Fast Mode Prompts
+    fastModePromptTr?: string;
+    fastModePromptEn?: string;
+
+    // High/Low Confidence Thresholds
+    highConfidenceThreshold?: number;
+    lowConfidenceThreshold?: number;
+
+    // Default System Prompts
+    defaultSystemPromptTr?: string;
+    defaultSystemPromptEn?: string;
 
     // Legacy
     aiProvider?: string;

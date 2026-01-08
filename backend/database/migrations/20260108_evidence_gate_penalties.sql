@@ -92,6 +92,30 @@ VALUES (
 ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, description = EXCLUDED.description;
 
 -- =============================================
+-- SOURCE TYPE PRIORITY (Dynamic ordering)
+-- =============================================
+-- Controls which source types are preferred in results
+-- Higher position = higher priority
+
+INSERT INTO settings (key, value, category, description)
+VALUES (
+  'ragSettings.sourceTypePriority',
+  '["ozelge", "kanun", "teblig", "sorucevap", "danistay", "makale", "document"]',
+  'rag',
+  'JSON array of source types in priority order. First = highest priority.'
+)
+ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, description = EXCLUDED.description;
+
+INSERT INTO settings (key, value, category, description)
+VALUES (
+  'ragSettings.sourceTypePriorityEnabled',
+  'true',
+  'rag',
+  'Enable source type priority ordering'
+)
+ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, description = EXCLUDED.description;
+
+-- =============================================
 -- REFUSAL POLICY SETTINGS
 -- =============================================
 -- Controls how the system handles "not found" responses

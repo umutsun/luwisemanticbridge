@@ -900,6 +900,9 @@ ${questionLabel}: ${message}`;
         'ragSettings.sourceTypeNormalizations',
         'ragSettings.preferredSourceTypes',
         'ragSettings.tocDetection',
+        // Source type priority (dynamic ordering)
+        'ragSettings.sourceTypePriority',
+        'ragSettings.sourceTypePriorityEnabled',
         'ragSettings.htmlCleaningPatterns',
         'ragSettings.quotePrefixPatterns',
         'ragSettings.genericTitlePatterns',
@@ -990,11 +993,54 @@ ${questionLabel}: ${message}`;
       }
       timings.search = Date.now() - startSearch;
 
-      // Sort by similarity score
+      // Sort by similarity score with optional source type priority
+      const sourceTypePriorityEnabled = settingsMap.get('ragSettings.sourceTypePriorityEnabled') !== 'false';
+      let sourceTypePriority: string[] = [];
+      if (sourceTypePriorityEnabled) {
+        const priorityRaw = settingsMap.get('ragSettings.sourceTypePriority');
+        if (priorityRaw) {
+          try {
+            sourceTypePriority = JSON.parse(priorityRaw);
+          } catch (e) {
+            // Default priority if parse fails
+            sourceTypePriority = ['ozelge', 'kanun', 'teblig', 'sorucevap', 'danistay', 'makale', 'document'];
+          }
+        } else {
+          sourceTypePriority = ['ozelge', 'kanun', 'teblig', 'sorucevap', 'danistay', 'makale', 'document'];
+        }
+      }
+
       searchResults = allResults.sort((a, b) => {
         const scoreA = a.score || (a.similarity_score * 100) || 0;
         const scoreB = b.score || (b.similarity_score * 100) || 0;
-        return scoreB - scoreA;
+
+        // Primary sort: by score (descending)
+        const scoreDiff = scoreB - scoreA;
+
+        // If scores are within 5% tolerance and source type priority is enabled,
+        // use source type as secondary sort
+        if (sourceTypePriorityEnabled && Math.abs(scoreDiff) < 5) {
+          const typeA = (a.source_type || a.metadata?.source_type || '').toLowerCase();
+          const typeB = (b.source_type || b.metadata?.source_type || '').toLowerCase();
+
+          // Get priority index (lower = higher priority, -1 means not in list = lowest priority)
+          const getPriority = (type: string): number => {
+            for (let i = 0; i < sourceTypePriority.length; i++) {
+              if (type.includes(sourceTypePriority[i])) return i;
+            }
+            return sourceTypePriority.length; // Lowest priority if not found
+          };
+
+          const priorityA = getPriority(typeA);
+          const priorityB = getPriority(typeB);
+
+          // If priorities differ, sort by priority
+          if (priorityA !== priorityB) {
+            return priorityA - priorityB;
+          }
+        }
+
+        return scoreDiff;
       });
 
       initialDisplayCount = Math.min(minResults, searchResults.length);
