@@ -92,6 +92,38 @@ VALUES (
 ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, description = EXCLUDED.description;
 
 -- =============================================
+-- REFUSAL POLICY SETTINGS
+-- =============================================
+-- Controls how the system handles "not found" responses
+
+INSERT INTO settings (key, value, category, description)
+VALUES (
+  'ragSettings.refusalPolicy.clearSourcesOnRefusal',
+  'true',
+  'rag',
+  'Clear sources array when LLM response indicates refusal/not found'
+)
+ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, description = EXCLUDED.description;
+
+INSERT INTO settings (key, value, category, description)
+VALUES (
+  'ragSettings.refusalPolicy.cleanResponseTextOnRefusal',
+  'true',
+  'rag',
+  'Remove [Kaynak X] and ALINTI blocks from response when refusal detected'
+)
+ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, description = EXCLUDED.description;
+
+INSERT INTO settings (key, value, category, description)
+VALUES (
+  'ragSettings.refusalPolicy.patterns',
+  '["bulunamadı", "hüküm bulunamadı", "kesin hüküm.*bulunamadı", "yeterli.*kaynak.*yok", "yeterli bilgi bulunamadı", "bu konuda.*bilgi.*yok", "no.*relevant.*found", "could not find", "no definitive ruling"]',
+  'rag',
+  'JSON array of regex patterns that indicate a refusal response'
+)
+ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, description = EXCLUDED.description;
+
+-- =============================================
 -- VERIFICATION QUERY
 -- =============================================
 -- Run this to verify:

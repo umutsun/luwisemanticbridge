@@ -872,6 +872,10 @@ ${questionLabel}: ${message}`;
         'ragSettings.evidenceGateMinChunks',
         'ragSettings.evidenceGateRefusalTr',
         'ragSettings.evidenceGateRefusalEn',
+        // Refusal policy settings
+        'ragSettings.refusalPolicy.clearSourcesOnRefusal',
+        'ragSettings.refusalPolicy.cleanResponseTextOnRefusal',
+        'ragSettings.refusalPolicy.patterns',
         // Prompt templates (fully configurable)
         'ragSettings.strictModePromptTr',
         'ragSettings.strictModePromptEn',
@@ -1552,21 +1556,31 @@ ${questionLabel}: ${message}`;
       // ========================================
       // REFUSAL DETECTION: Clear sources if LLM couldn't find verdict
       // ========================================
-      // If LLM response indicates "not found" / "no verdict", sources should be cleared
+      // Configurable via DB: ragSettings.refusalPolicy.*
       // This prevents showing irrelevant sources when LLM admits it couldn't answer
-      const refusalPatterns = [
-        'bulunamadı',
-        'bulunamadi',
-        'hüküm bulunamadı',
-        'kesin hüküm.*bulunamadı',
-        'yeterli.*kaynak.*yok',
-        'yeterli bilgi bulunamadı',
-        'ilgili kaynak.*bulunamadı',
-        'bu konuda.*bilgi.*yok',
-        'no.*relevant.*found',
-        'could not find',
-        'no definitive ruling'
+
+      // Load refusal policy from settings (with defaults)
+      const clearSourcesOnRefusal = settingsMap.get('ragSettings.refusalPolicy.clearSourcesOnRefusal') !== 'false';
+      const cleanResponseOnRefusal = settingsMap.get('ragSettings.refusalPolicy.cleanResponseTextOnRefusal') !== 'false';
+
+      // Load patterns from DB or use defaults
+      const defaultPatterns = [
+        'bulunamadı', 'bulunamadi', 'hüküm bulunamadı',
+        'kesin hüküm.*bulunamadı', 'yeterli.*kaynak.*yok',
+        'yeterli bilgi bulunamadı', 'ilgili kaynak.*bulunamadı',
+        'bu konuda.*bilgi.*yok', 'no.*relevant.*found',
+        'could not find', 'no definitive ruling'
       ];
+
+      let refusalPatterns = defaultPatterns;
+      const patternsRaw = settingsMap.get('ragSettings.refusalPolicy.patterns');
+      if (patternsRaw) {
+        try {
+          refusalPatterns = JSON.parse(patternsRaw);
+        } catch (e) {
+          console.warn('Failed to parse refusal patterns from settings, using defaults');
+        }
+      }
 
       const responseText = response.content.toLowerCase();
       const isRefusalResponse = refusalPatterns.some(pattern => {
@@ -1574,20 +1588,25 @@ ${questionLabel}: ${message}`;
         return regex.test(responseText);
       });
 
-      // If refusal detected, clear sources AND clean response text
+      // If refusal detected, apply configured policies
       let finalSources = formattedSources;
       let finalResponse = response.content;
 
       if (isRefusalResponse) {
-        console.log(`🚫 REFUSAL DETECTED in LLM response - clearing ${formattedSources.length} sources`);
+        console.log(`🚫 REFUSAL DETECTED: clearSources=${clearSourcesOnRefusal}, cleanResponse=${cleanResponseOnRefusal}`);
         console.log(`   Original response: "${response.content.substring(0, 150)}..."`);
 
-        // Clear sources
-        finalSources = [];
+        // Clear sources if policy enabled
+        if (clearSourcesOnRefusal) {
+          console.log(`   Clearing ${formattedSources.length} sources`);
+          finalSources = [];
+        }
 
-        // Clean response text: remove [Kaynak X], **ALINTI**, citation markers
-        finalResponse = this.cleanRefusalResponse(response.content);
-        console.log(`   Cleaned response: "${finalResponse.substring(0, 150)}..."`);
+        // Clean response text if policy enabled
+        if (cleanResponseOnRefusal) {
+          finalResponse = this.cleanRefusalResponse(response.content);
+          console.log(`   Cleaned response: "${finalResponse.substring(0, 150)}..."`);
+        }
       }
 
       // Log sources content for debugging
