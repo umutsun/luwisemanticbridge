@@ -116,6 +116,20 @@ VALUES (
 ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, description = EXCLUDED.description;
 
 -- =============================================
+-- STRICT MODE DETERMINISM
+-- =============================================
+-- Controls LLM temperature for strict mode (lower = more deterministic)
+
+INSERT INTO settings (key, value, category, description)
+VALUES (
+  'ragSettings.strictModeTemperature',
+  '0',
+  'rag',
+  'Temperature for strict mode LLM calls. 0 = fully deterministic. Range: 0-1'
+)
+ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, description = EXCLUDED.description;
+
+-- =============================================
 -- REFUSAL POLICY SETTINGS
 -- =============================================
 -- Controls how the system handles "not found" responses

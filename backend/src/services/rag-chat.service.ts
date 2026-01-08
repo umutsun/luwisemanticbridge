@@ -896,6 +896,7 @@ ${questionLabel}: ${message}`;
         // Mode toggles
         'ragSettings.disableCitationText',
         'ragSettings.strictMode',
+        'ragSettings.strictModeTemperature',
         // JSON configurations
         'ragSettings.sourceTypeNormalizations',
         'ragSettings.preferredSourceTypes',
@@ -1260,7 +1261,19 @@ ${questionLabel}: ${message}`;
       // DEFAULT: true - Legal platforms require source-faithful responses by default
       // NOTE: strictMode takes priority over citationsDisabled/disableCitationText
       const strictRagMode = settingsMap.get('ragSettings.strictMode') !== 'false';
-      console.log(`🔍 RAG MODE CHECK: strictRagMode=${strictRagMode}, citationsDisabled=${citationsDisabled}, disableCitationText=${disableCitationText}`);
+
+      // 🎯 NON-DETERMINISM FIX: Override temperature for strict mode
+      // Lower temperature = more consistent/deterministic responses
+      // Default: 0 for strict mode (fully deterministic)
+      if (strictRagMode) {
+        const strictModeTemp = parseFloat(settingsMap.get('ragSettings.strictModeTemperature') || '0');
+        if (options.temperature === undefined || options.temperature > strictModeTemp) {
+          console.log(`🎯 STRICT MODE: Overriding temperature ${options.temperature ?? 'undefined'} → ${strictModeTemp} for deterministic responses`);
+          options.temperature = strictModeTemp;
+        }
+      }
+
+      console.log(`🔍 RAG MODE CHECK: strictRagMode=${strictRagMode}, citationsDisabled=${citationsDisabled}, disableCitationText=${disableCitationText}, temperature=${options.temperature}`);
 
       // ⚡ FAST MODE: Only when strict mode is OFF and citations are disabled
       if (!strictRagMode && (citationsDisabled || disableCitationText)) {
@@ -1491,6 +1504,37 @@ ${questionLabel}: ${message}`;
       // This runs AFTER strip to ensure [Kaynak X] references are preserved
       if (strictRagMode && searchResults.length > 0) {
         response.content = this.fixEmptySourceReferences(response.content, searchResults, settingsMap, message);
+      }
+
+      // 🎯 GUARDRAILS - Validate response quality in strict mode
+      // This prevents "wrong quote from right document" and "unsupported claims" problems
+      if (strictRagMode && searchResults.length > 0) {
+        // 1. Quote Selection Guardrail - Check if ALINTI contains relevant keywords
+        const quoteValidation = this.validateQuoteRelevance(
+          message,
+          response.content,
+          searchResults,
+          responseLanguage
+        );
+
+        if (!quoteValidation.valid) {
+          console.log(`🎯 QUOTE GUARDRAIL: ${quoteValidation.reason}`);
+        }
+
+        // 2. Answer-Evidence Consistency - Check if claims are supported by ALINTI
+        const consistencyCheck = this.validateAnswerEvidenceConsistency(
+          response.content,
+          responseLanguage
+        );
+
+        if (!consistencyCheck.consistent) {
+          console.log(`🎯 CONSISTENCY GUARDRAIL: ${consistencyCheck.issue}`);
+
+          // Note: For now, we only LOG warnings. In production, these could:
+          // 1. Trigger a refusal if evidence doesn't support claims
+          // 2. Add a disclaimer to the response
+          // 3. Request a retry with stricter quote selection
+        }
       }
 
       // 5. Save messages to database with error handling
@@ -1736,6 +1780,215 @@ ${questionLabel}: ${message}`;
     cleaned = cleaned.trim();
 
     return cleaned;
+  }
+
+  /**
+   * 🎯 QUOTE SELECTION GUARDRAIL
+   * Validates that ALINTI section contains keywords relevant to the question
+   * This prevents "wrong quote from right document" problem
+   *
+   * Returns: { valid: boolean, reason?: string, suggestedRefusal?: string }
+   */
+  private validateQuoteRelevance(
+    question: string,
+    responseText: string,
+    searchResults: any[],
+    language: string = 'tr'
+  ): { valid: boolean; reason?: string; fixedResponse?: string } {
+    // Extract ALINTI section from response
+    const alintıMatch = responseText.match(/\*\*ALINTI\*\*[\s\S]*?(?=\*\*[A-ZÇĞİÖŞÜ]|\n\n\n|$)/i);
+    const quoteMatch = responseText.match(/\*\*QUOTE\*\*[\s\S]*?(?=\*\*[A-Z]|\n\n\n|$)/i);
+    const alintıText = (alintıMatch?.[0] || quoteMatch?.[0] || '').toLowerCase();
+
+    // If no ALINTI section, nothing to validate
+    if (!alintıText || alintıText.length < 20) {
+      return { valid: true };
+    }
+
+    // Extract key terms from question
+    const questionLower = question.toLowerCase();
+    const keyTerms = this.extractKeyTerms(questionLower);
+
+    if (keyTerms.length === 0) {
+      // No specific key terms to check
+      return { valid: true };
+    }
+
+    // Check if ALINTI contains at least one key term
+    const foundTerms = keyTerms.filter(term => alintıText.includes(term));
+
+    if (foundTerms.length > 0) {
+      console.log(`✅ QUOTE GUARDRAIL PASS: Found ${foundTerms.length} key terms in ALINTI: [${foundTerms.join(', ')}]`);
+      return { valid: true };
+    }
+
+    // ALINTI doesn't contain key terms - this is a potential evidence-mismatch
+    console.log(`⚠️ QUOTE GUARDRAIL WARNING: ALINTI doesn't contain key terms: [${keyTerms.join(', ')}]`);
+
+    // Check if any source has a sentence containing the key terms
+    const betterQuote = this.findBetterQuote(searchResults, keyTerms);
+
+    if (betterQuote) {
+      console.log(`🔧 QUOTE GUARDRAIL: Found better quote containing key terms`);
+      // Return suggestion to use better quote (but don't modify response here)
+      return {
+        valid: false,
+        reason: `ALINTI doesn't contain key terms [${keyTerms.join(', ')}]. Better quote found in sources.`,
+        // We could fix response here but for now just log warning
+      };
+    }
+
+    // No better quote found - the evidence doesn't support the claim
+    console.log(`❌ QUOTE GUARDRAIL FAIL: No evidence found containing key terms [${keyTerms.join(', ')}]`);
+    return {
+      valid: false,
+      reason: `No evidence found containing key terms [${keyTerms.join(', ')}]`
+    };
+  }
+
+  /**
+   * 🎯 ANSWER-EVIDENCE CONSISTENCY CHECK
+   * Validates that claims in the answer (CEVAP section) are supported by the ALINTI
+   * Specifically checks for penalty/requirement claims
+   */
+  private validateAnswerEvidenceConsistency(
+    responseText: string,
+    language: string = 'tr'
+  ): { consistent: boolean; issue?: string } {
+    // Extract CEVAP/ANSWER section
+    const cevapMatch = responseText.match(/\*\*CEVAP\*\*\s*([\s\S]*?)(?=\*\*ALINTI|\*\*QUOTE|$)/i);
+    const answerMatch = responseText.match(/\*\*ANSWER\*\*\s*([\s\S]*?)(?=\*\*QUOTE|$)/i);
+    const answerText = (cevapMatch?.[1] || answerMatch?.[1] || '').toLowerCase();
+
+    // Extract ALINTI section
+    const alintıMatch = responseText.match(/\*\*ALINTI\*\*\s*([\s\S]*?)(?=\*\*[A-ZÇĞİÖŞÜ]|\n\n\n|$)/i);
+    const quoteMatch = responseText.match(/\*\*QUOTE\*\*\s*([\s\S]*?)(?=\*\*[A-Z]|\n\n\n|$)/i);
+    const alintıText = (alintıMatch?.[1] || quoteMatch?.[1] || '').toLowerCase();
+
+    if (!answerText || !alintıText) {
+      return { consistent: true };
+    }
+
+    // Define claim-evidence pairs that must match
+    // If answer contains claim, evidence must contain supporting term
+    const claimEvidencePairs = [
+      // Penalty claims
+      {
+        answerPatterns: ['ceza uygulanır', 'ceza kesilir', 'ceza öngörülmüştür', 'cezaya tabi', 'usulsüzlük cezası var'],
+        evidenceTerms: ['ceza', 'usulsüzlük', 'müeyyide', 'yaptırım'],
+        claimType: 'penalty_applies'
+      },
+      {
+        answerPatterns: ['ceza uygulanmaz', 'ceza kesilmez', 'ceza yok', 'cezai sorumluluk yok'],
+        evidenceTerms: ['ceza', 'usulsüzlük', 'müeyyide', 'yaptırım', 'kaldırılmış', 'ortadan kalkmış'],
+        claimType: 'penalty_not_applies'
+      },
+      // Requirement claims
+      {
+        answerPatterns: ['zorunludur', 'mecburidir', 'gereklidir', 'şarttır', 'asılmalıdır', 'yapılmalıdır'],
+        evidenceTerms: ['zorunlu', 'mecburi', 'gerekli', 'şart', 'yapılmalı', 'mükellef'],
+        claimType: 'requirement'
+      },
+      {
+        answerPatterns: ['zorunlu değildir', 'mecburi değildir', 'gerekli değildir', 'kaldırılmıştır', 'asılmasına gerek yok'],
+        evidenceTerms: ['zorunlu değil', 'kaldırılmış', 'ortadan kalkmış', 'gerekmemekte', 'yükümlülük yok'],
+        claimType: 'no_requirement'
+      }
+    ];
+
+    for (const pair of claimEvidencePairs) {
+      // Check if answer contains this type of claim
+      const hasClaim = pair.answerPatterns.some(pattern => answerText.includes(pattern));
+
+      if (hasClaim) {
+        // Check if evidence supports this claim
+        const hasEvidence = pair.evidenceTerms.some(term => alintıText.includes(term));
+
+        if (!hasEvidence) {
+          console.log(`⚠️ ANSWER-EVIDENCE INCONSISTENCY: Claim type "${pair.claimType}" not supported by ALINTI`);
+          return {
+            consistent: false,
+            issue: `Answer makes "${pair.claimType}" claim but ALINTI doesn't contain supporting evidence [${pair.evidenceTerms.join('/')}]`
+          };
+        } else {
+          console.log(`✅ ANSWER-EVIDENCE CONSISTENT: Claim "${pair.claimType}" supported by evidence`);
+        }
+      }
+    }
+
+    return { consistent: true };
+  }
+
+  /**
+   * Extract key terms from question for quote validation
+   * Focuses on Turkish legal/tax terms and specific identifiers
+   */
+  private extractKeyTerms(question: string): string[] {
+    const terms: string[] = [];
+
+    // Legal/tax-specific terms (Turkish)
+    const legalTerms = [
+      'ceza', 'usulsüzlük', 'vergi', 'kdv', 'katma değer',
+      'tevkifat', 'stopaj', 'beyan', 'matrah', 'oran',
+      'muafiyet', 'istisna', 'indirim', 'mahsup',
+      'tebliğ', 'kanun', 'yönetmelik', 'genelge', 'özelge',
+      'seri', 'sayı', 'madde', 'fıkra', 'bent',
+      'mükellef', 'sorumlu', 'tahakkuk', 'tahsil',
+      'fatura', 'belge', 'kayıt', 'defter',
+      'zorunlu', 'mecburi', 'gerekli', 'şart'
+    ];
+
+    // Check for legal terms
+    legalTerms.forEach(term => {
+      if (question.includes(term)) {
+        terms.push(term);
+      }
+    });
+
+    // Extract numbers (like 107, 2024, etc.) - important for tebliğ references
+    const numberMatches = question.match(/\b\d{2,4}\b/g);
+    if (numberMatches) {
+      numberMatches.forEach(num => {
+        // Only include meaningful numbers (not years before 1990 or generic small numbers)
+        const numVal = parseInt(num);
+        if (numVal >= 10 && (numVal <= 500 || (numVal >= 1990 && numVal <= 2030))) {
+          terms.push(num);
+        }
+      });
+    }
+
+    // Extract specific keywords from question patterns
+    // "X var mı?" -> look for X in evidence
+    const varMiMatch = question.match(/(\w+)\s+(var|yok|uygulanır|uygulanmaz)\s*(mı|mi|mu|mü)?/i);
+    if (varMiMatch && varMiMatch[1].length > 3) {
+      terms.push(varMiMatch[1].toLowerCase());
+    }
+
+    // Deduplicate
+    return [...new Set(terms)];
+  }
+
+  /**
+   * Find a better quote from search results that contains key terms
+   */
+  private findBetterQuote(searchResults: any[], keyTerms: string[]): string | null {
+    for (const result of searchResults) {
+      const content = (result.content || result.excerpt || '').toLowerCase();
+
+      // Split content into sentences
+      const sentences = content.split(/[.!?]\s+/);
+
+      for (const sentence of sentences) {
+        // Check if sentence contains any key term
+        const hasKeyTerm = keyTerms.some(term => sentence.includes(term));
+        if (hasKeyTerm && sentence.length > 30 && sentence.length < 500) {
+          // Found a sentence with key term
+          return sentence.trim();
+        }
+      }
+    }
+
+    return null;
   }
 
   /**
