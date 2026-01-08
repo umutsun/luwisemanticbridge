@@ -897,6 +897,10 @@ ${questionLabel}: ${message}`;
         'ragSettings.disableCitationText',
         'ragSettings.strictMode',
         'ragSettings.strictModeTemperature',
+        'ragSettings.strictModeLevel',
+        // Level-specific prompts
+        'ragSettings.mediumModePromptTr',
+        'ragSettings.mediumModePromptEn',
         // JSON configurations
         'ragSettings.sourceTypeNormalizations',
         'ragSettings.preferredSourceTypes',
@@ -1320,23 +1324,76 @@ ${questionLabel}: ${message}`;
         // ========================================
         // STRICT RAG MODE - Source-faithful responses
         // ========================================
-        // ALL prompts loaded from database - no hardcoded defaults
-        console.log(`✅ STRICT MODE ACTIVE - Using database-configured prompts`);
+        // Supports multiple strictness levels: strict/medium/relaxed
+        // - strict: Requires exact verdict sentence (mümkündür, uygundur, etc.) - high refusal
+        // - medium: Requires citation but accepts any conclusive statement - balanced
+        // - relaxed: Requires citation, more flexible interpretation - low refusal
 
-        // Load strict mode prompts from database (new keys first, then legacy fallback)
-        const strictInstructionTr =
-          settingsMap.get('ragSettings.strictModePromptTr') ||
-          settingsMap.get('ragSettings.strictModeInstructionTr') ||
-          'Kaynakları kullanarak kısa ve öz cevap ver. [Kaynak X] formatında referans ekle.';
+        const strictModeLevel = settingsMap.get('ragSettings.strictModeLevel') || 'medium'; // Default to medium for better recall
+        console.log(`✅ STRICT MODE ACTIVE - Level: ${strictModeLevel.toUpperCase()}`);
 
-        const strictInstructionEn =
-          settingsMap.get('ragSettings.strictModePromptEn') ||
-          settingsMap.get('ragSettings.strictModeInstructionEn') ||
-          'Provide a concise answer using sources. Add references in [Source X] format.';
+        // Default medium-mode prompts (better recall, still requires citation)
+        const defaultMediumPromptTr = `Aşağıda numaralanmış kaynaklar var.
+
+CEVAPLAMA KURALLARI:
+1. SADECE kaynaklardaki bilgiyi kullan
+2. Her iddiayı [Kaynak X] ile referansla
+3. Kaynak metninden doğrudan alıntı yap
+4. Kaynaklarda yoksa "Bu konuda kaynaklarda bilgi bulunamadı" de
+
+FORMAT:
+**CEVAP**
+[Cevabın] [Kaynak X]
+
+**ALINTI**
+"[Kaynaktan alıntı]" — Tür: [tür], Başlık: [başlık] [Kaynak X]`;
+
+        const defaultMediumPromptEn = `Sources are numbered below.
+
+ANSWERING RULES:
+1. Use ONLY information from sources
+2. Reference every claim with [Source X]
+3. Quote directly from source text
+4. If not in sources, say "No information found on this topic in the sources"
+
+FORMAT:
+**ANSWER**
+[Your answer] [Source X]
+
+**QUOTE**
+"[Quote from source]" — Type: [type], Title: [title] [Source X]`;
+
+        // Select prompt based on strictModeLevel
+        let strictInstructionTr: string;
+        let strictInstructionEn: string;
+
+        if (strictModeLevel === 'strict') {
+          // Full strict mode - requires exact verdict patterns (high refusal)
+          strictInstructionTr =
+            settingsMap.get('ragSettings.strictModePromptTr') ||
+            settingsMap.get('ragSettings.strictModeInstructionTr') ||
+            'Kaynakları kullanarak kısa ve öz cevap ver. [Kaynak X] formatında referans ekle.';
+
+          strictInstructionEn =
+            settingsMap.get('ragSettings.strictModePromptEn') ||
+            settingsMap.get('ragSettings.strictModeInstructionEn') ||
+            'Provide a concise answer using sources. Add references in [Source X] format.';
+        } else {
+          // Medium or relaxed - better recall, still requires citation
+          strictInstructionTr =
+            settingsMap.get('ragSettings.mediumModePromptTr') ||
+            defaultMediumPromptTr;
+
+          strictInstructionEn =
+            settingsMap.get('ragSettings.mediumModePromptEn') ||
+            defaultMediumPromptEn;
+        }
 
         const strictInstruction = responseLanguage === 'en' ? strictInstructionEn : strictInstructionTr;
-        const isCustomPrompt = settingsMap.get('ragSettings.strictModePromptTr') || settingsMap.get('ragSettings.strictModeInstructionTr');
-        console.log(`📋 STRICT MODE: Using ${isCustomPrompt ? 'database' : 'minimal fallback'} prompt (${responseLanguage})`);
+        const isCustomPrompt = strictModeLevel === 'strict'
+          ? (settingsMap.get('ragSettings.strictModePromptTr') || settingsMap.get('ragSettings.strictModeInstructionTr'))
+          : settingsMap.get('ragSettings.mediumModePromptTr');
+        console.log(`📋 STRICT MODE [${strictModeLevel}]: Using ${isCustomPrompt ? 'database' : 'default'} prompt (${responseLanguage})`);
 
         // Load context template from database or use defaults
         const contextTemplateRaw = settingsMap.get('ragSettings.strictContextTemplate');
@@ -1683,8 +1740,36 @@ ${questionLabel}: ${message}`;
       let finalResponse = response.content;
 
       if (isRefusalResponse) {
-        console.log(`🚫 REFUSAL DETECTED: clearSources=${clearSourcesOnRefusal}, cleanResponse=${cleanResponseOnRefusal}`);
-        console.log(`   Original response: "${response.content.substring(0, 150)}..."`);
+        // 🎯 REFUSAL TYPE DETECTION: Gate-based vs Prompt-based
+        // Gate-based: Evidence Gate blocked due to low scores (correct behavior)
+        // Prompt-based: Gate passed but LLM couldn't find verdict sentence (potential over-strict issue)
+        const refusalType = searchResults.length > 0 && passesEvidenceGate
+          ? 'PROMPT_REFUSAL'  // Gate passed, LLM refused - prompt may be too strict
+          : 'GATE_REFUSAL';  // Gate blocked - correct behavior
+
+        // Get the strictModeLevel for logging
+        const currentStrictLevel = settingsMap.get('ragSettings.strictModeLevel') || 'medium';
+
+        console.log(`🚫 ${refusalType} DETECTED`);
+        console.log(`   Refusal Type: ${refusalType}`);
+        console.log(`   Strict Mode Level: ${currentStrictLevel}`);
+        console.log(`   Evidence Gate: ${passesEvidenceGate ? 'PASSED' : 'FAILED'} (${qualityChunks.length}/${evidenceGateMinChunks} quality chunks)`);
+        console.log(`   Top Score: ${(bestScore * 100).toFixed(1)}% (min: ${(evidenceGateMinScore * 100).toFixed(0)}%)`);
+        console.log(`   Search Results: ${searchResults.length} total`);
+        console.log(`   Policy: clearSources=${clearSourcesOnRefusal}, cleanResponse=${cleanResponseOnRefusal}`);
+        console.log(`   Original response: "${response.content.substring(0, 200)}..."`);
+
+        // Log which pattern triggered the refusal
+        const triggeringPattern = refusalPatterns.find(pattern => {
+          const regex = new RegExp(pattern, 'i');
+          return regex.test(responseText);
+        });
+        console.log(`   Triggered by pattern: "${triggeringPattern}"`);
+
+        // ⚠️ WARNING: If this is PROMPT_REFUSAL, the strictModeLevel might be too strict
+        if (refusalType === 'PROMPT_REFUSAL') {
+          console.log(`⚠️ PROMPT_REFUSAL WARNING: Evidence exists but LLM refused. Consider using strictModeLevel='medium' instead of '${currentStrictLevel}'`);
+        }
 
         // Clear sources if policy enabled
         if (clearSourcesOnRefusal) {

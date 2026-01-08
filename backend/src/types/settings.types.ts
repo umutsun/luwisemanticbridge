@@ -83,6 +83,8 @@ export interface RAGSettings {
 
     // Response Mode
     strictMode?: boolean;
+    strictModeLevel?: 'strict' | 'medium' | 'relaxed';
+    strictModeTemperature?: number;
     citationsDisabled?: boolean;
     disableCitationText?: boolean;
 
@@ -135,6 +137,10 @@ export interface RAGSettings {
     // Fast Mode Prompts
     fastModePromptTr?: string;
     fastModePromptEn?: string;
+
+    // Medium Mode Prompts (for strictModeLevel='medium')
+    mediumModePromptTr?: string;
+    mediumModePromptEn?: string;
 
     // High/Low Confidence Thresholds
     highConfidenceThreshold?: number;

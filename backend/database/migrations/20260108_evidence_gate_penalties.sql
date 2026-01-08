@@ -116,9 +116,9 @@ VALUES (
 ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, description = EXCLUDED.description;
 
 -- =============================================
--- STRICT MODE DETERMINISM
+-- STRICT MODE CONFIGURATION
 -- =============================================
--- Controls LLM temperature for strict mode (lower = more deterministic)
+-- Controls LLM behavior in strict mode
 
 INSERT INTO settings (key, value, category, description)
 VALUES (
@@ -126,6 +126,15 @@ VALUES (
   '0',
   'rag',
   'Temperature for strict mode LLM calls. 0 = fully deterministic. Range: 0-1'
+)
+ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, description = EXCLUDED.description;
+
+INSERT INTO settings (key, value, category, description)
+VALUES (
+  'ragSettings.strictModeLevel',
+  'medium',
+  'rag',
+  'Strictness level: strict (exact verdict sentence required, high refusal), medium (citation required, balanced), relaxed (citation preferred, low refusal). Default: medium'
 )
 ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, description = EXCLUDED.description;
 
