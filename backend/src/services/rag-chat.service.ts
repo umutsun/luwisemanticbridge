@@ -1574,12 +1574,20 @@ ${questionLabel}: ${message}`;
         return regex.test(responseText);
       });
 
-      // If refusal detected, clear sources to avoid misleading users
+      // If refusal detected, clear sources AND clean response text
       let finalSources = formattedSources;
+      let finalResponse = response.content;
+
       if (isRefusalResponse) {
         console.log(`🚫 REFUSAL DETECTED in LLM response - clearing ${formattedSources.length} sources`);
-        console.log(`   Matched pattern in: "${response.content.substring(0, 100)}..."`);
+        console.log(`   Original response: "${response.content.substring(0, 150)}..."`);
+
+        // Clear sources
         finalSources = [];
+
+        // Clean response text: remove [Kaynak X], **ALINTI**, citation markers
+        finalResponse = this.cleanRefusalResponse(response.content);
+        console.log(`   Cleaned response: "${finalResponse.substring(0, 150)}..."`);
       }
 
       // Log sources content for debugging
@@ -1603,8 +1611,8 @@ ${questionLabel}: ${message}`;
       }
 
       return {
-        response: response.content,
-        sources: finalSources,  // Use finalSources (cleared if refusal detected)
+        response: finalResponse,  // Use cleaned response if refusal detected
+        sources: finalSources,    // Use finalSources (cleared if refusal detected)
         relatedTopics: relatedTopics,
         followUpQuestions: followUpQuestions,
         conversationId: convId,
@@ -1624,6 +1632,45 @@ ${questionLabel}: ${message}`;
       console.error('RAG chat error:', error);
       throw error;
     }
+  }
+
+  /**
+   * Clean response text when refusal is detected
+   * Removes citation markers, ALINTI blocks, and source references
+   * This ensures user sees clean "not found" message without misleading citations
+   */
+  private cleanRefusalResponse(text: string): string {
+    let cleaned = text;
+
+    // Remove [Kaynak X] or [Source X] references (with or without brackets)
+    cleaned = cleaned.replace(/\[Kaynak\s*\d+\]/gi, '');
+    cleaned = cleaned.replace(/\[Source\s*\d+\]/gi, '');
+    cleaned = cleaned.replace(/Kaynak\s*\d+/gi, '');
+    cleaned = cleaned.replace(/Source\s*\d+/gi, '');
+
+    // Remove **ALINTI** blocks entirely (from **ALINTI** to next ** or end)
+    // Pattern: **ALINTI** ... (everything until next section or double newline)
+    cleaned = cleaned.replace(/\*\*ALINTI\*\*[\s\S]*?(?=\*\*[A-ZÇĞİÖŞÜ]|\n\n|$)/gi, '');
+    cleaned = cleaned.replace(/\*\*QUOTE\*\*[\s\S]*?(?=\*\*[A-Z]|\n\n|$)/gi, '');
+
+    // Remove "— Tür: ... [Kaynak X]" attribution lines
+    cleaned = cleaned.replace(/—\s*Tür:.*$/gm, '');
+    cleaned = cleaned.replace(/—\s*Type:.*$/gm, '');
+
+    // Remove orphaned citation numbers like [1], [2], [3]
+    cleaned = cleaned.replace(/\[\d+\]/g, '');
+
+    // Remove empty **CEVAP** or **ANSWER** headers if content is removed
+    cleaned = cleaned.replace(/\*\*CEVAP\*\*\s*\n\s*\n/gi, '');
+    cleaned = cleaned.replace(/\*\*ANSWER\*\*\s*\n\s*\n/gi, '');
+
+    // Clean up multiple newlines
+    cleaned = cleaned.replace(/\n{3,}/g, '\n\n');
+
+    // Trim whitespace
+    cleaned = cleaned.trim();
+
+    return cleaned;
   }
 
   /**
