@@ -974,7 +974,11 @@ ${questionLabel}: ${message}`;
       let searchResults: any[] = [];
       let allResults: any[] = [];
       let initialDisplayCount = 0;
-      let searchQuery = message;
+
+      // 🧹 QUERY SANITIZATION: Clean query before retrieval
+      // Removes numbering ("6)"), meta-instructions ("(CEVAP+ALINTI formatında)"), etc.
+      const sanitizeResult = this.sanitizeSearchQuery(message);
+      let searchQuery = sanitizeResult.sanitized;
 
       // 🔗 FOLLOW-UP QUESTION DETECTION (moved outside to be available in all modes)
       const followUpResult = this.detectFollowUpQuestion(message, earlyHistory);
@@ -1868,18 +1872,21 @@ FORMAT:
   }
 
   /**
-   * 🎯 QUOTE SELECTION GUARDRAIL
-   * Validates that ALINTI section contains keywords relevant to the question
-   * This prevents "wrong quote from right document" problem
+   * 🎯 QUOTE SELECTION GUARDRAIL (Enhanced)
+   * Validates that ALINTI section contains:
+   * 1. Key terms from question (ceza, usulsüzlük, etc.)
+   * 2. Topic entities from question (vergi levhası, fason, KDV, etc.)
    *
-   * Returns: { valid: boolean, reason?: string, suggestedRefusal?: string }
+   * This prevents both:
+   * - "wrong quote from right document" problem
+   * - "generic term match without topic relevance" problem
    */
   private validateQuoteRelevance(
     question: string,
     responseText: string,
     searchResults: any[],
     language: string = 'tr'
-  ): { valid: boolean; reason?: string; fixedResponse?: string } {
+  ): { valid: boolean; reason?: string; fixedResponse?: string; topicMissing?: boolean } {
     // Extract ALINTI section from response
     const alintıMatch = responseText.match(/\*\*ALINTI\*\*[\s\S]*?(?=\*\*[A-ZÇĞİÖŞÜ]|\n\n\n|$)/i);
     const quoteMatch = responseText.match(/\*\*QUOTE\*\*[\s\S]*?(?=\*\*[A-Z]|\n\n\n|$)/i);
@@ -1890,28 +1897,52 @@ FORMAT:
       return { valid: true };
     }
 
-    // Extract key terms from question
+    // Extract key terms AND topic entities from question
     const questionLower = question.toLowerCase();
     const keyTerms = this.extractKeyTerms(questionLower);
+    const topicEntities = this.extractTopicEntities(questionLower);
 
-    if (keyTerms.length === 0) {
-      // No specific key terms to check
+    console.log(`🎯 QUOTE GUARDRAIL CHECK:`);
+    console.log(`   Key terms: [${keyTerms.join(', ')}]`);
+    console.log(`   Topic entities: [${topicEntities.join(', ')}]`);
+
+    // Check if ALINTI contains key terms
+    const foundKeyTerms = keyTerms.filter(term => alintıText.includes(term));
+
+    // Check if ALINTI contains topic entities
+    const foundTopicEntities = topicEntities.filter(entity => {
+      // For compound entities like "vergi levhası", check both together and separately
+      if (entity.includes(' ')) {
+        const parts = entity.split(' ');
+        return alintıText.includes(entity) || parts.some(p => alintıText.includes(p));
+      }
+      return alintıText.includes(entity);
+    });
+
+    // PASS if: at least one topic entity found AND (key term found OR no key terms required)
+    if (foundTopicEntities.length > 0 && (foundKeyTerms.length > 0 || keyTerms.length === 0)) {
+      console.log(`✅ QUOTE GUARDRAIL PASS: Found topic entities [${foundTopicEntities.join(', ')}] and key terms [${foundKeyTerms.join(', ')}]`);
       return { valid: true };
     }
 
-    // Check if ALINTI contains at least one key term
-    const foundTerms = keyTerms.filter(term => alintıText.includes(term));
-
-    if (foundTerms.length > 0) {
-      console.log(`✅ QUOTE GUARDRAIL PASS: Found ${foundTerms.length} key terms in ALINTI: [${foundTerms.join(', ')}]`);
-      return { valid: true };
+    // WARN if: key terms found but NO topic entity (e.g., "usulsüzlük" found but not "vergi levhası")
+    if (foundKeyTerms.length > 0 && foundTopicEntities.length === 0 && topicEntities.length > 0) {
+      console.log(`⚠️ QUOTE GUARDRAIL TOPIC MISMATCH: Found key terms [${foundKeyTerms.join(', ')}] but MISSING topic entities [${topicEntities.join(', ')}]`);
+      console.log(`   This may indicate quote is from wrong context (e.g., generic "usulsüzlük" not about "vergi levhası")`);
+      return {
+        valid: false,
+        reason: `ALINTI contains generic term [${foundKeyTerms.join(', ')}] but missing topic entity [${topicEntities.join(', ')}]`,
+        topicMissing: true
+      };
     }
 
-    // ALINTI doesn't contain key terms - this is a potential evidence-mismatch
-    console.log(`⚠️ QUOTE GUARDRAIL WARNING: ALINTI doesn't contain key terms: [${keyTerms.join(', ')}]`);
+    // WARN if: no key terms found at all
+    if (foundKeyTerms.length === 0 && keyTerms.length > 0) {
+      console.log(`⚠️ QUOTE GUARDRAIL WARNING: ALINTI doesn't contain key terms: [${keyTerms.join(', ')}]`);
+    }
 
-    // Check if any source has a sentence containing the key terms
-    const betterQuote = this.findBetterQuote(searchResults, keyTerms);
+    // Check if any source has a sentence containing the key terms + topic entities
+    const betterQuote = this.findBetterQuote(searchResults, [...keyTerms, ...topicEntities]);
 
     if (betterQuote) {
       console.log(`🔧 QUOTE GUARDRAIL: Found better quote containing key terms`);
@@ -2002,6 +2033,118 @@ FORMAT:
     }
 
     return { consistent: true };
+  }
+
+  /**
+   * 🧹 QUERY SANITIZATION
+   * Cleans the user query before sending to retriever
+   * Removes numbering, meta-instructions, and formatting directives
+   * This prevents "query pollution" that causes false refusals
+   */
+  private sanitizeSearchQuery(query: string): { sanitized: string; originalLength: number; modifications: string[] } {
+    const modifications: string[] = [];
+    let sanitized = query;
+    const originalLength = query.length;
+
+    // 1. Remove leading numbering patterns like "6)", "12.", "a)", "A."
+    const numberingMatch = sanitized.match(/^\s*(\d+[\.\)]\s*|\(?[a-zA-Z][\.\)]\s*)/);
+    if (numberingMatch) {
+      sanitized = sanitized.replace(/^\s*(\d+[\.\)]\s*|\(?[a-zA-Z][\.\)]\s*)/, '');
+      modifications.push(`removed_numbering: "${numberingMatch[0].trim()}"`);
+    }
+
+    // 2. Remove parenthetical meta-instructions like "(CEVAP+ALINTI formatında yanıtla)"
+    // Common patterns: (CEVAP...), (format...), (yanıtla...), (lütfen...), (sadece...)
+    const metaPatterns = [
+      /\s*\((?:CEVAP|cevap|ALINTI|alıntı|format|FORMAT|yanıtla|lütfen|sadece|only|please)[^)]*\)\s*/gi,
+      /\s*\[(?:CEVAP|cevap|ALINTI|alıntı|format|FORMAT)[^\]]*\]\s*/gi,
+    ];
+
+    for (const pattern of metaPatterns) {
+      const match = sanitized.match(pattern);
+      if (match) {
+        sanitized = sanitized.replace(pattern, ' ');
+        modifications.push(`removed_meta: "${match[0].trim()}"`);
+      }
+    }
+
+    // 3. Remove trailing format instructions after question mark
+    // e.g., "...ceza var mı? Kısa cevap ver." → "...ceza var mı?"
+    const questionMarkIndex = sanitized.lastIndexOf('?');
+    if (questionMarkIndex > 0 && questionMarkIndex < sanitized.length - 1) {
+      const afterQuestion = sanitized.substring(questionMarkIndex + 1).trim();
+      // Check if what follows looks like a format instruction (not a follow-up question)
+      const formatInstructionPatterns = [
+        /^(kısa|uzun|detaylı|öz|sadece|format|cevap|yanıt|açıkla)/i,
+        /^(short|long|detailed|brief|only|format|answer|explain)/i
+      ];
+      const isFormatInstruction = formatInstructionPatterns.some(p => p.test(afterQuestion));
+      if (isFormatInstruction && !afterQuestion.includes('?')) {
+        sanitized = sanitized.substring(0, questionMarkIndex + 1);
+        modifications.push(`removed_trailing: "${afterQuestion}"`);
+      }
+    }
+
+    // 4. Clean up multiple spaces and trim
+    sanitized = sanitized.replace(/\s+/g, ' ').trim();
+
+    // Log if modifications were made
+    if (modifications.length > 0) {
+      console.log(`🧹 QUERY SANITIZED: "${query.substring(0, 50)}..." → "${sanitized.substring(0, 50)}..."`);
+      console.log(`   Modifications: ${modifications.join(', ')}`);
+    }
+
+    return { sanitized, originalLength, modifications };
+  }
+
+  /**
+   * 🎯 EXTRACT TOPIC ENTITIES
+   * Extracts the main topic/entity from the question for quote relevance validation
+   * e.g., "vergi levhası asılmazsa ceza var mı?" → ["vergi levhası", "levha"]
+   */
+  private extractTopicEntities(question: string): string[] {
+    const entities: string[] = [];
+    const questionLower = question.toLowerCase();
+
+    // Common Turkish legal/tax topic entities
+    const topicPatterns = [
+      // Document/certificate types
+      { pattern: /vergi levhası|vergi levha/gi, entity: 'vergi levhası' },
+      { pattern: /fatura/gi, entity: 'fatura' },
+      { pattern: /beyanname/gi, entity: 'beyanname' },
+      { pattern: /fiş|fis/gi, entity: 'fiş' },
+
+      // Tax types
+      { pattern: /kdv|katma değer/gi, entity: 'kdv' },
+      { pattern: /gelir vergisi/gi, entity: 'gelir vergisi' },
+      { pattern: /kurumlar vergisi/gi, entity: 'kurumlar vergisi' },
+      { pattern: /stopaj/gi, entity: 'stopaj' },
+      { pattern: /tevkifat/gi, entity: 'tevkifat' },
+
+      // Legal references
+      { pattern: /vuk\s*\d+|vergi usul/gi, entity: 'vuk' },
+      { pattern: /(\d+)\s*(seri|nolu|no'lu|sayılı)\s*(tebliğ|kanun)/gi, entity: 'tebliğ' },
+      { pattern: /6111/gi, entity: '6111' },
+      { pattern: /107/gi, entity: '107' },
+
+      // Business types
+      { pattern: /fason/gi, entity: 'fason' },
+      { pattern: /tekstil|konfeksiyon/gi, entity: 'tekstil' },
+
+      // Actions/processes
+      { pattern: /asma|asılma|asılmazsa/gi, entity: 'asma' },
+      { pattern: /bildirim/gi, entity: 'bildirim' },
+    ];
+
+    for (const { pattern, entity } of topicPatterns) {
+      if (pattern.test(questionLower)) {
+        if (!entities.includes(entity)) {
+          entities.push(entity);
+        }
+      }
+    }
+
+    return entities;
   }
 
   /**
