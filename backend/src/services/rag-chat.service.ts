@@ -1549,9 +1549,42 @@ ${questionLabel}: ${message}`;
       // const relatedTopics = await this.getRelatedTopics(message, searchResults.slice(0, 3), relatedResultsLimit);
       const relatedTopics = []; // Disable for now
 
+      // ========================================
+      // REFUSAL DETECTION: Clear sources if LLM couldn't find verdict
+      // ========================================
+      // If LLM response indicates "not found" / "no verdict", sources should be cleared
+      // This prevents showing irrelevant sources when LLM admits it couldn't answer
+      const refusalPatterns = [
+        'bulunamadı',
+        'bulunamadi',
+        'hüküm bulunamadı',
+        'kesin hüküm.*bulunamadı',
+        'yeterli.*kaynak.*yok',
+        'yeterli bilgi bulunamadı',
+        'ilgili kaynak.*bulunamadı',
+        'bu konuda.*bilgi.*yok',
+        'no.*relevant.*found',
+        'could not find',
+        'no definitive ruling'
+      ];
+
+      const responseText = response.content.toLowerCase();
+      const isRefusalResponse = refusalPatterns.some(pattern => {
+        const regex = new RegExp(pattern, 'i');
+        return regex.test(responseText);
+      });
+
+      // If refusal detected, clear sources to avoid misleading users
+      let finalSources = formattedSources;
+      if (isRefusalResponse) {
+        console.log(`🚫 REFUSAL DETECTED in LLM response - clearing ${formattedSources.length} sources`);
+        console.log(`   Matched pattern in: "${response.content.substring(0, 100)}..."`);
+        finalSources = [];
+      }
+
       // Log sources content for debugging
-      console.log(` Returning ${formattedSources.length} sources to frontend`);
-      formattedSources.forEach((source, idx) => {
+      console.log(` Returning ${finalSources.length} sources to frontend`);
+      finalSources.forEach((source, idx) => {
         console.log(`  Source ${idx + 1}: title="${source.title?.substring(0, 30)}...", content length=${source.content?.length || 0}, excerpt length=${source.excerpt?.length || 0}`);
       });
 
@@ -1561,7 +1594,7 @@ ${questionLabel}: ${message}`;
         followUpQuestions = await this.generateContextualFollowUps(
           message,
           response.content,
-          formattedSources,
+          finalSources,
           options.language || 'tr'
         );
       } catch (followUpError) {
@@ -1571,7 +1604,7 @@ ${questionLabel}: ${message}`;
 
       return {
         response: response.content,
-        sources: formattedSources,
+        sources: finalSources,  // Use finalSources (cleared if refusal detected)
         relatedTopics: relatedTopics,
         followUpQuestions: followUpQuestions,
         conversationId: convId,
@@ -1584,7 +1617,8 @@ ${questionLabel}: ${message}`;
         actualProvider: response.provider,
         fastMode: false,
         strictMode: settingsMap.get('ragSettings.strictMode') === 'true',
-        usage: response.usage // Token usage from LLM
+        usage: response.usage, // Token usage from LLM
+        refusalDetected: isRefusalResponse // Flag for debugging
       };
     } catch (error) {
       console.error('RAG chat error:', error);
