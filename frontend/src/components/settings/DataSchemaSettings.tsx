@@ -16,6 +16,9 @@ import { toast } from 'sonner';
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger
 } from '@/components/ui/dropdown-menu';
+import {
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter
+} from '@/components/ui/dialog';
 
 interface TopicEntity {
   pattern: string;      // regex pattern as string, e.g., "vergi levhası|vergi levha"
@@ -67,6 +70,16 @@ export default function DataSchemaSettings() {
   const [editedSchema, setEditedSchema] = useState<EditedSchema | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [fileInputRef, setFileInputRef] = useState<HTMLInputElement | null>(null);
+
+  // Modal state for editing
+  const [editModal, setEditModal] = useState<{
+    open: boolean;
+    field: string;
+    title: string;
+    value: string;
+    placeholder: string;
+    format?: 'text' | 'keyvalue' | 'arrows';
+  }>({ open: false, field: '', title: '', value: '', placeholder: '' });
 
   useEffect(() => { loadData(); }, []);
 
@@ -240,6 +253,41 @@ export default function DataSchemaSettings() {
     a.click();
     URL.revokeObjectURL(url);
     toast.success('Şema JSON olarak indirildi');
+  };
+
+  // Modal save handler
+  const saveModalValue = () => {
+    if (!editedSchema) return;
+    const { field, value, format } = editModal;
+
+    if (field === 'keyTerms') {
+      const terms = value.split('\n').map(t => t.trim()).filter(t => t);
+      setEditedSchema({ ...editedSchema, llmConfig: { ...editedSchema.llmConfig, keyTerms: terms } });
+    } else if (field === 'authorityLevels') {
+      const levels: Record<string, number> = {};
+      value.split('\n').filter(l => l.trim()).forEach(line => {
+        const [key, val] = line.split('=').map(s => s.trim());
+        if (key && val && !isNaN(Number(val))) levels[key] = Number(val);
+      });
+      setEditedSchema({ ...editedSchema, llmConfig: { ...editedSchema.llmConfig, authorityLevels: levels } });
+    } else if (field === 'topicEntities') {
+      const entities = value.split('\n').filter(l => l.trim()).map(line => {
+        const [pattern, syns] = line.split('→').map(s => s.trim());
+        return { pattern: pattern || '', entity: pattern || '', synonyms: syns ? syns.split(',').map(s => s.trim()).filter(s => s) : [] };
+      }).filter(e => e.pattern);
+      setEditedSchema({ ...editedSchema, llmConfig: { ...editedSchema.llmConfig, topicEntities: entities } });
+    } else if (field === 'analyzePrompt') {
+      setEditedSchema({ ...editedSchema, templates: { ...editedSchema.templates, analyze: value } });
+    } else if (field === 'chatbotContext') {
+      setEditedSchema({ ...editedSchema, llmConfig: { ...editedSchema.llmConfig, chatbotContext: value } });
+    } else if (field === 'fields') {
+      try {
+        const fields = JSON.parse(value);
+        if (Array.isArray(fields)) setEditedSchema({ ...editedSchema, fields });
+      } catch { toast.error('Geçersiz JSON'); return; }
+    }
+    setEditModal({ ...editModal, open: false });
+    toast.success('Güncellendi');
   };
 
   const importSchema = () => {
@@ -513,26 +561,11 @@ export default function DataSchemaSettings() {
                 />
               </div>
 
-              {/* LLM Konfigürasyonu - Sadece veri analizi ve citation için */}
-              <div className="border-t pt-4 space-y-3">
-                <h3 className="text-sm font-medium">LLM Konfigürasyonu</h3>
+              {/* LLM Konfigürasyonu - Click to Edit */}
+              <div className="border-t pt-4 space-y-2">
+                <h3 className="text-sm font-medium mb-3">LLM Konfigürasyonu</h3>
 
-                {/* Analyze Prompt */}
-                <div>
-                  <Label className="text-xs">Analyze Prompt</Label>
-                  <Textarea
-                    value={editedSchema.templates.analyze || ''}
-                    onChange={e => setEditedSchema({
-                      ...editedSchema,
-                      templates: { ...editedSchema.templates, analyze: e.target.value }
-                    })}
-                    placeholder="Belgeyi analiz et ve önemli bilgileri çıkar..."
-                    rows={3}
-                    className="mt-1 text-sm font-mono"
-                  />
-                </div>
-
-                {/* Citation Template */}
+                {/* Citation Template - Inline (short) */}
                 <div>
                   <Label className="text-xs">Citation Template</Label>
                   <Input
@@ -546,151 +579,122 @@ export default function DataSchemaSettings() {
                   />
                 </div>
 
-                {/* Chatbot Context */}
-                <div>
-                  <Label className="text-xs">Chatbot Context</Label>
-                  <Textarea
-                    value={editedSchema.llmConfig?.chatbotContext || ''}
-                    onChange={e => setEditedSchema({
-                      ...editedSchema,
-                      llmConfig: { ...editedSchema.llmConfig, chatbotContext: e.target.value }
+                {/* Clickable Cards for longer fields */}
+                <div className="grid grid-cols-2 gap-2 mt-3">
+                  {/* Analyze Prompt Card */}
+                  <div
+                    className="p-3 border rounded-lg cursor-pointer hover:bg-muted/50 transition-colors"
+                    onClick={() => setEditModal({
+                      open: true,
+                      field: 'analyzePrompt',
+                      title: 'Analyze Prompt',
+                      value: editedSchema.templates.analyze || '',
+                      placeholder: 'Dokümanı analiz etmek için LLM\'e verilecek talimatlar...'
                     })}
-                    placeholder="Domain uzmanı olarak yanıt ver..."
-                    rows={3}
-                    className="mt-1 text-sm font-mono"
-                  />
-                </div>
-
-              </div>
-
-              {/* Domain Configuration - Simplified */}
-              <div className="border-t pt-4 space-y-4">
-                <h3 className="text-sm font-medium">Domain Konfigürasyonu</h3>
-
-                {/* Key Terms - Tag style display */}
-                <div>
-                  <Label className="text-xs mb-2 block">Anahtar Terimler</Label>
-                  <div className="flex flex-wrap gap-1 mb-2 p-2 bg-muted/30 rounded min-h-[40px]">
-                    {(editedSchema.llmConfig?.keyTerms || []).map((term, i) => (
-                      <Badge key={i} variant="secondary" className="text-xs cursor-pointer hover:bg-destructive hover:text-destructive-foreground"
-                        onClick={() => {
-                          const newTerms = [...(editedSchema.llmConfig?.keyTerms || [])];
-                          newTerms.splice(i, 1);
-                          setEditedSchema({ ...editedSchema, llmConfig: { ...editedSchema.llmConfig, keyTerms: newTerms } });
-                        }}>
-                        {term} ×
-                      </Badge>
-                    ))}
-                    {!(editedSchema.llmConfig?.keyTerms || []).length && <span className="text-xs text-muted-foreground">Terim yok</span>}
+                  >
+                    <div className="text-xs font-medium mb-1">Analyze Prompt</div>
+                    <div className="text-xs text-muted-foreground line-clamp-2">
+                      {editedSchema.templates.analyze?.substring(0, 60) || 'Tanımsız'}...
+                    </div>
                   </div>
-                  <div className="flex gap-2">
-                    <Input
-                      id="newKeyTerm"
-                      placeholder="Yeni terim ekle..."
-                      className="h-8 text-sm flex-1"
-                      onKeyDown={e => {
-                        if (e.key === 'Enter') {
-                          const input = e.target as HTMLInputElement;
-                          const val = input.value.trim();
-                          if (val && !(editedSchema.llmConfig?.keyTerms || []).includes(val)) {
-                            setEditedSchema({
-                              ...editedSchema,
-                              llmConfig: { ...editedSchema.llmConfig, keyTerms: [...(editedSchema.llmConfig?.keyTerms || []), val] }
-                            });
-                            input.value = '';
-                          }
-                        }
-                      }}
-                    />
-                    <Button size="sm" variant="outline" className="h-8"
-                      onClick={() => {
-                        const input = document.getElementById('newKeyTerm') as HTMLInputElement;
-                        const val = input?.value.trim();
-                        if (val && !(editedSchema.llmConfig?.keyTerms || []).includes(val)) {
-                          setEditedSchema({
-                            ...editedSchema,
-                            llmConfig: { ...editedSchema.llmConfig, keyTerms: [...(editedSchema.llmConfig?.keyTerms || []), val] }
-                          });
-                          input.value = '';
-                        }
-                      }}>
-                      <Plus className="w-3 h-3" />
-                    </Button>
+
+                  {/* Chatbot Context Card */}
+                  <div
+                    className="p-3 border rounded-lg cursor-pointer hover:bg-muted/50 transition-colors"
+                    onClick={() => setEditModal({
+                      open: true,
+                      field: 'chatbotContext',
+                      title: 'Chatbot Context',
+                      value: editedSchema.llmConfig?.chatbotContext || '',
+                      placeholder: 'Chatbot\'un domain uzmanlığı ve davranış kuralları...'
+                    })}
+                  >
+                    <div className="text-xs font-medium mb-1">Chatbot Context</div>
+                    <div className="text-xs text-muted-foreground line-clamp-2">
+                      {editedSchema.llmConfig?.chatbotContext?.substring(0, 60) || 'Tanımsız'}...
+                    </div>
                   </div>
-                </div>
-
-                {/* Authority Levels - Simple key=value format */}
-                <div>
-                  <Label className="text-xs mb-2 block">Kaynak Öncelikleri (yüksek=güvenilir)</Label>
-                  <Textarea
-                    value={Object.entries(editedSchema.llmConfig?.authorityLevels || {}).map(([k, v]) => `${k}=${v}`).join('\n')}
-                    onChange={e => {
-                      const lines = e.target.value.split('\n').filter(l => l.trim());
-                      const levels: Record<string, number> = {};
-                      lines.forEach(line => {
-                        const [key, val] = line.split('=').map(s => s.trim());
-                        if (key && val && !isNaN(Number(val))) {
-                          levels[key] = Number(val);
-                        }
-                      });
-                      setEditedSchema({ ...editedSchema, llmConfig: { ...editedSchema.llmConfig, authorityLevels: levels } });
-                    }}
-                    placeholder="kanun=100&#10;teblig=90&#10;ozelge=75&#10;makale=50"
-                    rows={4}
-                    className="mt-1 text-sm font-mono"
-                  />
-                </div>
-
-                {/* Topic Entities - Simplified */}
-                <div>
-                  <Label className="text-xs mb-2 block">Konu Eşleşmeleri (gelişmiş)</Label>
-                  <Textarea
-                    value={(editedSchema.llmConfig?.topicEntities || []).map(e =>
-                      `${e.pattern} → ${e.synonyms?.join(', ') || ''}`
-                    ).join('\n')}
-                    onChange={e => {
-                      const lines = e.target.value.split('\n').filter(l => l.trim());
-                      const entities = lines.map(line => {
-                        const [pattern, syns] = line.split('→').map(s => s.trim());
-                        return {
-                          pattern: pattern || '',
-                          entity: pattern || '',
-                          synonyms: syns ? syns.split(',').map(s => s.trim()).filter(s => s) : []
-                        };
-                      }).filter(e => e.pattern);
-                      setEditedSchema({ ...editedSchema, llmConfig: { ...editedSchema.llmConfig, topicEntities: entities } });
-                    }}
-                    placeholder="vergi levhası → levha, asma zorunluluğu&#10;kdv → katma değer vergisi&#10;stopaj → kesinti, tevkifat"
-                    rows={4}
-                    className="mt-1 text-sm font-mono"
-                  />
-                  <p className="text-xs text-muted-foreground mt-1">Format: pattern → synonym1, synonym2</p>
                 </div>
               </div>
 
-              {/* Veri Alanları - JSON format */}
-              <div className="border-t pt-4">
-                <Label className="text-xs">Veri Alanları (Opsiyonel)</Label>
-                <p className="text-xs text-muted-foreground mb-2">Citation formatı için metadata alanları</p>
-                <Textarea
-                  value={JSON.stringify(editedSchema.fields || [], null, 2)}
-                  onChange={e => {
-                    try {
-                      const fields = JSON.parse(e.target.value);
-                      if (Array.isArray(fields)) {
-                        setEditedSchema({ ...editedSchema, fields });
-                      }
-                    } catch {
-                      // Invalid JSON
-                    }
-                  }}
-                  placeholder={`[{"key": "kanun_no", "label": "Kanun No", "type": "reference"}]`}
-                  rows={4}
-                  className="mt-1 text-xs font-mono"
-                />
-                <p className="text-xs text-muted-foreground mt-1">
-                  {editedSchema.fields.length} alan
-                </p>
+              {/* Domain Configuration - Click to Edit */}
+              <div className="border-t pt-4 space-y-2">
+                <h3 className="text-sm font-medium mb-3">Domain Konfigürasyonu</h3>
+
+                {/* Clickable Cards Grid */}
+                <div className="grid grid-cols-2 gap-2">
+                  {/* Key Terms Card */}
+                  <div
+                    className="p-3 border rounded-lg cursor-pointer hover:bg-muted/50 transition-colors"
+                    onClick={() => setEditModal({
+                      open: true,
+                      field: 'keyTerms',
+                      title: 'Anahtar Terimler',
+                      value: (editedSchema.llmConfig?.keyTerms || []).join('\n'),
+                      placeholder: 'Her satıra bir terim:\nceza\nvergi\nkdv\nmuafiyet'
+                    })}
+                  >
+                    <div className="text-xs font-medium mb-1">Anahtar Terimler</div>
+                    <div className="text-lg font-bold text-primary">{(editedSchema.llmConfig?.keyTerms || []).length}</div>
+                    <div className="text-xs text-muted-foreground truncate">
+                      {(editedSchema.llmConfig?.keyTerms || []).slice(0, 3).join(', ') || 'Tanımsız'}
+                    </div>
+                  </div>
+
+                  {/* Authority Levels Card */}
+                  <div
+                    className="p-3 border rounded-lg cursor-pointer hover:bg-muted/50 transition-colors"
+                    onClick={() => setEditModal({
+                      open: true,
+                      field: 'authorityLevels',
+                      title: 'Kaynak Öncelikleri',
+                      value: Object.entries(editedSchema.llmConfig?.authorityLevels || {}).map(([k, v]) => `${k}=${v}`).join('\n'),
+                      placeholder: 'Her satıra kaynak=öncelik:\nkanun=100\nteblig=90\nmakale=50'
+                    })}
+                  >
+                    <div className="text-xs font-medium mb-1">Kaynak Öncelikleri</div>
+                    <div className="text-lg font-bold text-primary">{Object.keys(editedSchema.llmConfig?.authorityLevels || {}).length}</div>
+                    <div className="text-xs text-muted-foreground truncate">
+                      {Object.keys(editedSchema.llmConfig?.authorityLevels || {}).slice(0, 3).join(', ') || 'Tanımsız'}
+                    </div>
+                  </div>
+
+                  {/* Topic Entities Card */}
+                  <div
+                    className="p-3 border rounded-lg cursor-pointer hover:bg-muted/50 transition-colors"
+                    onClick={() => setEditModal({
+                      open: true,
+                      field: 'topicEntities',
+                      title: 'Konu Eşleşmeleri',
+                      value: (editedSchema.llmConfig?.topicEntities || []).map(e => `${e.pattern} → ${e.synonyms?.join(', ') || ''}`).join('\n'),
+                      placeholder: 'Her satıra pattern → synonym1, synonym2:\nvergi levhası → levha, asma\nkdv → katma değer vergisi'
+                    })}
+                  >
+                    <div className="text-xs font-medium mb-1">Konu Eşleşmeleri</div>
+                    <div className="text-lg font-bold text-primary">{(editedSchema.llmConfig?.topicEntities || []).length}</div>
+                    <div className="text-xs text-muted-foreground truncate">
+                      {(editedSchema.llmConfig?.topicEntities || []).slice(0, 2).map(e => e.pattern).join(', ') || 'Tanımsız'}
+                    </div>
+                  </div>
+
+                  {/* Veri Alanları Card */}
+                  <div
+                    className="p-3 border rounded-lg cursor-pointer hover:bg-muted/50 transition-colors"
+                    onClick={() => setEditModal({
+                      open: true,
+                      field: 'fields',
+                      title: 'Veri Alanları (JSON)',
+                      value: JSON.stringify(editedSchema.fields || [], null, 2),
+                      placeholder: '[{"key": "kanun_no", "label": "Kanun No", "type": "reference"}]'
+                    })}
+                  >
+                    <div className="text-xs font-medium mb-1">Veri Alanları</div>
+                    <div className="text-lg font-bold text-primary">{(editedSchema.fields || []).length}</div>
+                    <div className="text-xs text-muted-foreground truncate">
+                      {(editedSchema.fields || []).slice(0, 3).map(f => f.label || f.key).join(', ') || 'Tanımsız'}
+                    </div>
+                  </div>
+                </div>
               </div>
             </>
           ) : (
@@ -701,6 +705,41 @@ export default function DataSchemaSettings() {
           )}
         </CardContent>
       </Card>
+
+      {/* Edit Modal */}
+      <Dialog open={editModal.open} onOpenChange={(open) => setEditModal({ ...editModal, open })}>
+        <DialogContent className="max-w-2xl max-h-[80vh]">
+          <DialogHeader>
+            <DialogTitle>{editModal.title}</DialogTitle>
+          </DialogHeader>
+          <div className="py-4">
+            <Textarea
+              value={editModal.value}
+              onChange={(e) => setEditModal({ ...editModal, value: e.target.value })}
+              placeholder={editModal.placeholder}
+              rows={15}
+              className="font-mono text-sm"
+            />
+            <p className="text-xs text-muted-foreground mt-2">
+              {editModal.field === 'keyTerms' && 'Her satıra bir terim yazın'}
+              {editModal.field === 'authorityLevels' && 'Format: kaynak=öncelik (örn: kanun=100)'}
+              {editModal.field === 'topicEntities' && 'Format: pattern → synonym1, synonym2'}
+              {editModal.field === 'fields' && 'JSON formatında alan tanımları'}
+              {editModal.field === 'analyzePrompt' && 'Doküman analizi için LLM talimatları'}
+              {editModal.field === 'chatbotContext' && 'Chat yanıtları için domain bağlamı'}
+            </p>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEditModal({ ...editModal, open: false })}>
+              İptal
+            </Button>
+            <Button onClick={saveModalValue}>
+              <Check className="w-4 h-4 mr-2" />
+              Kaydet
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
