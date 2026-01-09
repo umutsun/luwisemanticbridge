@@ -1,0 +1,83 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="2" failures="0" skipped="0" tests="2" time="8.992" timestamp="2026-01-07T03:44:46.954758+07:00" hostname="DELL-02"><testcase classname="" name="tests.test_crawl_router" time="0.000"><error message="collection failure">tests\test_crawl_router.py:4: in &lt;module&gt;
+    from main import app
+main.py:47: in &lt;module&gt;
+    from routers.scheduler_router import router as scheduler_router
+routers\scheduler_router.py:11: in &lt;module&gt;
+    from scheduler import (
+scheduler\__init__.py:11: in &lt;module&gt;
+    from .scheduler_service import SchedulerService, get_scheduler
+scheduler\scheduler_service.py:15: in &lt;module&gt;
+    from apscheduler.jobstores.sqlalchemy import SQLAlchemyJobStore
+C:\Users\umut.demirci\AppData\Local\Programs\Python\Python313\Lib\site-packages\apscheduler\jobstores\sqlalchemy.py:13: in &lt;module&gt;
+    from sqlalchemy import (
+C:\Users\umut.demirci\AppData\Local\Programs\Python\Python313\Lib\site-packages\sqlalchemy\__init__.py:13: in &lt;module&gt;
+    from .engine import AdaptedConnection as AdaptedConnection
+C:\Users\umut.demirci\AppData\Local\Programs\Python\Python313\Lib\site-packages\sqlalchemy\engine\__init__.py:18: in &lt;module&gt;
+    from . import events as events
+C:\Users\umut.demirci\AppData\Local\Programs\Python\Python313\Lib\site-packages\sqlalchemy\engine\events.py:19: in &lt;module&gt;
+    from .base import Connection
+C:\Users\umut.demirci\AppData\Local\Programs\Python\Python313\Lib\site-packages\sqlalchemy\engine\base.py:30: in &lt;module&gt;
+    from .interfaces import BindTyping
+C:\Users\umut.demirci\AppData\Local\Programs\Python\Python313\Lib\site-packages\sqlalchemy\engine\interfaces.py:38: in &lt;module&gt;
+    from ..sql.compiler import Compiled as Compiled
+C:\Users\umut.demirci\AppData\Local\Programs\Python\Python313\Lib\site-packages\sqlalchemy\sql\__init__.py:14: in &lt;module&gt;
+    from .compiler import COLLECT_CARTESIAN_PRODUCTS as COLLECT_CARTESIAN_PRODUCTS
+C:\Users\umut.demirci\AppData\Local\Programs\Python\Python313\Lib\site-packages\sqlalchemy\sql\compiler.py:61: in &lt;module&gt;
+    from . import crud
+C:\Users\umut.demirci\AppData\Local\Programs\Python\Python313\Lib\site-packages\sqlalchemy\sql\crud.py:34: in &lt;module&gt;
+    from . import dml
+C:\Users\umut.demirci\AppData\Local\Programs\Python\Python313\Lib\site-packages\sqlalchemy\sql\dml.py:34: in &lt;module&gt;
+    from . import util as sql_util
+C:\Users\umut.demirci\AppData\Local\Programs\Python\Python313\Lib\site-packages\sqlalchemy\sql\util.py:46: in &lt;module&gt;
+    from .ddl import sort_tables as sort_tables  # noqa: F401
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+C:\Users\umut.demirci\AppData\Local\Programs\Python\Python313\Lib\site-packages\sqlalchemy\sql\ddl.py:30: in &lt;module&gt;
+    from .elements import ClauseElement
+C:\Users\umut.demirci\AppData\Local\Programs\Python\Python313\Lib\site-packages\sqlalchemy\sql\elements.py:808: in &lt;module&gt;
+    class SQLCoreOperations(Generic[_T_co], ColumnOperators, TypingOnly):
+C:\Users\umut.demirci\AppData\Local\Programs\Python\Python313\Lib\typing.py:1257: in _generic_init_subclass
+    super(Generic, cls).__init_subclass__(*args, **kwargs)
+C:\Users\umut.demirci\AppData\Local\Programs\Python\Python313\Lib\site-packages\sqlalchemy\util\langhelpers.py:1988: in __init_subclass__
+    raise AssertionError(
+E   AssertionError: Class &lt;class 'sqlalchemy.sql.elements.SQLCoreOperations'&gt; directly inherits TypingOnly but has additional attributes {'__firstlineno__', '__static_attributes__'}.</error></testcase><testcase classname="" name="tests.test_semantic_search" time="0.000"><error message="collection failure">tests\test_semantic_search.py:4: in &lt;module&gt;
+    from main import app
+main.py:47: in &lt;module&gt;
+    from routers.scheduler_router import router as scheduler_router
+routers\scheduler_router.py:11: in &lt;module&gt;
+    from scheduler import (
+scheduler\__init__.py:11: in &lt;module&gt;
+    from .scheduler_service import SchedulerService, get_scheduler
+scheduler\scheduler_service.py:15: in &lt;module&gt;
+    from apscheduler.jobstores.sqlalchemy import SQLAlchemyJobStore
+C:\Users\umut.demirci\AppData\Local\Programs\Python\Python313\Lib\site-packages\apscheduler\jobstores\sqlalchemy.py:13: in &lt;module&gt;
+    from sqlalchemy import (
+C:\Users\umut.demirci\AppData\Local\Programs\Python\Python313\Lib\site-packages\sqlalchemy\__init__.py:13: in &lt;module&gt;
+    from .engine import AdaptedConnection as AdaptedConnection
+C:\Users\umut.demirci\AppData\Local\Programs\Python\Python313\Lib\site-packages\sqlalchemy\engine\__init__.py:18: in &lt;module&gt;
+    from . import events as events
+C:\Users\umut.demirci\AppData\Local\Programs\Python\Python313\Lib\site-packages\sqlalchemy\engine\events.py:19: in &lt;module&gt;
+    from .base import Connection
+C:\Users\umut.demirci\AppData\Local\Programs\Python\Python313\Lib\site-packages\sqlalchemy\engine\base.py:30: in &lt;module&gt;
+    from .interfaces import BindTyping
+C:\Users\umut.demirci\AppData\Local\Programs\Python\Python313\Lib\site-packages\sqlalchemy\engine\interfaces.py:38: in &lt;module&gt;
+    from ..sql.compiler import Compiled as Compiled
+C:\Users\umut.demirci\AppData\Local\Programs\Python\Python313\Lib\site-packages\sqlalchemy\sql\__init__.py:14: in &lt;module&gt;
+    from .compiler import COLLECT_CARTESIAN_PRODUCTS as COLLECT_CARTESIAN_PRODUCTS
+C:\Users\umut.demirci\AppData\Local\Programs\Python\Python313\Lib\site-packages\sqlalchemy\sql\compiler.py:61: in &lt;module&gt;
+    from . import crud
+C:\Users\umut.demirci\AppData\Local\Programs\Python\Python313\Lib\site-packages\sqlalchemy\sql\crud.py:34: in &lt;module&gt;
+    from . import dml
+C:\Users\umut.demirci\AppData\Local\Programs\Python\Python313\Lib\site-packages\sqlalchemy\sql\dml.py:34: in &lt;module&gt;
+    from . import util as sql_util
+C:\Users\umut.demirci\AppData\Local\Programs\Python\Python313\Lib\site-packages\sqlalchemy\sql\util.py:46: in &lt;module&gt;
+    from .ddl import sort_tables as sort_tables  # noqa: F401
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+C:\Users\umut.demirci\AppData\Local\Programs\Python\Python313\Lib\site-packages\sqlalchemy\sql\ddl.py:30: in &lt;module&gt;
+    from .elements import ClauseElement
+C:\Users\umut.demirci\AppData\Local\Programs\Python\Python313\Lib\site-packages\sqlalchemy\sql\elements.py:808: in &lt;module&gt;
+    class SQLCoreOperations(Generic[_T_co], ColumnOperators, TypingOnly):
+C:\Users\umut.demirci\AppData\Local\Programs\Python\Python313\Lib\typing.py:1257: in _generic_init_subclass
+    super(Generic, cls).__init_subclass__(*args, **kwargs)
+C:\Users\umut.demirci\AppData\Local\Programs\Python\Python313\Lib\site-packages\sqlalchemy\util\langhelpers.py:1988: in __init_subclass__
+    raise AssertionError(
+E   AssertionError: Class &lt;class 'sqlalchemy.sql.elements.SQLCoreOperations'&gt; directly inherits TypingOnly but has additional attributes {'__firstlineno__', '__static_attributes__'}.</error></testcase></testsuite></testsuites>

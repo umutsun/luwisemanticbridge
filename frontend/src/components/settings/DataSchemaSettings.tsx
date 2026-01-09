@@ -742,77 +742,89 @@ export default function DataSchemaSettings() {
           {editModal.field === 'keyTerms' ? (
             /* Terimler Sözlüğü - Dictionary Style UI */
             <div className="py-2 space-y-3">
-              {/* Suggested Terms by Category */}
+              {/* Suggested Terms by Category - Marker Style */}
               <div className="space-y-2">
                 <Label className="text-xs font-medium">Önerilen Terimler (tıkla ekle)</Label>
                 <div className="grid grid-cols-1 gap-2 max-h-[180px] overflow-y-auto">
-                  {/* Vergi/Hukuk Terms */}
-                  <div className="p-2 bg-blue-50 dark:bg-blue-950/30 rounded-lg">
-                    <div className="text-xs font-medium text-blue-700 dark:text-blue-300 mb-1.5">Vergi & Hukuk</div>
+                  {/* Vergi/Hukuk Terms - Yellow Marker */}
+                  <div className="p-2 rounded-lg" style={{ background: 'linear-gradient(45deg, rgba(254, 240, 138, 0.7) 0%, rgba(253, 224, 71, 0.5) 100%)' }}>
+                    <div className="text-xs font-semibold text-yellow-900 dark:text-yellow-100 mb-1.5">Vergi & Hukuk</div>
                     <div className="flex flex-wrap gap-1">
                       {['vergi', 'kdv', 'stopaj', 'tevkifat', 'muafiyet', 'istisna', 'beyanname', 'matrah', 'ceza', 'usulsüzlük', 'kanun', 'madde', 'tebliğ', 'özelge', 'indirim', 'mahsup'].map(term => {
                         const isAdded = editModal.value.split('\n').includes(term);
                         return (
-                          <Badge
+                          <span
                             key={term}
-                            variant={isAdded ? "default" : "outline"}
-                            className={`text-xs cursor-pointer transition-all ${isAdded ? 'bg-blue-600' : 'hover:bg-blue-100 dark:hover:bg-blue-900'}`}
+                            className={`text-xs px-2 py-0.5 cursor-pointer transition-all font-medium ${
+                              isAdded
+                                ? 'bg-yellow-400 text-yellow-900 shadow-sm'
+                                : 'bg-yellow-200/60 text-yellow-800 hover:bg-yellow-300'
+                            }`}
+                            style={{ borderRadius: '2px' }}
                             onClick={() => {
                               if (!isAdded) {
                                 setEditModal({ ...editModal, value: editModal.value ? editModal.value + '\n' + term : term });
                               }
                             }}
                           >
-                            {isAdded ? '✓ ' : '+ '}{term}
-                          </Badge>
+                            {isAdded ? '✓ ' : ''}{term}
+                          </span>
                         );
                       })}
                     </div>
                   </div>
 
-                  {/* Belge/İşlem Terms */}
-                  <div className="p-2 bg-green-50 dark:bg-green-950/30 rounded-lg">
-                    <div className="text-xs font-medium text-green-700 dark:text-green-300 mb-1.5">Belge & İşlem</div>
+                  {/* Belge/İşlem Terms - Green Marker */}
+                  <div className="p-2 rounded-lg" style={{ background: 'linear-gradient(45deg, rgba(187, 247, 208, 0.7) 0%, rgba(134, 239, 172, 0.5) 100%)' }}>
+                    <div className="text-xs font-semibold text-green-900 dark:text-green-100 mb-1.5">Belge & İşlem</div>
                     <div className="flex flex-wrap gap-1">
                       {['fatura', 'belge', 'kayıt', 'defter', 'makbuz', 'dekont', 'tahakkuk', 'tahsil', 'ödeme', 'başvuru', 'bildirim', 'beyan'].map(term => {
                         const isAdded = editModal.value.split('\n').includes(term);
                         return (
-                          <Badge
+                          <span
                             key={term}
-                            variant={isAdded ? "default" : "outline"}
-                            className={`text-xs cursor-pointer transition-all ${isAdded ? 'bg-green-600' : 'hover:bg-green-100 dark:hover:bg-green-900'}`}
+                            className={`text-xs px-2 py-0.5 cursor-pointer transition-all font-medium ${
+                              isAdded
+                                ? 'bg-green-400 text-green-900 shadow-sm'
+                                : 'bg-green-200/60 text-green-800 hover:bg-green-300'
+                            }`}
+                            style={{ borderRadius: '2px' }}
                             onClick={() => {
                               if (!isAdded) {
                                 setEditModal({ ...editModal, value: editModal.value ? editModal.value + '\n' + term : term });
                               }
                             }}
                           >
-                            {isAdded ? '✓ ' : '+ '}{term}
-                          </Badge>
+                            {isAdded ? '✓ ' : ''}{term}
+                          </span>
                         );
                       })}
                     </div>
                   </div>
 
-                  {/* Zorunluluk/Yaptırım Terms */}
-                  <div className="p-2 bg-orange-50 dark:bg-orange-950/30 rounded-lg">
-                    <div className="text-xs font-medium text-orange-700 dark:text-orange-300 mb-1.5">Zorunluluk & Yaptırım</div>
+                  {/* Zorunluluk/Yaptırım Terms - Pink Marker */}
+                  <div className="p-2 rounded-lg" style={{ background: 'linear-gradient(45deg, rgba(251, 207, 232, 0.7) 0%, rgba(249, 168, 212, 0.5) 100%)' }}>
+                    <div className="text-xs font-semibold text-pink-900 dark:text-pink-100 mb-1.5">Zorunluluk & Yaptırım</div>
                     <div className="flex flex-wrap gap-1">
                       {['zorunlu', 'mecburi', 'gerekli', 'şart', 'yükümlü', 'sorumlu', 'yasak', 'serbest', 'muaf', 'tabi'].map(term => {
                         const isAdded = editModal.value.split('\n').includes(term);
                         return (
-                          <Badge
+                          <span
                             key={term}
-                            variant={isAdded ? "default" : "outline"}
-                            className={`text-xs cursor-pointer transition-all ${isAdded ? 'bg-orange-600' : 'hover:bg-orange-100 dark:hover:bg-orange-900'}`}
+                            className={`text-xs px-2 py-0.5 cursor-pointer transition-all font-medium ${
+                              isAdded
+                                ? 'bg-pink-400 text-pink-900 shadow-sm'
+                                : 'bg-pink-200/60 text-pink-800 hover:bg-pink-300'
+                            }`}
+                            style={{ borderRadius: '2px' }}
                             onClick={() => {
                               if (!isAdded) {
                                 setEditModal({ ...editModal, value: editModal.value ? editModal.value + '\n' + term : term });
                               }
                             }}
                           >
-                            {isAdded ? '✓ ' : '+ '}{term}
-                          </Badge>
+                            {isAdded ? '✓ ' : ''}{term}
+                          </span>
                         );
                       })}
                     </div>
@@ -820,17 +832,17 @@ export default function DataSchemaSettings() {
                 </div>
               </div>
 
-              {/* LLM-powered suggestions */}
-              <div className="p-2 bg-purple-50 dark:bg-purple-950/30 rounded-lg border border-purple-200 dark:border-purple-800">
+              {/* LLM-powered suggestions - Purple/Violet Marker */}
+              <div className="p-2 rounded-lg" style={{ background: 'linear-gradient(45deg, rgba(221, 214, 254, 0.7) 0%, rgba(196, 181, 253, 0.5) 100%)' }}>
                 <div className="flex items-center justify-between mb-2">
                   <div className="flex items-center gap-1.5">
-                    <Sparkles className="w-3.5 h-3.5 text-purple-600" />
-                    <span className="text-xs font-medium text-purple-700 dark:text-purple-300">Akıllı Öneriler (LLM)</span>
+                    <Sparkles className="w-3.5 h-3.5 text-violet-700" />
+                    <span className="text-xs font-semibold text-violet-900 dark:text-violet-100">Akıllı Öneriler (LLM)</span>
                   </div>
                   <Button
                     variant="ghost"
                     size="sm"
-                    className="h-6 text-xs text-purple-600 hover:text-purple-700"
+                    className="h-6 text-xs text-violet-700 hover:text-violet-800 hover:bg-violet-200/50"
                     onClick={() => fetchLlmSuggestions()}
                     disabled={isLlmLoading}
                   >
@@ -847,29 +859,33 @@ export default function DataSchemaSettings() {
                     llmSuggestions.map(term => {
                       const isAdded = editModal.value.split('\n').includes(term);
                       return (
-                        <Badge
+                        <span
                           key={term}
-                          variant={isAdded ? "default" : "outline"}
-                          className={`text-xs cursor-pointer transition-all ${isAdded ? 'bg-purple-600' : 'hover:bg-purple-100 dark:hover:bg-purple-900 border-purple-300'}`}
+                          className={`text-xs px-2 py-0.5 cursor-pointer transition-all font-medium ${
+                            isAdded
+                              ? 'bg-violet-400 text-violet-900 shadow-sm'
+                              : 'bg-violet-200/60 text-violet-800 hover:bg-violet-300'
+                          }`}
+                          style={{ borderRadius: '2px' }}
                           onClick={() => {
                             if (!isAdded) {
                               setEditModal({ ...editModal, value: editModal.value ? editModal.value + '\n' + term : term });
                             }
                           }}
                         >
-                          {isAdded ? '✓ ' : '+ '}{term}
-                        </Badge>
+                          {isAdded ? '✓ ' : ''}{term}
+                        </span>
                       );
                     })
                   ) : (
-                    <span className="text-xs text-muted-foreground">
+                    <span className="text-xs text-violet-700/70">
                       {isLlmLoading ? 'Öneriler yükleniyor...' : 'Yenile butonuna tıklayarak LLM önerileri alın'}
                     </span>
                   )}
                 </div>
               </div>
 
-              {/* Custom term input with LLM */}
+              {/* Custom term input with LLM - Marker themed */}
               <div className="flex gap-2 pt-2 border-t">
                 <Input
                   id="customTermInput"
@@ -890,7 +906,7 @@ export default function DataSchemaSettings() {
                 <Button
                   variant="outline"
                   size="sm"
-                  className="text-purple-600 border-purple-300 hover:bg-purple-50"
+                  className="text-violet-700 border-violet-300 hover:bg-violet-100"
                   onClick={() => {
                     if (customTermInput.trim()) {
                       fetchLlmSuggestions(customTermInput);
