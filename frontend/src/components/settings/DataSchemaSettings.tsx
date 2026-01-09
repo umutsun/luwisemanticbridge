@@ -6,13 +6,11 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Switch } from '@/components/ui/switch';
 import { Badge } from '@/components/ui/badge';
 import {
-  Database, Plus, Trash2, Check, Save, RefreshCw, Search, Copy, MoreVertical, Download, Upload
+  Database, Plus, Check, Save, RefreshCw, Search, Copy, MoreVertical, Download, Upload
 } from 'lucide-react';
-import { DataSchema, SchemaField, FieldType, FIELD_TYPE_LABELS, EMPTY_FIELD } from '@/types/data-schema';
+import { DataSchema, SchemaField } from '@/types/data-schema';
 import apiClient from '@/lib/api/client';
 import { toast } from 'sonner';
 import {
@@ -222,26 +220,6 @@ export default function DataSchemaSettings() {
       createdAt: '', updatedAt: ''
     });
     toast.info('Klonlandı, kaydedin');
-  };
-
-  const updateField = (i: number, update: Partial<SchemaField>) => {
-    if (!editedSchema) return;
-    const fields = [...editedSchema.fields];
-    fields[i] = { ...fields[i], ...update };
-    setEditedSchema({ ...editedSchema, fields });
-  };
-
-  const addField = () => {
-    if (!editedSchema) return;
-    setEditedSchema({
-      ...editedSchema,
-      fields: [...editedSchema.fields, { ...EMPTY_FIELD, key: `field_${editedSchema.fields.length + 1}` }]
-    });
-  };
-
-  const removeField = (i: number) => {
-    if (!editedSchema) return;
-    setEditedSchema({ ...editedSchema, fields: editedSchema.fields.filter((_, idx) => idx !== i) });
   };
 
   const exportSchema = () => {
@@ -585,123 +563,134 @@ export default function DataSchemaSettings() {
 
               </div>
 
-              {/* Domain Configuration - RAG Guardrails */}
-              <div className="border-t pt-4 space-y-3">
+              {/* Domain Configuration - Simplified */}
+              <div className="border-t pt-4 space-y-4">
                 <h3 className="text-sm font-medium">Domain Konfigürasyonu</h3>
 
-                {/* Key Terms */}
+                {/* Key Terms - Tag style display */}
                 <div>
-                  <Label className="text-xs">Key Terms</Label>
+                  <Label className="text-xs mb-2 block">Anahtar Terimler</Label>
+                  <div className="flex flex-wrap gap-1 mb-2 p-2 bg-muted/30 rounded min-h-[40px]">
+                    {(editedSchema.llmConfig?.keyTerms || []).map((term, i) => (
+                      <Badge key={i} variant="secondary" className="text-xs cursor-pointer hover:bg-destructive hover:text-destructive-foreground"
+                        onClick={() => {
+                          const newTerms = [...(editedSchema.llmConfig?.keyTerms || [])];
+                          newTerms.splice(i, 1);
+                          setEditedSchema({ ...editedSchema, llmConfig: { ...editedSchema.llmConfig, keyTerms: newTerms } });
+                        }}>
+                        {term} ×
+                      </Badge>
+                    ))}
+                    {!(editedSchema.llmConfig?.keyTerms || []).length && <span className="text-xs text-muted-foreground">Terim yok</span>}
+                  </div>
+                  <div className="flex gap-2">
+                    <Input
+                      id="newKeyTerm"
+                      placeholder="Yeni terim ekle..."
+                      className="h-8 text-sm flex-1"
+                      onKeyDown={e => {
+                        if (e.key === 'Enter') {
+                          const input = e.target as HTMLInputElement;
+                          const val = input.value.trim();
+                          if (val && !(editedSchema.llmConfig?.keyTerms || []).includes(val)) {
+                            setEditedSchema({
+                              ...editedSchema,
+                              llmConfig: { ...editedSchema.llmConfig, keyTerms: [...(editedSchema.llmConfig?.keyTerms || []), val] }
+                            });
+                            input.value = '';
+                          }
+                        }
+                      }}
+                    />
+                    <Button size="sm" variant="outline" className="h-8"
+                      onClick={() => {
+                        const input = document.getElementById('newKeyTerm') as HTMLInputElement;
+                        const val = input?.value.trim();
+                        if (val && !(editedSchema.llmConfig?.keyTerms || []).includes(val)) {
+                          setEditedSchema({
+                            ...editedSchema,
+                            llmConfig: { ...editedSchema.llmConfig, keyTerms: [...(editedSchema.llmConfig?.keyTerms || []), val] }
+                          });
+                          input.value = '';
+                        }
+                      }}>
+                      <Plus className="w-3 h-3" />
+                    </Button>
+                  </div>
+                </div>
+
+                {/* Authority Levels - Simple key=value format */}
+                <div>
+                  <Label className="text-xs mb-2 block">Kaynak Öncelikleri (yüksek=güvenilir)</Label>
                   <Textarea
-                    value={(editedSchema.llmConfig?.keyTerms || []).join(', ')}
+                    value={Object.entries(editedSchema.llmConfig?.authorityLevels || {}).map(([k, v]) => `${k}=${v}`).join('\n')}
                     onChange={e => {
-                      const terms = e.target.value.split(',').map(t => t.trim()).filter(t => t);
-                      setEditedSchema({
-                        ...editedSchema,
-                        llmConfig: { ...editedSchema.llmConfig, keyTerms: terms }
+                      const lines = e.target.value.split('\n').filter(l => l.trim());
+                      const levels: Record<string, number> = {};
+                      lines.forEach(line => {
+                        const [key, val] = line.split('=').map(s => s.trim());
+                        if (key && val && !isNaN(Number(val))) {
+                          levels[key] = Number(val);
+                        }
                       });
+                      setEditedSchema({ ...editedSchema, llmConfig: { ...editedSchema.llmConfig, authorityLevels: levels } });
                     }}
-                    placeholder="ceza, usulsüzlük, vergi, kdv, tevkifat, stopaj, beyan, matrah..."
-                    rows={2}
-                    className="mt-1 text-sm"
-                  />
-                  <p className="text-xs text-muted-foreground mt-1">
-                    {(editedSchema.llmConfig?.keyTerms || []).length} terim
-                  </p>
-                </div>
-
-                {/* Topic Entities */}
-                <div>
-                  <Label className="text-xs">Topic Entities</Label>
-                  <Textarea
-                    value={JSON.stringify(editedSchema.llmConfig?.topicEntities || [], null, 2)}
-                    onChange={e => {
-                      try {
-                        const entities = JSON.parse(e.target.value);
-                        if (Array.isArray(entities)) {
-                          setEditedSchema({
-                            ...editedSchema,
-                            llmConfig: { ...editedSchema.llmConfig, topicEntities: entities }
-                          });
-                        }
-                      } catch {
-                        // Invalid JSON, don't update
-                      }
-                    }}
-                    placeholder={`[{"pattern": "vergi levhası", "entity": "vergi levhası", "synonyms": ["levha"]}]`}
-                    rows={5}
-                    className="mt-1 text-xs font-mono"
-                  />
-                  <p className="text-xs text-muted-foreground mt-1">
-                    {(editedSchema.llmConfig?.topicEntities || []).length} entity
-                  </p>
-                </div>
-
-                {/* Authority Levels */}
-                <div>
-                  <Label className="text-xs">Authority Levels</Label>
-                  <Textarea
-                    value={JSON.stringify(editedSchema.llmConfig?.authorityLevels || {}, null, 2)}
-                    onChange={e => {
-                      try {
-                        const levels = JSON.parse(e.target.value);
-                        if (typeof levels === 'object' && !Array.isArray(levels)) {
-                          setEditedSchema({
-                            ...editedSchema,
-                            llmConfig: { ...editedSchema.llmConfig, authorityLevels: levels }
-                          });
-                        }
-                      } catch {
-                        // Invalid JSON, don't update
-                      }
-                    }}
-                    placeholder={`{"kanun": 100, "teblig": 90, "ozelge": 75, "makale": 50}`}
+                    placeholder="kanun=100&#10;teblig=90&#10;ozelge=75&#10;makale=50"
                     rows={4}
-                    className="mt-1 text-xs font-mono"
+                    className="mt-1 text-sm font-mono"
                   />
-                  <p className="text-xs text-muted-foreground mt-1">
-                    {Object.keys(editedSchema.llmConfig?.authorityLevels || {}).length} seviye
-                  </p>
+                </div>
+
+                {/* Topic Entities - Simplified */}
+                <div>
+                  <Label className="text-xs mb-2 block">Konu Eşleşmeleri (gelişmiş)</Label>
+                  <Textarea
+                    value={(editedSchema.llmConfig?.topicEntities || []).map(e =>
+                      `${e.pattern} → ${e.synonyms?.join(', ') || ''}`
+                    ).join('\n')}
+                    onChange={e => {
+                      const lines = e.target.value.split('\n').filter(l => l.trim());
+                      const entities = lines.map(line => {
+                        const [pattern, syns] = line.split('→').map(s => s.trim());
+                        return {
+                          pattern: pattern || '',
+                          entity: pattern || '',
+                          synonyms: syns ? syns.split(',').map(s => s.trim()).filter(s => s) : []
+                        };
+                      }).filter(e => e.pattern);
+                      setEditedSchema({ ...editedSchema, llmConfig: { ...editedSchema.llmConfig, topicEntities: entities } });
+                    }}
+                    placeholder="vergi levhası → levha, asma zorunluluğu&#10;kdv → katma değer vergisi&#10;stopaj → kesinti, tevkifat"
+                    rows={4}
+                    className="mt-1 text-sm font-mono"
+                  />
+                  <p className="text-xs text-muted-foreground mt-1">Format: pattern → synonym1, synonym2</p>
                 </div>
               </div>
 
-              {/* Alanlar */}
+              {/* Veri Alanları - JSON format */}
               <div className="border-t pt-4">
-                <div className="flex items-center justify-between mb-2">
-                  <Label className="text-xs">Veri Alanları ({editedSchema.fields.length})</Label>
-                  <Button size="sm" variant="outline" onClick={addField} className="h-6 text-xs">
-                    <Plus className="w-3 h-3 mr-1" />Ekle
-                  </Button>
-                </div>
-                <div className="space-y-1.5 max-h-[180px] overflow-y-auto">
-                  {editedSchema.fields.map((field, i) => (
-                    <div key={i} className="flex items-center gap-2 p-2 bg-muted/50 rounded text-xs">
-                      <Input
-                        value={field.key}
-                        onChange={e => updateField(i, { key: e.target.value.toLowerCase().replace(/\s+/g, '_') })}
-                        placeholder="key"
-                        className="h-7 w-24"
-                      />
-                      <Input
-                        value={field.label}
-                        onChange={e => updateField(i, { label: e.target.value })}
-                        placeholder="Label"
-                        className="h-7 flex-1"
-                      />
-                      <Select value={field.type} onValueChange={v => updateField(i, { type: v as FieldType })}>
-                        <SelectTrigger className="h-7 w-20"><SelectValue /></SelectTrigger>
-                        <SelectContent>
-                          {Object.entries(FIELD_TYPE_LABELS).map(([v, l]) => <SelectItem key={v} value={v}>{l}</SelectItem>)}
-                        </SelectContent>
-                      </Select>
-                      <Switch checked={field.showInCitation} onCheckedChange={c => updateField(i, { showInCitation: c })} />
-                      <Button variant="ghost" size="sm" onClick={() => removeField(i)} className="h-7 w-7 p-0 text-destructive">
-                        <Trash2 className="w-3 h-3" />
-                      </Button>
-                    </div>
-                  ))}
-                  {!editedSchema.fields.length && <p className="text-xs text-muted-foreground text-center py-3">Alan yok</p>}
-                </div>
+                <Label className="text-xs">Veri Alanları (Opsiyonel)</Label>
+                <p className="text-xs text-muted-foreground mb-2">Citation formatı için metadata alanları</p>
+                <Textarea
+                  value={JSON.stringify(editedSchema.fields || [], null, 2)}
+                  onChange={e => {
+                    try {
+                      const fields = JSON.parse(e.target.value);
+                      if (Array.isArray(fields)) {
+                        setEditedSchema({ ...editedSchema, fields });
+                      }
+                    } catch {
+                      // Invalid JSON
+                    }
+                  }}
+                  placeholder={`[{"key": "kanun_no", "label": "Kanun No", "type": "reference"}]`}
+                  rows={4}
+                  className="mt-1 text-xs font-mono"
+                />
+                <p className="text-xs text-muted-foreground mt-1">
+                  {editedSchema.fields.length} alan
+                </p>
               </div>
             </>
           ) : (
