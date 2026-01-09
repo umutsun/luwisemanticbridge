@@ -535,13 +535,13 @@ export default function DataSchemaSettings() {
                 />
               </div>
 
-              {/* LLM Configuration - 6 fields (System Prompt ve Transform Rules kaldırıldı) */}
+              {/* LLM Konfigürasyonu - Sadece veri analizi ve citation için */}
               <div className="border-t pt-4 space-y-3">
                 <h3 className="text-sm font-medium">LLM Konfigürasyonu</h3>
 
-                {/* 1. Analyze Prompt */}
+                {/* Analyze Prompt */}
                 <div>
-                  <Label className="text-xs">Analyze Prompt (Doküman Analizi)</Label>
+                  <Label className="text-xs">Analyze Prompt</Label>
                   <Textarea
                     value={editedSchema.templates.analyze || ''}
                     onChange={e => setEditedSchema({
@@ -549,14 +549,14 @@ export default function DataSchemaSettings() {
                       templates: { ...editedSchema.templates, analyze: e.target.value }
                     })}
                     placeholder="Belgeyi analiz et ve önemli bilgileri çıkar..."
-                    rows={4}
+                    rows={3}
                     className="mt-1 text-sm font-mono"
                   />
                 </div>
 
-                {/* 2. Citation Template */}
+                {/* Citation Template */}
                 <div>
-                  <Label className="text-xs">Citation Template (Kaynak Formatı)</Label>
+                  <Label className="text-xs">Citation Template</Label>
                   <Input
                     value={editedSchema.templates.citation || ''}
                     onChange={e => setEditedSchema({
@@ -568,107 +568,30 @@ export default function DataSchemaSettings() {
                   />
                 </div>
 
-                {/* 2.5. Example Questions (Suggest Cards) */}
+                {/* Chatbot Context */}
                 <div>
-                  <Label className="text-xs flex items-center gap-2">
-                    Suggest Cards / Örnek Sorular
-                    <span className="text-muted-foreground font-normal">(Chatbot'ta öneri kartları olarak gösterilir)</span>
-                  </Label>
-                  <Textarea
-                    value={(editedSchema.templates.example_questions || editedSchema.templates.questions || []).join('\n')}
-                    onChange={e => {
-                      const questions = e.target.value.split('\n').filter(q => q.trim());
-                      setEditedSchema({
-                        ...editedSchema,
-                        templates: {
-                          ...editedSchema.templates,
-                          example_questions: questions,
-                          questions: questions
-                        }
-                      });
-                    }}
-                    placeholder="Her satıra bir soru yazın...&#10;KDV oranları nelerdir?&#10;Vergi beyannamesi ne zaman verilir?&#10;Stopaj oranı nasıl hesaplanır?"
-                    rows={4}
-                    className="mt-1 text-sm"
-                  />
-                  <p className="text-xs text-muted-foreground mt-1">
-                    {(editedSchema.templates.example_questions || editedSchema.templates.questions || []).length} soru tanımlı
-                  </p>
-                </div>
-
-                {/* 3. Chatbot Context */}
-                <div>
-                  <Label className="text-xs">Chatbot Context (Sohbet Bağlamı)</Label>
+                  <Label className="text-xs">Chatbot Context</Label>
                   <Textarea
                     value={editedSchema.llmConfig?.chatbotContext || ''}
                     onChange={e => setEditedSchema({
                       ...editedSchema,
                       llmConfig: { ...editedSchema.llmConfig, chatbotContext: e.target.value }
                     })}
-                    placeholder="Chatbot davranış kuralları ve yanıt stili..."
-                    rows={4}
-                    className="mt-1 text-sm font-mono"
-                  />
-                </div>
-
-                {/* 4. Question Generator */}
-                <div>
-                  <Label className="text-xs">Question Generator (Soru Üretici)</Label>
-                  <Textarea
-                    value={editedSchema.llmConfig?.questionGenerator || ''}
-                    onChange={e => setEditedSchema({
-                      ...editedSchema,
-                      llmConfig: { ...editedSchema.llmConfig, questionGenerator: e.target.value }
-                    })}
-                    placeholder="Takip soruları oluşturma kuralları..."
+                    placeholder="Domain uzmanı olarak yanıt ver..."
                     rows={3}
                     className="mt-1 text-sm font-mono"
                   />
                 </div>
 
-                {/* 5. Embedding Prefix */}
-                <div>
-                  <Label className="text-xs">Embedding Prefix (Vektör Öneki)</Label>
-                  <Input
-                    value={editedSchema.llmConfig?.embeddingPrefix || ''}
-                    onChange={e => setEditedSchema({
-                      ...editedSchema,
-                      llmConfig: { ...editedSchema.llmConfig, embeddingPrefix: e.target.value }
-                    })}
-                    placeholder="[Vergi Mevzuatı] "
-                    className="h-8 mt-1 font-mono"
-                  />
-                </div>
-
-                {/* 6. Search Context */}
-                <div>
-                  <Label className="text-xs">Search Context (Arama Bağlamı)</Label>
-                  <Textarea
-                    value={editedSchema.llmConfig?.searchContext || ''}
-                    onChange={e => setEditedSchema({
-                      ...editedSchema,
-                      llmConfig: { ...editedSchema.llmConfig, searchContext: e.target.value }
-                    })}
-                    placeholder="Semantik arama için bağlam..."
-                    rows={3}
-                    className="mt-1 text-sm font-mono"
-                  />
-                </div>
               </div>
 
               {/* Domain Configuration - RAG Guardrails */}
               <div className="border-t pt-4 space-y-3">
-                <h3 className="text-sm font-medium">Domain Konfigürasyonu (RAG Guardrails)</h3>
-                <p className="text-xs text-muted-foreground">
-                  Bu ayarlar RAG sisteminin domain-specific alıntı doğrulaması için kullanılır.
-                </p>
+                <h3 className="text-sm font-medium">Domain Konfigürasyonu</h3>
 
-                {/* 7. Key Terms */}
+                {/* Key Terms */}
                 <div>
-                  <Label className="text-xs flex items-center gap-2">
-                    Key Terms (Anahtar Terimler)
-                    <span className="text-muted-foreground font-normal">(Alıntı doğrulama için domain terimleri)</span>
-                  </Label>
+                  <Label className="text-xs">Key Terms</Label>
                   <Textarea
                     value={(editedSchema.llmConfig?.keyTerms || []).join(', ')}
                     onChange={e => {
@@ -678,21 +601,18 @@ export default function DataSchemaSettings() {
                         llmConfig: { ...editedSchema.llmConfig, keyTerms: terms }
                       });
                     }}
-                    placeholder="ceza, usulsüzlük, vergi, kdv, tevkifat, stopaj, beyan, matrah, muafiyet, istisna, tebliğ, kanun, özelge..."
+                    placeholder="ceza, usulsüzlük, vergi, kdv, tevkifat, stopaj, beyan, matrah..."
                     rows={2}
                     className="mt-1 text-sm"
                   />
                   <p className="text-xs text-muted-foreground mt-1">
-                    Virgülle ayırarak yazın. {(editedSchema.llmConfig?.keyTerms || []).length} terim tanımlı
+                    {(editedSchema.llmConfig?.keyTerms || []).length} terim
                   </p>
                 </div>
 
-                {/* 8. Topic Entities */}
+                {/* Topic Entities */}
                 <div>
-                  <Label className="text-xs flex items-center gap-2">
-                    Topic Entities (Konu Varlıkları)
-                    <span className="text-muted-foreground font-normal">(Soru-alıntı eşleşmesi için)</span>
-                  </Label>
+                  <Label className="text-xs">Topic Entities</Label>
                   <Textarea
                     value={JSON.stringify(editedSchema.llmConfig?.topicEntities || [], null, 2)}
                     onChange={e => {
@@ -708,56 +628,18 @@ export default function DataSchemaSettings() {
                         // Invalid JSON, don't update
                       }
                     }}
-                    placeholder={`[
-  {
-    "pattern": "vergi levhası|vergi levha",
-    "entity": "vergi levhası",
-    "synonyms": ["levha", "levha asma", "işyerinde bulundur"]
-  },
-  {
-    "pattern": "kdv|katma değer",
-    "entity": "kdv",
-    "synonyms": ["katma değer vergisi", "kdv oranı"]
-  }
-]`}
-                    rows={6}
+                    placeholder={`[{"pattern": "vergi levhası", "entity": "vergi levhası", "synonyms": ["levha"]}]`}
+                    rows={5}
                     className="mt-1 text-xs font-mono"
                   />
                   <p className="text-xs text-muted-foreground mt-1">
-                    JSON formatında: pattern (regex), entity (ana terim), synonyms (eşanlamlılar). {(editedSchema.llmConfig?.topicEntities || []).length} entity tanımlı
+                    {(editedSchema.llmConfig?.topicEntities || []).length} entity
                   </p>
                 </div>
 
-                {/* 9. Source Tables */}
+                {/* Authority Levels */}
                 <div>
-                  <Label className="text-xs flex items-center gap-2">
-                    Source Tables (Kaynak Tablolar)
-                    <span className="text-muted-foreground font-normal">(Bu şemaya ait veri tabloları)</span>
-                  </Label>
-                  <Textarea
-                    value={(editedSchema.llmConfig?.sourceTables || []).join('\n')}
-                    onChange={e => {
-                      const tables = e.target.value.split('\n').map(t => t.trim()).filter(t => t);
-                      setEditedSchema({
-                        ...editedSchema,
-                        llmConfig: { ...editedSchema.llmConfig, sourceTables: tables }
-                      });
-                    }}
-                    placeholder="csv_danistaykararlari&#10;csv_ozelge&#10;csv_makale_arsiv_2021&#10;csv_sorucevap"
-                    rows={3}
-                    className="mt-1 text-sm font-mono"
-                  />
-                  <p className="text-xs text-muted-foreground mt-1">
-                    Her satıra bir tablo adı. {(editedSchema.llmConfig?.sourceTables || []).length} tablo tanımlı
-                  </p>
-                </div>
-
-                {/* 10. Authority Levels */}
-                <div>
-                  <Label className="text-xs flex items-center gap-2">
-                    Authority Levels (Otorite Seviyeleri)
-                    <span className="text-muted-foreground font-normal">(Kaynak tipi önceliklendirme için)</span>
-                  </Label>
+                  <Label className="text-xs">Authority Levels</Label>
                   <Textarea
                     value={JSON.stringify(editedSchema.llmConfig?.authorityLevels || {}, null, 2)}
                     onChange={e => {
@@ -773,19 +655,12 @@ export default function DataSchemaSettings() {
                         // Invalid JSON, don't update
                       }
                     }}
-                    placeholder={`{
-  "kanun": 100,
-  "teblig": 90,
-  "ozelge": 75,
-  "danistay": 70,
-  "makale": 50,
-  "qna": 30
-}`}
-                    rows={5}
+                    placeholder={`{"kanun": 100, "teblig": 90, "ozelge": 75, "makale": 50}`}
+                    rows={4}
                     className="mt-1 text-xs font-mono"
                   />
                   <p className="text-xs text-muted-foreground mt-1">
-                    JSON formatında: kaynak_tipi: seviye (yüksek = daha güvenilir). {Object.keys(editedSchema.llmConfig?.authorityLevels || {}).length} seviye tanımlı
+                    {Object.keys(editedSchema.llmConfig?.authorityLevels || {}).length} seviye
                   </p>
                 </div>
               </div>
