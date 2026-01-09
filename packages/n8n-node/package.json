@@ -1,7 +1,7 @@
 {
   "name": "n8n-nodes-luwi-semantic-bridge",
-  "version": "2.0.0",
-  "description": "Connect to Luwi Chat API, format responses for Telegram/WhatsApp/Discord/Slack, and generate media",
+  "version": "2.1.0",
+  "description": "Connect to Luwi Chat API, format for social media (Twitter/LinkedIn/Instagram), generate AI hashtags & captions",
   "main": "index.js",
   "license": "MIT",
   "author": "Luwi <info@luwi.dev>",

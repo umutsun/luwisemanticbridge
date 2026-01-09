@@ -85,6 +85,37 @@ export class LuwiSemanticBridge implements INodeType {
             description: 'Generate audio from text using OpenAI TTS',
             action: 'Generate audio with TTS',
           },
+          // SOCIAL MEDIA
+          {
+            name: 'Format for Twitter/X',
+            value: 'formatTwitter',
+            description: 'Format response for Twitter/X with thread support',
+            action: 'Format for Twitter/X',
+          },
+          {
+            name: 'Format for LinkedIn',
+            value: 'formatLinkedIn',
+            description: 'Format response for LinkedIn post',
+            action: 'Format for LinkedIn',
+          },
+          {
+            name: 'Format for Instagram',
+            value: 'formatInstagram',
+            description: 'Format response for Instagram caption',
+            action: 'Format for Instagram',
+          },
+          {
+            name: 'Generate Hashtags',
+            value: 'generateHashtags',
+            description: 'Generate relevant hashtags using AI',
+            action: 'Generate hashtags with AI',
+          },
+          {
+            name: 'Generate Caption',
+            value: 'generateCaption',
+            description: 'Generate social media caption using AI',
+            action: 'Generate caption with AI',
+          },
         ],
         default: 'chat',
       },
@@ -189,7 +220,7 @@ export class LuwiSemanticBridge implements INodeType {
         description: 'The message content to format for the platform',
         displayOptions: {
           show: {
-            operation: ['formatTelegram', 'formatWhatsApp', 'formatDiscord', 'formatSlack'],
+            operation: ['formatTelegram', 'formatWhatsApp', 'formatDiscord', 'formatSlack', 'formatTwitter', 'formatLinkedIn', 'formatInstagram'],
           },
         },
       },
@@ -215,6 +246,223 @@ export class LuwiSemanticBridge implements INodeType {
           show: {
             operation: ['formatTelegram', 'formatWhatsApp', 'formatDiscord', 'formatSlack'],
             includeSources: [true],
+          },
+        },
+      },
+
+      // TWITTER/X SPECIFIC
+      {
+        displayName: 'Create Thread',
+        name: 'twitterCreateThread',
+        type: 'boolean',
+        default: true,
+        description: 'Whether to split long messages into Twitter thread',
+        displayOptions: {
+          show: {
+            operation: ['formatTwitter'],
+          },
+        },
+      },
+      {
+        displayName: 'Include Hashtags',
+        name: 'twitterIncludeHashtags',
+        type: 'boolean',
+        default: true,
+        description: 'Whether to add relevant hashtags',
+        displayOptions: {
+          show: {
+            operation: ['formatTwitter'],
+          },
+        },
+      },
+      {
+        displayName: 'Hashtags',
+        name: 'twitterHashtags',
+        type: 'string',
+        default: '',
+        placeholder: '#AI #Technology #News',
+        description: 'Custom hashtags to add (space or comma separated)',
+        displayOptions: {
+          show: {
+            operation: ['formatTwitter'],
+            twitterIncludeHashtags: [true],
+          },
+        },
+      },
+
+      // LINKEDIN SPECIFIC
+      {
+        displayName: 'Post Type',
+        name: 'linkedinPostType',
+        type: 'options',
+        options: [
+          { name: 'Standard Post', value: 'post' },
+          { name: 'Article', value: 'article' },
+          { name: 'Document/Carousel', value: 'document' },
+        ],
+        default: 'post',
+        displayOptions: {
+          show: {
+            operation: ['formatLinkedIn'],
+          },
+        },
+      },
+      {
+        displayName: 'Add Call to Action',
+        name: 'linkedinCTA',
+        type: 'boolean',
+        default: true,
+        description: 'Whether to add engagement prompt at the end',
+        displayOptions: {
+          show: {
+            operation: ['formatLinkedIn'],
+          },
+        },
+      },
+
+      // INSTAGRAM SPECIFIC
+      {
+        displayName: 'Caption Style',
+        name: 'instagramStyle',
+        type: 'options',
+        options: [
+          { name: 'Professional', value: 'professional' },
+          { name: 'Casual', value: 'casual' },
+          { name: 'Storytelling', value: 'storytelling' },
+          { name: 'Educational', value: 'educational' },
+        ],
+        default: 'professional',
+        displayOptions: {
+          show: {
+            operation: ['formatInstagram'],
+          },
+        },
+      },
+      {
+        displayName: 'Add Emojis',
+        name: 'instagramEmojis',
+        type: 'boolean',
+        default: true,
+        description: 'Whether to add relevant emojis',
+        displayOptions: {
+          show: {
+            operation: ['formatInstagram'],
+          },
+        },
+      },
+      {
+        displayName: 'Max Hashtags',
+        name: 'instagramMaxHashtags',
+        type: 'number',
+        default: 10,
+        typeOptions: {
+          minValue: 0,
+          maxValue: 30,
+        },
+        description: 'Maximum number of hashtags (Instagram allows up to 30)',
+        displayOptions: {
+          show: {
+            operation: ['formatInstagram'],
+          },
+        },
+      },
+
+      // ===================
+      // AI CONTENT GENERATION
+      // ===================
+      {
+        displayName: 'Content',
+        name: 'aiContent',
+        type: 'string',
+        typeOptions: {
+          rows: 4,
+        },
+        default: '',
+        placeholder: 'Content to generate hashtags/caption for...',
+        description: 'The content to analyze for generating hashtags or caption',
+        displayOptions: {
+          show: {
+            operation: ['generateHashtags', 'generateCaption'],
+          },
+        },
+        required: true,
+      },
+      {
+        displayName: 'Platform',
+        name: 'aiPlatform',
+        type: 'options',
+        options: [
+          { name: 'Twitter/X', value: 'twitter' },
+          { name: 'LinkedIn', value: 'linkedin' },
+          { name: 'Instagram', value: 'instagram' },
+          { name: 'Facebook', value: 'facebook' },
+          { name: 'General', value: 'general' },
+        ],
+        default: 'general',
+        description: 'Target platform for optimization',
+        displayOptions: {
+          show: {
+            operation: ['generateHashtags', 'generateCaption'],
+          },
+        },
+      },
+      {
+        displayName: 'Language',
+        name: 'aiLanguage',
+        type: 'options',
+        options: [
+          { name: 'Turkish', value: 'tr' },
+          { name: 'English', value: 'en' },
+          { name: 'Auto (Same as Content)', value: 'auto' },
+        ],
+        default: 'auto',
+        displayOptions: {
+          show: {
+            operation: ['generateHashtags', 'generateCaption'],
+          },
+        },
+      },
+      {
+        displayName: 'Number of Hashtags',
+        name: 'hashtagCount',
+        type: 'number',
+        default: 10,
+        typeOptions: {
+          minValue: 1,
+          maxValue: 30,
+        },
+        displayOptions: {
+          show: {
+            operation: ['generateHashtags'],
+          },
+        },
+      },
+      {
+        displayName: 'Caption Style',
+        name: 'captionStyle',
+        type: 'options',
+        options: [
+          { name: 'Professional', value: 'professional' },
+          { name: 'Casual & Friendly', value: 'casual' },
+          { name: 'Witty & Humorous', value: 'witty' },
+          { name: 'Inspirational', value: 'inspirational' },
+          { name: 'Educational', value: 'educational' },
+        ],
+        default: 'professional',
+        displayOptions: {
+          show: {
+            operation: ['generateCaption'],
+          },
+        },
+      },
+      {
+        displayName: 'Include Hashtags in Caption',
+        name: 'captionIncludeHashtags',
+        type: 'boolean',
+        default: true,
+        displayOptions: {
+          show: {
+            operation: ['generateCaption'],
           },
         },
       },
@@ -736,6 +984,310 @@ export class LuwiSemanticBridge implements INodeType {
                 mimeType: 'audio/mpeg',
                 fileName: 'speech.mp3',
               },
+            },
+          });
+        }
+
+        // ===================
+        // FORMAT FOR TWITTER/X
+        // ===================
+        else if (operation === 'formatTwitter') {
+          const message = this.getNodeParameter('formatMessage', i) as string;
+          const createThread = this.getNodeParameter('twitterCreateThread', i) as boolean;
+          const includeHashtags = this.getNodeParameter('twitterIncludeHashtags', i) as boolean;
+
+          const TWEET_LIMIT = 280;
+          let hashtags = '';
+
+          if (includeHashtags) {
+            hashtags = this.getNodeParameter('twitterHashtags', i, '') as string;
+          }
+
+          // Split into thread if needed
+          const tweets: string[] = [];
+          if (createThread && message.length > TWEET_LIMIT) {
+            // Split by sentences or at word boundaries
+            const sentences = message.split(/(?<=[.!?])\s+/);
+            let currentTweet = '';
+
+            for (const sentence of sentences) {
+              if ((currentTweet + ' ' + sentence).trim().length <= TWEET_LIMIT - 10) {
+                currentTweet = (currentTweet + ' ' + sentence).trim();
+              } else {
+                if (currentTweet) {
+                  tweets.push(currentTweet);
+                }
+                // Handle long sentences
+                if (sentence.length > TWEET_LIMIT - 10) {
+                  const words = sentence.split(' ');
+                  currentTweet = '';
+                  for (const word of words) {
+                    if ((currentTweet + ' ' + word).trim().length <= TWEET_LIMIT - 10) {
+                      currentTweet = (currentTweet + ' ' + word).trim();
+                    } else {
+                      if (currentTweet) tweets.push(currentTweet);
+                      currentTweet = word;
+                    }
+                  }
+                } else {
+                  currentTweet = sentence;
+                }
+              }
+            }
+            if (currentTweet) tweets.push(currentTweet);
+
+            // Add thread numbering
+            const numberedTweets = tweets.map((tweet, idx) =>
+              `${idx + 1}/${tweets.length} ${tweet}`
+            );
+
+            // Add hashtags to last tweet
+            if (hashtags && numberedTweets.length > 0) {
+              const lastIdx = numberedTweets.length - 1;
+              if ((numberedTweets[lastIdx] + '\n\n' + hashtags).length <= TWEET_LIMIT) {
+                numberedTweets[lastIdx] += '\n\n' + hashtags;
+              }
+            }
+
+            returnData.push({
+              json: {
+                isThread: true,
+                tweetCount: numberedTweets.length,
+                tweets: numberedTweets,
+                platform: 'twitter',
+              },
+            });
+          } else {
+            // Single tweet
+            let tweet = message.substring(0, TWEET_LIMIT);
+            if (hashtags && (tweet + '\n\n' + hashtags).length <= TWEET_LIMIT) {
+              tweet += '\n\n' + hashtags;
+            }
+
+            returnData.push({
+              json: {
+                isThread: false,
+                tweetCount: 1,
+                tweets: [tweet],
+                text: tweet,
+                platform: 'twitter',
+              },
+            });
+          }
+        }
+
+        // ===================
+        // FORMAT FOR LINKEDIN
+        // ===================
+        else if (operation === 'formatLinkedIn') {
+          const message = this.getNodeParameter('formatMessage', i) as string;
+          const postType = this.getNodeParameter('linkedinPostType', i) as string;
+          const addCTA = this.getNodeParameter('linkedinCTA', i) as boolean;
+
+          let formattedPost = message;
+
+          // LinkedIn formatting
+          formattedPost = formattedPost
+            .replace(/\*\*(.*?)\*\*/g, '$1') // Remove markdown bold (LinkedIn doesn't support)
+            .replace(/\*(.*?)\*/g, '$1');    // Remove markdown italic
+
+          // Add line breaks for readability
+          if (postType === 'post') {
+            // Standard post - max 3000 chars
+            formattedPost = formattedPost.substring(0, 3000);
+          } else if (postType === 'article') {
+            // Article summary
+            formattedPost = formattedPost.substring(0, 700);
+          }
+
+          // Add CTA
+          if (addCTA) {
+            const ctas = [
+              '\n\n💬 Ne düşünüyorsunuz? Yorumlarınızı bekliyorum.',
+              '\n\n👇 Sizin deneyimleriniz neler? Paylaşın!',
+              '\n\n🔔 Daha fazla içerik için takip edin.',
+              '\n\n💡 Bu konuda sorularınız varsa yorumlarda cevaplayalım.',
+            ];
+            formattedPost += ctas[Math.floor(Math.random() * ctas.length)];
+          }
+
+          returnData.push({
+            json: {
+              text: formattedPost,
+              postType,
+              characterCount: formattedPost.length,
+              platform: 'linkedin',
+            },
+          });
+        }
+
+        // ===================
+        // FORMAT FOR INSTAGRAM
+        // ===================
+        else if (operation === 'formatInstagram') {
+          const message = this.getNodeParameter('formatMessage', i) as string;
+          const style = this.getNodeParameter('instagramStyle', i) as string;
+          const addEmojis = this.getNodeParameter('instagramEmojis', i) as boolean;
+          const maxHashtags = this.getNodeParameter('instagramMaxHashtags', i) as number;
+
+          let caption = message;
+
+          // Style-based formatting
+          if (addEmojis) {
+            const styleEmojis: Record<string, string[]> = {
+              professional: ['💼', '📊', '✨', '🎯', '💡'],
+              casual: ['😊', '🙌', '❤️', '✌️', '🔥'],
+              storytelling: ['📖', '🌟', '💫', '🎬', '✨'],
+              educational: ['📚', '🎓', '💡', '🧠', '📝'],
+            };
+
+            const emojis = styleEmojis[style] || styleEmojis.professional;
+
+            // Add opening emoji
+            caption = `${emojis[Math.floor(Math.random() * emojis.length)]} ${caption}`;
+
+            // Add section emojis
+            caption = caption.replace(/\n\n/g, `\n\n${emojis[Math.floor(Math.random() * emojis.length)]} `);
+          }
+
+          // Instagram caption limit is 2200 chars
+          caption = caption.substring(0, 2200 - (maxHashtags * 15)); // Leave room for hashtags
+
+          // Add placeholder for hashtags
+          if (maxHashtags > 0) {
+            caption += '\n\n.\n.\n.\n'; // Instagram hashtag separator trick
+            caption += `[${maxHashtags} hashtag eklenecek]`;
+          }
+
+          returnData.push({
+            json: {
+              caption,
+              style,
+              characterCount: caption.length,
+              maxHashtags,
+              platform: 'instagram',
+            },
+          });
+        }
+
+        // ===================
+        // GENERATE HASHTAGS (AI)
+        // ===================
+        else if (operation === 'generateHashtags') {
+          const content = this.getNodeParameter('aiContent', i) as string;
+          const platform = this.getNodeParameter('aiPlatform', i) as string;
+          const language = this.getNodeParameter('aiLanguage', i) as string;
+          const count = this.getNodeParameter('hashtagCount', i) as number;
+
+          const openaiKey = credentials.openaiApiKey as string;
+          if (!openaiKey) {
+            throw new Error('OpenAI API key is required for hashtag generation');
+          }
+
+          const openai = new OpenAI({ apiKey: openaiKey });
+
+          const platformGuide: Record<string, string> = {
+            twitter: 'Twitter/X için kısa ve trend hashtag\'ler (2-3 kelime max)',
+            linkedin: 'LinkedIn için profesyonel ve sektörel hashtag\'ler',
+            instagram: 'Instagram için popüler ve keşfedilebilir hashtag\'ler',
+            facebook: 'Facebook için genel ve anlaşılır hashtag\'ler',
+            general: 'Genel sosyal medya kullanımı için hashtag\'ler',
+          };
+
+          const languageGuide = language === 'tr' ? 'Türkçe' : language === 'en' ? 'İngilizce' : 'içerikle aynı dilde';
+
+          const response = await openai.chat.completions.create({
+            model: 'gpt-4o-mini',
+            messages: [
+              {
+                role: 'system',
+                content: `Sen bir sosyal medya hashtag uzmanısın. ${platformGuide[platform]}. Hashtag'leri ${languageGuide} oluştur. Sadece hashtag'leri döndür, başka açıklama ekleme.`,
+              },
+              {
+                role: 'user',
+                content: `Aşağıdaki içerik için ${count} adet ilgili hashtag oluştur:\n\n${content}`,
+              },
+            ],
+            temperature: 0.7,
+          });
+
+          const hashtagText = response.choices[0].message.content || '';
+          const hashtags = hashtagText
+            .split(/[\s,\n]+/)
+            .filter(tag => tag.startsWith('#'))
+            .slice(0, count);
+
+          returnData.push({
+            json: {
+              hashtags,
+              hashtagString: hashtags.join(' '),
+              count: hashtags.length,
+              platform,
+              language,
+            },
+          });
+        }
+
+        // ===================
+        // GENERATE CAPTION (AI)
+        // ===================
+        else if (operation === 'generateCaption') {
+          const content = this.getNodeParameter('aiContent', i) as string;
+          const platform = this.getNodeParameter('aiPlatform', i) as string;
+          const language = this.getNodeParameter('aiLanguage', i) as string;
+          const style = this.getNodeParameter('captionStyle', i) as string;
+          const includeHashtags = this.getNodeParameter('captionIncludeHashtags', i) as boolean;
+
+          const openaiKey = credentials.openaiApiKey as string;
+          if (!openaiKey) {
+            throw new Error('OpenAI API key is required for caption generation');
+          }
+
+          const openai = new OpenAI({ apiKey: openaiKey });
+
+          const platformLimits: Record<string, number> = {
+            twitter: 280,
+            linkedin: 3000,
+            instagram: 2200,
+            facebook: 63206,
+            general: 1000,
+          };
+
+          const styleGuides: Record<string, string> = {
+            professional: 'Profesyonel, ciddi ve bilgilendirici bir ton kullan',
+            casual: 'Samimi, arkadaşça ve rahat bir ton kullan',
+            witty: 'Esprili, zekice ve eğlenceli bir ton kullan',
+            inspirational: 'İlham verici, motive edici ve pozitif bir ton kullan',
+            educational: 'Öğretici, açıklayıcı ve bilgi paylaşan bir ton kullan',
+          };
+
+          const languageGuide = language === 'tr' ? 'Türkçe' : language === 'en' ? 'İngilizce' : 'içerikle aynı dilde';
+          const charLimit = platformLimits[platform] || 1000;
+
+          const response = await openai.chat.completions.create({
+            model: 'gpt-4o-mini',
+            messages: [
+              {
+                role: 'system',
+                content: `Sen bir sosyal medya içerik yazarısın. ${styleGuides[style]}. Caption'ı ${languageGuide} yaz. Maksimum ${charLimit} karakter. ${includeHashtags ? 'Sonuna 5-10 ilgili hashtag ekle.' : 'Hashtag ekleme.'}`,
+              },
+              {
+                role: 'user',
+                content: `Aşağıdaki içerik için ${platform} platformuna uygun bir caption yaz:\n\n${content}`,
+              },
+            ],
+            temperature: 0.8,
+          });
+
+          const caption = response.choices[0].message.content || '';
+
+          returnData.push({
+            json: {
+              caption,
+              characterCount: caption.length,
+              platform,
+              style,
+              language,
             },
           });
         }
