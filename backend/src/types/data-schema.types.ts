@@ -181,6 +181,19 @@ export interface TransformPrompt {
 // ============================================
 
 /**
+ * Topic Entity for domain-specific quote validation
+ * Used by RAG guardrails to match questions with evidence
+ */
+export interface TopicEntity {
+  /** Regex pattern as string, e.g., "vergi levhası|vergi levha" */
+  pattern: string;
+  /** Primary entity name */
+  entity: string;
+  /** Synonyms for broader matching in evidence */
+  synonyms: string[];
+}
+
+/**
  * LLM Configuration for schema-aware processing
  * Used across all LLM-powered features: analyze, chatbot, embedding, transform
  */
@@ -205,6 +218,22 @@ export interface LLMConfig {
 
   /** Context for semantic search queries */
   searchContext?: string;
+
+  /** Domain-specific topic entities for RAG guardrails quote validation */
+  topicEntities?: TopicEntity[];
+
+  /** Domain-specific key terms for RAG guardrails validation */
+  keyTerms?: string[];
+
+  /** Source tables that belong to this schema */
+  sourceTables?: string[];
+
+  /**
+   * Authority levels for source types (higher = more authoritative)
+   * Used for quote upgrade guardrail - prefers higher authority sources
+   * Example: { "kanun": 100, "teblig": 90, "ozelge": 75, "danistay": 70, "makale": 50, "qna": 30 }
+   */
+  authorityLevels?: Record<string, number>;
 }
 
 /**

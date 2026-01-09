@@ -19,6 +19,12 @@ import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger
 } from '@/components/ui/dropdown-menu';
 
+interface TopicEntity {
+  pattern: string;      // regex pattern as string, e.g., "vergi levhası|vergi levha"
+  entity: string;       // primary entity name
+  synonyms: string[];   // synonyms for matching
+}
+
 interface UnifiedSchema {
   id: string;
   name: string;
@@ -27,7 +33,7 @@ interface UnifiedSchema {
   industry_code?: string;
   industry_icon?: string;
   fields: SchemaField[];
-  templates: { analyze: string; citation: string; questions: string[] };
+  templates: { analyze: string; citation: string; questions: string[]; example_questions?: string[] };
   llm_guide?: string;
   llm_config?: {
     analyzePrompt?: string;
@@ -37,6 +43,10 @@ interface UnifiedSchema {
     transformRules?: string;
     questionGenerator?: string;
     searchContext?: string;
+    topicEntities?: TopicEntity[];    // Domain-specific topic entities
+    keyTerms?: string[];              // Domain-specific key terms for validation
+    sourceTables?: string[];          // Source tables for this schema
+    authorityLevels?: Record<string, number>;  // Source type authority weights
   };
   is_active: boolean;
   is_default: boolean;
@@ -558,6 +568,34 @@ export default function DataSchemaSettings() {
                   />
                 </div>
 
+                {/* 2.5. Example Questions (Suggest Cards) */}
+                <div>
+                  <Label className="text-xs flex items-center gap-2">
+                    Suggest Cards / Örnek Sorular
+                    <span className="text-muted-foreground font-normal">(Chatbot'ta öneri kartları olarak gösterilir)</span>
+                  </Label>
+                  <Textarea
+                    value={(editedSchema.templates.example_questions || editedSchema.templates.questions || []).join('\n')}
+                    onChange={e => {
+                      const questions = e.target.value.split('\n').filter(q => q.trim());
+                      setEditedSchema({
+                        ...editedSchema,
+                        templates: {
+                          ...editedSchema.templates,
+                          example_questions: questions,
+                          questions: questions
+                        }
+                      });
+                    }}
+                    placeholder="Her satıra bir soru yazın...&#10;KDV oranları nelerdir?&#10;Vergi beyannamesi ne zaman verilir?&#10;Stopaj oranı nasıl hesaplanır?"
+                    rows={4}
+                    className="mt-1 text-sm"
+                  />
+                  <p className="text-xs text-muted-foreground mt-1">
+                    {(editedSchema.templates.example_questions || editedSchema.templates.questions || []).length} soru tanımlı
+                  </p>
+                </div>
+
                 {/* 3. Chatbot Context */}
                 <div>
                   <Label className="text-xs">Chatbot Context (Sohbet Bağlamı)</Label>
@@ -615,6 +653,140 @@ export default function DataSchemaSettings() {
                     rows={3}
                     className="mt-1 text-sm font-mono"
                   />
+                </div>
+              </div>
+
+              {/* Domain Configuration - RAG Guardrails */}
+              <div className="border-t pt-4 space-y-3">
+                <h3 className="text-sm font-medium">Domain Konfigürasyonu (RAG Guardrails)</h3>
+                <p className="text-xs text-muted-foreground">
+                  Bu ayarlar RAG sisteminin domain-specific alıntı doğrulaması için kullanılır.
+                </p>
+
+                {/* 7. Key Terms */}
+                <div>
+                  <Label className="text-xs flex items-center gap-2">
+                    Key Terms (Anahtar Terimler)
+                    <span className="text-muted-foreground font-normal">(Alıntı doğrulama için domain terimleri)</span>
+                  </Label>
+                  <Textarea
+                    value={(editedSchema.llmConfig?.keyTerms || []).join(', ')}
+                    onChange={e => {
+                      const terms = e.target.value.split(',').map(t => t.trim()).filter(t => t);
+                      setEditedSchema({
+                        ...editedSchema,
+                        llmConfig: { ...editedSchema.llmConfig, keyTerms: terms }
+                      });
+                    }}
+                    placeholder="ceza, usulsüzlük, vergi, kdv, tevkifat, stopaj, beyan, matrah, muafiyet, istisna, tebliğ, kanun, özelge..."
+                    rows={2}
+                    className="mt-1 text-sm"
+                  />
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Virgülle ayırarak yazın. {(editedSchema.llmConfig?.keyTerms || []).length} terim tanımlı
+                  </p>
+                </div>
+
+                {/* 8. Topic Entities */}
+                <div>
+                  <Label className="text-xs flex items-center gap-2">
+                    Topic Entities (Konu Varlıkları)
+                    <span className="text-muted-foreground font-normal">(Soru-alıntı eşleşmesi için)</span>
+                  </Label>
+                  <Textarea
+                    value={JSON.stringify(editedSchema.llmConfig?.topicEntities || [], null, 2)}
+                    onChange={e => {
+                      try {
+                        const entities = JSON.parse(e.target.value);
+                        if (Array.isArray(entities)) {
+                          setEditedSchema({
+                            ...editedSchema,
+                            llmConfig: { ...editedSchema.llmConfig, topicEntities: entities }
+                          });
+                        }
+                      } catch {
+                        // Invalid JSON, don't update
+                      }
+                    }}
+                    placeholder={`[
+  {
+    "pattern": "vergi levhası|vergi levha",
+    "entity": "vergi levhası",
+    "synonyms": ["levha", "levha asma", "işyerinde bulundur"]
+  },
+  {
+    "pattern": "kdv|katma değer",
+    "entity": "kdv",
+    "synonyms": ["katma değer vergisi", "kdv oranı"]
+  }
+]`}
+                    rows={6}
+                    className="mt-1 text-xs font-mono"
+                  />
+                  <p className="text-xs text-muted-foreground mt-1">
+                    JSON formatında: pattern (regex), entity (ana terim), synonyms (eşanlamlılar). {(editedSchema.llmConfig?.topicEntities || []).length} entity tanımlı
+                  </p>
+                </div>
+
+                {/* 9. Source Tables */}
+                <div>
+                  <Label className="text-xs flex items-center gap-2">
+                    Source Tables (Kaynak Tablolar)
+                    <span className="text-muted-foreground font-normal">(Bu şemaya ait veri tabloları)</span>
+                  </Label>
+                  <Textarea
+                    value={(editedSchema.llmConfig?.sourceTables || []).join('\n')}
+                    onChange={e => {
+                      const tables = e.target.value.split('\n').map(t => t.trim()).filter(t => t);
+                      setEditedSchema({
+                        ...editedSchema,
+                        llmConfig: { ...editedSchema.llmConfig, sourceTables: tables }
+                      });
+                    }}
+                    placeholder="csv_danistaykararlari&#10;csv_ozelge&#10;csv_makale_arsiv_2021&#10;csv_sorucevap"
+                    rows={3}
+                    className="mt-1 text-sm font-mono"
+                  />
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Her satıra bir tablo adı. {(editedSchema.llmConfig?.sourceTables || []).length} tablo tanımlı
+                  </p>
+                </div>
+
+                {/* 10. Authority Levels */}
+                <div>
+                  <Label className="text-xs flex items-center gap-2">
+                    Authority Levels (Otorite Seviyeleri)
+                    <span className="text-muted-foreground font-normal">(Kaynak tipi önceliklendirme için)</span>
+                  </Label>
+                  <Textarea
+                    value={JSON.stringify(editedSchema.llmConfig?.authorityLevels || {}, null, 2)}
+                    onChange={e => {
+                      try {
+                        const levels = JSON.parse(e.target.value);
+                        if (typeof levels === 'object' && !Array.isArray(levels)) {
+                          setEditedSchema({
+                            ...editedSchema,
+                            llmConfig: { ...editedSchema.llmConfig, authorityLevels: levels }
+                          });
+                        }
+                      } catch {
+                        // Invalid JSON, don't update
+                      }
+                    }}
+                    placeholder={`{
+  "kanun": 100,
+  "teblig": 90,
+  "ozelge": 75,
+  "danistay": 70,
+  "makale": 50,
+  "qna": 30
+}`}
+                    rows={5}
+                    className="mt-1 text-xs font-mono"
+                  />
+                  <p className="text-xs text-muted-foreground mt-1">
+                    JSON formatında: kaynak_tipi: seviye (yüksek = daha güvenilir). {Object.keys(editedSchema.llmConfig?.authorityLevels || {}).length} seviye tanımlı
+                  </p>
                 </div>
               </div>
 

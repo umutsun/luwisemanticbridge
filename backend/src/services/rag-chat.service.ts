@@ -6,6 +6,7 @@ import pool from '../config/database';
 import { redis } from '../config/redis';
 import dotenv from 'dotenv';
 import { TIMEOUTS } from '../config';
+import { TopicEntity, LLMConfig } from '../types/data-schema.types';
 
 // Settings service interface
 interface SettingsService {
@@ -166,6 +167,50 @@ export class RAGChatService {
   constructor() {
     this.llmManager = LLMManager.getInstance();
     console.log(' RAG Chat Service initialized with LLM Manager');
+  }
+
+  /**
+   * 🔧 DOMAIN CONFIG LOADER
+   * Loads topic entities and key terms from active schema's llm_config
+   * NO HARDCODED DEFAULTS - each instance imports their own domain config JSON
+   *
+   * Domain configs available at: docs/domain-configs/
+   * - vergilex-domain-config.json (Vergi/Hukuk)
+   * - bookie-domain-config.json (Muhasebe)
+   * - geolex-domain-config.json (Emlak/İmar)
+   */
+  private async getDomainConfig(): Promise<{
+    topicEntities: TopicEntity[];
+    keyTerms: string[];
+    authorityLevels: Record<string, number>;
+  }> {
+    try {
+      const config = await dataSchemaService.loadConfig();
+      const activeSchema = config.schemas.find(s => s.id === config.activeSchemaId);
+      const llmConfig = activeSchema?.llmConfig as any; // Cast to any for authorityLevels
+
+      // Get topic entities from DB - NO HARDCODED DEFAULTS
+      const topicEntities = llmConfig?.topicEntities || [];
+
+      // Get key terms from DB - NO HARDCODED DEFAULTS
+      const keyTerms = llmConfig?.keyTerms || [];
+
+      // Get authority levels from DB - NO HARDCODED DEFAULTS
+      const authorityLevels = llmConfig?.authorityLevels || {};
+
+      if (topicEntities.length === 0 && keyTerms.length === 0) {
+        console.log(`⚠️ [DOMAIN_CONFIG] No domain config in DB!`);
+        console.log(`   Import a domain config JSON via Settings > Schema > JSON Import`);
+        console.log(`   Available configs: docs/domain-configs/*.json`);
+      } else {
+        console.log(`📋 [DOMAIN_CONFIG] Loaded from DB: ${topicEntities.length} entities, ${keyTerms.length} key terms, ${Object.keys(authorityLevels).length} authority levels`);
+      }
+
+      return { topicEntities, keyTerms, authorityLevels };
+    } catch (error) {
+      console.error('[DOMAIN_CONFIG] Failed to load config:', error);
+      return { topicEntities: [], keyTerms: [], authorityLevels: {} };
+    }
   }
 
   /**
@@ -793,6 +838,10 @@ ${questionLabel}: ${message}`;
     const timings: Record<string, number> = {};
     const startTotal = Date.now();
 
+    // 📋 Load domain config (topic entities and key terms) from active schema
+    // This is loaded once at the start and reused throughout the method
+    const domainConfig = await this.getDomainConfig();
+
     try {
       // 1. Create or get conversation
       const convId = conversationId || uuidv4();
@@ -1055,6 +1104,18 @@ ${questionLabel}: ${message}`;
       initialDisplayCount = Math.min(minResults, searchResults.length);
       console.log(`⏱️ Search: ${searchResults.length} results in ${timings.search}ms, displaying ${initialDisplayCount}`);
 
+      // 📊 METRIC: AC-D - Source Type Distribution for this request
+      const sourceTypeDistribution: Record<string, number> = {};
+      searchResults.forEach(r => {
+        const type = (r.source_type || r.metadata?.source_type || 'unknown').toLowerCase();
+        sourceTypeDistribution[type] = (sourceTypeDistribution[type] || 0) + 1;
+      });
+      const topSourceTypes = searchResults.slice(0, 5).map(r => ({
+        type: (r.source_type || r.metadata?.source_type || 'unknown').toLowerCase(),
+        score: ((r.final_score || r.score || 0) * 100).toFixed(1) + '%'
+      }));
+      console.log(`📊 [METRIC] SOURCE_TYPE_COUNTS: distribution=${JSON.stringify(sourceTypeDistribution)}, topN=${JSON.stringify(topSourceTypes)}`);
+
       // 3. Get conversation history (use early history if already fetched)
       let history = earlyHistory;
       if (history.length === 0) {
@@ -1233,6 +1294,18 @@ ${questionLabel}: ${message}`;
           return (raw > 1 ? raw : raw * 100).toFixed(1) + '%';
         });
         console.log(`   Top scores: ${topScores.join(', ')}`);
+
+        // 📊 SOURCE TYPE BREAKDOWN for debugging
+        const sourceTypeCounts: Record<string, number> = {};
+        searchResults.forEach(r => {
+          const type = (r.source_type || r.metadata?.source_type || 'unknown').toLowerCase();
+          sourceTypeCounts[type] = (sourceTypeCounts[type] || 0) + 1;
+        });
+        console.log(`   📊 Source types: ${JSON.stringify(sourceTypeCounts)}`);
+
+        // 🎯 TOPIC ENTITIES for debugging (using domain config)
+        const topicEntitiesForLog = this.extractTopicEntities(message, domainConfig.topicEntities);
+        console.log(`   🎯 Topic entities: [${topicEntitiesForLog.slice(0, 5).join(', ')}]`);
 
         return {
           response: refusalMessage,
@@ -1570,24 +1643,169 @@ FORMAT:
       // 🎯 GUARDRAILS - Validate response quality in strict mode
       // This prevents "wrong quote from right document" and "unsupported claims" problems
       if (strictRagMode && searchResults.length > 0) {
-        // 1. Quote Selection Guardrail - Check if ALINTI contains relevant keywords + topic entities
-        const quoteValidation = this.validateQuoteRelevance(
+        // ⚡ PERF: Extract topic entities ONCE using DB config and reuse throughout guardrails
+        const topicEntities = this.extractTopicEntities(message, domainConfig.topicEntities);
+
+        // 0. AUTHORITY UPGRADE (Eksik-2 Fix) - If quote is from low-authority source,
+        // try to find a matching quote from a higher-authority source
+        if (topicEntities.length > 0 && response.content.includes('**ALINTI**')) {
+          const upgradeResult = this.tryUpgradeQuoteToHigherAuthority(
+            response.content,
+            searchResults,
+            topicEntities,
+            responseLanguage,
+            domainConfig.authorityLevels,
+            domainConfig.keyTerms
+          );
+          if (upgradeResult.upgraded && upgradeResult.newResponse) {
+            response.content = upgradeResult.newResponse;
+            console.log(`📊 [METRIC] AUTHORITY_UPGRADE_APPLIED: old="${upgradeResult.oldSource}", new="${upgradeResult.newSource}"`);
+          }
+        }
+
+        // 0b. NUMBER VALIDATION (Eksik-3 Fix) - For "hangi tebliğ/madde?" questions,
+        // verify the number in answer also appears in quote, and flag conflicts
+        const numberValidation = this.validateNumberInQuote(
           message,
           response.content,
           searchResults,
           responseLanguage
         );
 
+        if (!numberValidation.valid) {
+          // Number mismatch - remove the ALINTI to prevent misleading
+          console.log(`📊 [METRIC] NUMBER_VALIDATION_FAIL: answerNumber="${numberValidation.answerNumber}", quoteNumber="${numberValidation.quoteNumber}"`);
+          console.log(`🔢 NUMBER MISMATCH: Removing ALINTI because answer number not in quote`);
+          response.content = this.removeInvalidQuote(response.content, responseLanguage);
+        } else if (numberValidation.conflictNumbers && numberValidation.conflictNumbers.length > 0) {
+          // Valid but has conflicts - add warning
+          console.log(`📊 [METRIC] NUMBER_CONFLICT_WARNING: answerNumber="${numberValidation.answerNumber}", conflicts=[${numberValidation.conflictNumbers.join(', ')}]`);
+          response.content = this.addNumberConflictWarning(
+            response.content,
+            numberValidation.answerNumber!,
+            numberValidation.conflictNumbers,
+            responseLanguage
+          );
+        }
+
+        // 1. Quote Selection Guardrail - Check if ALINTI contains relevant keywords + topic entities
+        const quoteValidation = this.validateQuoteRelevance(
+          message,
+          response.content,
+          searchResults,
+          responseLanguage,
+          domainConfig.topicEntities,
+          domainConfig.keyTerms
+        );
+
         // 🚨 HARD FAIL: If quote doesn't match topic, REMOVE the ALINTI section entirely
         // "Yanlış alıntı göstermek, alıntı yok demekten çok daha kötü."
+        let alintıRemoved = false;
+        let alintıRemovalReason = '';
+        // ⚡ PERF: topicEntities already computed at start of guardrails block
+
         if (!quoteValidation.valid) {
+          // 📊 METRIC: AC-A1 - Quote Guardrail Hard Fail
+          console.log(`📊 [METRIC] QUOTE_GUARDRAIL_HARD_FAIL: reason="${quoteValidation.reason}", topicMissing=${quoteValidation.topicMissing || false}`);
           console.log(`🚨 QUOTE GUARDRAIL HARD FAIL: ${quoteValidation.reason}`);
 
           // Remove ALINTI section from response to prevent showing irrelevant quotes
           const cleanedResponse = this.removeInvalidQuote(response.content, responseLanguage);
           if (cleanedResponse !== response.content) {
+            // 📊 METRIC: AC-A2 - ALINTI Removed due to topic mismatch
+            console.log(`📊 [METRIC] ALINTI_REMOVED_TOPIC_MISMATCH: question="${message.substring(0, 50)}...", topicEntities=[${topicEntities.slice(0, 3).join(', ')}]`);
             console.log(`🧹 ALINTI REMOVED: Topic mismatch - showing answer without misleading quote`);
             response.content = cleanedResponse;
+            alintıRemoved = true;
+            alintıRemovalReason = 'TOPIC_MISMATCH';
+          }
+        }
+
+        // 1b. SOURCE-TYPE MINIMUM BAR: If all results are low-authority (qna), remove ALINTI
+        // Alıntı göstermek için en az bir regulation/ozelge sonucu olmalı
+        const hasHighAuthoritySource = searchResults.some(r => {
+          const sourceType = (r.source_type || r.metadata?.source_type || '').toLowerCase();
+          // High authority: regulation, ozelge, kanun, teblig, danistay
+          // Low authority: qna, sorucevap, makale, document (unless quasi-high)
+          const isHighAuthority = sourceType.includes('ozelge') ||
+                 sourceType.includes('regulation') ||
+                 sourceType.includes('kanun') ||
+                 sourceType.includes('tebli') ||
+                 sourceType.includes('danistay');
+
+          if (isHighAuthority) return true;
+
+          // QUASI-HIGH CHECK: "document" type may contain official content
+          // Check title/content for official publication indicators
+          if (sourceType.includes('document') || sourceType.includes('ebook') || sourceType.includes('pdf')) {
+            const title = (r.title || '').toLowerCase();
+            const content = (r.content || r.text || '').toLowerCase().substring(0, 500);
+            const quasiHighPatterns = [
+              'resmî gazete', 'resmi gazete', 'r.g.', 'rg tarih',
+              'kanun', 'sayılı kanun', 'madde',
+              'tebliğ', 'yönetmelik', 'genelge',
+              'bakanlar kurulu', 'cumhurbaşkanlığı kararnamesi',
+              'vergi usul', 'vuk', 'kvk', 'gvk'
+            ];
+            const matchedPattern = quasiHighPatterns.find(p =>
+              title.includes(p) || content.includes(p)
+            );
+            if (matchedPattern) {
+              // 📊 METRIC: AC-C2 - Quasi-High Match
+              console.log(`📊 [METRIC] QUASI_HIGH_MATCH: sourceType="${sourceType}", pattern="${matchedPattern}", title="${r.title?.substring(0, 40)}..."`);
+              console.log(`📄 QUASI-HIGH: "${r.title?.substring(0, 40)}..." treated as high-authority (official content detected)`);
+              return true;
+            }
+          }
+
+          return false;
+        });
+
+        if (!hasHighAuthoritySource && response.content.includes('**ALINTI**')) {
+          // 📊 METRIC: AC-C1 - Source Type Bar Fail (no high-authority sources)
+          const sourceTypeCounts: Record<string, number> = {};
+          searchResults.forEach(r => {
+            const type = (r.source_type || r.metadata?.source_type || 'unknown').toLowerCase();
+            sourceTypeCounts[type] = (sourceTypeCounts[type] || 0) + 1;
+          });
+          console.log(`📊 [METRIC] SOURCE_TYPE_BAR_FAIL: allLowAuthority=true, sourceTypes=${JSON.stringify(sourceTypeCounts)}`);
+          console.log(`📊 SOURCE-TYPE BAR: No high-authority sources found (all are qna/makale), removing ALINTI`);
+          const cleanedResponse = this.removeInvalidQuote(response.content, responseLanguage);
+          if (cleanedResponse !== response.content) {
+            console.log(`🧹 ALINTI REMOVED: Low-authority sources only - quote may not be reliable`);
+            response.content = cleanedResponse;
+            alintıRemoved = true;
+            alintıRemovalReason = alintıRemovalReason || 'LOW_AUTHORITY_ONLY';
+          }
+        }
+
+        // 🔄 FALLBACK RETRY: After removing ALINTI, try to find a better quote in search results
+        if (alintıRemoved && topicEntities.length > 0) {
+          // 📊 METRIC: AC-B - Fallback Tried
+          console.log(`📊 [METRIC] FALLBACK_TRIED: removalReason="${alintıRemovalReason}", topicEntities=[${topicEntities.slice(0, 3).join(', ')}], resultCount=${searchResults.length}`);
+          console.log(`🔄 FALLBACK: Attempting to find relevant quote after hard fail...`);
+
+          const fallback = this.tryFindFallbackQuote(
+            response.content,
+            searchResults,
+            topicEntities,
+            responseLanguage,
+            domainConfig.keyTerms
+          );
+
+          if (fallback.found && fallback.quote && fallback.source) {
+            // 📊 METRIC: AC-B1 - Fallback Accepted
+            console.log(`📊 [METRIC] FALLBACK_ACCEPTED: source="${fallback.source}", quoteLength=${fallback.quote.length}`);
+            console.log(`✅ FALLBACK SUCCESS: Replacing "no quote" message with found quote`);
+            response.content = this.replaceWithFallbackQuote(
+              response.content,
+              fallback.quote,
+              fallback.source,
+              responseLanguage
+            );
+          } else {
+            // 📊 METRIC: AC-B - Fallback Rejected (no suitable quote found)
+            console.log(`📊 [METRIC] FALLBACK_REJECTED: reason="NO_MATCHING_QUOTE"`);
           }
         }
 
@@ -1766,6 +1984,19 @@ FORMAT:
         console.log(`   Top Score: ${(bestScore * 100).toFixed(1)}% (min: ${(evidenceGateMinScore * 100).toFixed(0)}%)`);
         console.log(`   Search Results: ${searchResults.length} total`);
         console.log(`   Policy: clearSources=${clearSourcesOnRefusal}, cleanResponse=${cleanResponseOnRefusal}`);
+
+        // 📊 SOURCE TYPE BREAKDOWN for debugging
+        const refusalSourceTypes: Record<string, number> = {};
+        searchResults.forEach(r => {
+          const type = (r.source_type || r.metadata?.source_type || 'unknown').toLowerCase();
+          refusalSourceTypes[type] = (refusalSourceTypes[type] || 0) + 1;
+        });
+        console.log(`   📊 Source types: ${JSON.stringify(refusalSourceTypes)}`);
+
+        // 🎯 TOPIC ENTITIES extracted from query (using domain config)
+        const refusalTopicEntities = this.extractTopicEntities(message, domainConfig.topicEntities);
+        console.log(`   🎯 Topic entities: [${refusalTopicEntities.slice(0, 5).join(', ')}]`);
+
         console.log(`   Original response: "${response.content.substring(0, 200)}..."`);
 
         // Log which pattern triggered the refusal
@@ -1887,9 +2118,10 @@ FORMAT:
     let cleaned = responseText;
 
     // Message to show instead of invalid quote
+    // Clear messaging: "quote not found" ≠ "no sources"
     const noQuoteMessage = language === 'tr'
-      ? '**ALINTI**\n_Bu soru için uygun alıntı bulunamadı. Yukarıdaki cevap, kaynaklardaki bilgilerden çıkarım yapılarak oluşturulmuştur._'
-      : '**QUOTE**\n_No suitable quote found for this question. The answer above was derived from available sources._';
+      ? '**ALINTI**\n_Mevcut veritabanında bu soruyu doğrudan destekleyen kısa bir alıntı bulunamadı; cevap, ilgili kaynaklardaki genel bilgilerden çıkarım içerir. Kaynaklar aşağıda listelenmiştir._'
+      : '**QUOTE**\n_No direct quote supporting this question was found in the database; the answer is derived from general information in related sources. Sources are listed below._';
 
     // Pattern to match ALINTI section (Turkish)
     const alintıPattern = /\*\*ALINTI\*\*[\s\S]*?(?=\*\*[A-ZÇĞİÖŞÜ][A-ZÇĞİÖŞÜa-zçğıöşü]*\*\*|\n\n\n|$)/gi;
@@ -1907,11 +2139,34 @@ FORMAT:
     if (hasAlinti) {
       // Replace ALINTI section with clean message
       cleaned = cleaned.replace(alintıPattern, noQuoteMessage + '\n\n');
-      console.log(`🧹 Removed invalid ALINTI section`);
+      console.log(`🧹 Replaced invalid ALINTI section with no-quote message`);
     } else if (hasQuote) {
       // Replace QUOTE section with clean message
       cleaned = cleaned.replace(quotePattern, noQuoteMessage + '\n\n');
-      console.log(`🧹 Removed invalid QUOTE section`);
+      console.log(`🧹 Replaced invalid QUOTE section with no-quote message`);
+    } else {
+      // 🔧 FIX Eksik-1: No ALINTI section exists - ADD the no-quote message
+      // This happens when LLM didn't generate any quote, or quote was stripped earlier
+      // Insert no-quote message AFTER **CEVAP** section but BEFORE **KAYNAKLAR**
+      const cevapEndPattern = /(\*\*CEVAP\*\*[\s\S]*?)(\*\*KAYNAKLAR\*\*|\*\*SOURCES\*\*|$)/i;
+      const answerEndPattern = /(\*\*ANSWER\*\*[\s\S]*?)(\*\*SOURCES\*\*|\*\*KAYNAKLAR\*\*|$)/i;
+
+      if (cevapEndPattern.test(cleaned)) {
+        cleaned = cleaned.replace(cevapEndPattern, `$1\n\n${noQuoteMessage}\n\n$2`);
+        console.log(`🧹 Added no-quote message after CEVAP section`);
+      } else if (answerEndPattern.test(cleaned)) {
+        cleaned = cleaned.replace(answerEndPattern, `$1\n\n${noQuoteMessage}\n\n$2`);
+        console.log(`🧹 Added no-quote message after ANSWER section`);
+      } else {
+        // Fallback: just append at the end before any KAYNAKLAR section
+        const sourcesPattern = /(\*\*KAYNAKLAR\*\*|\*\*SOURCES\*\*)/i;
+        if (sourcesPattern.test(cleaned)) {
+          cleaned = cleaned.replace(sourcesPattern, `${noQuoteMessage}\n\n$1`);
+        } else {
+          cleaned = cleaned + '\n\n' + noQuoteMessage;
+        }
+        console.log(`🧹 Added no-quote message (fallback position)`);
+      }
     }
 
     // Clean up any orphaned citation references that pointed to the removed quote
@@ -1922,6 +2177,445 @@ FORMAT:
     cleaned = cleaned.replace(/\n{3,}/g, '\n\n');
 
     return cleaned.trim();
+  }
+
+  /**
+   * 🔢 NUMBER VALIDATION FOR "HANGI TEBLİĞ/MADDE?" QUESTIONS (Eksik-3 Fix)
+   * When question asks "hangi tebliğ/madde/kanun", validates that:
+   * 1. The number in CEVAP also appears in ALINTI
+   * 2. If multiple conflicting numbers exist, flags for conflict handling
+   *
+   * Returns validation result with:
+   * - valid: true if number in answer matches quote
+   * - conflictNumbers: array if multiple different numbers found in sources
+   */
+  private validateNumberInQuote(
+    question: string,
+    responseText: string,
+    searchResults: any[],
+    language: string = 'tr'
+  ): { valid: boolean; reason?: string; answerNumber?: string; quoteNumber?: string; conflictNumbers?: string[] } {
+    const questionLower = question.toLowerCase();
+
+    // Check if this is a "hangi tebliğ/madde/kanun" type question
+    const numberQuestionPatterns = [
+      /hangi\s+(tebliğ|teblig|madde|kanun|sirk[üu]ler|karar|genelge)/i,
+      /kaçıncı\s+(madde|fıkra|bent)/i,
+      /kaç\s*(?:nolu|numaralı|seri)/i,
+      /(\d+)\s*(?:nolu|numaralı|seri|sayılı)\s+(?:tebliğ|kanun|madde)/i
+    ];
+
+    const isNumberQuestion = numberQuestionPatterns.some(p => p.test(questionLower));
+    if (!isNumberQuestion) {
+      return { valid: true }; // Not a number question, skip validation
+    }
+
+    console.log(`🔢 NUMBER VALIDATION: Detected "hangi tebliğ/madde?" type question`);
+
+    // Extract the CEVAP section
+    const cevapMatch = responseText.match(/\*\*CEVAP\*\*([\s\S]*?)(?=\*\*[A-ZÇĞİÖŞÜ]|\n\n\n|$)/i);
+    if (!cevapMatch) {
+      return { valid: true }; // No answer to validate
+    }
+
+    const answerText = cevapMatch[1];
+
+    // Extract numbers from answer (looking for tebliğ/madde numbers)
+    // Patterns: "117 nolu", "117 seri", "107 sayılı", "madde 5", etc.
+    const numberPatterns = [
+      /(\d+)\s*(?:nolu|no'lu|numaralı|seri|sayılı)/gi,
+      /(?:tebliğ|kanun|madde|sirküler)\s*(?:no|numarası)?\s*[:=]?\s*(\d+)/gi,
+      /(\d{2,4})\s*(?:nolu|seri)\s*(?:kdv|katma değer|gelir|kurumlar)?\s*tebliğ/gi
+    ];
+
+    const answerNumbers: string[] = [];
+    for (const pattern of numberPatterns) {
+      pattern.lastIndex = 0;
+      let match;
+      while ((match = pattern.exec(answerText)) !== null) {
+        const num = match[1];
+        if (num && !answerNumbers.includes(num) && parseInt(num) >= 10) {
+          answerNumbers.push(num);
+        }
+      }
+    }
+
+    if (answerNumbers.length === 0) {
+      console.log(`🔢 NUMBER VALIDATION: No specific numbers found in answer`);
+      return { valid: true }; // No number to validate
+    }
+
+    console.log(`🔢 NUMBER VALIDATION: Found answer numbers: [${answerNumbers.join(', ')}]`);
+
+    // Extract the ALINTI section
+    const alintiMatch = responseText.match(/\*\*ALINTI\*\*([\s\S]*?)(?=\*\*[A-ZÇĞİÖŞÜ]|\n\n\n|$)/i);
+    if (!alintiMatch) {
+      // No quote to validate against - this is OK, but flag it
+      console.log(`🔢 NUMBER VALIDATION: No ALINTI section to validate against`);
+      return { valid: true, answerNumber: answerNumbers[0] };
+    }
+
+    const quoteText = alintiMatch[1];
+
+    // Check if the answer number appears in the quote
+    const answerNumber = answerNumbers[0];
+    const numberInQuote = quoteText.includes(answerNumber);
+
+    if (!numberInQuote) {
+      console.log(`📊 [METRIC] NUMBER_MISMATCH: answerNumber="${answerNumber}" not found in ALINTI`);
+      console.log(`🔢 NUMBER VALIDATION FAIL: Number ${answerNumber} in answer but not in quote`);
+
+      // Try to find what number IS in the quote
+      const quoteNumbers: string[] = [];
+      for (const pattern of numberPatterns) {
+        pattern.lastIndex = 0;
+        let match;
+        while ((match = pattern.exec(quoteText)) !== null) {
+          const num = match[1];
+          if (num && !quoteNumbers.includes(num) && parseInt(num) >= 10) {
+            quoteNumbers.push(num);
+          }
+        }
+      }
+
+      return {
+        valid: false,
+        reason: `Answer says "${answerNumber}" but quote doesn't contain this number`,
+        answerNumber,
+        quoteNumber: quoteNumbers[0] || 'none'
+      };
+    }
+
+    // Check for conflicting numbers in search results (multiple different tebliğ numbers)
+    const allNumbersInResults: Set<string> = new Set();
+    for (const result of searchResults) {
+      const content = (result.content || result.text || '').toLowerCase();
+      // Only check high-authority sources for conflict
+      const sourceType = (result.source_type || result.source_table || '').toLowerCase();
+      const isHighAuthority = sourceType.includes('ozelge') || sourceType.includes('tebli') ||
+        sourceType.includes('regulation') || sourceType.includes('kanun');
+
+      if (isHighAuthority) {
+        for (const pattern of numberPatterns) {
+          pattern.lastIndex = 0;
+          let match;
+          while ((match = pattern.exec(content)) !== null) {
+            const num = match[1];
+            if (num && parseInt(num) >= 10 && parseInt(num) <= 500) {
+              allNumbersInResults.add(num);
+            }
+          }
+        }
+      }
+    }
+
+    // If multiple different numbers found in high-authority sources, flag conflict
+    const conflictNumbers = Array.from(allNumbersInResults).filter(n => n !== answerNumber);
+    if (conflictNumbers.length > 0) {
+      console.log(`📊 [METRIC] NUMBER_CONFLICT: answerNumber="${answerNumber}", otherNumbers=[${conflictNumbers.join(', ')}]`);
+      console.log(`⚠️ NUMBER VALIDATION: Multiple numbers found in sources - potential conflict`);
+      return {
+        valid: true, // Still valid, but with conflict warning
+        answerNumber,
+        conflictNumbers
+      };
+    }
+
+    console.log(`✅ NUMBER VALIDATION PASS: Number ${answerNumber} found in quote`);
+    return { valid: true, answerNumber };
+  }
+
+  /**
+   * 🔢 ADD CONFLICT WARNING TO RESPONSE
+   * When multiple tebliğ/madde numbers exist in sources, adds a disclaimer
+   */
+  private addNumberConflictWarning(
+    responseText: string,
+    answerNumber: string,
+    conflictNumbers: string[],
+    language: string = 'tr'
+  ): string {
+    const warningTr = `\n\n> ⚠️ _Not: Kaynaklarda ${answerNumber} numaralı tebliğin yanı sıra ${conflictNumbers.join(', ')} numaralı tebliğlere de atıf bulunmaktadır. Farklı dönemlerde farklı düzenlemeler geçerli olabilir._`;
+    const warningEn = `\n\n> ⚠️ _Note: In addition to regulation ${answerNumber}, sources also reference regulations ${conflictNumbers.join(', ')}. Different regulations may apply in different periods._`;
+
+    const warning = language === 'tr' ? warningTr : warningEn;
+
+    // Insert warning after ALINTI section
+    const alintiEndPattern = /(\*\*ALINTI\*\*[\s\S]*?)(\*\*KAYNAKLAR\*\*|\*\*SOURCES\*\*|$)/i;
+    if (alintiEndPattern.test(responseText)) {
+      return responseText.replace(alintiEndPattern, `$1${warning}\n\n$2`);
+    }
+
+    // Fallback: insert before KAYNAKLAR
+    const sourcesPattern = /(\*\*KAYNAKLAR\*\*|\*\*SOURCES\*\*)/i;
+    if (sourcesPattern.test(responseText)) {
+      return responseText.replace(sourcesPattern, `${warning}\n\n$1`);
+    }
+
+    return responseText + warning;
+  }
+
+  /**
+   * 🔝 AUTHORITY-BASED QUOTE UPGRADE (Eksik-2 Fix)
+   * When LLM selects a quote from low-authority source (QnA/makale),
+   * checks if a higher-authority source has a matching topic+keyterm quote.
+   * If found, upgrades the quote to the higher-authority source.
+   *
+   * Authority levels are loaded from schema config (llmConfig.authorityLevels)
+   * Each domain defines its own authority hierarchy
+   */
+  private tryUpgradeQuoteToHigherAuthority(
+    responseText: string,
+    searchResults: any[],
+    topicEntities: string[],
+    language: string = 'tr',
+    configAuthorityLevels?: Record<string, number>,
+    configKeyTerms?: string[]
+  ): { upgraded: boolean; newResponse?: string; oldSource?: string; newSource?: string } {
+    // Extract current ALINTI section
+    const alintıMatch = responseText.match(/\*\*ALINTI\*\*([\s\S]*?)(?=\*\*[A-ZÇĞİÖŞÜ]|\n\n\n|$)/i);
+    if (!alintıMatch) {
+      return { upgraded: false };
+    }
+
+    const currentAlinti = alintıMatch[0];
+    const currentAlintiLower = currentAlinti.toLowerCase();
+
+    // Detect source type from the current quote attribution line
+    // Pattern: "— Tür: SoruCevap" or "— csv_sorucevap" etc.
+    const sourceAttributionMatch = currentAlinti.match(/—\s*(?:Tür:\s*)?([^\[（\n]+)/i);
+    const currentSourceHint = (sourceAttributionMatch?.[1] || '').toLowerCase().trim();
+
+    // Get authority level from config or use empty (no hardcoded defaults)
+    const getAuthorityLevel = (sourceType: string): number => {
+      const s = sourceType.toLowerCase();
+      // Check config authority levels first
+      if (configAuthorityLevels && Object.keys(configAuthorityLevels).length > 0) {
+        for (const [pattern, level] of Object.entries(configAuthorityLevels)) {
+          if (s.includes(pattern.toLowerCase())) {
+            return level;
+          }
+        }
+        return 35; // default unknown when config exists but no match
+      }
+      // No config - return low authority for all (no assumptions about domain)
+      return 35;
+    };
+
+    // Determine current source's authority
+    let currentAuthority = 35;
+    for (const result of searchResults) {
+      const content = (result.content || result.text || '').toLowerCase();
+      // Check if this result's content appears in the current quote
+      if (currentAlintiLower.includes(content.substring(0, 100))) {
+        const sourceType = (result.source_type || result.source_table || '').toLowerCase();
+        currentAuthority = getAuthorityLevel(sourceType);
+        break;
+      }
+    }
+
+    // Also check hint from attribution line
+    if (currentSourceHint) {
+      const hintAuthority = getAuthorityLevel(currentSourceHint);
+      currentAuthority = Math.max(currentAuthority, hintAuthority);
+    }
+
+    // If already high authority (>= 70), no need to upgrade
+    if (currentAuthority >= 70) {
+      console.log(`🔝 AUTHORITY CHECK: Current quote from high-authority source (level ${currentAuthority}), no upgrade needed`);
+      return { upgraded: false };
+    }
+
+    console.log(`🔝 AUTHORITY CHECK: Current quote from authority level ${currentAuthority}, searching for higher...`);
+
+    // Extract key terms from current ALINTI for matching
+    // Use config key terms - NO HARDCODED DEFAULTS
+    const keyTerms = configKeyTerms || [];
+    const matchedKeyTerms = keyTerms.filter(term => currentAlintiLower.includes(term.toLowerCase()));
+    const primaryEntities = topicEntities.slice(0, 3);
+
+    // Search for better quote in higher-authority sources
+    for (const result of searchResults) {
+      const sourceType = (result.source_type || result.source_table || '').toLowerCase();
+      const resultAuthority = getAuthorityLevel(sourceType);
+
+      // Skip if not higher authority
+      if (resultAuthority <= currentAuthority) continue;
+
+      const content = (result.content || result.text || '').toLowerCase();
+
+      // Check if this source contains topic entities
+      const hasTopicEntity = primaryEntities.some(entity =>
+        content.includes(entity.toLowerCase())
+      );
+      if (!hasTopicEntity) continue;
+
+      // Find a sentence with topic + keyterm
+      const sentences = content.split(/[.!?。]\s*/);
+      for (const sentence of sentences) {
+        const trimmed = sentence.trim();
+        if (trimmed.length < 30 || trimmed.length > 400) continue;
+
+        const hasTopic = primaryEntities.some(e => trimmed.includes(e.toLowerCase()));
+        const hasKeyTerm = matchedKeyTerms.length === 0 ||
+          matchedKeyTerms.some(term => trimmed.includes(term));
+
+        if (hasTopic && hasKeyTerm) {
+          // Found a better quote!
+          const newSourceTitle = result.title || result.source_table || sourceType;
+
+          // Build new ALINTI section
+          const newAlinti = language === 'tr'
+            ? `**ALINTI**\n> "${trimmed}"\n— _${newSourceTitle}_`
+            : `**QUOTE**\n> "${trimmed}"\n— _${newSourceTitle}_`;
+
+          // Replace in response
+          const newResponse = responseText.replace(
+            /\*\*ALINTI\*\*[\s\S]*?(?=\*\*[A-ZÇĞİÖŞÜ]|\n\n\n|$)/i,
+            newAlinti + '\n\n'
+          );
+
+          console.log(`📊 [METRIC] QUOTE_AUTHORITY_UPGRADE: from=${currentAuthority}, to=${resultAuthority}, newSource="${newSourceTitle.substring(0, 30)}..."`);
+          console.log(`🔝 AUTHORITY UPGRADE: Replaced QnA quote with ${sourceType} quote (authority ${currentAuthority} → ${resultAuthority})`);
+
+          return {
+            upgraded: true,
+            newResponse,
+            oldSource: currentSourceHint || 'unknown',
+            newSource: newSourceTitle
+          };
+        }
+      }
+    }
+
+    console.log(`🔝 AUTHORITY CHECK: No higher-authority quote found with matching topic+keyterm`);
+    return { upgraded: false };
+  }
+
+  /**
+   * 🔄 FALLBACK QUOTE FINDER (Strengthened)
+   * When ALINTI hard fail occurs, attempts to find a relevant quote by:
+   * 1. Extracting key sentences from CEVAP (answer) section
+   * 2. Using topic entities to search within existing results
+   * 3. REQUIRES BOTH: topic entity match + key term match (to prevent false positives)
+   * 4. Returns a replacement quote if found, null otherwise
+   */
+  private tryFindFallbackQuote(
+    responseText: string,
+    searchResults: any[],
+    topicEntities: string[],
+    language: string = 'tr',
+    configKeyTerms?: string[]
+  ): { found: boolean; quote?: string; source?: string } {
+    // Extract the CEVAP/ANSWER section
+    const answerMatch = language === 'tr'
+      ? responseText.match(/\*\*CEVAP\*\*([\s\S]*?)(?=\*\*[A-ZÇĞİÖŞÜ]|\n\n\n|$)/i)
+      : responseText.match(/\*\*ANSWER\*\*([\s\S]*?)(?=\*\*[A-Z]|\n\n\n|$)/i);
+
+    if (!answerMatch) {
+      console.log(`🔄 FALLBACK: No CEVAP section found to extract keywords`);
+      return { found: false };
+    }
+
+    const answerText = answerMatch[1].toLowerCase();
+
+    // 🔒 KEY TERMS: Intent/action words that must also appear in fallback quote
+    // These ensure the quote is about the same "what" not just the same "topic"
+    // Use config key terms - NO HARDCODED DEFAULTS
+    const keyTerms = configKeyTerms || [];
+
+    // Find which key terms appear in the answer
+    const answerKeyTerms = keyTerms.filter(term => answerText.includes(term));
+    console.log(`🔄 FALLBACK: Searching for quote in ${searchResults.length} results`);
+    console.log(`   Topic entities: [${topicEntities.slice(0, 3).join(', ')}]`);
+    console.log(`   Key terms from answer: [${answerKeyTerms.join(', ')}]`);
+
+    // Track rejection reasons for metrics
+    let resultsWithoutTopic = 0;
+    let sentencesWithoutTopic = 0;
+    let sentencesWithoutKeyTerm = 0;
+
+    // Look through search results for text containing topic entities + key terms
+    const primaryEntities = topicEntities.slice(0, 3); // First 3 are likely primary entities
+
+    for (const result of searchResults) {
+      const content = (result.content || result.text || '').toLowerCase();
+
+      // Check if this result contains any topic entity (primary entity, not all synonyms)
+      const containsTopicEntity = primaryEntities.some(entity =>
+        content.includes(entity.toLowerCase())
+      );
+
+      if (!containsTopicEntity) {
+        resultsWithoutTopic++;
+        continue;
+      }
+
+      // Find a sentence containing BOTH topic entity AND key term
+      const sentences = content.split(/[.!?。]\s*/);
+      for (const sentence of sentences) {
+        const trimmedSentence = sentence.trim();
+        // Skip very short or very long sentences
+        if (trimmedSentence.length < 30 || trimmedSentence.length > 400) continue;
+
+        // Check if sentence contains topic entity
+        const hasTopic = primaryEntities.some(entity =>
+          trimmedSentence.includes(entity.toLowerCase())
+        );
+
+        if (!hasTopic) {
+          sentencesWithoutTopic++;
+          continue;
+        }
+
+        // 🔒 STRENGTHENED: Also require at least one key term match
+        const hasKeyTerm = answerKeyTerms.length === 0 || // If no key terms in answer, skip this check
+          answerKeyTerms.some(term => trimmedSentence.includes(term));
+
+        if (!hasKeyTerm) {
+          sentencesWithoutKeyTerm++;
+          continue;
+        }
+
+        // Found a relevant sentence - use it as the fallback quote
+        const sourceTitle = result.title || result.source_table || 'Kaynak';
+        console.log(`✅ FALLBACK SUCCESS: Found quote with topic+keyterm match in "${sourceTitle}"`);
+        return {
+          found: true,
+          quote: trimmedSentence,
+          source: sourceTitle
+        };
+      }
+    }
+
+    // 📊 METRIC: AC-B - Detailed rejection breakdown
+    console.log(`📊 [METRIC] FALLBACK_REJECTION_DETAILS: resultsWithoutTopic=${resultsWithoutTopic}/${searchResults.length}, sentencesWithoutTopic=${sentencesWithoutTopic}, sentencesWithoutKeyTerm=${sentencesWithoutKeyTerm}`);
+    console.log(`❌ FALLBACK: No relevant quote found (requires both topic entity + key term)`);
+    return { found: false };
+  }
+
+  /**
+   * 🔄 REPLACE NO-QUOTE MESSAGE WITH FALLBACK
+   * Replaces the "no quote found" message with an actual quote from fallback search
+   */
+  private replaceWithFallbackQuote(
+    responseText: string,
+    fallbackQuote: string,
+    sourceTitle: string,
+    language: string = 'tr'
+  ): string {
+    // Create the new quote section
+    const newQuoteSection = language === 'tr'
+      ? `**ALINTI**\n> "${fallbackQuote}"\n— _${sourceTitle}_`
+      : `**QUOTE**\n> "${fallbackQuote}"\n— _${sourceTitle}_`;
+
+    // Pattern to match the "no quote found" placeholder
+    const noQuotePlaceholder = language === 'tr'
+      ? /\*\*ALINTI\*\*\n_Mevcut veritabanında[^*]*?Kaynaklar aşağıda listelenmiştir\._/gi
+      : /\*\*QUOTE\*\*\n_No direct quote[^*]*?Sources are listed below\._/gi;
+
+    // Replace placeholder with actual quote
+    return responseText.replace(noQuotePlaceholder, newQuoteSection);
   }
 
   /**
@@ -1938,7 +2632,9 @@ FORMAT:
     question: string,
     responseText: string,
     searchResults: any[],
-    language: string = 'tr'
+    language: string = 'tr',
+    configEntities?: TopicEntity[],
+    configTerms?: string[]
   ): { valid: boolean; reason?: string; fixedResponse?: string; topicMissing?: boolean } {
     // Extract ALINTI section from response
     const alintıMatch = responseText.match(/\*\*ALINTI\*\*[\s\S]*?(?=\*\*[A-ZÇĞİÖŞÜ]|\n\n\n|$)/i);
@@ -1950,10 +2646,10 @@ FORMAT:
       return { valid: true };
     }
 
-    // Extract key terms AND topic entities from question
+    // Extract key terms AND topic entities from question (using config if provided)
     const questionLower = question.toLowerCase();
-    const keyTerms = this.extractKeyTerms(questionLower);
-    const topicEntities = this.extractTopicEntities(questionLower);
+    const keyTerms = this.extractKeyTerms(questionLower, configTerms);
+    const topicEntities = this.extractTopicEntities(questionLower, configEntities);
 
     console.log(`🎯 QUOTE GUARDRAIL CHECK:`);
     console.log(`   Key terms: [${keyTerms.join(', ')}]`);
@@ -2154,45 +2850,32 @@ FORMAT:
    * 🎯 EXTRACT TOPIC ENTITIES
    * Extracts the main topic/entity from the question for quote relevance validation
    * e.g., "vergi levhası asılmazsa ceza var mı?" → ["vergi levhası", "levha"]
+   * @param question - The user's question
+   * @param configEntities - Optional custom entities from DB config (falls back to defaults)
    */
-  private extractTopicEntities(question: string): string[] {
+  private extractTopicEntities(question: string, configEntities?: TopicEntity[]): string[] {
     const entities: string[] = [];
     const questionLower = question.toLowerCase();
 
-    // Common Turkish legal/tax topic entities
-    const topicPatterns = [
-      // Document/certificate types
-      { pattern: /vergi levhası|vergi levha/gi, entity: 'vergi levhası' },
-      { pattern: /fatura/gi, entity: 'fatura' },
-      { pattern: /beyanname/gi, entity: 'beyanname' },
-      { pattern: /fiş|fis/gi, entity: 'fiş' },
+    // Use config entities if provided, otherwise use defaults
+    const topicEntities = configEntities || this.getDefaultTopicEntities();
 
-      // Tax types
-      { pattern: /kdv|katma değer/gi, entity: 'kdv' },
-      { pattern: /gelir vergisi/gi, entity: 'gelir vergisi' },
-      { pattern: /kurumlar vergisi/gi, entity: 'kurumlar vergisi' },
-      { pattern: /stopaj/gi, entity: 'stopaj' },
-      { pattern: /tevkifat/gi, entity: 'tevkifat' },
+    for (const { pattern, entity, synonyms } of topicEntities) {
+      // Convert string pattern to RegExp if needed
+      const regex = typeof pattern === 'string' ? new RegExp(pattern, 'gi') : pattern;
 
-      // Legal references
-      { pattern: /vuk\s*\d+|vergi usul/gi, entity: 'vuk' },
-      { pattern: /(\d+)\s*(seri|nolu|no'lu|sayılı)\s*(tebliğ|kanun)/gi, entity: 'tebliğ' },
-      { pattern: /6111/gi, entity: '6111' },
-      { pattern: /107/gi, entity: '107' },
-
-      // Business types
-      { pattern: /fason/gi, entity: 'fason' },
-      { pattern: /tekstil|konfeksiyon/gi, entity: 'tekstil' },
-
-      // Actions/processes
-      { pattern: /asma|asılma|asılmazsa/gi, entity: 'asma' },
-      { pattern: /bildirim/gi, entity: 'bildirim' },
-    ];
-
-    for (const { pattern, entity } of topicPatterns) {
-      if (pattern.test(questionLower)) {
+      // Reset regex lastIndex (important for global patterns)
+      regex.lastIndex = 0;
+      if (regex.test(questionLower)) {
+        // Add primary entity
         if (!entities.includes(entity)) {
           entities.push(entity);
+        }
+        // Add all synonyms for broader matching
+        for (const synonym of synonyms) {
+          if (!entities.includes(synonym)) {
+            entities.push(synonym);
+          }
         }
       }
     }
@@ -2202,22 +2885,15 @@ FORMAT:
 
   /**
    * Extract key terms from question for quote validation
-   * Focuses on Turkish legal/tax terms and specific identifiers
+   * Focuses on domain-specific terms and identifiers
+   * @param question - The user's question
+   * @param configTerms - Optional custom key terms from DB config (falls back to defaults)
    */
-  private extractKeyTerms(question: string): string[] {
+  private extractKeyTerms(question: string, configTerms?: string[]): string[] {
     const terms: string[] = [];
 
-    // Legal/tax-specific terms (Turkish)
-    const legalTerms = [
-      'ceza', 'usulsüzlük', 'vergi', 'kdv', 'katma değer',
-      'tevkifat', 'stopaj', 'beyan', 'matrah', 'oran',
-      'muafiyet', 'istisna', 'indirim', 'mahsup',
-      'tebliğ', 'kanun', 'yönetmelik', 'genelge', 'özelge',
-      'seri', 'sayı', 'madde', 'fıkra', 'bent',
-      'mükellef', 'sorumlu', 'tahakkuk', 'tahsil',
-      'fatura', 'belge', 'kayıt', 'defter',
-      'zorunlu', 'mecburi', 'gerekli', 'şart'
-    ];
+    // Use config terms if provided, otherwise use defaults
+    const legalTerms = configTerms || this.getDefaultKeyTerms();
 
     // Check for legal terms
     legalTerms.forEach(term => {
