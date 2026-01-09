@@ -706,29 +706,172 @@ export default function DataSchemaSettings() {
         </CardContent>
       </Card>
 
-      {/* Edit Modal */}
+      {/* Edit Modal - Different UI for keyTerms */}
       <Dialog open={editModal.open} onOpenChange={(open) => setEditModal({ ...editModal, open })}>
         <DialogContent className="max-w-2xl max-h-[80vh]">
           <DialogHeader>
             <DialogTitle>{editModal.title}</DialogTitle>
           </DialogHeader>
-          <div className="py-4">
-            <Textarea
-              value={editModal.value}
-              onChange={(e) => setEditModal({ ...editModal, value: e.target.value })}
-              placeholder={editModal.placeholder}
-              rows={15}
-              className="font-mono text-sm"
-            />
-            <p className="text-xs text-muted-foreground mt-2">
-              {editModal.field === 'keyTerms' && 'Her satıra bir terim yazın'}
-              {editModal.field === 'authorityLevels' && 'Format: kaynak=öncelik (örn: kanun=100)'}
-              {editModal.field === 'topicEntities' && 'Format: pattern → synonym1, synonym2'}
-              {editModal.field === 'fields' && 'JSON formatında alan tanımları'}
-              {editModal.field === 'analyzePrompt' && 'Doküman analizi için LLM talimatları'}
-              {editModal.field === 'chatbotContext' && 'Chat yanıtları için domain bağlamı'}
-            </p>
-          </div>
+
+          {editModal.field === 'keyTerms' ? (
+            /* Terimler Sözlüğü - Dictionary Style UI */
+            <div className="py-2 space-y-3">
+              {/* Suggested Terms by Category */}
+              <div className="space-y-2">
+                <Label className="text-xs font-medium">Önerilen Terimler (tıkla ekle)</Label>
+                <div className="grid grid-cols-1 gap-2 max-h-[180px] overflow-y-auto">
+                  {/* Vergi/Hukuk Terms */}
+                  <div className="p-2 bg-blue-50 dark:bg-blue-950/30 rounded-lg">
+                    <div className="text-xs font-medium text-blue-700 dark:text-blue-300 mb-1.5">Vergi & Hukuk</div>
+                    <div className="flex flex-wrap gap-1">
+                      {['vergi', 'kdv', 'stopaj', 'tevkifat', 'muafiyet', 'istisna', 'beyanname', 'matrah', 'ceza', 'usulsüzlük', 'kanun', 'madde', 'tebliğ', 'özelge', 'indirim', 'mahsup'].map(term => {
+                        const isAdded = editModal.value.split('\n').includes(term);
+                        return (
+                          <Badge
+                            key={term}
+                            variant={isAdded ? "default" : "outline"}
+                            className={`text-xs cursor-pointer transition-all ${isAdded ? 'bg-blue-600' : 'hover:bg-blue-100 dark:hover:bg-blue-900'}`}
+                            onClick={() => {
+                              if (!isAdded) {
+                                setEditModal({ ...editModal, value: editModal.value ? editModal.value + '\n' + term : term });
+                              }
+                            }}
+                          >
+                            {isAdded ? '✓ ' : '+ '}{term}
+                          </Badge>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* Belge/İşlem Terms */}
+                  <div className="p-2 bg-green-50 dark:bg-green-950/30 rounded-lg">
+                    <div className="text-xs font-medium text-green-700 dark:text-green-300 mb-1.5">Belge & İşlem</div>
+                    <div className="flex flex-wrap gap-1">
+                      {['fatura', 'belge', 'kayıt', 'defter', 'makbuz', 'dekont', 'tahakkuk', 'tahsil', 'ödeme', 'başvuru', 'bildirim', 'beyan'].map(term => {
+                        const isAdded = editModal.value.split('\n').includes(term);
+                        return (
+                          <Badge
+                            key={term}
+                            variant={isAdded ? "default" : "outline"}
+                            className={`text-xs cursor-pointer transition-all ${isAdded ? 'bg-green-600' : 'hover:bg-green-100 dark:hover:bg-green-900'}`}
+                            onClick={() => {
+                              if (!isAdded) {
+                                setEditModal({ ...editModal, value: editModal.value ? editModal.value + '\n' + term : term });
+                              }
+                            }}
+                          >
+                            {isAdded ? '✓ ' : '+ '}{term}
+                          </Badge>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* Zorunluluk/Yaptırım Terms */}
+                  <div className="p-2 bg-orange-50 dark:bg-orange-950/30 rounded-lg">
+                    <div className="text-xs font-medium text-orange-700 dark:text-orange-300 mb-1.5">Zorunluluk & Yaptırım</div>
+                    <div className="flex flex-wrap gap-1">
+                      {['zorunlu', 'mecburi', 'gerekli', 'şart', 'yükümlü', 'sorumlu', 'yasak', 'serbest', 'muaf', 'tabi'].map(term => {
+                        const isAdded = editModal.value.split('\n').includes(term);
+                        return (
+                          <Badge
+                            key={term}
+                            variant={isAdded ? "default" : "outline"}
+                            className={`text-xs cursor-pointer transition-all ${isAdded ? 'bg-orange-600' : 'hover:bg-orange-100 dark:hover:bg-orange-900'}`}
+                            onClick={() => {
+                              if (!isAdded) {
+                                setEditModal({ ...editModal, value: editModal.value ? editModal.value + '\n' + term : term });
+                              }
+                            }}
+                          >
+                            {isAdded ? '✓ ' : '+ '}{term}
+                          </Badge>
+                        );
+                      })}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Custom term input */}
+              <div className="flex gap-2 pt-2 border-t">
+                <Input
+                  id="customTermInput"
+                  placeholder="Özel terim ekle..."
+                  className="flex-1"
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      const input = e.target as HTMLInputElement;
+                      const val = input.value.trim().toLowerCase();
+                      if (val && !editModal.value.split('\n').includes(val)) {
+                        setEditModal({ ...editModal, value: editModal.value ? editModal.value + '\n' + val : val });
+                        input.value = '';
+                      }
+                    }
+                  }}
+                />
+                <Button variant="outline" size="sm" onClick={() => {
+                  const input = document.getElementById('customTermInput') as HTMLInputElement;
+                  const val = input?.value.trim().toLowerCase();
+                  if (val && !editModal.value.split('\n').includes(val)) {
+                    setEditModal({ ...editModal, value: editModal.value ? editModal.value + '\n' + val : val });
+                    input.value = '';
+                  }
+                }}>
+                  <Plus className="w-4 h-4" />
+                </Button>
+              </div>
+
+              {/* Selected Terms */}
+              <div className="pt-2 border-t">
+                <div className="flex items-center justify-between mb-2">
+                  <Label className="text-xs font-medium">Seçilen Terimler ({editModal.value.split('\n').filter(t => t.trim()).length})</Label>
+                  <Button variant="ghost" size="sm" className="h-6 text-xs text-destructive" onClick={() => setEditModal({ ...editModal, value: '' })}>
+                    Tümünü Sil
+                  </Button>
+                </div>
+                <div className="border rounded-lg p-2 min-h-[80px] max-h-[120px] overflow-y-auto bg-muted/20">
+                  <div className="flex flex-wrap gap-1">
+                    {editModal.value.split('\n').filter(t => t.trim()).map((term, i) => (
+                      <Badge
+                        key={i}
+                        variant="secondary"
+                        className="text-xs cursor-pointer hover:bg-destructive hover:text-destructive-foreground"
+                        onClick={() => {
+                          const terms = editModal.value.split('\n').filter(t => t.trim());
+                          terms.splice(i, 1);
+                          setEditModal({ ...editModal, value: terms.join('\n') });
+                        }}
+                      >
+                        {term} ×
+                      </Badge>
+                    ))}
+                    {!editModal.value.trim() && <span className="text-xs text-muted-foreground">Terim seçilmedi</span>}
+                  </div>
+                </div>
+              </div>
+            </div>
+          ) : (
+            /* Default textarea UI for other fields */
+            <div className="py-4">
+              <Textarea
+                value={editModal.value}
+                onChange={(e) => setEditModal({ ...editModal, value: e.target.value })}
+                placeholder={editModal.placeholder}
+                rows={15}
+                className="font-mono text-sm"
+              />
+              <p className="text-xs text-muted-foreground mt-2">
+                {editModal.field === 'authorityLevels' && 'Format: kaynak=öncelik (örn: kanun=100)'}
+                {editModal.field === 'topicEntities' && 'Format: pattern → synonym1, synonym2'}
+                {editModal.field === 'fields' && 'JSON formatında alan tanımları'}
+                {editModal.field === 'analyzePrompt' && 'Doküman analizi için LLM talimatları'}
+                {editModal.field === 'chatbotContext' && 'Chat yanıtları için domain bağlamı'}
+              </p>
+            </div>
+          )}
+
           <DialogFooter>
             <Button variant="outline" onClick={() => setEditModal({ ...editModal, open: false })}>
               İptal
