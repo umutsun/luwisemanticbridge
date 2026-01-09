@@ -807,4 +807,81 @@ router.get('/chatbot-system-prompt', authenticateToken, async (req: Authenticate
   }
 });
 
+/**
+ * POST /api/v2/data-schema/smart-autocomplete
+ * Generate LLM-powered autocomplete suggestions based on context
+ */
+router.post('/smart-autocomplete', authenticateToken, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const userId = (req.user as any)?.userId || (req.user as any)?.id;
+    if (!userId) {
+      return res.status(401).json({ error: 'User not authenticated' });
+    }
+
+    const { query, context, field, maxSuggestions = 5 } = req.body;
+
+    if (!query || query.length < 2) {
+      return res.json({ suggestions: [] });
+    }
+
+    // Get active schema's LLM config for context
+    const llmConfig = await dataSchemaService.getActiveLLMConfig(userId);
+    const existingTerms = llmConfig?.keyTerms || [];
+    const chatbotContext = llmConfig?.chatbotContext || '';
+
+    // Build prompt for LLM
+    const systemPrompt = `Sen bir domain uzmanı asistansın. Kullanıcının yazdığı metne göre ilgili terimleri öneriyorsun.
+
+Domain bağlamı: ${chatbotContext}
+
+Mevcut terimler: ${existingTerms.slice(0, 20).join(', ')}
+
+Kurallar:
+- Sadece domain ile ilgili terimleri öner
+- Kısa ve öz terimler (1-3 kelime)
+- Türkçe terimler
+- JSON array formatında yanıt ver: ["terim1", "terim2", ...]`;
+
+    const userPrompt = `Kullanıcı "${query}" yazdı.${context ? ` Bağlam: ${context}` : ''}${field ? ` Alan: ${field}` : ''}
+
+Bu girişe uygun ${maxSuggestions} adet terim öner. Sadece JSON array döndür.`;
+
+    // Use LLM service to generate suggestions
+    const { generateChatCompletion } = await import('../services/litellm.service');
+
+    const response = await generateChatCompletion({
+      messages: [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: userPrompt }
+      ],
+      temperature: 0.3,
+      max_tokens: 200
+    });
+
+    // Parse LLM response
+    let suggestions: string[] = [];
+    try {
+      const content = response?.choices?.[0]?.message?.content || '';
+      // Extract JSON array from response
+      const jsonMatch = content.match(/\[[\s\S]*?\]/);
+      if (jsonMatch) {
+        suggestions = JSON.parse(jsonMatch[0]);
+      }
+    } catch (parseError) {
+      console.error('[Smart Autocomplete] Parse error:', parseError);
+    }
+
+    // Filter and deduplicate
+    suggestions = suggestions
+      .filter(s => typeof s === 'string' && s.length > 0)
+      .filter(s => !existingTerms.includes(s.toLowerCase()))
+      .slice(0, maxSuggestions);
+
+    res.json({ suggestions });
+  } catch (error: any) {
+    console.error('[DataSchema Routes] Smart autocomplete error:', error);
+    res.status(500).json({ error: error.message, suggestions: [] });
+  }
+});
+
 export default router;

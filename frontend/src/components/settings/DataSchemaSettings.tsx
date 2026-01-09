@@ -8,7 +8,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import {
-  Database, Plus, Check, Save, RefreshCw, Search, Copy, MoreVertical, Download, Upload
+  Database, Plus, Check, Save, RefreshCw, Search, Copy, MoreVertical, Download, Upload, Sparkles, Loader2
 } from 'lucide-react';
 import { DataSchema, SchemaField } from '@/types/data-schema';
 import apiClient from '@/lib/api/client';
@@ -80,6 +80,32 @@ export default function DataSchemaSettings() {
     placeholder: string;
     format?: 'text' | 'keyvalue' | 'arrows';
   }>({ open: false, field: '', title: '', value: '', placeholder: '' });
+
+  // LLM-powered suggestions
+  const [llmSuggestions, setLlmSuggestions] = useState<string[]>([]);
+  const [isLlmLoading, setIsLlmLoading] = useState(false);
+  const [customTermInput, setCustomTermInput] = useState('');
+
+  // Fetch LLM suggestions for keyTerms
+  const fetchLlmSuggestions = async (query?: string) => {
+    if (isLlmLoading) return;
+    setIsLlmLoading(true);
+    try {
+      const response = await apiClient.post('/api/v2/data-schema/smart-autocomplete', {
+        query: query || customTermInput || 'vergi',
+        context: editedSchema?.description || '',
+        field: 'keyTerms',
+        maxSuggestions: 8
+      });
+      if (response.data?.suggestions) {
+        setLlmSuggestions(response.data.suggestions);
+      }
+    } catch (error) {
+      console.error('LLM suggestions error:', error);
+    } finally {
+      setIsLlmLoading(false);
+    }
+  };
 
   useEffect(() => { loadData(); }, []);
 
@@ -794,29 +820,92 @@ export default function DataSchemaSettings() {
                 </div>
               </div>
 
-              {/* Custom term input */}
+              {/* LLM-powered suggestions */}
+              <div className="p-2 bg-purple-50 dark:bg-purple-950/30 rounded-lg border border-purple-200 dark:border-purple-800">
+                <div className="flex items-center justify-between mb-2">
+                  <div className="flex items-center gap-1.5">
+                    <Sparkles className="w-3.5 h-3.5 text-purple-600" />
+                    <span className="text-xs font-medium text-purple-700 dark:text-purple-300">Akıllı Öneriler (LLM)</span>
+                  </div>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-6 text-xs text-purple-600 hover:text-purple-700"
+                    onClick={() => fetchLlmSuggestions()}
+                    disabled={isLlmLoading}
+                  >
+                    {isLlmLoading ? (
+                      <Loader2 className="w-3 h-3 animate-spin" />
+                    ) : (
+                      <RefreshCw className="w-3 h-3" />
+                    )}
+                    <span className="ml-1">Yenile</span>
+                  </Button>
+                </div>
+                <div className="flex flex-wrap gap-1">
+                  {llmSuggestions.length > 0 ? (
+                    llmSuggestions.map(term => {
+                      const isAdded = editModal.value.split('\n').includes(term);
+                      return (
+                        <Badge
+                          key={term}
+                          variant={isAdded ? "default" : "outline"}
+                          className={`text-xs cursor-pointer transition-all ${isAdded ? 'bg-purple-600' : 'hover:bg-purple-100 dark:hover:bg-purple-900 border-purple-300'}`}
+                          onClick={() => {
+                            if (!isAdded) {
+                              setEditModal({ ...editModal, value: editModal.value ? editModal.value + '\n' + term : term });
+                            }
+                          }}
+                        >
+                          {isAdded ? '✓ ' : '+ '}{term}
+                        </Badge>
+                      );
+                    })
+                  ) : (
+                    <span className="text-xs text-muted-foreground">
+                      {isLlmLoading ? 'Öneriler yükleniyor...' : 'Yenile butonuna tıklayarak LLM önerileri alın'}
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              {/* Custom term input with LLM */}
               <div className="flex gap-2 pt-2 border-t">
                 <Input
                   id="customTermInput"
-                  placeholder="Özel terim ekle..."
+                  placeholder="Terim yaz, LLM önersin..."
                   className="flex-1"
+                  value={customTermInput}
+                  onChange={(e) => setCustomTermInput(e.target.value)}
                   onKeyDown={(e) => {
                     if (e.key === 'Enter') {
-                      const input = e.target as HTMLInputElement;
-                      const val = input.value.trim().toLowerCase();
+                      const val = customTermInput.trim().toLowerCase();
                       if (val && !editModal.value.split('\n').includes(val)) {
                         setEditModal({ ...editModal, value: editModal.value ? editModal.value + '\n' + val : val });
-                        input.value = '';
+                        setCustomTermInput('');
                       }
                     }
                   }}
                 />
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="text-purple-600 border-purple-300 hover:bg-purple-50"
+                  onClick={() => {
+                    if (customTermInput.trim()) {
+                      fetchLlmSuggestions(customTermInput);
+                    }
+                  }}
+                  disabled={isLlmLoading || !customTermInput.trim()}
+                  title="LLM ile akıllı öneri al"
+                >
+                  <Sparkles className="w-4 h-4" />
+                </Button>
                 <Button variant="outline" size="sm" onClick={() => {
-                  const input = document.getElementById('customTermInput') as HTMLInputElement;
-                  const val = input?.value.trim().toLowerCase();
+                  const val = customTermInput.trim().toLowerCase();
                   if (val && !editModal.value.split('\n').includes(val)) {
                     setEditModal({ ...editModal, value: editModal.value ? editModal.value + '\n' + val : val });
-                    input.value = '';
+                    setCustomTermInput('');
                   }
                 }}>
                   <Plus className="w-4 h-4" />

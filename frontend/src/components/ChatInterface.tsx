@@ -36,6 +36,7 @@ import ThemeToggle from '@/components/ThemeToggle';
 import { useAuth } from '@/contexts/AuthProvider';
 import { createEnhancedSourceClickHandler } from '@/utils/semantic-search-enhancement';
 import { MessageSkeleton } from '@/components/chat/message-skeleton';
+import { SmartAutocomplete } from '@/components/chat/SmartAutocomplete';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import {
@@ -254,6 +255,9 @@ export default function ChatInterface() {
   const [availableModels, setAvailableModels] = useState<Array<{provider: string, model: string, displayName: string, description: string}>>([]);
   const [currentModel, setCurrentModel] = useState<string>('Claude');
   const [lastUserQuery, setLastUserQuery] = useState<string>(''); // For keyword boost highlighting
+  const [keyTerms, setKeyTerms] = useState<string[]>([]); // Schema keyTerms for autocomplete
+  const [showAutocomplete, setShowAutocomplete] = useState(false);
+  const [recentQueries, setRecentQueries] = useState<string[]>([]);
 
   // RAG and LLM Settings from backend
   const [ragSettings, setRagSettings] = useState({
@@ -447,8 +451,22 @@ export default function ChatInterface() {
     // Fetch available models with force refresh to avoid caching
     fetchAvailableModels(true);
 
+    // Fetch schema keyTerms for autocomplete
+    fetch('/api/v2/data-schema/llm-config', {
+      headers: token ? { 'Authorization': `Bearer ${token}` } : {}
+    })
+      .then(async (res) => {
+        if (res.ok) {
+          const data = await res.json();
+          const terms = data.config?.keyTerms || [];
+          setKeyTerms(terms);
+          debug.log('📚 [ChatInterface] KeyTerms loaded:', terms.length);
+        }
+      })
+      .catch(err => debug.log('KeyTerms fetch error:', err));
+
     // No interval to cleanup - suggestions are fetched once and cached
-  }, []);
+  }, [token]);
 
   // Timer useEffect removed - now using isolated StreamingTimer component
 
@@ -1502,15 +1520,61 @@ export default function ChatInterface() {
         <div className="fixed bottom-0 left-0 right-0 bg-background/80 backdrop-blur-md border-t">
           <div className="max-w-4xl mx-auto w-[98%] sm:w-[95%] md:w-full px-1 sm:px-2 md:px-4 py-2 sm:py-3 md:py-4">
             <div className="flex gap-1.5 sm:gap-2">
-              <Textarea
-                ref={textareaRef}
-                value={inputText}
-                onChange={(e) => setInputText(e.target.value)}
-                onKeyDown={handleKeyPress}
-                placeholder={chatbotSettings.placeholder}
-                className="min-h-[50px] sm:min-h-[60px] max-h-[100px] sm:max-h-[120px] resize-none text-sm"
-                disabled={isLoading}
-              />
+              <div className="relative flex-1">
+                <Textarea
+                  ref={textareaRef}
+                  value={inputText}
+                  onChange={(e) => {
+                    setInputText(e.target.value);
+                    // Show autocomplete when typing (at least 2 chars in current word)
+                    const words = e.target.value.split(/\s+/);
+                    const lastWord = words[words.length - 1] || '';
+                    setShowAutocomplete(lastWord.length >= 2 && !isLoading);
+                  }}
+                  onKeyDown={(e) => {
+                    // Hide autocomplete on Escape
+                    if (e.key === 'Escape') {
+                      setShowAutocomplete(false);
+                      return;
+                    }
+                    handleKeyPress(e);
+                  }}
+                  onFocus={() => {
+                    const words = inputText.split(/\s+/);
+                    const lastWord = words[words.length - 1] || '';
+                    setShowAutocomplete(lastWord.length >= 2 && !isLoading);
+                  }}
+                  onBlur={() => {
+                    // Delay hiding to allow click on suggestions
+                    setTimeout(() => setShowAutocomplete(false), 200);
+                  }}
+                  placeholder={chatbotSettings.placeholder}
+                  className="min-h-[50px] sm:min-h-[60px] max-h-[100px] sm:max-h-[120px] resize-none text-sm w-full"
+                  disabled={isLoading}
+                />
+                {/* Smart Autocomplete */}
+                {showAutocomplete && keyTerms.length > 0 && (
+                  <SmartAutocomplete
+                    value={inputText}
+                    onSelect={(term) => {
+                      // Replace last word with selected term
+                      const words = inputText.split(/\s+/);
+                      words[words.length - 1] = term;
+                      setInputText(words.join(' ') + ' ');
+                      setShowAutocomplete(false);
+                      textareaRef.current?.focus();
+                      // Track recent queries
+                      setRecentQueries(prev => [inputText, ...prev.slice(0, 4)]);
+                    }}
+                    keyTerms={keyTerms}
+                    recentQueries={recentQueries}
+                    position="above"
+                    enabled={showAutocomplete}
+                    llmEnabled={true}
+                    token={token}
+                  />
+                )}
+              </div>
               <Button
                 onClick={() => handleSendMessage()}
                 disabled={!inputText.trim() || isLoading}
