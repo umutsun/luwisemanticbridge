@@ -8,45 +8,26 @@ export class LuwiSemanticBridgeApi implements ICredentialType {
   displayName = 'Luwi Semantic Bridge API';
   documentationUrl = 'https://luwi.dev';
   properties: INodeProperties[] = [
+    // Luwi API Configuration
     {
-      displayName: 'PostgreSQL Host',
-      name: 'pgHost',
+      displayName: 'Luwi API URL',
+      name: 'luwiApiUrl',
       type: 'string',
-      default: 'localhost',
+      default: 'https://vergilex.luwi.dev',
+      placeholder: 'https://your-instance.luwi.dev',
+      description: 'Base URL of your Luwi instance (e.g., https://vergilex.luwi.dev)',
     },
     {
-      displayName: 'PostgreSQL Port',
-      name: 'pgPort',
-      type: 'number',
-      default: 5432,
-    },
-    {
-      displayName: 'PostgreSQL Database',
-      name: 'pgDatabase',
-      type: 'string',
-      default: 'postgres',
-    },
-    {
-      displayName: 'PostgreSQL User',
-      name: 'pgUser',
-      type: 'string',
-      default: 'postgres',
-    },
-    {
-      displayName: 'PostgreSQL Password',
-      name: 'pgPassword',
+      displayName: 'Luwi API Token',
+      name: 'luwiApiToken',
       type: 'string',
       typeOptions: {
         password: true,
       },
       default: '',
+      description: 'JWT token for authentication. Get this from your Luwi dashboard settings.',
     },
-    {
-      displayName: 'PostgreSQL SSL',
-      name: 'pgSsl',
-      type: 'boolean',
-      default: false,
-    },
+    // OpenAI for media generation
     {
       displayName: 'OpenAI API Key',
       name: 'openaiApiKey',
@@ -55,6 +36,7 @@ export class LuwiSemanticBridgeApi implements ICredentialType {
         password: true,
       },
       default: '',
+      description: 'OpenAI API key for image and audio generation (optional)',
     },
   ];
 }

@@ -5,7 +5,6 @@ import {
   INodeTypeDescription,
   NodeConnectionType,
 } from 'n8n-workflow';
-import { Client } from 'pg';
 import OpenAI from 'openai';
 
 export class LuwiSemanticBridge implements INodeType {
@@ -14,9 +13,9 @@ export class LuwiSemanticBridge implements INodeType {
     name: 'luwiSemanticBridge',
     icon: 'file:LuwiSemanticBridge.svg',
     group: ['transform'],
-    version: 1,
+    version: 2,
     subtitle: '={{$parameter["operation"]}}',
-    description: 'RAG-powered semantic search, chat completions, and bot message formatting for Telegram/WhatsApp',
+    description: 'Connect to Luwi Chat API, format responses for bots, and generate media',
     defaults: {
       name: 'Luwi Semantic Bridge',
     },
@@ -39,221 +38,158 @@ export class LuwiSemanticBridge implements INodeType {
         noDataExpression: true,
         options: [
           {
-            name: 'Embed and Store',
-            value: 'embedStore',
-            description: 'Generate embeddings and store in PostgreSQL',
-            action: 'Embed and store document',
+            name: 'Chat with Luwi',
+            value: 'chat',
+            description: 'Send a message to Luwi Chat API and get RAG response',
+            action: 'Send message to Luwi',
           },
           {
-            name: 'Semantic Search',
-            value: 'search',
-            description: 'Search for similar documents using vector similarity',
-            action: 'Search similar documents',
-          },
-          {
-            name: 'RAG Chat',
-            value: 'ragChat',
-            description: 'Answer questions using retrieved context (RAG)',
-            action: 'RAG powered chat completion',
+            name: 'Get Conversation',
+            value: 'getConversation',
+            description: 'Get conversation history',
+            action: 'Get conversation history',
           },
           {
             name: 'Format for Telegram',
             value: 'formatTelegram',
-            description: 'Format response for Telegram bot output',
-            action: 'Format message for Telegram',
+            description: 'Format response for Telegram bot',
+            action: 'Format for Telegram',
           },
           {
             name: 'Format for WhatsApp',
             value: 'formatWhatsApp',
-            description: 'Format response for WhatsApp bot output',
-            action: 'Format message for WhatsApp',
+            description: 'Format response for WhatsApp bot',
+            action: 'Format for WhatsApp',
+          },
+          {
+            name: 'Format for Discord',
+            value: 'formatDiscord',
+            description: 'Format response for Discord bot',
+            action: 'Format for Discord',
+          },
+          {
+            name: 'Format for Slack',
+            value: 'formatSlack',
+            description: 'Format response for Slack bot',
+            action: 'Format for Slack',
+          },
+          {
+            name: 'Generate Image',
+            value: 'generateImage',
+            description: 'Generate image from text using DALL-E',
+            action: 'Generate image with DALL-E',
+          },
+          {
+            name: 'Generate Audio',
+            value: 'generateAudio',
+            description: 'Generate audio from text using OpenAI TTS',
+            action: 'Generate audio with TTS',
           },
         ],
-        default: 'search',
+        default: 'chat',
       },
 
       // ===================
-      // EMBED & STORE OPTIONS
+      // CHAT WITH LUWI OPTIONS
       // ===================
       {
-        displayName: 'Text',
-        name: 'text',
+        displayName: 'Message',
+        name: 'chatMessage',
         type: 'string',
         typeOptions: {
-          rows: 4,
+          rows: 3,
         },
         default: '',
-        placeholder: 'Text content to embed...',
-        description: 'The text content to generate embeddings for',
+        placeholder: 'Vergi beyannamesi ne zaman verilir?',
+        description: 'The message to send to Luwi Chat API',
         displayOptions: {
           show: {
-            operation: ['embedStore'],
+            operation: ['chat'],
           },
         },
+        required: true,
       },
       {
-        displayName: 'Document ID',
-        name: 'documentId',
+        displayName: 'Conversation ID',
+        name: 'conversationId',
         type: 'string',
         default: '',
-        placeholder: 'doc-001',
-        description: 'Unique identifier for the document (auto-generated if empty)',
+        placeholder: 'Leave empty to start new conversation',
+        description: 'Existing conversation ID to continue, or empty for new',
         displayOptions: {
           show: {
-            operation: ['embedStore'],
-          },
-        },
-      },
-      {
-        displayName: 'Source',
-        name: 'source',
-        type: 'string',
-        default: '',
-        placeholder: 'website, pdf, manual...',
-        description: 'Source of the document for filtering',
-        displayOptions: {
-          show: {
-            operation: ['embedStore'],
-          },
-        },
-      },
-      {
-        displayName: 'Metadata',
-        name: 'metadata',
-        type: 'json',
-        default: '{}',
-        description: 'Additional metadata to store with the document (JSON)',
-        displayOptions: {
-          show: {
-            operation: ['embedStore'],
-          },
-        },
-      },
-
-      // ===================
-      // SEARCH OPTIONS
-      // ===================
-      {
-        displayName: 'Query',
-        name: 'query',
-        type: 'string',
-        typeOptions: {
-          rows: 2,
-        },
-        default: '',
-        placeholder: 'What is the return policy?',
-        description: 'Search query to find similar documents',
-        displayOptions: {
-          show: {
-            operation: ['search', 'ragChat'],
-          },
-        },
-      },
-      {
-        displayName: 'Result Limit',
-        name: 'limit',
-        type: 'number',
-        default: 5,
-        description: 'Maximum number of results to return',
-        displayOptions: {
-          show: {
-            operation: ['search', 'ragChat'],
-          },
-        },
-      },
-      {
-        displayName: 'Minimum Similarity',
-        name: 'minSimilarity',
-        type: 'number',
-        default: 0.7,
-        description: 'Minimum similarity score (0-1) to include in results',
-        typeOptions: {
-          minValue: 0,
-          maxValue: 1,
-          numberPrecision: 2,
-        },
-        displayOptions: {
-          show: {
-            operation: ['search', 'ragChat'],
-          },
-        },
-      },
-      {
-        displayName: 'Filter by Source',
-        name: 'filterSource',
-        type: 'string',
-        default: '',
-        placeholder: 'Leave empty for all sources',
-        description: 'Filter results by source field',
-        displayOptions: {
-          show: {
-            operation: ['search', 'ragChat'],
-          },
-        },
-      },
-
-      // ===================
-      // RAG CHAT OPTIONS
-      // ===================
-      {
-        displayName: 'System Prompt',
-        name: 'systemPrompt',
-        type: 'string',
-        typeOptions: {
-          rows: 4,
-        },
-        default: 'You are a helpful assistant. Answer questions based on the provided context. If the context doesn\'t contain relevant information, say so.',
-        description: 'System prompt for the AI assistant',
-        displayOptions: {
-          show: {
-            operation: ['ragChat'],
+            operation: ['chat', 'getConversation'],
           },
         },
       },
       {
         displayName: 'Model',
-        name: 'model',
+        name: 'chatModel',
         type: 'options',
         options: [
-          { name: 'GPT-4o Mini', value: 'gpt-4o-mini' },
-          { name: 'GPT-4o', value: 'gpt-4o' },
+          { name: 'GPT-4o Mini (Fast)', value: 'gpt-4o-mini' },
+          { name: 'GPT-4o (Recommended)', value: 'gpt-4o' },
           { name: 'GPT-4 Turbo', value: 'gpt-4-turbo' },
-          { name: 'GPT-3.5 Turbo', value: 'gpt-3.5-turbo' },
         ],
         default: 'gpt-4o-mini',
-        description: 'OpenAI model to use for chat completion',
+        description: 'AI model to use for chat completion',
         displayOptions: {
           show: {
-            operation: ['ragChat'],
+            operation: ['chat'],
           },
         },
       },
       {
         displayName: 'Temperature',
-        name: 'temperature',
+        name: 'chatTemperature',
         type: 'number',
         default: 0.7,
-        description: 'Controls randomness (0=deterministic, 1=creative)',
         typeOptions: {
           minValue: 0,
           maxValue: 2,
           numberPrecision: 1,
         },
+        description: 'Controls randomness (0=focused, 1=creative)',
         displayOptions: {
           show: {
-            operation: ['ragChat'],
+            operation: ['chat'],
           },
         },
       },
       {
-        displayName: 'Max Tokens',
-        name: 'maxTokens',
-        type: 'number',
-        default: 1000,
-        description: 'Maximum tokens in the response',
+        displayName: 'Language',
+        name: 'chatLanguage',
+        type: 'options',
+        options: [
+          { name: 'Turkish', value: 'tr' },
+          { name: 'English', value: 'en' },
+          { name: 'Auto Detect', value: 'auto' },
+        ],
+        default: 'tr',
+        description: 'Response language',
         displayOptions: {
           show: {
-            operation: ['ragChat'],
+            operation: ['chat'],
+          },
+        },
+      },
+
+      // ===================
+      // FORMAT OPTIONS (SHARED)
+      // ===================
+      {
+        displayName: 'Message',
+        name: 'formatMessage',
+        type: 'string',
+        typeOptions: {
+          rows: 4,
+        },
+        default: '',
+        placeholder: 'Message to format...',
+        description: 'The message content to format for the platform',
+        displayOptions: {
+          show: {
+            operation: ['formatTelegram', 'formatWhatsApp', 'formatDiscord', 'formatSlack'],
           },
         },
       },
@@ -262,33 +198,28 @@ export class LuwiSemanticBridge implements INodeType {
         name: 'includeSources',
         type: 'boolean',
         default: true,
-        description: 'Whether to include source references in the response',
+        description: 'Whether to include source references',
         displayOptions: {
           show: {
-            operation: ['ragChat'],
+            operation: ['formatTelegram', 'formatWhatsApp', 'formatDiscord', 'formatSlack'],
+          },
+        },
+      },
+      {
+        displayName: 'Sources',
+        name: 'sources',
+        type: 'json',
+        default: '[]',
+        description: 'Array of sources [{title, url, similarity}]',
+        displayOptions: {
+          show: {
+            operation: ['formatTelegram', 'formatWhatsApp', 'formatDiscord', 'formatSlack'],
+            includeSources: [true],
           },
         },
       },
 
-      // ===================
-      // TELEGRAM FORMAT OPTIONS
-      // ===================
-      {
-        displayName: 'Message',
-        name: 'telegramMessage',
-        type: 'string',
-        typeOptions: {
-          rows: 4,
-        },
-        default: '',
-        placeholder: 'Message to format for Telegram...',
-        description: 'The message content to format',
-        displayOptions: {
-          show: {
-            operation: ['formatTelegram'],
-          },
-        },
-      },
+      // TELEGRAM SPECIFIC
       {
         displayName: 'Parse Mode',
         name: 'telegramParseMode',
@@ -297,137 +228,177 @@ export class LuwiSemanticBridge implements INodeType {
           { name: 'HTML', value: 'HTML' },
           { name: 'Markdown', value: 'Markdown' },
           { name: 'MarkdownV2', value: 'MarkdownV2' },
-          { name: 'Plain Text', value: 'plain' },
         ],
         default: 'HTML',
-        description: 'Telegram message parse mode',
         displayOptions: {
           show: {
             operation: ['formatTelegram'],
           },
         },
       },
+
+      // DISCORD SPECIFIC
       {
-        displayName: 'Add Sources Footer',
-        name: 'telegramAddSources',
+        displayName: 'Use Embed',
+        name: 'discordUseEmbed',
         type: 'boolean',
-        default: false,
-        description: 'Whether to add source links at the bottom',
+        default: true,
+        description: 'Whether to use Discord embed format',
         displayOptions: {
           show: {
-            operation: ['formatTelegram'],
+            operation: ['formatDiscord'],
           },
         },
       },
       {
-        displayName: 'Sources',
-        name: 'telegramSources',
-        type: 'json',
-        default: '[]',
-        description: 'Array of source objects [{title, url}]',
+        displayName: 'Embed Color',
+        name: 'discordEmbedColor',
+        type: 'color',
+        default: '#6366f1',
         displayOptions: {
           show: {
-            operation: ['formatTelegram'],
-            telegramAddSources: [true],
+            operation: ['formatDiscord'],
+            discordUseEmbed: [true],
           },
         },
       },
 
       // ===================
-      // WHATSAPP FORMAT OPTIONS
+      // IMAGE GENERATION
       // ===================
       {
-        displayName: 'Message',
-        name: 'whatsappMessage',
+        displayName: 'Prompt',
+        name: 'imagePrompt',
+        type: 'string',
+        typeOptions: {
+          rows: 3,
+        },
+        default: '',
+        placeholder: 'A professional infographic about tax regulations...',
+        description: 'Text description for image generation',
+        displayOptions: {
+          show: {
+            operation: ['generateImage'],
+          },
+        },
+        required: true,
+      },
+      {
+        displayName: 'Model',
+        name: 'imageModel',
+        type: 'options',
+        options: [
+          { name: 'DALL-E 3', value: 'dall-e-3' },
+          { name: 'DALL-E 2', value: 'dall-e-2' },
+        ],
+        default: 'dall-e-3',
+        displayOptions: {
+          show: {
+            operation: ['generateImage'],
+          },
+        },
+      },
+      {
+        displayName: 'Size',
+        name: 'imageSize',
+        type: 'options',
+        options: [
+          { name: '1024x1024 (Square)', value: '1024x1024' },
+          { name: '1792x1024 (Landscape)', value: '1792x1024' },
+          { name: '1024x1792 (Portrait)', value: '1024x1792' },
+        ],
+        default: '1024x1024',
+        displayOptions: {
+          show: {
+            operation: ['generateImage'],
+          },
+        },
+      },
+      {
+        displayName: 'Quality',
+        name: 'imageQuality',
+        type: 'options',
+        options: [
+          { name: 'Standard', value: 'standard' },
+          { name: 'HD', value: 'hd' },
+        ],
+        default: 'standard',
+        displayOptions: {
+          show: {
+            operation: ['generateImage'],
+            imageModel: ['dall-e-3'],
+          },
+        },
+      },
+
+      // ===================
+      // AUDIO GENERATION
+      // ===================
+      {
+        displayName: 'Text',
+        name: 'audioText',
         type: 'string',
         typeOptions: {
           rows: 4,
         },
         default: '',
-        placeholder: 'Message to format for WhatsApp...',
-        description: 'The message content to format',
+        placeholder: 'Text to convert to speech...',
+        description: 'Text content for audio generation',
         displayOptions: {
           show: {
-            operation: ['formatWhatsApp'],
+            operation: ['generateAudio'],
           },
         },
+        required: true,
       },
       {
-        displayName: 'Format Style',
-        name: 'whatsappStyle',
+        displayName: 'Voice',
+        name: 'audioVoice',
         type: 'options',
         options: [
-          { name: 'Plain', value: 'plain' },
-          { name: 'With Formatting', value: 'formatted' },
-          { name: 'Compact', value: 'compact' },
+          { name: 'Alloy', value: 'alloy' },
+          { name: 'Echo', value: 'echo' },
+          { name: 'Fable', value: 'fable' },
+          { name: 'Onyx', value: 'onyx' },
+          { name: 'Nova', value: 'nova' },
+          { name: 'Shimmer', value: 'shimmer' },
         ],
-        default: 'formatted',
-        description: 'WhatsApp message formatting style',
+        default: 'alloy',
         displayOptions: {
           show: {
-            operation: ['formatWhatsApp'],
+            operation: ['generateAudio'],
           },
         },
       },
       {
-        displayName: 'Add Sources Footer',
-        name: 'whatsappAddSources',
-        type: 'boolean',
-        default: false,
-        description: 'Whether to add source links at the bottom',
-        displayOptions: {
-          show: {
-            operation: ['formatWhatsApp'],
-          },
-        },
-      },
-      {
-        displayName: 'Sources',
-        name: 'whatsappSources',
-        type: 'json',
-        default: '[]',
-        description: 'Array of source objects [{title, url}]',
-        displayOptions: {
-          show: {
-            operation: ['formatWhatsApp'],
-            whatsappAddSources: [true],
-          },
-        },
-      },
-
-      // ===================
-      // EMBEDDING OPTIONS
-      // ===================
-      {
-        displayName: 'Embedding Model',
-        name: 'embeddingModel',
+        displayName: 'Model',
+        name: 'audioModel',
         type: 'options',
         options: [
-          { name: 'text-embedding-3-small (Recommended)', value: 'text-embedding-3-small' },
-          { name: 'text-embedding-3-large', value: 'text-embedding-3-large' },
-          { name: 'text-embedding-ada-002 (Legacy)', value: 'text-embedding-ada-002' },
+          { name: 'TTS-1 (Fast)', value: 'tts-1' },
+          { name: 'TTS-1 HD (Quality)', value: 'tts-1-hd' },
         ],
-        default: 'text-embedding-3-small',
-        description: 'OpenAI embedding model to use',
+        default: 'tts-1',
         displayOptions: {
           show: {
-            operation: ['embedStore', 'search', 'ragChat'],
+            operation: ['generateAudio'],
           },
         },
       },
-
-      // ===================
-      // DATABASE OPTIONS
-      // ===================
       {
-        displayName: 'Table Name',
-        name: 'tableName',
-        type: 'string',
-        default: 'documents',
-        description: 'PostgreSQL table name for storing embeddings',
+        displayName: 'Speed',
+        name: 'audioSpeed',
+        type: 'number',
+        default: 1.0,
+        typeOptions: {
+          minValue: 0.25,
+          maxValue: 4.0,
+          numberPrecision: 2,
+        },
+        description: 'Speed of speech (0.25 to 4.0)',
         displayOptions: {
           show: {
-            operation: ['embedStore', 'search', 'ragChat'],
+            operation: ['generateAudio'],
           },
         },
       },
@@ -438,34 +409,102 @@ export class LuwiSemanticBridge implements INodeType {
     const items = this.getInputData();
     const returnData: INodeExecutionData[] = [];
     const operation = this.getNodeParameter('operation', 0) as string;
+    const credentials = await this.getCredentials('luwiSemanticBridgeApi');
 
-    // For format operations, we don't need DB/OpenAI
-    if (operation === 'formatTelegram' || operation === 'formatWhatsApp') {
-      for (let i = 0; i < items.length; i++) {
-        if (operation === 'formatTelegram') {
-          const message = this.getNodeParameter('telegramMessage', i) as string;
+    for (let i = 0; i < items.length; i++) {
+      try {
+        // ===================
+        // CHAT WITH LUWI
+        // ===================
+        if (operation === 'chat') {
+          const message = this.getNodeParameter('chatMessage', i) as string;
+          const conversationId = this.getNodeParameter('conversationId', i, '') as string;
+          const model = this.getNodeParameter('chatModel', i) as string;
+          const temperature = this.getNodeParameter('chatTemperature', i) as number;
+          const language = this.getNodeParameter('chatLanguage', i) as string;
+
+          const apiUrl = credentials.luwiApiUrl as string;
+          const apiToken = credentials.luwiApiToken as string;
+
+          const response = await fetch(`${apiUrl}/api/v2/chat`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${apiToken}`,
+            },
+            body: JSON.stringify({
+              message,
+              conversationId: conversationId || undefined,
+              model,
+              temperature,
+              language,
+            }),
+          });
+
+          if (!response.ok) {
+            const errorText = await response.text();
+            throw new Error(`Luwi API error: ${response.status} - ${errorText}`);
+          }
+
+          const result = await response.json();
+
+          returnData.push({
+            json: {
+              success: true,
+              answer: result.response || result.answer,
+              conversationId: result.conversationId,
+              sources: result.sources || [],
+              model,
+              usage: result.usage,
+            },
+          });
+        }
+
+        // ===================
+        // GET CONVERSATION
+        // ===================
+        else if (operation === 'getConversation') {
+          const conversationId = this.getNodeParameter('conversationId', i) as string;
+          const apiUrl = credentials.luwiApiUrl as string;
+          const apiToken = credentials.luwiApiToken as string;
+
+          const response = await fetch(`${apiUrl}/api/v2/chat/conversation/${conversationId}`, {
+            method: 'GET',
+            headers: {
+              'Authorization': `Bearer ${apiToken}`,
+            },
+          });
+
+          if (!response.ok) {
+            throw new Error(`Failed to get conversation: ${response.status}`);
+          }
+
+          const result = await response.json();
+          returnData.push({ json: result });
+        }
+
+        // ===================
+        // FORMAT FOR TELEGRAM
+        // ===================
+        else if (operation === 'formatTelegram') {
+          const message = this.getNodeParameter('formatMessage', i) as string;
           const parseMode = this.getNodeParameter('telegramParseMode', i) as string;
-          const addSources = this.getNodeParameter('telegramAddSources', i) as boolean;
+          const includeSources = this.getNodeParameter('includeSources', i) as boolean;
 
           let formattedMessage = message;
 
-          if (addSources) {
-            const sources = this.getNodeParameter('telegramSources', i, []) as Array<{title: string, url: string}>;
+          if (includeSources) {
+            const sources = this.getNodeParameter('sources', i, []) as Array<{title: string, url: string}>;
             if (sources.length > 0) {
               if (parseMode === 'HTML') {
                 formattedMessage += '\n\n<b>📚 Kaynaklar:</b>\n';
-                sources.forEach((s, idx) => {
+                sources.slice(0, 5).forEach((s, idx) => {
                   formattedMessage += `${idx + 1}. <a href="${s.url}">${s.title}</a>\n`;
                 });
-              } else if (parseMode === 'Markdown' || parseMode === 'MarkdownV2') {
-                formattedMessage += '\n\n*📚 Kaynaklar:*\n';
-                sources.forEach((s, idx) => {
-                  formattedMessage += `${idx + 1}. [${s.title}](${s.url})\n`;
-                });
               } else {
-                formattedMessage += '\n\n📚 Kaynaklar:\n';
-                sources.forEach((s, idx) => {
-                  formattedMessage += `${idx + 1}. ${s.title}: ${s.url}\n`;
+                formattedMessage += '\n\n*📚 Kaynaklar:*\n';
+                sources.slice(0, 5).forEach((s, idx) => {
+                  formattedMessage += `${idx + 1}. [${s.title}](${s.url})\n`;
                 });
               }
             }
@@ -474,33 +513,28 @@ export class LuwiSemanticBridge implements INodeType {
           returnData.push({
             json: {
               text: formattedMessage,
-              parse_mode: parseMode === 'plain' ? undefined : parseMode,
+              parse_mode: parseMode,
               platform: 'telegram',
             },
           });
-        } else if (operation === 'formatWhatsApp') {
-          const message = this.getNodeParameter('whatsappMessage', i) as string;
-          const style = this.getNodeParameter('whatsappStyle', i) as string;
-          const addSources = this.getNodeParameter('whatsappAddSources', i) as boolean;
+        }
 
-          let formattedMessage = message;
+        // ===================
+        // FORMAT FOR WHATSAPP
+        // ===================
+        else if (operation === 'formatWhatsApp') {
+          const message = this.getNodeParameter('formatMessage', i) as string;
+          const includeSources = this.getNodeParameter('includeSources', i) as boolean;
 
-          // WhatsApp formatting
-          if (style === 'formatted') {
-            // Convert markdown-like syntax to WhatsApp format
-            formattedMessage = formattedMessage
-              .replace(/\*\*(.*?)\*\*/g, '*$1*')  // Bold
-              .replace(/__(.*?)__/g, '_$1_');     // Italic
-          } else if (style === 'compact') {
-            // Remove extra whitespace
-            formattedMessage = formattedMessage.replace(/\n{3,}/g, '\n\n').trim();
-          }
+          let formattedMessage = message
+            .replace(/\*\*(.*?)\*\*/g, '*$1*')  // Bold
+            .replace(/__(.*?)__/g, '_$1_');     // Italic
 
-          if (addSources) {
-            const sources = this.getNodeParameter('whatsappSources', i, []) as Array<{title: string, url: string}>;
+          if (includeSources) {
+            const sources = this.getNodeParameter('sources', i, []) as Array<{title: string, url: string}>;
             if (sources.length > 0) {
               formattedMessage += '\n\n📚 *Kaynaklar:*\n';
-              sources.forEach((s, idx) => {
+              sources.slice(0, 5).forEach((s, idx) => {
                 formattedMessage += `${idx + 1}. ${s.title}\n${s.url}\n`;
               });
             }
@@ -513,231 +547,210 @@ export class LuwiSemanticBridge implements INodeType {
             },
           });
         }
-      }
-      return [returnData];
-    }
 
-    // For DB operations, get credentials
-    const credentials = await this.getCredentials('luwiSemanticBridgeApi');
-    const tableName = this.getNodeParameter('tableName', 0, 'documents') as string;
-    const embeddingModel = this.getNodeParameter('embeddingModel', 0, 'text-embedding-3-small') as string;
+        // ===================
+        // FORMAT FOR DISCORD
+        // ===================
+        else if (operation === 'formatDiscord') {
+          const message = this.getNodeParameter('formatMessage', i) as string;
+          const useEmbed = this.getNodeParameter('discordUseEmbed', i) as boolean;
+          const includeSources = this.getNodeParameter('includeSources', i) as boolean;
 
-    // Determine embedding dimensions based on model
-    const embeddingDimensions = embeddingModel === 'text-embedding-3-large' ? 3072 : 1536;
+          if (useEmbed) {
+            const embedColor = this.getNodeParameter('discordEmbedColor', i) as string;
+            const colorInt = parseInt(embedColor.replace('#', ''), 16);
 
-    // Initialize PostgreSQL client
-    const pgClient = new Client({
-      host: credentials.pgHost as string,
-      port: credentials.pgPort as number,
-      database: credentials.pgDatabase as string,
-      user: credentials.pgUser as string,
-      password: credentials.pgPassword as string,
-      ssl: credentials.pgSsl === true ? { rejectUnauthorized: false } : false,
-    });
+            const embed: any = {
+              description: message.substring(0, 4096),
+              color: colorInt,
+              footer: {
+                text: 'Powered by Luwi Semantic Bridge',
+              },
+              timestamp: new Date().toISOString(),
+            };
 
-    // Initialize OpenAI client
-    const openai = new OpenAI({
-      apiKey: credentials.openaiApiKey as string,
-    });
+            if (includeSources) {
+              const sources = this.getNodeParameter('sources', i, []) as Array<{title: string, url: string}>;
+              if (sources.length > 0) {
+                embed.fields = sources.slice(0, 5).map((s, idx) => ({
+                  name: `📄 Kaynak ${idx + 1}`,
+                  value: `[${s.title}](${s.url})`,
+                  inline: true,
+                }));
+              }
+            }
 
-    try {
-      await pgClient.connect();
+            returnData.push({
+              json: {
+                embeds: [embed],
+                platform: 'discord',
+              },
+            });
+          } else {
+            let formattedMessage = message;
+            if (includeSources) {
+              const sources = this.getNodeParameter('sources', i, []) as Array<{title: string, url: string}>;
+              if (sources.length > 0) {
+                formattedMessage += '\n\n**📚 Kaynaklar:**\n';
+                sources.slice(0, 5).forEach((s, idx) => {
+                  formattedMessage += `${idx + 1}. [${s.title}](${s.url})\n`;
+                });
+              }
+            }
+            returnData.push({
+              json: {
+                content: formattedMessage,
+                platform: 'discord',
+              },
+            });
+          }
+        }
 
-      // Ensure table exists with proper structure
-      await pgClient.query(`
-        CREATE TABLE IF NOT EXISTS ${tableName} (
-          id TEXT PRIMARY KEY,
-          text TEXT,
-          embedding vector(${embeddingDimensions}),
-          source TEXT,
-          metadata JSONB,
-          created_at TIMESTAMP DEFAULT NOW(),
-          updated_at TIMESTAMP DEFAULT NOW()
-        )
-      `);
+        // ===================
+        // FORMAT FOR SLACK
+        // ===================
+        else if (operation === 'formatSlack') {
+          const message = this.getNodeParameter('formatMessage', i) as string;
+          const includeSources = this.getNodeParameter('includeSources', i) as boolean;
 
-      // Create index for faster similarity search if not exists
-      await pgClient.query(`
-        CREATE INDEX IF NOT EXISTS idx_${tableName}_embedding
-        ON ${tableName} USING ivfflat (embedding vector_cosine_ops)
-        WITH (lists = 100)
-      `).catch(() => {
-        // Index might fail if not enough rows, ignore
-      });
+          const blocks: any[] = [
+            {
+              type: 'section',
+              text: {
+                type: 'mrkdwn',
+                text: message,
+              },
+            },
+          ];
 
-      for (let i = 0; i < items.length; i++) {
-        if (operation === 'embedStore') {
-          const text = this.getNodeParameter('text', i) as string;
-          let documentId = this.getNodeParameter('documentId', i) as string;
-          const source = this.getNodeParameter('source', i, '') as string;
-          const metadata = this.getNodeParameter('metadata', i, {}) as object;
-
-          // Auto-generate ID if not provided
-          if (!documentId) {
-            documentId = `doc_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+          if (includeSources) {
+            const sources = this.getNodeParameter('sources', i, []) as Array<{title: string, url: string}>;
+            if (sources.length > 0) {
+              blocks.push({ type: 'divider' });
+              blocks.push({
+                type: 'section',
+                text: {
+                  type: 'mrkdwn',
+                  text: '*📚 Kaynaklar:*\n' + sources.slice(0, 5).map((s, idx) =>
+                    `${idx + 1}. <${s.url}|${s.title}>`
+                  ).join('\n'),
+                },
+              });
+            }
           }
 
-          // Generate embedding
-          const embeddingResponse = await openai.embeddings.create({
-            model: embeddingModel,
-            input: text,
+          blocks.push({
+            type: 'context',
+            elements: [
+              {
+                type: 'mrkdwn',
+                text: '_Powered by Luwi Semantic Bridge_',
+              },
+            ],
           });
 
-          const embedding = embeddingResponse.data[0].embedding;
+          returnData.push({
+            json: {
+              blocks,
+              text: message, // Fallback
+              platform: 'slack',
+            },
+          });
+        }
 
-          // Store in PostgreSQL
-          await pgClient.query(
-            `INSERT INTO ${tableName} (id, text, embedding, source, metadata, updated_at)
-             VALUES ($1, $2, $3, $4, $5, NOW())
-             ON CONFLICT (id) DO UPDATE
-             SET text = $2, embedding = $3, source = $4, metadata = $5, updated_at = NOW()`,
-            [documentId, text, `[${embedding.join(',')}]`, source, JSON.stringify(metadata)]
-          );
+        // ===================
+        // GENERATE IMAGE
+        // ===================
+        else if (operation === 'generateImage') {
+          const prompt = this.getNodeParameter('imagePrompt', i) as string;
+          const model = this.getNodeParameter('imageModel', i) as string;
+          const size = this.getNodeParameter('imageSize', i) as string;
+          const quality = model === 'dall-e-3'
+            ? this.getNodeParameter('imageQuality', i) as string
+            : 'standard';
+
+          const openaiKey = credentials.openaiApiKey as string;
+          if (!openaiKey) {
+            throw new Error('OpenAI API key is required for image generation');
+          }
+
+          const openai = new OpenAI({ apiKey: openaiKey });
+
+          const response = await openai.images.generate({
+            model,
+            prompt,
+            size: size as any,
+            quality: quality as any,
+            n: 1,
+          });
 
           returnData.push({
             json: {
               success: true,
-              documentId,
-              source,
-              textLength: text.length,
-              embeddingModel,
-              message: 'Document stored successfully',
-            },
-          });
-
-        } else if (operation === 'search') {
-          const query = this.getNodeParameter('query', i) as string;
-          const limit = this.getNodeParameter('limit', i) as number;
-          const minSimilarity = this.getNodeParameter('minSimilarity', i) as number;
-          const filterSource = this.getNodeParameter('filterSource', i, '') as string;
-
-          // Generate embedding for search query
-          const embeddingResponse = await openai.embeddings.create({
-            model: embeddingModel,
-            input: query,
-          });
-
-          const queryEmbedding = embeddingResponse.data[0].embedding;
-
-          // Build query with optional source filter
-          let searchQuery = `
-            SELECT id, text, source, metadata,
-                   1 - (embedding <=> $1::vector) as similarity
-            FROM ${tableName}
-            WHERE 1 - (embedding <=> $1::vector) >= $2
-          `;
-          const params: any[] = [`[${queryEmbedding.join(',')}]`, minSimilarity];
-
-          if (filterSource) {
-            searchQuery += ` AND source = $3`;
-            params.push(filterSource);
-          }
-
-          searchQuery += ` ORDER BY embedding <=> $1::vector LIMIT $${params.length + 1}`;
-          params.push(limit);
-
-          const result = await pgClient.query(searchQuery, params);
-
-          returnData.push({
-            json: {
-              query,
-              totalResults: result.rows.length,
-              results: result.rows.map(row => ({
-                id: row.id,
-                text: row.text,
-                source: row.source,
-                similarity: parseFloat(row.similarity.toFixed(4)),
-                metadata: row.metadata,
-              })),
-            },
-          });
-
-        } else if (operation === 'ragChat') {
-          const query = this.getNodeParameter('query', i) as string;
-          const limit = this.getNodeParameter('limit', i) as number;
-          const minSimilarity = this.getNodeParameter('minSimilarity', i) as number;
-          const filterSource = this.getNodeParameter('filterSource', i, '') as string;
-          const systemPrompt = this.getNodeParameter('systemPrompt', i) as string;
-          const model = this.getNodeParameter('model', i) as string;
-          const temperature = this.getNodeParameter('temperature', i) as number;
-          const maxTokens = this.getNodeParameter('maxTokens', i) as number;
-          const includeSources = this.getNodeParameter('includeSources', i) as boolean;
-
-          // Step 1: Retrieve relevant documents
-          const embeddingResponse = await openai.embeddings.create({
-            model: embeddingModel,
-            input: query,
-          });
-
-          const queryEmbedding = embeddingResponse.data[0].embedding;
-
-          let searchQuery = `
-            SELECT id, text, source, metadata,
-                   1 - (embedding <=> $1::vector) as similarity
-            FROM ${tableName}
-            WHERE 1 - (embedding <=> $1::vector) >= $2
-          `;
-          const params: any[] = [`[${queryEmbedding.join(',')}]`, minSimilarity];
-
-          if (filterSource) {
-            searchQuery += ` AND source = $3`;
-            params.push(filterSource);
-          }
-
-          searchQuery += ` ORDER BY embedding <=> $1::vector LIMIT $${params.length + 1}`;
-          params.push(limit);
-
-          const searchResult = await pgClient.query(searchQuery, params);
-
-          // Step 2: Build context from retrieved documents
-          const context = searchResult.rows.map((row, idx) =>
-            `[${idx + 1}] ${row.text}`
-          ).join('\n\n');
-
-          const sources = searchResult.rows.map(row => ({
-            id: row.id,
-            source: row.source,
-            similarity: parseFloat(row.similarity.toFixed(4)),
-          }));
-
-          // Step 3: Generate response with context
-          const messages = [
-            { role: 'system' as const, content: systemPrompt },
-            {
-              role: 'user' as const,
-              content: `Context:\n${context}\n\n---\n\nQuestion: ${query}`
-            },
-          ];
-
-          const completion = await openai.chat.completions.create({
-            model,
-            messages,
-            temperature,
-            max_tokens: maxTokens,
-          });
-
-          const answer = completion.choices[0]?.message?.content || 'No response generated';
-
-          returnData.push({
-            json: {
-              query,
-              answer,
+              url: response.data[0].url,
+              revised_prompt: response.data[0].revised_prompt,
               model,
-              sources: includeSources ? sources : undefined,
-              contextDocuments: searchResult.rows.length,
-              usage: {
-                promptTokens: completion.usage?.prompt_tokens,
-                completionTokens: completion.usage?.completion_tokens,
-                totalTokens: completion.usage?.total_tokens,
+              size,
+            },
+          });
+        }
+
+        // ===================
+        // GENERATE AUDIO
+        // ===================
+        else if (operation === 'generateAudio') {
+          const text = this.getNodeParameter('audioText', i) as string;
+          const voice = this.getNodeParameter('audioVoice', i) as string;
+          const model = this.getNodeParameter('audioModel', i) as string;
+          const speed = this.getNodeParameter('audioSpeed', i) as number;
+
+          const openaiKey = credentials.openaiApiKey as string;
+          if (!openaiKey) {
+            throw new Error('OpenAI API key is required for audio generation');
+          }
+
+          const openai = new OpenAI({ apiKey: openaiKey });
+
+          const response = await openai.audio.speech.create({
+            model,
+            voice: voice as any,
+            input: text,
+            speed,
+          });
+
+          // Convert to base64
+          const buffer = Buffer.from(await response.arrayBuffer());
+          const base64Audio = buffer.toString('base64');
+
+          returnData.push({
+            json: {
+              success: true,
+              audio: base64Audio,
+              format: 'mp3',
+              voice,
+              model,
+            },
+            binary: {
+              audio: {
+                data: base64Audio,
+                mimeType: 'audio/mpeg',
+                fileName: 'speech.mp3',
               },
             },
           });
         }
+
+      } catch (error) {
+        if (this.continueOnFail()) {
+          returnData.push({
+            json: {
+              error: error instanceof Error ? error.message : String(error),
+            },
+          });
+          continue;
+        }
+        throw error;
       }
-    } catch (error) {
-      throw new Error(`Operation failed: ${error instanceof Error ? error.message : String(error)}`);
-    } finally {
-      await pgClient.end();
     }
 
     return [returnData];
