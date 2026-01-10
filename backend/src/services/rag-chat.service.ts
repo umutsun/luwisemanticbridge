@@ -2024,6 +2024,24 @@ FORMAT:
         }
       }
 
+      // 🚫 HARD CLEAR: Always clear sources for OUT_OF_SCOPE or definitive NOT_FOUND
+      // This is independent of refusalPolicy settings - these responses should NEVER show sources
+      const outOfScopePatterns = [
+        /kapsam\s*dışı/i,
+        /bu\s+(?:konu|soru).*(?:uzmanlık|alan).*dışında/i,
+        /vergi.*(?:hukuk|mevzuat).*ilgili\s+değil/i,
+        /bu\s+konuda\s+(?:yeterli\s+)?(?:bilgi|kaynak)\s+bulunamadı/i,
+        /kaynaklarda\s+(?:bu\s+konuda\s+)?bilgi\s+bulunamadı/i,
+        /ilgili\s+kaynak\s+bulunamadı/i
+      ];
+
+      const isOutOfScope = outOfScopePatterns.some(pattern => pattern.test(response.content));
+
+      if (isOutOfScope) {
+        console.log(`🚫 OUT_OF_SCOPE/NOT_FOUND detected - clearing sources regardless of policy`);
+        finalSources = [];
+      }
+
       // Log sources content for debugging
       console.log(` Returning ${finalSources.length} sources to frontend`);
       finalSources.forEach((source, idx) => {
@@ -2117,12 +2135,6 @@ FORMAT:
   private removeInvalidQuote(responseText: string, language: string = 'tr'): string {
     let cleaned = responseText;
 
-    // Message to show instead of invalid quote
-    // Clear messaging: "quote not found" ≠ "no sources"
-    const noQuoteMessage = language === 'tr'
-      ? '**ALINTI**\n_Mevcut veritabanında bu soruyu doğrudan destekleyen kısa bir alıntı bulunamadı; cevap, ilgili kaynaklardaki genel bilgilerden çıkarım içerir. Kaynaklar aşağıda listelenmiştir._'
-      : '**QUOTE**\n_No direct quote supporting this question was found in the database; the answer is derived from general information in related sources. Sources are listed below._';
-
     // Pattern to match ALINTI section (Turkish)
     const alintıPattern = /\*\*ALINTI\*\*[\s\S]*?(?=\*\*[A-ZÇĞİÖŞÜ][A-ZÇĞİÖŞÜa-zçğıöşü]*\*\*|\n\n\n|$)/gi;
 
@@ -2137,41 +2149,15 @@ FORMAT:
     quotePattern.lastIndex = 0;
 
     if (hasAlinti) {
-      // Replace ALINTI section with clean message
-      cleaned = cleaned.replace(alintıPattern, noQuoteMessage + '\n\n');
-      console.log(`🧹 Replaced invalid ALINTI section with no-quote message`);
+      // Simply remove invalid ALINTI section - no placeholder
+      cleaned = cleaned.replace(alintıPattern, '');
+      console.log(`🧹 Removed invalid ALINTI section (no placeholder)`);
     } else if (hasQuote) {
-      // Replace QUOTE section with clean message
-      cleaned = cleaned.replace(quotePattern, noQuoteMessage + '\n\n');
-      console.log(`🧹 Replaced invalid QUOTE section with no-quote message`);
-    } else {
-      // 🔧 FIX Eksik-1: No ALINTI section exists - ADD the no-quote message
-      // This happens when LLM didn't generate any quote, or quote was stripped earlier
-      // Insert no-quote message AFTER **CEVAP** section but BEFORE **KAYNAKLAR**
-      const cevapEndPattern = /(\*\*CEVAP\*\*[\s\S]*?)(\*\*KAYNAKLAR\*\*|\*\*SOURCES\*\*|$)/i;
-      const answerEndPattern = /(\*\*ANSWER\*\*[\s\S]*?)(\*\*SOURCES\*\*|\*\*KAYNAKLAR\*\*|$)/i;
-
-      if (cevapEndPattern.test(cleaned)) {
-        cleaned = cleaned.replace(cevapEndPattern, `$1\n\n${noQuoteMessage}\n\n$2`);
-        console.log(`🧹 Added no-quote message after CEVAP section`);
-      } else if (answerEndPattern.test(cleaned)) {
-        cleaned = cleaned.replace(answerEndPattern, `$1\n\n${noQuoteMessage}\n\n$2`);
-        console.log(`🧹 Added no-quote message after ANSWER section`);
-      } else {
-        // Fallback: just append at the end before any KAYNAKLAR section
-        const sourcesPattern = /(\*\*KAYNAKLAR\*\*|\*\*SOURCES\*\*)/i;
-        if (sourcesPattern.test(cleaned)) {
-          cleaned = cleaned.replace(sourcesPattern, `${noQuoteMessage}\n\n$1`);
-        } else {
-          cleaned = cleaned + '\n\n' + noQuoteMessage;
-        }
-        console.log(`🧹 Added no-quote message (fallback position)`);
-      }
+      // Simply remove invalid QUOTE section - no placeholder
+      cleaned = cleaned.replace(quotePattern, '');
+      console.log(`🧹 Removed invalid QUOTE section (no placeholder)`);
     }
-
-    // Clean up any orphaned citation references that pointed to the removed quote
-    // e.g., [Kaynak 1] references that no longer have context
-    // Keep [Kaynak X] in CEVAP section as they reference the source list
+    // If no ALINTI/QUOTE section exists, don't add anything - just return as-is
 
     // Clean up multiple newlines
     cleaned = cleaned.replace(/\n{3,}/g, '\n\n');
