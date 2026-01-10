@@ -1051,6 +1051,48 @@ ${questionLabel}: ${message}`;
       }
       timings.search = Date.now() - startSearch;
 
+      // 🎯 KEYWORD BOOST: Boost results with exact query term matches
+      // This helps surface relevant özelge/tebliğ when embedding similarity is close
+      const queryTerms = searchQuery.toLowerCase().split(/\s+/).filter(t => t.length > 2);
+      const highValueTerms = ['fotokopi', 'sube', 'tasdik', 'asil', 'levha', 'ozelge', 'teblig', 'kanun', 'madde', 'fason', 'tevkifat', 'izaha', 'beyanname'];
+      const queryHighValueTerms = queryTerms.filter(t => highValueTerms.some(hv => t.includes(hv)));
+
+      allResults = allResults.map(result => {
+        let keywordBoost = 0;
+        const title = (result.title || '').toLowerCase();
+        const content = (result.content || result.text || result.excerpt || '').toLowerCase();
+        const sourceType = (result.source_type || result.metadata?.source_type || '').toLowerCase();
+
+        // Boost for each high-value query term found in title (strongest signal)
+        for (const term of queryHighValueTerms) {
+          if (title.includes(term)) keywordBoost += 15; // Title match = +15%
+        }
+
+        // Boost for each query term found in content
+        for (const term of queryTerms) {
+          if (content.includes(term)) keywordBoost += 3; // Content match = +3%
+        }
+
+        // Extra boost for özelge sources when query contains official-document terms
+        if (sourceType.includes('ozelge') && queryHighValueTerms.length > 0) {
+          keywordBoost += 10; // özelge relevance boost
+        }
+
+        // Apply boost to score
+        const originalScore = result.score || (result.similarity_score * 100) || 0;
+        const boostedScore = Math.min(originalScore + keywordBoost, 100);
+
+        if (keywordBoost > 0) {
+          console.log(`🎯 KEYWORD_BOOST: "${title.substring(0, 40)}..." +${keywordBoost}% (${originalScore.toFixed(1)} -> ${boostedScore.toFixed(1)})`);
+        }
+
+        return {
+          ...result,
+          score: boostedScore,
+          _keywordBoost: keywordBoost
+        };
+      });
+
       // Sort by similarity score with optional source type priority
       const sourceTypePriorityEnabled = settingsMap.get('ragSettings.sourceTypePriorityEnabled') !== 'false';
       let sourceTypePriority: string[] = [];
@@ -1821,6 +1863,113 @@ FORMAT:
         }
       }
 
+      // ========================================
+      // 📋 RESPONSE TYPE DETECTION (before format enforcement)
+      // ========================================
+      // Types: OUT_OF_SCOPE | NOT_FOUND | NEEDS_CLARIFICATION | FOUND
+      // This determines whether to run enforceResponseFormat and how to handle sources
+
+      // ✅ VERGI TERM ALLOWLIST: These terms should NEVER trigger OUT_OF_SCOPE
+      const vergiTermAllowlist = [
+        'izaha davet', 'beyanname', 'vuk', 'vergi', 'kdv', 'gelir vergisi',
+        'kurumlar vergisi', 'stopaj', 'tevkifat', 'muafiyet', 'istisna',
+        'matrah', 'tarh', 'tahakkuk', 'tahsil', 'ceza', 'usulsuzluk',
+        'inceleme', 'denetim', 'rapor', 'ozelge', 'sirkuler',
+        'teblig', 'karar', 'danistay', 'yargi', 'dava', 'itiraz',
+        'uzlasma', 'mahsup', 'iade', 'fatura', 'belge',
+        'defter', 'muhasebe', 'bilanco', 'mali', 'vergi levha',
+        'mukellef', 'isyeri', 'sube', 'fotokopi', 'tasdik', 'onay'
+      ];
+
+      const queryLower = message.toLowerCase();
+      const isQueryInScope = vergiTermAllowlist.some(term => queryLower.includes(term));
+
+      // 🤔 NEEDS_CLARIFICATION DETECTION (query-based, before LLM response check)
+      // Patterns that indicate unclear/ambiguous query
+      const needsClarificationPatterns = {
+        // Very short queries (less than 3 words, no clear vergi term)
+        tooShort: queryLower.split(/\s+/).filter(w => w.length > 2).length < 3 && !isQueryInScope,
+        // Incomplete terms or typos (common mistakes)
+        hasIncomplete: /\b(verg[^i]|kdv[a-z]|beyan[^n]|tebli[^gğ])\b/i.test(queryLower),
+        // Just numbers without context
+        justNumbers: /^\d+$/.test(message.trim()) || /^(\d+\s*\/\s*\d+)$/.test(message.trim()),
+        // Question words without clear subject
+        vagueQuestion: /^(ne|nasıl|nedir|neden|kim)\s*\??$/i.test(message.trim()),
+        // LLM response indicates need for clarification
+        llmAsksClarification: /(?:ne demek istiyorsunuz|hangi(?:si)?.*(?:kastediyorsunuz|soruyorsunuz)|a[çc][ıi]klar\s*m[ıi]s[ıi]n[ıi]z|daha fazla bilgi|belirtir misiniz)/i.test(response.content)
+      };
+
+      const needsClarification = Object.values(needsClarificationPatterns).some(v => v === true);
+      const clarificationReason = Object.entries(needsClarificationPatterns)
+        .filter(([_, v]) => v === true)
+        .map(([k, _]) => k)
+        .join(', ');
+
+      // Detect OUT_OF_SCOPE patterns in response
+      const outOfScopePatterns = [
+        /kapsam\s*d[ıi][sş][ıi]/i,
+        /vergilex.*kapsam.*d[ıi][sş][ıi]/i,
+        /t[uü]rk\s+vergi\s+mevzuat[ıi].*ilgili\s+de[gğ]il/i,
+        /bu\s+(?:konu|soru).*(?:uzmanl[ıi]k|alan).*d[ıi][sş][ıi]nda/i
+      ];
+
+      // Detect NOT_FOUND patterns in response
+      const notFoundPatterns = [
+        /kaynaklarda.*bilgi\s+bulunamad[ıi]/i,
+        /bu\s+konuda.*(?:bilgi|kaynak).*bulunamad[ıi]/i,
+        /ilgili\s+kaynak\s+bulunamad[ıi]/i,
+        /yeterli\s+(?:bilgi|kaynak).*(?:yok|bulunamad[ıi])/i
+      ];
+
+      const responseContent = response.content;
+      const matchesOutOfScope = outOfScopePatterns.some(p => p.test(responseContent));
+      const matchesNotFound = notFoundPatterns.some(p => p.test(responseContent));
+
+      // Determine response type (priority order: OUT_OF_SCOPE > NEEDS_CLARIFICATION > NOT_FOUND > FOUND)
+      let responseType: 'OUT_OF_SCOPE' | 'NOT_FOUND' | 'NEEDS_CLARIFICATION' | 'FOUND' = 'FOUND';
+
+      if (matchesOutOfScope && !isQueryInScope) {
+        responseType = 'OUT_OF_SCOPE';
+      } else if (needsClarification && !isQueryInScope) {
+        // Only trigger NEEDS_CLARIFICATION if query doesn't have clear vergi terms
+        responseType = 'NEEDS_CLARIFICATION';
+      } else if (matchesNotFound) {
+        responseType = 'NOT_FOUND';
+      }
+
+      console.log(`📋 RESPONSE TYPE: ${responseType} (queryInScope=${isQueryInScope}, matchesOutOfScope=${matchesOutOfScope}, matchesNotFound=${matchesNotFound}, needsClarification=${needsClarification}${needsClarification ? ' [' + clarificationReason + ']' : ''})`);
+
+      // ========================================
+      // APPLY BEHAVIORAL CONTRACT
+      // ========================================
+
+      if (responseType === 'OUT_OF_SCOPE') {
+        // A) OUT_OF_SCOPE: Single line, no CEVAP/ALINTI, sources=[], bypass format
+        console.log(`🚫 OUT_OF_SCOPE: Applying contract - single line response, no sources`);
+        response.content = 'Bu soru Vergilex kapsamı dışındadır (Türk vergi mevzuatı ile ilgili değil).';
+        // sources will be cleared in finalSources below
+        // NO enforceResponseFormat
+      } else if (responseType === 'NEEDS_CLARIFICATION') {
+        // B) NEEDS_CLARIFICATION: Ask for clarification, sources=[], no misleading results
+        console.log(`🤔 NEEDS_CLARIFICATION: Applying contract - ask clarification, no sources`);
+        response.content = this.generateClarificationResponse(message, responseLanguage);
+        // sources will be cleared in finalSources below
+        // NO enforceResponseFormat
+      } else if (responseType === 'NOT_FOUND') {
+        // C) NOT_FOUND: CEVAP with "bulunamadı", no ALINTI, sources=[]
+        console.log(`🔍 NOT_FOUND: Applying contract - clean response, no sources`);
+        response.content = this.cleanNotFoundResponse(response.content, responseLanguage);
+        // sources will be cleared in finalSources below
+        // NO enforceResponseFormat
+      } else {
+        // D) FOUND: Apply format enforcement ONLY for found responses
+        response.content = this.enforceResponseFormat(
+          response.content,
+          searchResults,
+          responseLanguage
+        );
+      }
+
       // 5. Save messages to database with error handling
       try {
         await this.saveMessage(convId, 'user', message);
@@ -1892,11 +2041,44 @@ FORMAT:
           };
         });
 
-        console.log(`⚡ FAST MODE: Returning ${fastModeSources.length} sources (no LLM summaries)`);
+        // 📋 APPLY BEHAVIORAL CONTRACT in fast mode (same rules as normal mode)
+        // responseType was already determined before fast mode check
+        let fastModeResponse = response.content;
+        let fastModeFinalSources = fastModeSources;
+
+        if (responseType === 'OUT_OF_SCOPE') {
+          fastModeResponse = 'Bu soru Vergilex kapsamı dışındadır (Türk vergi mevzuatı ile ilgili değil).';
+          fastModeFinalSources = [];
+        } else if (responseType === 'NEEDS_CLARIFICATION') {
+          fastModeResponse = this.generateClarificationResponse(message, responseLanguage);
+          fastModeFinalSources = [];
+        } else if (responseType === 'NOT_FOUND') {
+          fastModeResponse = this.cleanNotFoundResponse(response.content, responseLanguage);
+          fastModeFinalSources = [];
+        } else {
+          // FOUND: Apply format enforcement only for found responses
+          fastModeResponse = this.enforceResponseFormat(response.content, searchResults, responseLanguage);
+        }
+
+        // 📊 DEBUG INFO for fast mode
+        const fastModeDebugInfo = {
+          responseType,
+          queryInScope: isQueryInScope,
+          matchesOutOfScope,
+          matchesNotFound,
+          needsClarification,
+          clarificationReason: needsClarification ? clarificationReason : null,
+          sourcesCount: fastModeFinalSources.length,
+          searchResultsCount: searchResults.length,
+          hasCevap: fastModeResponse.includes('**CEVAP**'),
+          hasAlinti: fastModeResponse.includes('**ALINTI**'),
+          fastMode: true
+        };
+        console.log(`📊 DEBUG_INFO (FAST): ${JSON.stringify(fastModeDebugInfo)}`);
 
         return {
-          response: response.content,
-          sources: fastModeSources, // ⚡ Now returns formatted sources
+          response: fastModeResponse,
+          sources: fastModeFinalSources, // ⚡ Cleared if OUT_OF_SCOPE/NOT_FOUND/NEEDS_CLARIFICATION
           relatedTopics: [],
           followUpQuestions: [],
           conversationId: convId,
@@ -1909,7 +2091,8 @@ FORMAT:
           actualProvider: response.provider,
           fastMode: true, // Flag for frontend
           strictMode: false, // Fast mode is not strict mode
-          usage: response.usage // Token usage from LLM
+          usage: response.usage, // Token usage from LLM
+          _debug: fastModeDebugInfo // 📊 Debug field for regression testing
         };
       }
 
@@ -1956,10 +2139,10 @@ FORMAT:
         }
       }
 
-      const responseText = response.content.toLowerCase();
+      const responseTextLower = response.content.toLowerCase();
       const isRefusalResponse = refusalPatterns.some(pattern => {
         const regex = new RegExp(pattern, 'i');
-        return regex.test(responseText);
+        return regex.test(responseTextLower);
       });
 
       // If refusal detected, apply configured policies
@@ -2002,7 +2185,7 @@ FORMAT:
         // Log which pattern triggered the refusal
         const triggeringPattern = refusalPatterns.find(pattern => {
           const regex = new RegExp(pattern, 'i');
-          return regex.test(responseText);
+          return regex.test(responseTextLower);
         });
         console.log(`   Triggered by pattern: "${triggeringPattern}"`);
 
@@ -2024,21 +2207,10 @@ FORMAT:
         }
       }
 
-      // 🚫 HARD CLEAR: Always clear sources for OUT_OF_SCOPE or definitive NOT_FOUND
-      // This is independent of refusalPolicy settings - these responses should NEVER show sources
-      const outOfScopePatterns = [
-        /kapsam\s*dışı/i,
-        /bu\s+(?:konu|soru).*(?:uzmanlık|alan).*dışında/i,
-        /vergi.*(?:hukuk|mevzuat).*ilgili\s+değil/i,
-        /bu\s+konuda\s+(?:yeterli\s+)?(?:bilgi|kaynak)\s+bulunamadı/i,
-        /kaynaklarda\s+(?:bu\s+konuda\s+)?bilgi\s+bulunamadı/i,
-        /ilgili\s+kaynak\s+bulunamadı/i
-      ];
-
-      const isOutOfScope = outOfScopePatterns.some(pattern => pattern.test(response.content));
-
-      if (isOutOfScope) {
-        console.log(`🚫 OUT_OF_SCOPE/NOT_FOUND detected - clearing sources regardless of policy`);
+      // 🚫 BEHAVIORAL CONTRACT: Clear sources based on responseType (detected earlier)
+      // OUT_OF_SCOPE, NOT_FOUND, and NEEDS_CLARIFICATION should NEVER show sources to user
+      if (responseType === 'OUT_OF_SCOPE' || responseType === 'NOT_FOUND' || responseType === 'NEEDS_CLARIFICATION') {
+        console.log(`🚫 ${responseType}: Clearing all sources per behavioral contract`);
         finalSources = [];
       }
 
@@ -2062,6 +2234,22 @@ FORMAT:
         // Continue without follow-up questions
       }
 
+      // 📊 DEBUG INFO: Log response type decision for troubleshooting
+      const debugInfo = {
+        responseType,
+        queryInScope: isQueryInScope,
+        matchesOutOfScope,
+        matchesNotFound,
+        needsClarification,
+        clarificationReason: needsClarification ? clarificationReason : null,
+        sourcesCount: finalSources.length,
+        searchResultsCount: searchResults.length,
+        refusalDetected: isRefusalResponse,
+        hasCevap: finalResponse.includes('**CEVAP**'),
+        hasAlinti: finalResponse.includes('**ALINTI**')
+      };
+      console.log(`📊 DEBUG_INFO: ${JSON.stringify(debugInfo)}`);
+
       return {
         response: finalResponse,  // Use cleaned response if refusal detected
         sources: finalSources,    // Use finalSources (cleared if refusal detected)
@@ -2078,7 +2266,8 @@ FORMAT:
         fastMode: false,
         strictMode: settingsMap.get('ragSettings.strictMode') === 'true',
         usage: response.usage, // Token usage from LLM
-        refusalDetected: isRefusalResponse // Flag for debugging
+        refusalDetected: isRefusalResponse, // Flag for debugging
+        _debug: debugInfo // 📊 Debug field for regression testing
       };
     } catch (error) {
       console.error('RAG chat error:', error);
@@ -2123,6 +2312,246 @@ FORMAT:
     cleaned = cleaned.trim();
 
     return cleaned;
+  }
+
+  /**
+   * 🔍 CLEAN NOT_FOUND RESPONSE
+   * Formats response for NOT_FOUND case:
+   * - CEVAP: Bu konuda kaynaklarda bilgi bulunamadı.
+   * - No ALINTI section
+   * - No source references
+   */
+  private cleanNotFoundResponse(text: string, language: string = 'tr'): string {
+    // Extract the core "not found" message if present, otherwise use default
+    const notFoundMessage = language === 'tr'
+      ? 'Bu konuda kaynaklarda bilgi bulunamadı.'
+      : 'No information found in the sources for this topic.';
+
+    // Check if there's useful context in the original response
+    // (e.g., "Vergi levhası hakkında kaynaklarda bilgi bulunamadı")
+    const contextMatch = text.match(/(?:hakkında|konusunda|ile ilgili).*(?:bulunamadı|yok)/i);
+
+    if (contextMatch) {
+      // Keep the contextual not found message
+      let cleaned = text;
+      // Remove ALINTI section
+      cleaned = cleaned.replace(/\*\*ALINTI\*\*[\s\S]*?(?=\*\*[A-ZÇĞİÖŞÜ]|\n\n\n|$)/gi, '');
+      cleaned = cleaned.replace(/\*\*QUOTE\*\*[\s\S]*?(?=\*\*[A-Z]|\n\n\n|$)/gi, '');
+      // Remove source references
+      cleaned = cleaned.replace(/\[Kaynak\s*\d+\]/gi, '');
+      cleaned = cleaned.replace(/\[\d+\]/g, '');
+      // Clean up
+      cleaned = cleaned.replace(/\n{3,}/g, '\n\n').trim();
+
+      // Ensure CEVAP header
+      if (!cleaned.includes('**CEVAP**')) {
+        cleaned = '**CEVAP**\n' + cleaned;
+      }
+      return cleaned;
+    }
+
+    // Default NOT_FOUND format
+    return '**CEVAP**\n' + notFoundMessage;
+  }
+
+  /**
+   * 🤔 GENERATE CLARIFICATION RESPONSE
+   * Creates a response asking user to clarify their question
+   * Used when query is too vague, has typos, or is incomplete
+   * sources=[] to avoid misleading results
+   */
+  private generateClarificationResponse(query: string, language: string = 'tr'): string {
+    const queryLower = query.toLowerCase();
+
+    // Try to detect what topic they might be asking about
+    const suggestions: string[] = [];
+
+    // Check for partial/incomplete terms and suggest corrections
+    if (/verg/i.test(queryLower) && !/vergi/i.test(queryLower)) {
+      suggestions.push('Vergi ile ilgili bir soru mu sormak istiyorsunuz?');
+    }
+    if (/kdv/i.test(queryLower)) {
+      suggestions.push('KDV oranları veya KDV iadesi hakkında mı?');
+    }
+    if (/beyan/i.test(queryLower)) {
+      suggestions.push('Beyanname türü (KDV, Gelir, Kurumlar) veya beyanname verme tarihleri mi?');
+    }
+    if (/tebli/i.test(queryLower)) {
+      suggestions.push('Hangi tebliğ numarası veya konusu?');
+    }
+    if (/levha/i.test(queryLower)) {
+      suggestions.push('Vergi levhası asma zorunluluğu veya tasdiki mi?');
+    }
+    if (/fatura/i.test(queryLower)) {
+      suggestions.push('E-fatura, fatura düzenleme veya fatura iptali mi?');
+    }
+    if (/\d+/.test(query)) {
+      suggestions.push('Bu numara bir kanun/tebliğ/madde numarası mı?');
+    }
+
+    // If no specific suggestions, add generic ones
+    if (suggestions.length === 0) {
+      suggestions.push(
+        'Vergi türü (KDV, Gelir Vergisi, Kurumlar Vergisi)?',
+        'Belirli bir mevzuat veya tebliğ?',
+        'İşlem türü (beyanname, iade, muafiyet)?'
+      );
+    }
+
+    // Limit to 3 suggestions
+    const limitedSuggestions = suggestions.slice(0, 3);
+
+    if (language === 'tr') {
+      return `Sorunuzu daha iyi anlayabilmem için biraz daha bilgi verir misiniz?\n\n` +
+        `Şunu mu demek istediniz:\n` +
+        limitedSuggestions.map((s, i) => `• ${s}`).join('\n') +
+        `\n\nLütfen sorunuzu biraz daha detaylandırın.`;
+    } else {
+      return `Could you provide more details so I can better understand your question?\n\n` +
+        `Did you mean:\n` +
+        limitedSuggestions.map((s, i) => `• ${s}`).join('\n') +
+        `\n\nPlease elaborate on your question.`;
+    }
+  }
+
+  /**
+   * 📋 ENFORCE RESPONSE FORMAT (CEVAP + ALINTI)
+   * Ensures response always has both **CEVAP** and **ALINTI** sections
+   * This is a response contract - users expect consistent format
+   *
+   * Rules:
+   * 1. If **CEVAP** missing, wrap response content in **CEVAP** section
+   * 2. If **ALINTI** missing, add empty **ALINTI** with appropriate message
+   * 3. Never return response without both headers
+   */
+  private enforceResponseFormat(
+    responseText: string,
+    searchResults: any[],
+    language: string = 'tr'
+  ): string {
+    let result = responseText;
+
+    // Check for CEVAP section
+    const hasCevap = /\*\*CEVAP\*\*/i.test(result);
+    const hasAlinti = /\*\*ALINTI\*\*/i.test(result);
+
+    // If no CEVAP header, wrap the response
+    if (!hasCevap) {
+      console.log('[FORMAT] Missing **CEVAP** header - wrapping response');
+      // Find if there's any content before potential sections
+      const content = result.replace(/\*\*[A-Z]+\*\*[\s\S]*/gi, '').trim();
+      if (content) {
+        result = '**CEVAP**\n' + content + '\n\n' + result.replace(content, '').trim();
+      } else {
+        result = '**CEVAP**\n' + result;
+      }
+    }
+
+    // If no ALINTI header, add one
+    if (!hasAlinti) {
+      console.log('[FORMAT] Missing **ALINTI** header - adding section');
+
+      // Extract CEVAP section to find key terms mentioned in answer
+      const cevapMatch = result.match(/\*\*CEVAP\*\*\s*([\s\S]*?)(?=\*\*[A-Z]|\n\n\n|$)/i);
+      const answerText = (cevapMatch?.[1] || '').toLowerCase();
+
+      // Key terms to search for in sources (extract from answer)
+      const potentialKeyTerms = answerText.match(/\b(?:fotokopi|sube|tasdik|asil|zorunlu|mecburi|gerekli|levha|vergi|ozelge|teblig|madde|kanun)\b/gi) || [];
+      const keyTermsLower = [...new Set(potentialKeyTerms.map(t => t.toLowerCase()))];
+
+      let alintıContent = '';
+      let bestQuote = '';
+      let bestSource = '';
+      let bestScore = 0;
+
+      // Search through all results for best matching sentence
+      for (const searchResult of searchResults) {
+        const sourceContent = searchResult.content || searchResult.text || searchResult.excerpt || '';
+        const sourceTitle = searchResult.title || 'Kaynak';
+        const sourceType = searchResult.source_type || searchResult.metadata?.source_type || 'document';
+
+        // Split into sentences
+        const sentences = sourceContent.split(/[.!?]+/).filter((s: string) => {
+          const trimmed = s.trim();
+          return trimmed.length > 30 &&
+                 trimmed.length < 500 &&
+                 !trimmed.startsWith('Tarih:') &&
+                 !trimmed.startsWith('Konu:') &&
+                 !trimmed.match(/^[A-Z\s]+$/);
+        });
+
+        for (const sentence of sentences) {
+          const sentenceLower = sentence.toLowerCase();
+          // Score based on how many key terms are present
+          let score = 0;
+          for (const term of keyTermsLower) {
+            if (sentenceLower.includes(term)) score++;
+          }
+          // Bonus for ozelge/teblig sources
+          if (sourceType.toLowerCase().includes('ozelge') || sourceType.toLowerCase().includes('tebli')) {
+            score += 2;
+          }
+
+          if (score > bestScore) {
+            bestScore = score;
+            bestQuote = sentence.trim();
+            bestSource = sourceTitle + ' (' + sourceType + ')';
+          }
+        }
+      }
+
+      // Minimum score threshold - below this, don't use the quote
+      const MIN_QUOTE_SCORE = 2;
+
+      if (bestQuote && bestScore >= MIN_QUOTE_SCORE) {
+        // Good quote found - use it
+        alintıContent = '> "' + bestQuote + '..."\n\n' + bestSource;
+        console.log('[FORMAT] Found relevant quote with score ' + bestScore + ': ' + bestQuote.substring(0, 50) + '...');
+      } else {
+        // NO GOOD QUOTE FOUND - Don't force a quote, soften the verdict instead
+        console.log('[FORMAT] No good quote found (bestScore=' + bestScore + ') - softening verdict');
+
+        // Soften the CEVAP by adding disclaimer
+        const softenedDisclaimer = language === 'tr'
+          ? '\n\n_Not: Bu bilgi kaynaklar taranarak derlenmistir, ancak dogrudan destekleyen kisa alinti bulunamadi. Kesin bilgi icin ilgili mevzuata basvurunuz._'
+          : '\n\n_Note: This information was compiled from sources, but no direct supporting quote was found. Please refer to relevant legislation for definitive information._';
+
+        // Check if CEVAP contains strong claims (penalties, requirements)
+        const strongClaimPatterns = [
+          /zorunludur/gi,
+          /mecburidir/gi,
+          /ceza\s+(?:uygulanır|kesilir)/gi,
+          /yasaktır/gi,
+          /(?:asla|kesinlikle)\s+(?:yapılamaz|olamaz)/gi
+        ];
+
+        const hasCevapHeader = result.includes('**CEVAP**');
+        if (hasCevapHeader) {
+          const cevapSection = result.match(/\*\*CEVAP\*\*\s*([\s\S]*?)(?=\*\*[A-Z]|\n\n\n|$)/i);
+          if (cevapSection && cevapSection[1]) {
+            const hasStrongClaims = strongClaimPatterns.some(p => p.test(cevapSection[1]));
+            if (hasStrongClaims) {
+              console.log('[FORMAT] Strong claims detected but no supporting quote - adding disclaimer');
+              // Add disclaimer to end of CEVAP section
+              result = result.replace(
+                /(\*\*CEVAP\*\*\s*[\s\S]*?)(?=\*\*[A-Z]|\n\n\n|$)/i,
+                '$1' + softenedDisclaimer
+              );
+            }
+          }
+        }
+
+        // ALINTI section shows "no direct quote" message
+        alintıContent = language === 'tr'
+          ? '_Kaynaklar taranmis, ancak bu cevabi dogrudan destekleyen kisa alinti tespit edilememistir._'
+          : '_Sources were searched, but no short quote directly supporting this answer was found._';
+      }
+
+      // Append ALINTI section
+      result = result.trimEnd() + '\n\n**ALINTI**\n' + alintıContent;
+    }
+
+    return result;
   }
 
   /**
