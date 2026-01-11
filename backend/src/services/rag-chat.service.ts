@@ -1054,7 +1054,10 @@ ${questionLabel}: ${message}`;
       // 🎯 KEYWORD BOOST: Boost results with exact query term matches
       // This helps surface relevant özelge/tebliğ when embedding similarity is close
       const queryTerms = searchQuery.toLowerCase().split(/\s+/).filter(t => t.length > 2);
-      const highValueTerms = ['fotokopi', 'sube', 'tasdik', 'asil', 'levha', 'ozelge', 'teblig', 'kanun', 'madde', 'fason', 'tevkifat', 'izaha', 'beyanname'];
+      // Use keyTerms from DB domain config (no hardcoding)
+      const highValueTerms = domainConfig.keyTerms.length > 0
+        ? domainConfig.keyTerms.map(t => t.toLowerCase())
+        : []; // Empty if not configured in DB
       const queryHighValueTerms = queryTerms.filter(t => highValueTerms.some(hv => t.includes(hv)));
 
       allResults = allResults.map(result => {
@@ -1869,20 +1872,22 @@ FORMAT:
       // Types: OUT_OF_SCOPE | NOT_FOUND | NEEDS_CLARIFICATION | FOUND
       // This determines whether to run enforceResponseFormat and how to handle sources
 
-      // ✅ VERGI TERM ALLOWLIST: These terms should NEVER trigger OUT_OF_SCOPE
-      const vergiTermAllowlist = [
-        'izaha davet', 'beyanname', 'vuk', 'vergi', 'kdv', 'gelir vergisi',
-        'kurumlar vergisi', 'stopaj', 'tevkifat', 'muafiyet', 'istisna',
-        'matrah', 'tarh', 'tahakkuk', 'tahsil', 'ceza', 'usulsuzluk',
-        'inceleme', 'denetim', 'rapor', 'ozelge', 'sirkuler',
-        'teblig', 'karar', 'danistay', 'yargi', 'dava', 'itiraz',
-        'uzlasma', 'mahsup', 'iade', 'fatura', 'belge',
-        'defter', 'muhasebe', 'bilanco', 'mali', 'vergi levha',
-        'mukellef', 'isyeri', 'sube', 'fotokopi', 'tasdik', 'onay'
+      // ✅ DOMAIN TERM ALLOWLIST: Use keyTerms + topicEntity synonyms from DB (no hardcoding)
+      // These terms should NEVER trigger OUT_OF_SCOPE
+      const domainTermAllowlist = [
+        ...domainConfig.keyTerms.map(t => t.toLowerCase()),
+        ...domainConfig.topicEntities.flatMap(e => [
+          e.entity.toLowerCase(),
+          ...e.synonyms.map(s => s.toLowerCase()),
+          // Also split pattern by | to get individual terms
+          ...e.pattern.split('|').map(p => p.toLowerCase().trim())
+        ])
       ];
 
       const queryLower = message.toLowerCase();
-      const isQueryInScope = vergiTermAllowlist.some(term => queryLower.includes(term));
+      const isQueryInScope = domainTermAllowlist.length > 0
+        ? domainTermAllowlist.some(term => queryLower.includes(term))
+        : false; // If no config, default to not in scope (will use LLM detection)
 
       // 🤔 NEEDS_CLARIFICATION DETECTION (query-based, before LLM response check)
       // Patterns that indicate unclear/ambiguous query
