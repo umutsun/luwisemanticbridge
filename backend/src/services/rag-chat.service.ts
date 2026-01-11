@@ -1931,15 +1931,20 @@ FORMAT:
 
       // 🤔 NEEDS_CLARIFICATION DETECTION (query-based, before LLM response check)
       // Patterns that indicate unclear/ambiguous query
+      const wordCount = queryLower.split(/\s+/).filter(w => w.length > 2).length;
+
       const needsClarificationPatterns = {
-        // Very short queries (less than 3 words, no clear vergi term)
-        tooShort: queryLower.split(/\s+/).filter(w => w.length > 2).length < 3 && !isQueryInScope,
+        // Very short queries (less than 3 words) - applies even for in-scope terms
+        // 🔧 FIX: Short domain queries should get NEEDS_CLARIFICATION, not OUT_OF_SCOPE
+        tooShort: wordCount < 3,
         // Incomplete terms or typos (common mistakes)
         hasIncomplete: /\b(verg[^i]|kdv[a-z]|beyan[^n]|tebli[^gğ])\b/i.test(queryLower),
-        // Just numbers without context
+        // Just numbers without context (e.g., "6111")
         justNumbers: /^\d+$/.test(message.trim()) || /^(\d+\s*\/\s*\d+)$/.test(message.trim()),
         // Question words without clear subject
         vagueQuestion: /^(ne|nasıl|nedir|neden|kim)\s*\??$/i.test(message.trim()),
+        // 🔧 NEW: Short phrase with "?" but lacking full context
+        shortPhraseQuestion: wordCount <= 4 && message.trim().endsWith('?') && !message.includes(' mı') && !message.includes(' mi'),
         // LLM response indicates need for clarification
         llmAsksClarification: /(?:ne demek istiyorsunuz|hangi(?:si)?.*(?:kastediyorsunuz|soruyorsunuz)|a[çc][ıi]klar\s*m[ıi]s[ıi]n[ıi]z|daha fazla bilgi|belirtir misiniz)/i.test(response.content)
       };
@@ -1968,17 +1973,37 @@ FORMAT:
 
       const responseContent = response.content;
       const matchesOutOfScope = outOfScopePatterns.some(p => p.test(responseContent));
-      const matchesNotFound = notFoundPatterns.some(p => p.test(responseContent));
+      let matchesNotFound = notFoundPatterns.some(p => p.test(responseContent));
 
-      // Determine response type (priority order: OUT_OF_SCOPE > NEEDS_CLARIFICATION > NOT_FOUND > FOUND)
+      // 🔧 FIX: NOT_FOUND guard - if we have authoritative sources, LLM cannot say "bilgi yok"
+      // Authoritative sources: ozelge, kanun, teblig, danistay, sirkuler
+      const AUTHORITATIVE_TYPES = ['ozelge', 'özelge', 'kanun', 'teblig', 'tebliğ', 'danistay', 'danıştay', 'sirkuler', 'sirküler'];
+      const authoritativeCount = searchResults.filter(r => {
+        const sourceType = (r.source_type || r.source_table || '').toLowerCase();
+        return AUTHORITATIVE_TYPES.some(t => sourceType.includes(t));
+      }).length;
+
+      if (matchesNotFound && authoritativeCount > 0) {
+        console.log(`⚠️ NOT_FOUND OVERRIDE: LLM said "bulunamadı" but we have ${authoritativeCount} authoritative sources - forcing FOUND`);
+        matchesNotFound = false; // Override - we have sources, cannot say "not found"
+      }
+
+      // 🔧 FIX: Response type priority - NEEDS_CLARIFICATION before OUT_OF_SCOPE
+      // Priority: (has results + in scope) → FOUND > NEEDS_CLARIFICATION > NOT_FOUND > OUT_OF_SCOPE
       let responseType: 'OUT_OF_SCOPE' | 'NOT_FOUND' | 'NEEDS_CLARIFICATION' | 'FOUND' = 'FOUND';
 
-      if (matchesOutOfScope && !isQueryInScope) {
-        responseType = 'OUT_OF_SCOPE';
-      } else if (needsClarification && !isQueryInScope) {
-        // Only trigger NEEDS_CLARIFICATION if query doesn't have clear vergi terms
+      // 🔧 KEY FIX: If we have search results AND query is in scope, ALWAYS go to FOUND
+      // Short domain queries like "vergi levha fotokopi?" should get results, not clarification
+      if (isQueryInScope && searchResults.length > 0) {
+        responseType = 'FOUND'; // Has domain terms + has results = answer it
+        console.log(`✅ FOUND: Query in scope with ${searchResults.length} results - proceeding to answer`);
+      } else if (needsClarification && searchResults.length === 0) {
+        // 🔧 FIX: NEEDS_CLARIFICATION only if no results and query is unclear
         responseType = 'NEEDS_CLARIFICATION';
-      } else if (matchesNotFound) {
+      } else if (matchesOutOfScope && !isQueryInScope) {
+        responseType = 'OUT_OF_SCOPE';
+      } else if (matchesNotFound && searchResults.length === 0) {
+        // Only NOT_FOUND if truly no results
         responseType = 'NOT_FOUND';
       }
 
@@ -2667,9 +2692,42 @@ FORMAT:
             score += 2;
           }
 
-          // 🔧 NEW: Bonus for verdict-like sentences
-          if (/(?:mümkündür|mümkün değildir|zorunludur|yasaktır|uygulanır|asılabilir|asilabilir|bulundurulabilir)/i.test(sentence)) {
-            score += 2;
+          // 🔧 FIX: NEGATIVE score for non-verdict patterns (dilekçe, tereddüt, soru)
+          // These are preamble/question text, NOT rulings
+          const NON_VERDICT_PATTERNS = [
+            /ilgi\s+dilekçe/i,           // "İlgi dilekçenizden..."
+            /dilekçeniz(?:de|den)/i,     // "Dilekçenizde..."
+            /sorulmaktadır/i,            // "...sorulmaktadır"
+            /sorulmuştur/i,              // "...sorulmuştur"
+            /tereddüt\s+(?:edilmiş|hasıl|oluş)/i, // "tereddüt edilmiştir"
+            /talep\s+edilmektedir/i,     // "talep edilmektedir"
+            /bilgi\s+(?:verilmesi|istenmiş)/i,   // "bilgi verilmesi istenmiştir"
+            /(?:yukarıda|aşağıda)\s+(?:belirtilen|açıklanan)/i, // meta-references
+            /(?:hususunda|konusunda)\s+görüş/i   // "hususunda görüşünüz"
+          ];
+          for (const pattern of NON_VERDICT_PATTERNS) {
+            if (pattern.test(sentence)) {
+              score -= 5; // Heavy penalty - this is NOT a ruling
+            }
+          }
+
+          // 🔧 AGGRESSIVE: Bonus for verdict-like sentences
+          // These are actual rulings/conclusions
+          const VERDICT_PATTERNS = [
+            /\b(?:mümkündür|mümkün\s+değildir|mümkün\s+bulunmaktadır)\b/i,  // +5
+            /\b(?:zorunludur|mecburidir|gerekir|gerekmektedir)\b/i,         // +5
+            /\b(?:yasaktır|yasaklanmıştır|uygulanamaz)\b/i,                 // +5
+            /\b(?:uygulanır|uygulanacaktır|uygulanmaktadır)\b/i,            // +4
+            /\b(?:kaldırılmıştır|yürürlükten\s+kaldırılmış)\b/i,            // +4
+            /\b(?:asılabilir|asılması\s+(?:mümkündür|gerekir))\b/i,         // +5
+            /\b(?:bulundurulabilir|bulundurulması\s+(?:mümkündür|zorunludur))\b/i, // +5
+            /\b(?:fotokopi(?:si)?\s+(?:ile|olarak)\s+(?:asıl|kullanıl))\b/i // +5 - specific to levha questions
+          ];
+          for (const pattern of VERDICT_PATTERNS) {
+            if (pattern.test(sentence)) {
+              score += 5; // Strong boost for actual rulings
+              break; // Only count once
+            }
           }
 
           if (score > bestScore) {
