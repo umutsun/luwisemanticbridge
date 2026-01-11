@@ -2392,18 +2392,18 @@ FORMAT:
       }
 
       // 📊 DEBUG INFO: Log response type decision for troubleshooting
+      // NOTE: ResponseType is now DETERMINISTIC - no LLM pattern matching
       const debugInfo = {
         responseType,
         queryInScope: isQueryInScope,
-        matchesOutOfScope,
-        matchesNotFound,
+        resultsCount: searchResults.length,
         needsClarification,
         clarificationReason: needsClarification ? clarificationReason : null,
         sourcesCount: finalSources.length,
-        searchResultsCount: searchResults.length,
         refusalDetected: isRefusalResponse,
         hasCevap: finalResponse.includes('**CEVAP**'),
-        hasAlinti: finalResponse.includes('**ALINTI**')
+        hasAlinti: finalResponse.includes('**ALINTI**'),
+        deterministic: true  // Flag indicating no LLM pattern matching
       };
       console.log(`📊 DEBUG_INFO: ${JSON.stringify(debugInfo)}`);
 
