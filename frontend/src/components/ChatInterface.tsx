@@ -30,7 +30,8 @@ import {
   Plus,
   Settings,
   LayoutDashboard,
-  MessageSquare
+  MessageSquare,
+  Search
 } from 'lucide-react';
 import ThemeToggle from '@/components/ThemeToggle';
 import { useAuth } from '@/contexts/AuthProvider';
@@ -54,6 +55,7 @@ interface Message {
   sources?: any[];
   relatedTopics?: any[];
   context?: string[];
+  suggestedQuestions?: string[];  // Clickable suggestions for NEEDS_CLARIFICATION
   isTyping?: boolean;
   isFromSource?: boolean;
   isStreaming?: boolean;
@@ -936,6 +938,7 @@ export default function ChatInterface() {
                 sources: data.sources,
                 relatedTopics: data.relatedTopics,
                 context: data.context,
+                suggestedQuestions: data.suggestedQuestions,  // "Did you mean?" suggestions
                 responseTime: msg.startTime ? Date.now() - msg.startTime : undefined,
                 tokens: data.tokens || data.usage
               }
@@ -1318,6 +1321,28 @@ export default function ChatInterface() {
                                   ) : message.isStreaming ? (
                                     <MessageSkeleton type="generating" />
                                   ) : null}
+                                </div>
+                              )}
+
+                              {/* 🔍 SUGGESTED QUESTIONS - "Did you mean?" style cards */}
+                              {message.suggestedQuestions && message.suggestedQuestions.length > 0 && (
+                                <div className="mt-3 sm:mt-4 pt-2 sm:pt-3 border-t border-border/50">
+                                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                    {message.suggestedQuestions.map((question, idx) => (
+                                      <button
+                                        key={idx}
+                                        onClick={() => handleSuggestionClick(question)}
+                                        className="text-left p-2 sm:p-3 rounded-lg border bg-card hover:bg-accent/50 hover:border-primary/30 transition-all group"
+                                      >
+                                        <div className="flex items-center gap-2">
+                                          <Search className="w-4 h-4 text-primary/60 group-hover:text-primary flex-shrink-0" />
+                                          <span className="text-xs sm:text-sm text-foreground/80 group-hover:text-foreground line-clamp-2">
+                                            {question}
+                                          </span>
+                                        </div>
+                                      </button>
+                                    ))}
+                                  </div>
                                 </div>
                               )}
 

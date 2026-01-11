@@ -1150,14 +1150,15 @@ ${questionLabel}: ${message}`;
 
         // Save messages
         await this.saveMessage(convId, 'user', message);
-        const clarificationResponse = this.generateClarificationResponse(message, responseLanguage);
-        await this.saveMessage(convId, 'assistant', clarificationResponse, [], activeModel);
+        const clarificationResult = this.generateClarificationResponse(message, responseLanguage);
+        await this.saveMessage(convId, 'assistant', clarificationResult.text, [], activeModel);
 
         return {
-          response: clarificationResponse,
+          response: clarificationResult.text,
           sources: [],  // NO SOURCES for NEEDS_CLARIFICATION
           relatedTopics: [],
           followUpQuestions: [],
+          suggestedQuestions: clarificationResult.suggestions,  // Clickable suggestion cards
           conversationId: convId,
           provider: 'system',
           model: 'deterministic',
@@ -1173,7 +1174,8 @@ ${questionLabel}: ${message}`;
             queryInScope: hasDomainTerm,
             resultsCount: 0,
             sourcesCount: 0,
-            deterministic: true
+            deterministic: true,
+            suggestions: clarificationResult.suggestions
           }
         };
       }
@@ -2198,7 +2200,9 @@ FORMAT:
       } else if (responseType === 'NEEDS_CLARIFICATION') {
         // B) NEEDS_CLARIFICATION: Ask for clarification, sources=[], no misleading results
         console.log(`🤔 NEEDS_CLARIFICATION: Applying contract - ask clarification, no sources`);
-        response.content = this.generateClarificationResponse(message, responseLanguage);
+        const clarificationResult = this.generateClarificationResponse(message, responseLanguage);
+        response.content = clarificationResult.text;
+        (response as any).suggestedQuestions = clarificationResult.suggestions;
         // sources will be cleared in finalSources below
         // NO enforceResponseFormat
       } else if (responseType === 'NOT_FOUND') {
@@ -2294,11 +2298,15 @@ FORMAT:
         let fastModeResponse = response.content;
         let fastModeFinalSources = fastModeSources;
 
+        let fastModeSuggestedQuestions: string[] = [];
+
         if (responseType === 'OUT_OF_SCOPE') {
           fastModeResponse = 'Bu soru Vergilex kapsamı dışındadır (Türk vergi mevzuatı ile ilgili değil).';
           fastModeFinalSources = [];
         } else if (responseType === 'NEEDS_CLARIFICATION') {
-          fastModeResponse = this.generateClarificationResponse(message, responseLanguage);
+          const clarificationResult = this.generateClarificationResponse(message, responseLanguage);
+          fastModeResponse = clarificationResult.text;
+          fastModeSuggestedQuestions = clarificationResult.suggestions;
           fastModeFinalSources = [];
         } else if (responseType === 'NOT_FOUND') {
           fastModeResponse = this.cleanNotFoundResponse(response.content, responseLanguage);
@@ -2320,7 +2328,8 @@ FORMAT:
           searchResultsCount: searchResults.length,
           hasCevap: fastModeResponse.includes('**CEVAP**'),
           hasAlinti: fastModeResponse.includes('**ALINTI**'),
-          fastMode: true
+          fastMode: true,
+          suggestions: fastModeSuggestedQuestions.length > 0 ? fastModeSuggestedQuestions : undefined
         };
         console.log(`📊 DEBUG_INFO (FAST): ${JSON.stringify(fastModeDebugInfo)}`);
 
@@ -2329,6 +2338,7 @@ FORMAT:
           sources: fastModeFinalSources, // ⚡ Cleared if OUT_OF_SCOPE/NOT_FOUND/NEEDS_CLARIFICATION
           relatedTopics: [],
           followUpQuestions: [],
+          suggestedQuestions: fastModeSuggestedQuestions.length > 0 ? fastModeSuggestedQuestions : undefined,
           conversationId: convId,
           provider: response.provider,
           model: response.model || response.provider,
@@ -2597,6 +2607,7 @@ FORMAT:
         sources: finalSources,    // Use finalSources (cleared if refusal detected)
         relatedTopics: relatedTopics,
         followUpQuestions: followUpQuestions,
+        suggestedQuestions: (response as any).suggestedQuestions,  // Clickable suggestions for NEEDS_CLARIFICATION
         conversationId: convId,
         provider: response.provider,
         model: response.model || response.provider,
@@ -2697,62 +2708,143 @@ FORMAT:
   }
 
   /**
-   * 🤔 GENERATE CLARIFICATION RESPONSE
+   * 🤔 GENERATE CLARIFICATION RESPONSE (Google-style "Did you mean?")
    * Creates a response asking user to clarify their question
-   * Used when query is too vague, has typos, or is incomplete
+   * Uses smart detection for typos, partial terms, and number-based queries
+   * Returns both text response and clickable suggestion cards
    * sources=[] to avoid misleading results
    */
-  private generateClarificationResponse(query: string, language: string = 'tr'): string {
-    const queryLower = query.toLowerCase();
+  private generateClarificationResponse(query: string, language: string = 'tr'): { text: string; suggestions: string[] } {
+    const queryLower = query.toLowerCase().trim();
+    const didYouMean: string[] = [];
+    const clarifyQuestions: string[] = [];
 
-    // Try to detect what topic they might be asking about
-    const suggestions: string[] = [];
+    // ========================================
+    // 🔢 NUMBER-BASED QUERIES (Law/Article numbers)
+    // ========================================
+    const numberMatch = query.match(/^(\d{3,5})$/);
+    if (numberMatch) {
+      const num = numberMatch[1];
+      // Known tax law numbers
+      const knownLaws: Record<string, string> = {
+        '213': 'Vergi Usul Kanunu (VUK)',
+        '193': 'Gelir Vergisi Kanunu (GVK)',
+        '5520': 'Kurumlar Vergisi Kanunu (KVK)',
+        '3065': 'Katma Değer Vergisi Kanunu (KDVK)',
+        '6111': '6111 sayılı Torba Kanun (Vergi affı)',
+        '7143': '7143 sayılı Yapılandırma Kanunu',
+        '7256': '7256 sayılı Yapılandırma Kanunu',
+        '7326': '7326 sayılı Matrah Artırımı Kanunu',
+        '488': 'Damga Vergisi Kanunu',
+        '4760': 'Özel Tüketim Vergisi Kanunu (ÖTV)',
+      };
 
-    // Check for partial/incomplete terms and suggest corrections
-    if (/verg/i.test(queryLower) && !/vergi/i.test(queryLower)) {
-      suggestions.push('Vergi ile ilgili bir soru mu sormak istiyorsunuz?');
-    }
-    if (/kdv/i.test(queryLower)) {
-      suggestions.push('KDV oranları veya KDV iadesi hakkında mı?');
-    }
-    if (/beyan/i.test(queryLower)) {
-      suggestions.push('Beyanname türü (KDV, Gelir, Kurumlar) veya beyanname verme tarihleri mi?');
-    }
-    if (/tebli/i.test(queryLower)) {
-      suggestions.push('Hangi tebliğ numarası veya konusu?');
-    }
-    if (/levha/i.test(queryLower)) {
-      suggestions.push('Vergi levhası asma zorunluluğu veya tasdiki mi?');
-    }
-    if (/fatura/i.test(queryLower)) {
-      suggestions.push('E-fatura, fatura düzenleme veya fatura iptali mi?');
-    }
-    if (/\d+/.test(query)) {
-      suggestions.push('Bu numara bir kanun/tebliğ/madde numarası mı?');
+      if (knownLaws[num]) {
+        didYouMean.push(`"${knownLaws[num]}" hakkında mı soruyorsunuz?`);
+        didYouMean.push(`${num} sayılı kanunun hangi maddesi?`);
+      } else {
+        didYouMean.push(`${num} sayılı bir kanun mu?`);
+        didYouMean.push(`${num} numaralı bir madde veya tebliğ mi?`);
+      }
     }
 
-    // If no specific suggestions, add generic ones
-    if (suggestions.length === 0) {
-      suggestions.push(
-        'Vergi türü (KDV, Gelir Vergisi, Kurumlar Vergisi)?',
-        'Belirli bir mevzuat veya tebliğ?',
-        'İşlem türü (beyanname, iade, muafiyet)?'
+    // ========================================
+    // 🔤 TYPO DETECTION & CORRECTION
+    // ========================================
+    const typoCorrections: Array<{ pattern: RegExp; correction: string; suggestion: string }> = [
+      { pattern: /\bverg[iı]?\b/i, correction: 'vergi', suggestion: 'Vergi ile ilgili ne öğrenmek istiyorsunuz?' },
+      { pattern: /\bkdv\b/i, correction: 'KDV', suggestion: 'KDV oranı, KDV iadesi, veya KDV beyannamesi mi?' },
+      { pattern: /\bbeyan\b/i, correction: 'beyanname', suggestion: 'Hangi beyanname? (KDV, Muhtasar, Gelir, Kurumlar)' },
+      { pattern: /\blevh?a\b/i, correction: 'vergi levhası', suggestion: 'Vergi levhası asma zorunluluğu mu, tasdiki mi?' },
+      { pattern: /\bfatur\b/i, correction: 'fatura', suggestion: 'E-fatura mı, kağıt fatura mı, fatura düzenleme mi?' },
+      { pattern: /\btevk[iı]f\b/i, correction: 'tevkifat', suggestion: 'KDV tevkifatı mı, gelir vergisi tevkifatı mı?' },
+      { pattern: /\bstop[aı]j\b/i, correction: 'stopaj', suggestion: 'Stopaj oranı mı, stopaj iadesi mi?' },
+      { pattern: /\bmuaf[iı]?y?e?t?\b/i, correction: 'muafiyet', suggestion: 'Hangi vergiden muafiyet? (KDV, Damga, Gelir)' },
+      { pattern: /\b[iı]st[iı]sna\b/i, correction: 'istisna', suggestion: 'Hangi vergi istisnası?' },
+      { pattern: /\bmatra[hğ]?\b/i, correction: 'matrah', suggestion: 'Matrah artırımı mı, matrah hesabı mı?' },
+    ];
+
+    for (const { pattern, suggestion } of typoCorrections) {
+      if (pattern.test(queryLower) && !didYouMean.includes(suggestion)) {
+        clarifyQuestions.push(suggestion);
+      }
+    }
+
+    // ========================================
+    // 📝 SINGLE WORD QUERIES
+    // ========================================
+    if (queryLower.split(/\s+/).length === 1 && !numberMatch) {
+      const singleWordExpansions: Record<string, string[]> = {
+        'kdv': ['KDV oranı nedir?', 'KDV iadesi nasıl alınır?', 'KDV beyannamesi ne zaman verilir?'],
+        'fatura': ['E-fatura zorunluluğu', 'Fatura düzenleme süresi', 'Fatura iptal prosedürü'],
+        'beyanname': ['KDV beyannamesi', 'Muhtasar beyanname', 'Yıllık gelir vergisi beyannamesi'],
+        'levha': ['Vergi levhası asma zorunluluğu', 'Vergi levhası fotokopisi asılabilir mi?'],
+        'stopaj': ['Stopaj oranları', 'Stopaj kesintisi nasıl yapılır?'],
+        'tevkifat': ['KDV tevkifat oranları', 'Tevkifat uygulaması'],
+        'iade': ['KDV iadesi', 'Gelir vergisi iadesi', 'ÖTV iadesi'],
+      };
+
+      const expansions = singleWordExpansions[queryLower];
+      if (expansions) {
+        didYouMean.push(...expansions.slice(0, 3));
+      }
+    }
+
+    // ========================================
+    // 🤷 VAGUE QUESTIONS
+    // ========================================
+    if (/^(ne|nasıl|nedir|neden|kim|hangi)\s*\??$/i.test(query)) {
+      clarifyQuestions.push(
+        'Hangi konu hakkında bilgi istiyorsunuz?',
+        'Vergi türü belirtir misiniz? (KDV, Gelir, Kurumlar, Damga)',
+        'Belirli bir işlem veya belge hakkında mı?'
       );
     }
 
-    // Limit to 3 suggestions
-    const limitedSuggestions = suggestions.slice(0, 3);
+    // ========================================
+    // 📋 BUILD RESPONSE
+    // ========================================
+    const allSuggestions = [...didYouMean, ...clarifyQuestions];
+
+    // Fallback if no specific suggestions
+    if (allSuggestions.length === 0) {
+      allSuggestions.push(
+        'Hangi vergi türü? (KDV, Gelir Vergisi, Kurumlar Vergisi)',
+        'Belirli bir mevzuat veya tebliğ numarası var mı?',
+        'Ne tür bir işlem? (beyanname, iade, muafiyet, tevkifat)'
+      );
+    }
+
+    const limitedSuggestions = allSuggestions.slice(0, 4);
+
+    // Format suggestions as clickable questions (ensure they end with ?)
+    const clickableSuggestions = limitedSuggestions.map(s => {
+      // Clean up and format as a proper question
+      const cleaned = s.replace(/^\d+\.\s*/, '').trim();
+      // If it's a question already, keep it; otherwise add ?
+      return cleaned.endsWith('?') ? cleaned : `${cleaned}?`;
+    });
 
     if (language === 'tr') {
-      return `Sorunuzu daha iyi anlayabilmem için biraz daha bilgi verir misiniz?\n\n` +
-        `Şunu mu demek istediniz:\n` +
-        limitedSuggestions.map((s, i) => `• ${s}`).join('\n') +
-        `\n\nLütfen sorunuzu biraz daha detaylandırın.`;
+      const header = didYouMean.length > 0
+        ? `🔍 **Bunu mu demek istediniz?**`
+        : `❓ **Sorunuzu anlamam için daha fazla bilgi gerekiyor**`;
+
+      const text = `${header}\n\n` +
+        limitedSuggestions.map((s, i) => `${i + 1}. ${s}`).join('\n') +
+        `\n\n_💡 İpucu: Aşağıdaki önerilerden birini tıklayabilir veya kendi sorunuzu yazabilirsiniz._`;
+
+      return { text, suggestions: clickableSuggestions };
     } else {
-      return `Could you provide more details so I can better understand your question?\n\n` +
-        `Did you mean:\n` +
-        limitedSuggestions.map((s, i) => `• ${s}`).join('\n') +
-        `\n\nPlease elaborate on your question.`;
+      const header = didYouMean.length > 0
+        ? `🔍 **Did you mean?**`
+        : `❓ **I need more information to understand your question**`;
+
+      const text = `${header}\n\n` +
+        limitedSuggestions.map((s, i) => `${i + 1}. ${s}`).join('\n') +
+        `\n\n_💡 Tip: Click one of the suggestions below or type your own question._`;
+
+      return { text, suggestions: clickableSuggestions };
     }
   }
 
