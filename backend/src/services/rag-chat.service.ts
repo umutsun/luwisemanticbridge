@@ -2135,20 +2135,39 @@ FORMAT:
       // Rank sources by hierarchy weight (from sourceTypeHierarchy) + similarity score
       const rankedSources = formattedSources
         .map(source => {
-          // Get source type from metadata or infer from title/content
-          const sourceType = (source.source_type || source.metadata?.source_type || 'document').toLowerCase();
+          // Get source type from multiple possible fields
+          // Priority: source_type > sourceTable > category > metadata.source_type
+          const rawSourceType = (
+            source.source_type ||
+            source.sourceTable ||
+            source.category ||
+            source.metadata?.source_type ||
+            source.metadata?.sourceTable ||
+            'document'
+          ).toLowerCase();
+
+          // Normalize source type (remove csv_ prefix, etc.)
+          const sourceType = rawSourceType
+            .replace(/^csv_/, '')
+            .replace(/_/g, '')
+            .replace(/arsiv.*/, '');  // "makale_arsiv_2021" -> "makale"
 
           // Get hierarchy weight from domainConfig.authorityLevels (loaded from RAG Settings)
-          let hierarchyWeight = domainConfig.authorityLevels[sourceType] || 30; // default low weight
+          let hierarchyWeight = domainConfig.authorityLevels[sourceType] || 0;
 
-          // Try partial matches for source types like "csv_ozelge" -> "ozelge"
-          if (hierarchyWeight === 30) {
+          // Try partial matches for source types like "danistaykararlari" -> "danistay"
+          if (hierarchyWeight === 0) {
             for (const [key, weight] of Object.entries(domainConfig.authorityLevels)) {
               if (sourceType.includes(key) || key.includes(sourceType)) {
                 hierarchyWeight = weight;
                 break;
               }
             }
+          }
+
+          // Final fallback to default weight
+          if (hierarchyWeight === 0) {
+            hierarchyWeight = 20; // Low default for unknown sources
           }
 
           // Combined score: hierarchy weight (70%) + similarity score (30%)
@@ -2166,7 +2185,8 @@ FORMAT:
 
       console.log(`📊 [SOURCES] Ranked ${formattedSources.length} → Top ${rankedSources.length} (max=${maxSourcesToShow})`);
       rankedSources.forEach((s, i) => {
-        console.log(`   ${i + 1}. ${s.source_type || 'unknown'} (weight=${s._hierarchyWeight}, score=${(s._combinedScore * 100).toFixed(1)}%): ${s.title?.substring(0, 40)}...`);
+        const detectedType = s.sourceTable || s.category || s.source_type || 'unknown';
+        console.log(`   ${i + 1}. ${detectedType} (weight=${s._hierarchyWeight}, combined=${(s._combinedScore * 100).toFixed(1)}%): ${s.title?.substring(0, 40)}...`);
       });
 
       // Replace formattedSources with ranked/limited version for FOUND responses
