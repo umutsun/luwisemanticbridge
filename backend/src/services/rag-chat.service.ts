@@ -1167,11 +1167,12 @@ ${questionLabel}: ${message}`;
       // 📊 METRIC: AC-D - Source Type Distribution for this request
       const sourceTypeDistribution: Record<string, number> = {};
       searchResults.forEach(r => {
-        const type = (r.source_type || r.metadata?.source_type || 'unknown').toLowerCase();
+        const rawType = (r.source_type || r.sourceTable || r.category || r.metadata?.source_type || 'unknown').toLowerCase();
+        const type = rawType.replace(/^csv_/, '').replace(/_/g, '');
         sourceTypeDistribution[type] = (sourceTypeDistribution[type] || 0) + 1;
       });
       const topSourceTypes = searchResults.slice(0, 5).map(r => ({
-        type: (r.source_type || r.metadata?.source_type || 'unknown').toLowerCase(),
+        type: (r.source_type || r.sourceTable || r.category || r.metadata?.source_type || 'unknown').toLowerCase().replace(/^csv_/, '').replace(/_/g, ''),
         score: ((r.final_score || r.score || 0) * 100).toFixed(1) + '%'
       }));
       console.log(`📊 [METRIC] SOURCE_TYPE_COUNTS: distribution=${JSON.stringify(sourceTypeDistribution)}, topN=${JSON.stringify(topSourceTypes)}`);
@@ -1358,7 +1359,8 @@ ${questionLabel}: ${message}`;
         // 📊 SOURCE TYPE BREAKDOWN for debugging
         const sourceTypeCounts: Record<string, number> = {};
         searchResults.forEach(r => {
-          const type = (r.source_type || r.metadata?.source_type || 'unknown').toLowerCase();
+          const rawType = (r.source_type || r.sourceTable || r.category || r.metadata?.source_type || 'unknown').toLowerCase();
+          const type = rawType.replace(/^csv_/, '').replace(/_/g, '');
           sourceTypeCounts[type] = (sourceTypeCounts[type] || 0) + 1;
         });
         console.log(`   📊 Source types: ${JSON.stringify(sourceTypeCounts)}`);
@@ -1784,7 +1786,10 @@ FORMAT:
         // 1b. SOURCE-TYPE MINIMUM BAR: If all results are low-authority (qna), remove ALINTI
         // Alıntı göstermek için en az bir regulation/ozelge sonucu olmalı
         const hasHighAuthoritySource = searchResults.some(r => {
-          const sourceType = (r.source_type || r.metadata?.source_type || '').toLowerCase();
+          // Check multiple fields for source type (same logic as source ranking)
+          const rawSourceType = (r.source_type || r.sourceTable || r.category || r.metadata?.source_type || '').toLowerCase();
+          // Normalize: remove csv_ prefix and underscores
+          const sourceType = rawSourceType.replace(/^csv_/, '').replace(/_/g, '');
           // High authority: regulation, ozelge, kanun, teblig, danistay
           // Low authority: qna, sorucevap, makale, document (unless quasi-high)
           const isHighAuthority = sourceType.includes('ozelge') ||
@@ -1825,7 +1830,9 @@ FORMAT:
           // 📊 METRIC: AC-C1 - Source Type Bar Fail (no high-authority sources)
           const sourceTypeCounts: Record<string, number> = {};
           searchResults.forEach(r => {
-            const type = (r.source_type || r.metadata?.source_type || 'unknown').toLowerCase();
+            // Use same source type detection logic as hasHighAuthoritySource check
+            const rawType = (r.source_type || r.sourceTable || r.category || r.metadata?.source_type || 'unknown').toLowerCase();
+            const type = rawType.replace(/^csv_/, '').replace(/_/g, '');
             sourceTypeCounts[type] = (sourceTypeCounts[type] || 0) + 1;
           });
           console.log(`📊 [METRIC] SOURCE_TYPE_BAR_FAIL: allLowAuthority=true, sourceTypes=${JSON.stringify(sourceTypeCounts)}`);
@@ -2260,7 +2267,8 @@ FORMAT:
         // 📊 SOURCE TYPE BREAKDOWN for debugging
         const refusalSourceTypes: Record<string, number> = {};
         searchResults.forEach(r => {
-          const type = (r.source_type || r.metadata?.source_type || 'unknown').toLowerCase();
+          const rawType = (r.source_type || r.sourceTable || r.category || r.metadata?.source_type || 'unknown').toLowerCase();
+          const type = rawType.replace(/^csv_/, '').replace(/_/g, '');
           refusalSourceTypes[type] = (refusalSourceTypes[type] || 0) + 1;
         });
         console.log(`   📊 Source types: ${JSON.stringify(refusalSourceTypes)}`);
