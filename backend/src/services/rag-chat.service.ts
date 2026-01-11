@@ -2124,6 +2124,54 @@ FORMAT:
         batchSize: batchSize
       });
 
+      // ========================================
+      // 6b. RANK AND LIMIT SOURCES (Hierarchy + Relevance)
+      // ========================================
+      // Sort by: 1) Source type hierarchy weight, 2) Similarity score
+      // Then limit to maxSourcesToShow (configurable via RAG Settings)
+      const maxSourcesToShow = parseInt(settingsMap.get('ragSettings.maxSourcesToShow') || '3');
+      const minSourcesToShow = parseInt(settingsMap.get('ragSettings.minSourcesToShow') || '1');
+
+      // Rank sources by hierarchy weight (from sourceTypeHierarchy) + similarity score
+      const rankedSources = formattedSources
+        .map(source => {
+          // Get source type from metadata or infer from title/content
+          const sourceType = (source.source_type || source.metadata?.source_type || 'document').toLowerCase();
+
+          // Get hierarchy weight from domainConfig.authorityLevels (loaded from RAG Settings)
+          let hierarchyWeight = domainConfig.authorityLevels[sourceType] || 30; // default low weight
+
+          // Try partial matches for source types like "csv_ozelge" -> "ozelge"
+          if (hierarchyWeight === 30) {
+            for (const [key, weight] of Object.entries(domainConfig.authorityLevels)) {
+              if (sourceType.includes(key) || key.includes(sourceType)) {
+                hierarchyWeight = weight;
+                break;
+              }
+            }
+          }
+
+          // Combined score: hierarchy weight (70%) + similarity score (30%)
+          const similarityScore = source.score || source.similarity_score || 0.5;
+          const combinedScore = (hierarchyWeight / 100) * 0.7 + similarityScore * 0.3;
+
+          return {
+            ...source,
+            _hierarchyWeight: hierarchyWeight,
+            _combinedScore: combinedScore
+          };
+        })
+        .sort((a, b) => b._combinedScore - a._combinedScore)
+        .slice(0, Math.max(minSourcesToShow, maxSourcesToShow));
+
+      console.log(`📊 [SOURCES] Ranked ${formattedSources.length} → Top ${rankedSources.length} (max=${maxSourcesToShow})`);
+      rankedSources.forEach((s, i) => {
+        console.log(`   ${i + 1}. ${s.source_type || 'unknown'} (weight=${s._hierarchyWeight}, score=${(s._combinedScore * 100).toFixed(1)}%): ${s.title?.substring(0, 40)}...`);
+      });
+
+      // Replace formattedSources with ranked/limited version for FOUND responses
+      const limitedSources = rankedSources;
+
       // 7. Get additional related topics (excluding already shown ones) - DISABLED FOR PERFORMANCE
       // const relatedResultsLimit = parseInt(await settingsService.getSetting('related_results_limit') || '20');
       // const shownIds = searchResults.slice(0, 3).map(s => s.id?.toString() || s.source_id?.toString());
@@ -2166,7 +2214,8 @@ FORMAT:
       });
 
       // If refusal detected, apply configured policies
-      let finalSources = formattedSources;
+      // Use limitedSources (ranked and limited by maxSourcesToShow) instead of raw formattedSources
+      let finalSources = limitedSources;
       let finalResponse = response.content;
 
       if (isRefusalResponse) {
