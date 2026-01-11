@@ -32,6 +32,10 @@ const MODEL_PRICING: Record<string, Record<string, { input: number; output: numb
     'deepseek-chat': { input: 0.14, output: 0.28 },
     'deepseek-coder': { input: 0.14, output: 0.28 },
   },
+  grok: {
+    'grok-beta': { input: 5, output: 15 },
+    'grok-vision-beta': { input: 5, output: 15 },
+  },
   voyage: {
     'voyage-3': { input: 0.06, output: 0 },
     'voyage-3-lite': { input: 0.02, output: 0 },
@@ -299,6 +303,52 @@ router.post('/test/:provider', async (req: Request, res: Response) => {
             success: false,
             error: error.message || 'DeepSeek API validation failed',
             type: error.type || 'unknown'
+          };
+        }
+        break;
+
+      case 'grok':
+      case 'xai':
+        try {
+          console.log(`Testing Grok/xAI with API key: ${apiKey?.substring(0, 10)}...`);
+
+          // xAI/Grok uses OpenAI-compatible API
+          const grok = new OpenAI({
+            apiKey,
+            baseURL: 'https://api.x.ai/v1'
+          });
+
+          const testModel = model || 'grok-beta';
+
+          const response = await grok.chat.completions.create({
+            model: testModel,
+            messages: [{ role: 'user', content: 'Test' }],
+            max_tokens: 5
+          });
+
+          const responseTime = Date.now() - startTime;
+
+          const inputTokens = response.usage?.prompt_tokens || 0;
+          const outputTokens = response.usage?.completion_tokens || 0;
+
+          testResult = {
+            success: true,
+            model: testModel,
+            responseTime,
+            usage: {
+              promptTokens: inputTokens,
+              completionTokens: outputTokens,
+              totalTokens: response.usage?.total_tokens || 0
+            },
+            cost: 0, // xAI pricing not yet public
+            message: 'Grok/xAI API connection successful'
+          };
+        } catch (error: any) {
+          console.error('Grok/xAI API validation error:', error);
+          testResult = {
+            success: false,
+            error: error.message || 'Grok/xAI API validation failed',
+            type: error.type || 'xai_api_error'
           };
         }
         break;
