@@ -1051,6 +1051,13 @@ ${questionLabel}: ${message}`;
         console.log(`🔗 Follow-up detected, enhanced query: "${searchQuery.substring(0, 60)}..."`);
       }
 
+      // 📝 QUERY REWRITING: Expand short queries with domain synsets
+      // Example: "6111" → "6111 vergi yapılandırma VUK 5 vergi levhası"
+      const rewriteResult = this.rewriteQuery(searchQuery);
+      if (rewriteResult.expanded && rewriteResult.rewritten !== searchQuery) {
+        searchQuery = rewriteResult.rewritten;
+      }
+
       // 🔍 Always perform semantic search (even when citations disabled)
       const searchMaxResults = citationsDisabled ? 5 : maxResults;
       if (citationsDisabled) {
@@ -1988,24 +1995,44 @@ FORMAT:
         matchesNotFound = false; // Override - we have sources, cannot say "not found"
       }
 
-      // 🔧 FIX: Response type priority - NEEDS_CLARIFICATION before OUT_OF_SCOPE
-      // Priority: (has results + in scope) → FOUND > NEEDS_CLARIFICATION > NOT_FOUND > OUT_OF_SCOPE
+      // ========================================
+      // 🎯 CONSOLIDATED RESPONSE TYPE DECISION
+      // ========================================
+      // This is the SINGLE source of truth for response type.
+      // NO contradictions - clear priority order with explicit conditions.
+      //
+      // Priority (highest to lowest):
+      // 1. FOUND: Have search results (in-scope or not) = answer it
+      // 2. NEEDS_CLARIFICATION: No results + unclear query + in-scope terms
+      // 3. NOT_FOUND: No results + LLM says not found + query was clear
+      // 4. OUT_OF_SCOPE: No results + query has no domain terms + LLM says out of scope
+      //
+      // KEY RULE: searchResults.length > 0 ALWAYS means FOUND (never override with NOT_FOUND)
       let responseType: 'OUT_OF_SCOPE' | 'NOT_FOUND' | 'NEEDS_CLARIFICATION' | 'FOUND' = 'FOUND';
 
-      // 🔧 KEY FIX: If we have search results AND query is in scope, ALWAYS go to FOUND
-      // Short domain queries like "vergi levha fotokopi?" should get results, not clarification
-      if (isQueryInScope && searchResults.length > 0) {
-        responseType = 'FOUND'; // Has domain terms + has results = answer it
-        console.log(`✅ FOUND: Query in scope with ${searchResults.length} results - proceeding to answer`);
-      } else if (needsClarification && searchResults.length === 0) {
-        // 🔧 FIX: NEEDS_CLARIFICATION only if no results and query is unclear
+      if (searchResults.length > 0) {
+        // RULE 1: If we have results, ALWAYS answer (FOUND)
+        // Even if query doesn't match allowlist - results are relevant
+        responseType = 'FOUND';
+        console.log(`✅ FOUND: ${searchResults.length} results found - proceeding to answer`);
+      } else if (isQueryInScope && needsClarification) {
+        // RULE 2: In-scope query but unclear + no results = ask for clarification
         responseType = 'NEEDS_CLARIFICATION';
-      } else if (matchesOutOfScope && !isQueryInScope) {
+        console.log(`🤔 NEEDS_CLARIFICATION: Query in scope but unclear (${clarificationReason})`);
+      } else if (!isQueryInScope && matchesOutOfScope) {
+        // RULE 3: Not in scope + LLM confirms = OUT_OF_SCOPE
         responseType = 'OUT_OF_SCOPE';
-      } else if (matchesNotFound && searchResults.length === 0) {
-        // Only NOT_FOUND if truly no results
+        console.log(`🚫 OUT_OF_SCOPE: Query not in domain scope`);
+      } else if (matchesNotFound) {
+        // RULE 4: No results + LLM says not found = NOT_FOUND
         responseType = 'NOT_FOUND';
+        console.log(`🔍 NOT_FOUND: No results and LLM confirms`);
+      } else if (needsClarification) {
+        // RULE 5: Fallback - unclear query even if not in scope
+        responseType = 'NEEDS_CLARIFICATION';
+        console.log(`🤔 NEEDS_CLARIFICATION: Unclear query (${clarificationReason})`);
       }
+      // Default: FOUND (be helpful rather than refusing)
 
       console.log(`📋 RESPONSE TYPE: ${responseType} (queryInScope=${isQueryInScope}, matchesOutOfScope=${matchesOutOfScope}, matchesNotFound=${matchesNotFound}, needsClarification=${needsClarification}${needsClarification ? ' [' + clarificationReason + ']' : ''})`);
 
@@ -2579,6 +2606,162 @@ FORMAT:
   }
 
   /**
+   * 📝 QUERY REWRITING - Domain Synset Expansion
+   * Expands short/numeric queries with related domain terms
+   * Example: "6111" → "6111 kanun VUK 5 vergi levhası"
+   *
+   * This improves recall for queries that may have related concepts
+   * the user didn't explicitly mention but are relevant for search.
+   */
+  private rewriteQuery(query: string): { rewritten: string; expanded: boolean; additions: string[] } {
+    const queryLower = query.toLowerCase().trim();
+    const additions: string[] = [];
+
+    // Domain synset mapping: short term -> related expansion terms
+    // This is loaded once and can be extended via database config
+    const DOMAIN_SYNSETS: Record<string, string[]> = {
+      // Tax law numbers and their related concepts
+      '6111': ['vergi yapılandırma', 'VUK 5', 'vergi levhası', 'af kanunu'],
+      '6736': ['vergi barışı', 'yapılandırma', 'matrah artırımı'],
+      '7143': ['vergi yapılandırma', 'borç yapılandırma'],
+      '7256': ['vergi barışı', 'yapılandırma'],
+      '7326': ['matrah artırımı', 'vergi yapılandırma', 'af'],
+      '5520': ['kurumlar vergisi', 'kurumlar vergisi kanunu'],
+      '193': ['gelir vergisi kanunu', 'GVK'],
+      '213': ['vergi usul kanunu', 'VUK'],
+      '3065': ['KDV kanunu', 'katma değer vergisi'],
+      '4760': ['ÖTV kanunu', 'özel tüketim vergisi'],
+
+      // Common short terms and their expansions
+      'vuk': ['vergi usul kanunu', '213'],
+      'gvk': ['gelir vergisi kanunu', '193'],
+      'kdv': ['katma değer vergisi', '3065', 'KDV oranı', 'KDV indirimi'],
+      'ötv': ['özel tüketim vergisi', '4760'],
+      'kvk': ['kurumlar vergisi kanunu', '5520'],
+
+      // Specific document/concept expansions
+      'levha': ['vergi levhası', 'levha asma', 'levha zorunluluğu', 'VUK 5'],
+      'fatura': ['fatura düzenleme', 'fatura zorunluluğu', 'e-fatura'],
+      'defter': ['defter tutma', 'yasal defter', 'bilanço esası'],
+      'beyanname': ['vergi beyannamesi', 'beyanname verme', 'beyan süresi'],
+      'muafiyet': ['vergi muafiyeti', 'istisna', 'muaf'],
+      'istisna': ['vergi istisnası', 'muafiyet'],
+      'ceza': ['vergi cezası', 'usulsüzlük cezası', 'gecikme faizi'],
+      'uzlaşma': ['vergi uzlaşması', 'tarhiyat', 'uzlaşma komisyonu'],
+    };
+
+    // Check if query contains any synset keys
+    let rewritten = query;
+    let expanded = false;
+
+    for (const [key, expansions] of Object.entries(DOMAIN_SYNSETS)) {
+      // Match whole word or number
+      const keyPattern = new RegExp(`\\b${key}\\b`, 'i');
+      if (keyPattern.test(queryLower)) {
+        // Add expansions that aren't already in the query
+        for (const expansion of expansions) {
+          if (!queryLower.includes(expansion.toLowerCase())) {
+            additions.push(expansion);
+          }
+        }
+        expanded = true;
+      }
+    }
+
+    // Only add expansions if query is short (likely a search term, not a full question)
+    if (expanded && query.trim().split(/\s+/).length <= 5 && additions.length > 0) {
+      // Limit to top 3 most relevant expansions
+      const topAdditions = additions.slice(0, 3);
+      rewritten = `${query} ${topAdditions.join(' ')}`;
+      console.log(`[QUERY-REWRITE] Expanded: "${query}" → "${rewritten}"`);
+    } else if (expanded) {
+      console.log(`[QUERY-REWRITE] Skip expansion for long query (${query.split(/\s+/).length} words)`);
+    }
+
+    return { rewritten, expanded, additions };
+  }
+
+  /**
+   * 📋 DOCUMENT-TYPE SECTION FINDER
+   * Extracts the relevant ruling section based on document type
+   * Different document types have rulings in different locations:
+   * - Özelge: "Açıklamalar", "Bu durumda", "Sonuç", "Cevap" sections (NOT "Konu:")
+   * - Danıştay: "HÜKÜM", "SONUÇ", "Karar" sections
+   * - Kanun/Tebliğ: "Madde" (Article) numbered sections
+   */
+  private extractRulingSection(content: string, sourceType: string): string {
+    const sourceTypeLower = (sourceType || '').toLowerCase();
+
+    // Document type detection and ruling section extraction
+    if (sourceTypeLower.includes('ozelge') || sourceTypeLower.includes('özelge')) {
+      // ÖZELGE: Ruling is in Açıklamalar/Sonuç/Cevap sections
+      // Match section headers like "Açıklamalar:", "AÇIKLAMALAR:", "Sonuç olarak", "Cevap:"
+      const ozelgeSectionPatterns = [
+        // "Açıklamalar" section (most common for rulings)
+        /(?:açıklamalar?|AÇIKLAMALAR?)[\s:]*([^]*?)(?=(?:sonuç|değerlendirme|kaynakça|ekler|tarih|sayı)[\s:]|$)/i,
+        // "Bu durumda" paragraph (often contains the verdict)
+        /(?:bu\s+durumda|bu\s+çerçevede|sonuç\s+olarak)[\s:,]*([^]*?)(?=(?:\n\n|\r\n\r\n|$))/i,
+        // "Sonuç" section
+        /(?:sonuç|SONUÇ)[\s:]*([^]*?)(?=(?:ekler|kaynakça|tarih|sayı)|$)/i,
+        // "Cevap" section
+        /(?:cevap|CEVAP)[\s:]*([^]*?)(?=(?:\n\n|\r\n\r\n|ekler|$))/i
+      ];
+
+      for (const pattern of ozelgeSectionPatterns) {
+        const match = content.match(pattern);
+        if (match && match[1] && match[1].trim().length > 50) {
+          console.log('[SECTION-FINDER] Extracted Özelge ruling section: ' + match[1].substring(0, 50) + '...');
+          return match[1].trim();
+        }
+      }
+    }
+
+    if (sourceTypeLower.includes('danistay') || sourceTypeLower.includes('danıştay')) {
+      // DANIŞTAY: Ruling is in HÜKÜM/SONUÇ/Karar sections
+      const danistaySectionPatterns = [
+        // "HÜKÜM" section (formal verdict)
+        /(?:HÜKÜM|hüküm|Hüküm)[\s:]*([^]*?)(?=(?:başkan|üye|katılan|tarih|imza)|$)/i,
+        // "SONUÇ" section
+        /(?:SONUÇ|sonuç|Sonuç)[\s:]*([^]*?)(?=(?:başkan|üye|katılan|hüküm|tarih)|$)/i,
+        // "Karar" paragraph (often contains verdict)
+        /(?:karara\s+bağlanmıştır|karar\s+verilmiştir|hükmedilmiştir)([^]*?)(?=(?:\n\n|\r\n\r\n|$))/i,
+        // Match around "hükmedilmiştir" verb (key verdict indicator)
+        /([^.]*(?:reddine|kabulüne|bozulmasına|onanmasına|hükmedilmiştir)[^.]*\.)/i
+      ];
+
+      for (const pattern of danistaySectionPatterns) {
+        const match = content.match(pattern);
+        if (match && match[1] && match[1].trim().length > 30) {
+          console.log('[SECTION-FINDER] Extracted Danıştay ruling section: ' + match[1].substring(0, 50) + '...');
+          return match[1].trim();
+        }
+      }
+    }
+
+    if (sourceTypeLower.includes('kanun') || sourceTypeLower.includes('tebli')) {
+      // KANUN/TEBLİĞ: Content is in numbered Madde sections
+      // Extract Madde (Article) content
+      const kanunSectionPatterns = [
+        // "Madde X -" format
+        /(?:madde\s*\d+)\s*[-–]\s*([^]*?)(?=(?:madde\s*\d+|$))/i,
+        // "X. Madde" or "Madde X:" format
+        /(?:\d+\.?\s*madde|madde\s*\d+:?)\s*([^]*?)(?=(?:\d+\.?\s*madde|madde\s*\d+|$))/i
+      ];
+
+      for (const pattern of kanunSectionPatterns) {
+        const match = content.match(pattern);
+        if (match && match[1] && match[1].trim().length > 30) {
+          console.log('[SECTION-FINDER] Extracted Kanun/Tebliğ article section: ' + match[1].substring(0, 50) + '...');
+          return match[1].trim();
+        }
+      }
+    }
+
+    // Default: return full content if no specific section found
+    return content;
+  }
+
+  /**
    * 📋 ENFORCE RESPONSE FORMAT (CEVAP + ALINTI)
    * Ensures response always has both **CEVAP** and **ALINTI** sections
    * This is a response contract - users expect consistent format
@@ -2651,10 +2834,16 @@ FORMAT:
           .replace(/\s+/g, ' ')
           .trim();
 
+        // 🔧 DOCUMENT-TYPE SECTION FINDER: Extract ruling section based on document type
+        // This focuses quote extraction on the actual ruling part of the document
+        const rulingContent = this.extractRulingSection(sourceContent, sourceType);
+        // Use ruling section if found, otherwise use full content
+        const contentForQuotes = rulingContent.length > 50 ? rulingContent : sourceContent;
+
         // 🔧 FIX: Better Turkish sentence splitting
         // Split on: period+space+capital, exclamation, question mark
         // But preserve abbreviations like "vb.", "vs.", "No."
-        const sentences = sourceContent
+        const sentences = contentForQuotes
           .replace(/\b(vb|vs|No|Md|Dr|Prof|vd)\.\s*/gi, '$1<DOT>')
           .split(/(?<=[.!?])\s+(?=[A-ZÇĞİÖŞÜ])/)
           .map(s => s.replace(/<DOT>/g, '. '))
@@ -2745,69 +2934,110 @@ FORMAT:
       if (bestQuote && bestScore >= MIN_QUOTE_SCORE) {
         // Good quote found - use it
         alintıContent = '> "' + bestQuote + '..."\n\n' + bestSource;
-        console.log('[FORMAT] Found relevant quote with score ' + bestScore + ' from ' + bestSourceType + ': ' + bestQuote.substring(0, 50) + '...');
+        console.log('[FORMAT] ✅ Found relevant quote with score ' + bestScore + ' from ' + bestSourceType + ': ' + bestQuote.substring(0, 50) + '...');
       } else {
-        // 🔧 CRITICAL FIX: NO QUOTE = NO DEFINITIVE VERDICT
-        // "ALINTI yoksa kesin hüküm yok" - müşteri geribildirimi
-        console.log('[FORMAT] ⚠️ No good quote found (bestScore=' + bestScore + ') - SOFTENING VERDICT');
+        // ========================================
+        // 🔒 EVIDENCE-FIRST CONTRACT
+        // ========================================
+        // "ALINTI yoksa kesin hüküm yok" - bu tek kural seti
+        // Sistem asla "bilgi yok" demesin; kaynakları göstersin
+        console.log('[FORMAT] 🔒 EVIDENCE-FIRST: No quote found (bestScore=' + bestScore + ') - applying contract');
 
-        // Strong claim patterns that MUST be softened without quote support
-        const strongClaimPatterns = [
-          { pattern: /\bzorunludur\b/gi, soft: 'zorunlu olabilir' },
-          { pattern: /\bmecburidir\b/gi, soft: 'mecburi olabilir' },
-          { pattern: /\byasaktır\b/gi, soft: 'yasak olabilir' },
-          { pattern: /\bmümkündür\b/gi, soft: 'mümkün olabilir' },
-          { pattern: /\bmümkün değildir\b/gi, soft: 'mümkün olmayabilir' },
-          { pattern: /\basılabilir\b/gi, soft: 'asılabileceği değerlendirilebilir' },
-          { pattern: /\basılamaz\b/gi, soft: 'asılamayabileceği değerlendirilebilir' },
-          { pattern: /\bbulundurulabilir\b/gi, soft: 'bulundurulabileceği değerlendirilebilir' },
-          { pattern: /\bbulundurulamaz\b/gi, soft: 'bulundurulamayabileceği değerlendirilebilir' },
-          { pattern: /\bkesinlikle\s+(?:yapılamaz|olamaz)\b/gi, soft: 'yapılamayabileceği değerlendirilebilir' },
-          { pattern: /\bceza\s+(?:uygulanır|kesilir)\b/gi, soft: 'ceza uygulanabilir' }
+        // Detect if this is a "hukuki hüküm" question (evet/hayır, zorunlu mu, kaldırıldı mı)
+        const VERDICT_QUESTION_PATTERNS = [
+          /\b(?:mümkün\s+mü|mümkün\s+müdür|olabilir\s+mi)\b/i,
+          /\b(?:zorunlu\s+mu|mecburi\s+mi|gerekli\s+mi|şart\s+mı)\b/i,
+          /\b(?:yasak\s+mı|yasaklandı\s+mı)\b/i,
+          /\b(?:kaldırıldı\s+mı|kalktı\s+mı|yürürlükte\s+mi)\b/i,
+          /\b(?:asılabilir\s+mi|asılır\s+mı|bulundurulabilir\s+mi)\b/i,
+          /\b(?:uygulanır\s+mı|geçerli\s+mi)\b/i,
+          /\b(?:var\s+mı|yok\s+mu)\b/i
         ];
 
-        const hasCevapHeader = result.includes('**CEVAP**');
-        if (hasCevapHeader) {
-          const cevapMatch = result.match(/\*\*CEVAP\*\*\s*([\s\S]*?)(?=\*\*[A-Z]|\n\n\n|$)/i);
-          if (cevapMatch && cevapMatch[1]) {
-            let cevapContent = cevapMatch[1];
-            let softenedCount = 0;
+        const originalMessage = answerText; // from cevapMatch earlier
+        const isVerdictQuestion = VERDICT_QUESTION_PATTERNS.some(p => p.test(originalMessage));
 
-            // 🔧 CRITICAL: Replace strong claims with softened versions
-            for (const { pattern, soft } of strongClaimPatterns) {
-              if (pattern.test(cevapContent)) {
-                cevapContent = cevapContent.replace(pattern, soft);
-                softenedCount++;
-                pattern.lastIndex = 0; // Reset regex state
+        if (isVerdictQuestion && searchResults.length > 0) {
+          // 🔒 CONTRACT: Verdict question but no quote = cannot give definitive answer
+          console.log('[FORMAT] 🔒 Verdict question detected - replacing with source-reference response');
+
+          // Build source list (top 3)
+          const topSources = searchResults.slice(0, 3).map((r, i) => {
+            const title = r.title || 'Kaynak';
+            const type = r.source_type || r.source_table || 'Belge';
+            return `${i + 1}. **${title}** (${type})`;
+          }).join('\n');
+
+          // 🔒 REPLACE entire response with evidence-first message
+          const evidenceFirstResponse = language === 'tr'
+            ? `**CEVAP**\nBu konuda kaynak bulunmakla birlikte, net hüküm cümlesi otomatik olarak seçilememiştir.\n\nAşağıdaki kaynaklarda ilgili bölümün incelenmesi önerilir:\n${topSources}\n\n_Kesin bilgi için yukarıdaki kaynaklara doğrudan başvurunuz._`
+            : `**ANSWER**\nSources were found on this topic, but a clear ruling sentence could not be automatically extracted.\n\nPlease review the relevant sections in these sources:\n${topSources}\n\n_Please refer directly to the sources above for definitive information._`;
+
+          result = evidenceFirstResponse;
+          alintıContent = language === 'tr'
+            ? '_Net hüküm cümlesi otomatik seçilemedi. Yukarıdaki kaynaklarda ilgili bölüm incelenmelidir._'
+            : '_A clear ruling sentence could not be automatically extracted. Please review the relevant sections in the sources above._';
+
+        } else {
+          // Non-verdict question (tanım, açıklama) - soften but allow
+          console.log('[FORMAT] Non-verdict question - softening claims');
+
+          // Strong claim patterns that MUST be softened without quote support
+          const strongClaimPatterns = [
+            { pattern: /\bzorunludur\b/gi, soft: 'zorunlu olabilir' },
+            { pattern: /\bmecburidir\b/gi, soft: 'mecburi olabilir' },
+            { pattern: /\byasaktır\b/gi, soft: 'yasak olabilir' },
+            { pattern: /\bmümkündür\b/gi, soft: 'mümkün olabilir' },
+            { pattern: /\bmümkün değildir\b/gi, soft: 'mümkün olmayabilir' },
+            { pattern: /\basılabilir\b/gi, soft: 'asılabileceği değerlendirilebilir' },
+            { pattern: /\basılamaz\b/gi, soft: 'asılamayabileceği değerlendirilebilir' },
+            { pattern: /\bbulundurulabilir\b/gi, soft: 'bulundurulabileceği değerlendirilebilir' },
+            { pattern: /\bbulundurulamaz\b/gi, soft: 'bulundurulamayabileceği değerlendirilebilir' },
+            { pattern: /\bkesinlikle\s+(?:yapılamaz|olamaz)\b/gi, soft: 'yapılamayabileceği değerlendirilebilir' },
+            { pattern: /\bceza\s+(?:uygulanır|kesilir)\b/gi, soft: 'ceza uygulanabilir' }
+          ];
+
+          const hasCevapHeader = result.includes('**CEVAP**');
+          if (hasCevapHeader) {
+            const cevapMatch = result.match(/\*\*CEVAP\*\*\s*([\s\S]*?)(?=\*\*[A-Z]|\n\n\n|$)/i);
+            if (cevapMatch && cevapMatch[1]) {
+              let cevapContent = cevapMatch[1];
+              let softenedCount = 0;
+
+              for (const { pattern, soft } of strongClaimPatterns) {
+                if (pattern.test(cevapContent)) {
+                  cevapContent = cevapContent.replace(pattern, soft);
+                  softenedCount++;
+                  pattern.lastIndex = 0;
+                }
+              }
+
+              if (softenedCount > 0) {
+                console.log(`[FORMAT] 🔄 Softened ${softenedCount} strong claim(s)`);
+                result = result.replace(
+                  /(\*\*CEVAP\*\*\s*)([\s\S]*?)(?=\*\*[A-Z]|\n\n\n|$)/i,
+                  '$1' + cevapContent
+                );
               }
             }
-
-            if (softenedCount > 0) {
-              console.log(`[FORMAT] 🔄 Softened ${softenedCount} strong claim(s) due to missing quote support`);
-
-              // Replace the CEVAP content with softened version
-              result = result.replace(
-                /(\*\*CEVAP\*\*\s*)([\s\S]*?)(?=\*\*[A-Z]|\n\n\n|$)/i,
-                '$1' + cevapContent
-              );
-            }
-
-            // Add mandatory disclaimer when no quote found
-            const noQuoteDisclaimer = language === 'tr'
-              ? '\n\n_⚠️ Uyarı: Bu değerlendirme kaynaklara dayanmaktadır ancak doğrudan destekleyen alıntı tespit edilememiştir. Kesin bilgi için ilgili özelge/mevzuata başvurunuz._'
-              : '\n\n_⚠️ Warning: This assessment is based on sources but no direct supporting quote was found. Please refer to relevant rulings/legislation for definitive information._';
-
-            result = result.replace(
-              /(\*\*CEVAP\*\*\s*[\s\S]*?)(?=\*\*[A-Z]|\n\n\n|$)/i,
-              '$1' + noQuoteDisclaimer
-            );
           }
-        }
 
-        // ALINTI section shows clear "no quote" message
-        alintıContent = language === 'tr'
-          ? '_Kaynaklarda bu konuya ilişkin içerik bulunmakla birlikte, cevabı doğrudan destekleyen kısa ve net bir alıntı tespit edilememiştir._'
-          : '_While sources contain relevant content, no short and clear quote directly supporting this answer was found._';
+          // Add disclaimer for non-verdict questions
+          const noQuoteDisclaimer = language === 'tr'
+            ? '\n\n_⚠️ Uyarı: Bu değerlendirme kaynaklara dayanmaktadır ancak doğrudan destekleyen alıntı tespit edilememiştir._'
+            : '\n\n_⚠️ Warning: This assessment is based on sources but no direct supporting quote was found._';
+
+          result = result.replace(
+            /(\*\*CEVAP\*\*\s*[\s\S]*?)(?=\*\*[A-Z]|\n\n\n|$)/i,
+            '$1' + noQuoteDisclaimer
+          );
+
+          // Set ALINTI content for non-verdict questions (no quote found)
+          alintıContent = language === 'tr'
+            ? '_Kaynaklarda bu konuya ilişkin içerik bulunmakla birlikte, cevabı doğrudan destekleyen kısa ve net bir alıntı tespit edilememiştir._'
+            : '_While sources contain relevant content, no short and clear quote directly supporting this answer was found._';
+        }
+        // NOTE: For verdict questions, alintıContent was already set above (lines 2788-2790)
       }
 
       // Append ALINTI section
