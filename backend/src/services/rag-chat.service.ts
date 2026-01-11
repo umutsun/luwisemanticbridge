@@ -1957,6 +1957,26 @@ FORMAT:
       };
 
       const needsClarification = Object.values(needsClarificationPatterns).some(v => v === true);
+
+      // ========================================
+      // 🚫 AMBIGUITY GUARD: Short/ambiguous queries MUST get NEEDS_CLARIFICATION
+      // ========================================
+      // Even if we have search results, certain query patterns are too ambiguous
+      // to provide a confident answer. These patterns OVERRIDE the normal FOUND logic.
+      //
+      // STRONG AMBIGUITY (forces NEEDS_CLARIFICATION even with results):
+      // - justNumbers: "6111", "213", "7326" - could mean law number, article, year, etc.
+      // - vagueQuestion: "ne?", "nedir?" - no subject specified
+      // - tooShort without clear question form: "KDV" vs "KDV nedir?"
+      const isStrongAmbiguity = (
+        needsClarificationPatterns.justNumbers ||
+        needsClarificationPatterns.vagueQuestion ||
+        (needsClarificationPatterns.tooShort && !message.includes('?'))
+      );
+
+      if (isStrongAmbiguity) {
+        console.log(`🚫 AMBIGUITY GUARD: Strong ambiguity detected - will force NEEDS_CLARIFICATION regardless of results`);
+      }
       const clarificationReason = Object.entries(needsClarificationPatterns)
         .filter(([_, v]) => v === true)
         .map(([k, _]) => k)
@@ -1966,22 +1986,29 @@ FORMAT:
       // 🎯 DETERMINISTIC RESPONSE TYPE (NO LLM PATTERN MATCHING)
       // ========================================
       // ResponseType is PURELY based on:
-      // 1. searchResults.length (do we have results?)
-      // 2. isQueryInScope (does query contain domain terms?)
-      // 3. needsClarification (is query too short/unclear?)
+      // 1. isStrongAmbiguity (ambiguity guard - highest priority!)
+      // 2. searchResults.length (do we have results?)
+      // 3. isQueryInScope (does query contain domain terms?)
+      // 4. needsClarification (is query too short/unclear?)
       //
       // LLM response content is NEVER checked for OUT_OF_SCOPE/NOT_FOUND patterns.
       // This prevents regression when LLM produces unexpected responses.
       //
       // RULES (strict priority):
-      // 1. searchResults.length > 0 → FOUND (always)
+      // 0. isStrongAmbiguity → NEEDS_CLARIFICATION (even with results!)
+      // 1. searchResults.length > 0 → FOUND
       // 2. searchResults.length == 0 + isQueryInScope → NOT_FOUND
       // 3. searchResults.length == 0 + needsClarification → NEEDS_CLARIFICATION
       // 4. searchResults.length == 0 + !isQueryInScope → OUT_OF_SCOPE
       let responseType: 'OUT_OF_SCOPE' | 'NOT_FOUND' | 'NEEDS_CLARIFICATION' | 'FOUND' = 'FOUND';
 
-      if (searchResults.length > 0) {
-        // RULE 1: Results exist → FOUND (no exceptions)
+      if (isStrongAmbiguity) {
+        // RULE 0: Strong ambiguity → NEEDS_CLARIFICATION (even with results!)
+        // This prevents showing misleading results for "6111", "ne?" etc.
+        responseType = 'NEEDS_CLARIFICATION';
+        console.log(`🚫 NEEDS_CLARIFICATION: AMBIGUITY GUARD triggered (${clarificationReason}) - ignoring ${searchResults.length} results`);
+      } else if (searchResults.length > 0) {
+        // RULE 1: Results exist → FOUND
         responseType = 'FOUND';
         console.log(`✅ FOUND: ${searchResults.length} results - deterministic FOUND`);
       } else if (isQueryInScope) {
@@ -1998,7 +2025,7 @@ FORMAT:
         console.log(`🚫 OUT_OF_SCOPE: No results, not in domain scope`);
       }
 
-      console.log(`📋 RESPONSE TYPE: ${responseType} [DETERMINISTIC] (results=${searchResults.length}, inScope=${isQueryInScope}, unclear=${needsClarification}${needsClarification ? ' [' + clarificationReason + ']' : ''})`);
+      console.log(`📋 RESPONSE TYPE: ${responseType} [DETERMINISTIC] (strongAmbiguity=${isStrongAmbiguity}, results=${searchResults.length}, inScope=${isQueryInScope}, unclear=${needsClarification}${needsClarification ? ' [' + clarificationReason + ']' : ''})`);
 
       // ========================================
       // APPLY BEHAVIORAL CONTRACT
@@ -2963,6 +2990,7 @@ FORMAT:
         // Uses ORIGINAL user query, NOT LLM response text!
         // This prevents false negatives when LLM doesn't echo the question.
         const VERDICT_QUESTION_PATTERNS = [
+          // === YES/NO VERDICT PATTERNS ===
           /\b(?:mümkün\s+mü|mümkün\s+müdür|olabilir\s+mi)\b/i,
           /\b(?:zorunlu\s+mu|mecburi\s+mi|gerekli\s+mi|şart\s+mı)\b/i,
           /\b(?:yasak\s+mı|yasaklandı\s+mı)\b/i,
@@ -2972,7 +3000,19 @@ FORMAT:
           /\b(?:var\s+mı|yok\s+mu)\b/i,
           // Additional patterns for implicit verdict questions
           /\b(?:zorunlu(?:luk|luğu)?)\s+var\b/i,  // "zorunluluk var mı"
-          /\b(?:asma|bulundurma)\s+(?:mecburiyeti|zorunluluğu)\b/i  // "asma zorunluluğu"
+          /\b(?:asma|bulundurma)\s+(?:mecburiyeti|zorunluluğu)\b/i,  // "asma zorunluluğu"
+
+          // === PROCEDURAL PATTERNS (Evidence-First required) ===
+          // These questions need specific documentary evidence, not LLM opinions
+          /\b(?:nereye)\s+(?:yazılır|girilir|kaydedilir|bildirilir|beyan\s+edilir)\b/i,  // "nereye yazılır"
+          /\b(?:hangi)\s+(?:alana?|satıra?|koda?|bölüme?|beyanname(?:ye)?)\s+(?:yazılır|girilir)\b/i,  // "hangi alana girilir"
+          /\b(?:hangi)\s+(?:kodu?|satırı?)\b/i,  // "hangi kod", "hangi satır"
+          /\b(?:kaç)\s+(?:gün(?:de)?|ay(?:da)?|yıl(?:da)?|süre(?:de)?)\b/i,  // "kaç gün", "kaç günde"
+          /\b(?:ne\s+zaman(?:a\s+kadar)?|hangi\s+tarih(?:te|e)?)\b/i,  // "ne zaman", "hangi tarihte"
+          /\b(?:süre(?:si)?|vade(?:si)?)\s+(?:ne\s+kadar|kaç)\b/i,  // "süre ne kadar"
+          /\b(?:oran(?:ı)?)\s+(?:kaç|ne\s+kadar|yüzde\s+kaç)\b/i,  // "oranı kaç", "yüzde kaç"
+          /\b(?:limit(?:i)?|tutar(?:ı)?|miktar(?:ı)?)\s+(?:kaç|ne\s+kadar)\b/i,  // "limiti kaç", "tutarı ne kadar"
+          /\b(?:kaçıncı|kaç\s+numaralı)\s+(?:madde|satır|kod|alan)\b/i  // "kaçıncı madde"
         ];
 
         // Check ORIGINAL query, not LLM response
