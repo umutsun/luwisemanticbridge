@@ -187,23 +187,38 @@ export class RAGChatService {
     try {
       const config = await dataSchemaService.loadConfig();
       const activeSchema = config.schemas.find(s => s.id === config.activeSchemaId);
-      const llmConfig = activeSchema?.llmConfig as any; // Cast to any for authorityLevels
+      const llmConfig = activeSchema?.llmConfig as any;
 
-      // Get topic entities from DB - NO HARDCODED DEFAULTS
+      // Get topic entities from Schema llmConfig (domain-specific)
       const topicEntities = llmConfig?.topicEntities || [];
 
-      // Get key terms from DB - NO HARDCODED DEFAULTS
+      // Get key terms from Schema llmConfig (domain-specific)
       const keyTerms = llmConfig?.keyTerms || [];
 
-      // Get authority levels from DB - NO HARDCODED DEFAULTS
-      const authorityLevels = llmConfig?.authorityLevels || {};
+      // Get authority levels from RAG Settings (NOT from schema - single source of truth)
+      // This uses ragSettings.sourceTypeHierarchy which is configured via UI
+      const hierarchyRaw = await settingsService.getSetting('ragSettings.sourceTypeHierarchy');
+      let authorityLevels: Record<string, number> = {};
+
+      if (hierarchyRaw) {
+        try {
+          const hierarchy = typeof hierarchyRaw === 'string' ? JSON.parse(hierarchyRaw) : hierarchyRaw;
+          // Convert sourceTypeHierarchy format to authorityLevels format
+          for (const [key, value] of Object.entries(hierarchy)) {
+            if (typeof value === 'object' && value !== null && 'weight' in value) {
+              authorityLevels[key] = (value as any).weight;
+            }
+          }
+        } catch (e) {
+          console.warn('[DOMAIN_CONFIG] Failed to parse sourceTypeHierarchy:', e);
+        }
+      }
 
       if (topicEntities.length === 0 && keyTerms.length === 0) {
         console.log(`⚠️ [DOMAIN_CONFIG] No domain config in DB!`);
         console.log(`   Import a domain config JSON via Settings > Schema > JSON Import`);
-        console.log(`   Available configs: docs/domain-configs/*.json`);
       } else {
-        console.log(`📋 [DOMAIN_CONFIG] Loaded from DB: ${topicEntities.length} entities, ${keyTerms.length} key terms, ${Object.keys(authorityLevels).length} authority levels`);
+        console.log(`📋 [DOMAIN_CONFIG] Loaded: ${topicEntities.length} entities, ${keyTerms.length} terms, ${Object.keys(authorityLevels).length} authority levels (from RAG Settings)`);
       }
 
       return { topicEntities, keyTerms, authorityLevels };
