@@ -8,27 +8,40 @@ import { settingsCache } from '../services/cache.service';
 const router = Router();
 
 // Cache middleware with performance tracking
+// 🔧 NEW: Supports X-Bypass-Cache header for testing
 function cacheMiddleware(req: Request, res: Response, next: any) {
   const startTime = Date.now();
   const key = `settings:${req.originalUrl}`;
-  const cached = settingsCache.get(key);
 
-  if (cached !== null) {
-    const duration = Date.now() - startTime;
-    console.log(` [CACHE] Hit for ${key} (${duration}ms)`);
-    return res.json(cached);
+  // 🔧 NEW: Check for cache bypass header (for testing)
+  const bypassCache = req.headers['x-bypass-cache'] === 'true' ||
+                      req.headers['x-bypass-cache'] === '1';
+
+  if (bypassCache) {
+    console.log(`⚠️ [CACHE] Bypassed for ${key} (X-Bypass-Cache header)`);
+    // Clear the cache entry to ensure fresh data
+    settingsCache.delete(key);
+  } else {
+    const cached = settingsCache.get(key);
+    if (cached !== null) {
+      const duration = Date.now() - startTime;
+      console.log(` [CACHE] Hit for ${key} (${duration}ms)`);
+      return res.json(cached);
+    }
   }
 
   console.log(` [API] Miss for ${key}`);
 
-  // Override res.json to cache response
+  // Override res.json to cache response (skip if bypass)
   const originalJson = res.json;
   res.json = function(data) {
     const duration = Date.now() - startTime;
-    console.log(` [API] Response in ${duration}ms, caching...`);
+    console.log(` [API] Response in ${duration}ms${bypassCache ? ' (no cache)' : ', caching...'}`);
 
-    // Cache with 30s TTL
-    settingsCache.set(key, data, 30000);
+    // Cache with 30s TTL (skip if bypass header present)
+    if (!bypassCache) {
+      settingsCache.set(key, data, 30000);
+    }
 
     return originalJson.call(this, data);
   };

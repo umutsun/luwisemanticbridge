@@ -44,6 +44,14 @@ router.post('/api/v2/chat', authenticateToken, async (req: AuthenticatedRequest,
       headers: req.headers['content-type']
     });
 
+    // 🔧 NEW: Check for cache bypass header (for testing)
+    const bypassCache = req.headers['x-bypass-cache'] === 'true' ||
+                        req.headers['x-bypass-cache'] === '1';
+    if (bypassCache) {
+      console.log('⚠️ [CHAT] Cache bypass requested - invalidating settings cache');
+      settingsService.forceInvalidateCache();
+    }
+
     if (!req.user) {
       return res.status(401).json({ error: 'Authentication required' });
     }

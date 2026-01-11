@@ -1894,8 +1894,16 @@ FORMAT:
       // Types: OUT_OF_SCOPE | NOT_FOUND | NEEDS_CLARIFICATION | FOUND
       // This determines whether to run enforceResponseFormat and how to handle sources
 
-      // ✅ DOMAIN TERM ALLOWLIST: Use keyTerms + topicEntity synonyms from DB (no hardcoding)
-      // These terms should NEVER trigger OUT_OF_SCOPE
+      // ✅ DOMAIN TERM ALLOWLIST: Use keyTerms + topicEntity synonyms from DB
+      // 🔧 FIX: Add fallback core tax terms when DB config is empty
+      const FALLBACK_TAX_TERMS = [
+        'vergi', 'kdv', 'gelir', 'kurumlar', 'stopaj', 'beyanname', 'fatura',
+        'levha', 'özelge', 'ozelge', 'tebliğ', 'teblig', 'kanun', 'madde',
+        'tevkifat', 'istisna', 'muafiyet', 'indirim', 'iade', 'mahsup',
+        'fotokopi', 'şube', 'sube', 'merkez', 'tasdik', 'asıl', 'suret',
+        'mükellef', 'mukellef', 'vuk', 'gvk', 'kvk', 'ötv', 'mtv', 'damga'
+      ];
+
       const domainTermAllowlist = [
         ...domainConfig.keyTerms.map(t => t.toLowerCase()),
         ...domainConfig.topicEntities.flatMap(e => [
@@ -1903,13 +1911,23 @@ FORMAT:
           ...e.synonyms.map(s => s.toLowerCase()),
           // Also split pattern by | to get individual terms
           ...e.pattern.split('|').map(p => p.toLowerCase().trim())
-        ])
+        ]),
+        // 🔧 FIX: Always include fallback terms to prevent false OUT_OF_SCOPE
+        ...(domainConfig.keyTerms.length === 0 ? FALLBACK_TAX_TERMS : [])
       ];
 
       const queryLower = message.toLowerCase();
-      const isQueryInScope = domainTermAllowlist.length > 0
-        ? domainTermAllowlist.some(term => queryLower.includes(term))
-        : false; // If no config, default to not in scope (will use LLM detection)
+
+      // 🔧 FIX: Check both DB config AND fallback terms
+      const isQueryInScope = domainTermAllowlist.some(term => queryLower.includes(term))
+        || FALLBACK_TAX_TERMS.some(term => queryLower.includes(term));
+
+      // Log for debugging
+      if (isQueryInScope) {
+        const matchedTerms = [...domainTermAllowlist, ...FALLBACK_TAX_TERMS]
+          .filter(term => queryLower.includes(term));
+        console.log(`✅ Query IN SCOPE: matched terms = [${matchedTerms.slice(0, 5).join(', ')}${matchedTerms.length > 5 ? '...' : ''}]`);
+      }
 
       // 🤔 NEEDS_CLARIFICATION DETECTION (query-based, before LLM response check)
       // Patterns that indicate unclear/ambiguous query
@@ -2577,39 +2595,80 @@ FORMAT:
       const answerText = (cevapMatch?.[1] || '').toLowerCase();
 
       // Key terms to search for in sources (extract from answer)
-      const potentialKeyTerms = answerText.match(/\b(?:fotokopi|sube|tasdik|asil|zorunlu|mecburi|gerekli|levha|vergi|ozelge|teblig|madde|kanun)\b/gi) || [];
+      // 🔧 IMPROVED: Extract key terms from answer + domain config
+      const potentialKeyTerms = answerText.match(/\b(?:fotokopi|şube|sube|tasdik|asıl|asil|zorunlu|mecburi|gerekli|levha|vergi|özelge|ozelge|tebliğ|teblig|madde|kanun|asmak|asılır|asilir|bulundur|mümkün|mumkun|yasak|ceza)\b/gi) || [];
       const keyTermsLower = [...new Set(potentialKeyTerms.map(t => t.toLowerCase()))];
 
       let alintıContent = '';
       let bestQuote = '';
       let bestSource = '';
       let bestScore = 0;
+      let bestSourceType = '';
 
       // Search through all results for best matching sentence
       for (const searchResult of searchResults) {
-        const sourceContent = searchResult.content || searchResult.text || searchResult.excerpt || '';
+        let sourceContent = searchResult.content || searchResult.text || searchResult.excerpt || '';
         const sourceTitle = searchResult.title || 'Kaynak';
         const sourceType = searchResult.source_type || searchResult.metadata?.source_type || 'document';
 
-        // Split into sentences
-        const sentences = sourceContent.split(/[.!?]+/).filter((s: string) => {
-          const trimmed = s.trim();
-          return trimmed.length > 30 &&
-                 trimmed.length < 500 &&
-                 !trimmed.startsWith('Tarih:') &&
-                 !trimmed.startsWith('Konu:') &&
-                 !trimmed.match(/^[A-Z\s]+$/);
-        });
+        // 🔧 FIX: Decode HTML entities BEFORE sentence splitting
+        sourceContent = sourceContent
+          .replace(/&nbsp;/gi, ' ')
+          .replace(/&amp;/gi, '&')
+          .replace(/&lt;/gi, '<')
+          .replace(/&gt;/gi, '>')
+          .replace(/&#39;/gi, "'")
+          .replace(/&quot;/gi, '"')
+          .replace(/&#\d+;/gi, '')
+          .replace(/<br\s*\/?>/gi, '. ')
+          .replace(/<\/?(p|div|li|tr|td)>/gi, '. ')
+          .replace(/<[^>]+>/g, ' ')
+          .replace(/\s+/g, ' ')
+          .trim();
+
+        // 🔧 FIX: Better Turkish sentence splitting
+        // Split on: period+space+capital, exclamation, question mark
+        // But preserve abbreviations like "vb.", "vs.", "No."
+        const sentences = sourceContent
+          .replace(/\b(vb|vs|No|Md|Dr|Prof|vd)\.\s*/gi, '$1<DOT>')
+          .split(/(?<=[.!?])\s+(?=[A-ZÇĞİÖŞÜ])/)
+          .map(s => s.replace(/<DOT>/g, '. '))
+          .filter((s: string) => {
+            const trimmed = s.trim();
+            // 🔧 FIX: Keep "Konu:" sentences - they often contain key rulings!
+            // Only filter out pure metadata headers (Tarih:, Sayı:)
+            return trimmed.length > 40 &&
+                   trimmed.length < 600 &&
+                   !trimmed.match(/^(Tarih|Sayı|Dosya No|T\.C\.):/i) &&
+                   !trimmed.match(/^[A-Z\s]{20,}$/); // All-caps headers only
+          });
+
+        // 🔧 FIX: Also check for "Konu:" content which often has the ruling
+        const konuMatch = sourceContent.match(/Konu:\s*([^.]+(?:\.[^.]+)?)/i);
+        if (konuMatch && konuMatch[1] && konuMatch[1].length > 40) {
+          sentences.push(konuMatch[1].trim());
+        }
 
         for (const sentence of sentences) {
           const sentenceLower = sentence.toLowerCase();
           // Score based on how many key terms are present
           let score = 0;
           for (const term of keyTermsLower) {
-            if (sentenceLower.includes(term)) score++;
+            if (sentenceLower.includes(term)) score += 1;
           }
-          // Bonus for ozelge/teblig sources
-          if (sourceType.toLowerCase().includes('ozelge') || sourceType.toLowerCase().includes('tebli')) {
+
+          // 🔧 IMPROVED: Higher bonus for authoritative sources
+          const sourceTypeLower = sourceType.toLowerCase();
+          if (sourceTypeLower.includes('ozelge') || sourceTypeLower.includes('özelge')) {
+            score += 3; // Özelge is most authoritative for specific rulings
+          } else if (sourceTypeLower.includes('tebli') || sourceTypeLower.includes('kanun')) {
+            score += 2;
+          } else if (sourceTypeLower.includes('danistay') || sourceTypeLower.includes('danıştay')) {
+            score += 2;
+          }
+
+          // 🔧 NEW: Bonus for verdict-like sentences
+          if (/(?:mümkündür|mümkün değildir|zorunludur|yasaktır|uygulanır|asılabilir|asilabilir|bulundurulabilir)/i.test(sentence)) {
             score += 2;
           }
 
@@ -2617,55 +2676,80 @@ FORMAT:
             bestScore = score;
             bestQuote = sentence.trim();
             bestSource = sourceTitle + ' (' + sourceType + ')';
+            bestSourceType = sourceType;
           }
         }
       }
 
-      // Minimum score threshold - below this, don't use the quote
-      const MIN_QUOTE_SCORE = 2;
+      // 🔧 FIX: Increased threshold - require stronger match
+      const MIN_QUOTE_SCORE = 3;
 
       if (bestQuote && bestScore >= MIN_QUOTE_SCORE) {
         // Good quote found - use it
         alintıContent = '> "' + bestQuote + '..."\n\n' + bestSource;
-        console.log('[FORMAT] Found relevant quote with score ' + bestScore + ': ' + bestQuote.substring(0, 50) + '...');
+        console.log('[FORMAT] Found relevant quote with score ' + bestScore + ' from ' + bestSourceType + ': ' + bestQuote.substring(0, 50) + '...');
       } else {
-        // NO GOOD QUOTE FOUND - Don't force a quote, soften the verdict instead
-        console.log('[FORMAT] No good quote found (bestScore=' + bestScore + ') - softening verdict');
+        // 🔧 CRITICAL FIX: NO QUOTE = NO DEFINITIVE VERDICT
+        // "ALINTI yoksa kesin hüküm yok" - müşteri geribildirimi
+        console.log('[FORMAT] ⚠️ No good quote found (bestScore=' + bestScore + ') - SOFTENING VERDICT');
 
-        // Soften the CEVAP by adding disclaimer
-        const softenedDisclaimer = language === 'tr'
-          ? '\n\n_Not: Bu bilgi kaynaklar taranarak derlenmistir, ancak dogrudan destekleyen kisa alinti bulunamadi. Kesin bilgi icin ilgili mevzuata basvurunuz._'
-          : '\n\n_Note: This information was compiled from sources, but no direct supporting quote was found. Please refer to relevant legislation for definitive information._';
-
-        // Check if CEVAP contains strong claims (penalties, requirements)
+        // Strong claim patterns that MUST be softened without quote support
         const strongClaimPatterns = [
-          /zorunludur/gi,
-          /mecburidir/gi,
-          /ceza\s+(?:uygulanır|kesilir)/gi,
-          /yasaktır/gi,
-          /(?:asla|kesinlikle)\s+(?:yapılamaz|olamaz)/gi
+          { pattern: /\bzorunludur\b/gi, soft: 'zorunlu olabilir' },
+          { pattern: /\bmecburidir\b/gi, soft: 'mecburi olabilir' },
+          { pattern: /\byasaktır\b/gi, soft: 'yasak olabilir' },
+          { pattern: /\bmümkündür\b/gi, soft: 'mümkün olabilir' },
+          { pattern: /\bmümkün değildir\b/gi, soft: 'mümkün olmayabilir' },
+          { pattern: /\basılabilir\b/gi, soft: 'asılabileceği değerlendirilebilir' },
+          { pattern: /\basılamaz\b/gi, soft: 'asılamayabileceği değerlendirilebilir' },
+          { pattern: /\bbulundurulabilir\b/gi, soft: 'bulundurulabileceği değerlendirilebilir' },
+          { pattern: /\bbulundurulamaz\b/gi, soft: 'bulundurulamayabileceği değerlendirilebilir' },
+          { pattern: /\bkesinlikle\s+(?:yapılamaz|olamaz)\b/gi, soft: 'yapılamayabileceği değerlendirilebilir' },
+          { pattern: /\bceza\s+(?:uygulanır|kesilir)\b/gi, soft: 'ceza uygulanabilir' }
         ];
 
         const hasCevapHeader = result.includes('**CEVAP**');
         if (hasCevapHeader) {
-          const cevapSection = result.match(/\*\*CEVAP\*\*\s*([\s\S]*?)(?=\*\*[A-Z]|\n\n\n|$)/i);
-          if (cevapSection && cevapSection[1]) {
-            const hasStrongClaims = strongClaimPatterns.some(p => p.test(cevapSection[1]));
-            if (hasStrongClaims) {
-              console.log('[FORMAT] Strong claims detected but no supporting quote - adding disclaimer');
-              // Add disclaimer to end of CEVAP section
+          const cevapMatch = result.match(/\*\*CEVAP\*\*\s*([\s\S]*?)(?=\*\*[A-Z]|\n\n\n|$)/i);
+          if (cevapMatch && cevapMatch[1]) {
+            let cevapContent = cevapMatch[1];
+            let softenedCount = 0;
+
+            // 🔧 CRITICAL: Replace strong claims with softened versions
+            for (const { pattern, soft } of strongClaimPatterns) {
+              if (pattern.test(cevapContent)) {
+                cevapContent = cevapContent.replace(pattern, soft);
+                softenedCount++;
+                pattern.lastIndex = 0; // Reset regex state
+              }
+            }
+
+            if (softenedCount > 0) {
+              console.log(`[FORMAT] 🔄 Softened ${softenedCount} strong claim(s) due to missing quote support`);
+
+              // Replace the CEVAP content with softened version
               result = result.replace(
-                /(\*\*CEVAP\*\*\s*[\s\S]*?)(?=\*\*[A-Z]|\n\n\n|$)/i,
-                '$1' + softenedDisclaimer
+                /(\*\*CEVAP\*\*\s*)([\s\S]*?)(?=\*\*[A-Z]|\n\n\n|$)/i,
+                '$1' + cevapContent
               );
             }
+
+            // Add mandatory disclaimer when no quote found
+            const noQuoteDisclaimer = language === 'tr'
+              ? '\n\n_⚠️ Uyarı: Bu değerlendirme kaynaklara dayanmaktadır ancak doğrudan destekleyen alıntı tespit edilememiştir. Kesin bilgi için ilgili özelge/mevzuata başvurunuz._'
+              : '\n\n_⚠️ Warning: This assessment is based on sources but no direct supporting quote was found. Please refer to relevant rulings/legislation for definitive information._';
+
+            result = result.replace(
+              /(\*\*CEVAP\*\*\s*[\s\S]*?)(?=\*\*[A-Z]|\n\n\n|$)/i,
+              '$1' + noQuoteDisclaimer
+            );
           }
         }
 
-        // ALINTI section shows "no direct quote" message
+        // ALINTI section shows clear "no quote" message
         alintıContent = language === 'tr'
-          ? '_Kaynaklar taranmis, ancak bu cevabi dogrudan destekleyen kisa alinti tespit edilememistir._'
-          : '_Sources were searched, but no short quote directly supporting this answer was found._';
+          ? '_Kaynaklarda bu konuya ilişkin içerik bulunmakla birlikte, cevabı doğrudan destekleyen kısa ve net bir alıntı tespit edilememiştir._'
+          : '_While sources contain relevant content, no short and clear quote directly supporting this answer was found._';
       }
 
       // Append ALINTI section

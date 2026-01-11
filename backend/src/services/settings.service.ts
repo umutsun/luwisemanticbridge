@@ -101,6 +101,15 @@ export class SettingsService {
     }
   }
 
+  /**
+   * 🔧 NEW: Public method to force cache invalidation
+   * Used when X-Bypass-Cache header is present for testing
+   */
+  public forceInvalidateCache(): void {
+    this.cache.clear();
+    logger.info('[SettingsService] Cache forcefully invalidated');
+  }
+
   // Get port configurations from settings
   async getPortConfig(): Promise<ServicePortConfig> {
     try {

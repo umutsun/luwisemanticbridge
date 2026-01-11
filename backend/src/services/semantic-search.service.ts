@@ -65,6 +65,24 @@ export class SemanticSearchService {
   private lastWeightsRefresh: number = 0;
   private readonly WEIGHTS_CACHE_TTL = 30000; // 30 seconds
 
+  // 🔧 NEW: Source type hierarchy for ranking (from ragSettings.sourceTypeHierarchy)
+  // Default weights based on authority level
+  private sourceTypeHierarchy: Record<string, { weight: number; label: string }> = {
+    'ozelge': { weight: 75, label: 'Özelge' },
+    'kanun': { weight: 80, label: 'Kanun' },
+    'teblig': { weight: 65, label: 'Tebliğ' },
+    'danistay': { weight: 70, label: 'Danıştay Kararı' },
+    'sirkuler': { weight: 60, label: 'Sirküler' },
+    'sorucevap': { weight: 50, label: 'Soru-Cevap' },
+    'makale': { weight: 40, label: 'Makale' },
+    'document': { weight: 30, label: 'Belge' }
+  };
+
+  // 🔧 NEW: Ranking formula weights (configurable via settings)
+  // Default: 70% semantic similarity + 30% source hierarchy
+  private semanticWeight: number = 0.70;
+  private hierarchyWeight: number = 0.30;
+
   // Python semantic search settings
   private usePythonSemanticSearch: boolean = true; // Enable Python by default for performance
   private pythonSemanticSearchFallback: boolean = true; // Fallback to Node.js if Python unavailable
@@ -381,7 +399,7 @@ export class SemanticSearchService {
 
       const result = await this.pool.query(
         `SELECT key, value FROM settings WHERE key IN (
-          $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22
+          $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25
         )`,
         [
           'ragSettings.similarityThreshold',
@@ -404,6 +422,10 @@ export class SemanticSearchService {
           'ragSettings.documentsPriority',
           'ragSettings.chatPriority',
           'ragSettings.webPriority',
+          // 🔧 NEW: Source hierarchy and ranking weights
+          'ragSettings.sourceTypeHierarchy',
+          'ragSettings.semanticWeight',
+          'ragSettings.hierarchyWeight',
           'ragSettings.usePythonSemanticSearch',
           'ragSettings.pythonSemanticSearchFallback'
         ]
@@ -539,6 +561,36 @@ export class SemanticSearchService {
             const parsed = this.parseBooleanSetting(value);
             if (parsed !== undefined) {
               this.pythonSemanticSearchFallback = parsed;
+            }
+            break;
+          }
+          // 🔧 NEW: Source type hierarchy from settings
+          case 'ragSettings.sourceTypeHierarchy': {
+            try {
+              const hierarchy = JSON.parse(value);
+              if (hierarchy && typeof hierarchy === 'object') {
+                this.sourceTypeHierarchy = hierarchy;
+                console.log('[SemanticSearch] Loaded sourceTypeHierarchy from settings');
+              }
+            } catch (e) {
+              console.warn('[SemanticSearch] Failed to parse sourceTypeHierarchy:', e);
+            }
+            break;
+          }
+          // 🔧 NEW: Ranking formula weights
+          case 'ragSettings.semanticWeight': {
+            const weight = parseFloat(value);
+            if (!isNaN(weight) && weight >= 0 && weight <= 1) {
+              this.semanticWeight = weight;
+              console.log(`[SemanticSearch] Set semanticWeight to ${weight}`);
+            }
+            break;
+          }
+          case 'ragSettings.hierarchyWeight': {
+            const weight = parseFloat(value);
+            if (!isNaN(weight) && weight >= 0 && weight <= 1) {
+              this.hierarchyWeight = weight;
+              console.log(`[SemanticSearch] Set hierarchyWeight to ${weight}`);
             }
             break;
           }
@@ -1350,12 +1402,23 @@ export class SemanticSearchService {
         // Data source priority is normalized from 0-10 to 0-1 range
         const weightedSimilarity = pureSimilarity * tableWeight * dataSourcePriority;
 
+        // 🔧 NEW: Get source hierarchy weight (0-100 scale from settings)
+        // Normalize source table name for hierarchy lookup
+        const normalizedSourceType = this.normalizeSourceType(sourceTable);
+        const hierarchyEntry = this.sourceTypeHierarchy[normalizedSourceType];
+        const hierarchyScore = hierarchyEntry ? hierarchyEntry.weight / 100 : 0.3; // Default 30% for unknown
+
         // Display score: Use weighted semantic similarity as the main score (0-100)
         // This gives users honest feedback about relevance with table prioritization
         const displayScore = Math.round(weightedSimilarity * 100);
 
-        // Combined score: Include all signals for ranking (but don't display)
-        const combinedScore = Math.min((weightedSimilarity + keywordBoost + priorityBoost) * 100, 100);
+        // 🔧 NEW: Combined score with configurable weights
+        // Default: 70% semantic similarity + 30% source hierarchy
+        // Formula: (semantic * semanticWeight) + (hierarchy * hierarchyWeight) + (keyword * 0.1)
+        const combinedScore = Math.min(
+          (pureSimilarity * this.semanticWeight + hierarchyScore * this.hierarchyWeight + keywordBoost * 0.1) * 100,
+          100
+        );
 
         // Format title and excerpt from metadata for better display
         const formatted = this.formatSearchContent(row);
@@ -1373,6 +1436,11 @@ export class SemanticSearchService {
             weightedSimilarity: displayScore,
             keywordBoost: Math.round(keywordBoost * 100),
             priorityBoost: Math.round(priorityBoost * 100),
+            // 🔧 NEW: Hierarchy debug info
+            hierarchyScore: Math.round(hierarchyScore * 100),
+            normalizedSourceType: normalizedSourceType,
+            semanticWeight: this.semanticWeight,
+            hierarchyWeight: this.hierarchyWeight,
             combined: Math.round(combinedScore)
           },
           content: formatted.excerpt, // Human-readable content from metadata
@@ -1569,6 +1637,39 @@ export class SemanticSearchService {
         totalWithEmbeddings: 0
       };
     }
+  }
+
+  /**
+   * 🔧 NEW: Normalize source table name to hierarchy key
+   * Maps csv_ozelge, ozelgeler, etc. to 'ozelge' for hierarchy lookup
+   */
+  private normalizeSourceType(sourceTable: string): string {
+    const normalized = (sourceTable || '').toLowerCase()
+      .replace(/^csv_/, '')  // Remove csv_ prefix
+      .replace(/_embeddings$/, '')  // Remove _embeddings suffix
+      .replace(/ler$|ları$|lari$/, '')  // Remove Turkish plural suffixes
+      .replace(/kararlari$|kararlari$/, '')  // Remove 'kararlari'
+      .trim();
+
+    // Map common variations to standard hierarchy keys
+    const mappings: Record<string, string> = {
+      'ozelge': 'ozelge',
+      'ozelgeler': 'ozelge',
+      'danistay': 'danistay',
+      'danistaykarar': 'danistay',
+      'teblig': 'teblig',
+      'tebligler': 'teblig',
+      'kanun': 'kanun',
+      'kanunlar': 'kanun',
+      'sirkuler': 'sirkuler',
+      'sorucevap': 'sorucevap',
+      'makale': 'makale',
+      'makaleler': 'makale',
+      'document': 'document',
+      'unified': 'document'
+    };
+
+    return mappings[normalized] || normalized;
   }
 
   private getSourceDisplayName(sourceTable: string): string {
