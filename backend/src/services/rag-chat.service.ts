@@ -1097,7 +1097,26 @@ ${questionLabel}: ${message}`;
       ];
       const hasDomainTerm = earlyDomainTerms.some(term => earlyQueryLower.includes(term));
 
-      // Non-tax patterns (clearly out of domain)
+      // Domain mode: TAX_ONLY (default) vs GENERAL_LAW
+      // TAX_ONLY: Only tax-related queries (VUK, GVK, KVK, KDV, etc.)
+      // GENERAL_LAW: All laws including TMK, Borçlar, TCK, etc.
+      const domainMode = settingsMap.get('ragSettings.domainMode') || 'TAX_ONLY';
+
+      // Non-tax law patterns (for TAX_ONLY mode)
+      // These are valid laws but NOT tax-related - should be OUT_OF_SCOPE in TAX_ONLY mode
+      const NON_TAX_LAW_PATTERNS = [
+        /\b(medeni\s+kanun|tmk)\b/i,           // Türk Medeni Kanunu
+        /\b(borçlar\s+kanun|tbk)\b/i,          // Türk Borçlar Kanunu
+        /\b(ceza\s+kanun|tck)\b/i,             // Türk Ceza Kanunu
+        /\b(ticaret\s+kanun|ttk)\b/i,          // Türk Ticaret Kanunu (except tax provisions)
+        /\b(iş\s+kanun)\b/i,                   // İş Kanunu
+        /\b(miras\s+payı|miras\s+hukuk)\b/i,   // Inheritance law (Medeni Kanun)
+        /\b(velayet|nafaka|boşanma)\b/i,       // Family law (Medeni Kanun)
+        /\b(kira\s+sözleşme|tahliye)\b/i,      // Lease law (Borçlar Kanunu)
+      ];
+      const isNonTaxLaw = NON_TAX_LAW_PATTERNS.some(p => p.test(message));
+
+      // Non-tax patterns (clearly out of domain - always OUT_OF_SCOPE)
       const OUT_OF_SCOPE_PATTERNS = [
         /\b(einstein|newton|shakespeare|picasso)\b/i,  // Famous people
         /\b(hava\s+durumu|weather)\b/i,                // Weather
@@ -1107,7 +1126,18 @@ ${questionLabel}: ${message}`;
         /^(merhaba|selam|hello|hi|hey)\s*\?*$/i,       // Greetings
         /\b(astroloji|burç|horoscope)\b/i,             // Astrology
       ];
-      const isEarlyOutOfScope = !hasDomainTerm && OUT_OF_SCOPE_PATTERNS.some(p => p.test(message));
+
+      // OUT_OF_SCOPE if:
+      // 1. No domain term AND matches out-of-scope pattern, OR
+      // 2. TAX_ONLY mode AND matches non-tax law pattern
+      const isEarlyOutOfScope = (
+        (!hasDomainTerm && OUT_OF_SCOPE_PATTERNS.some(p => p.test(message))) ||
+        (domainMode === 'TAX_ONLY' && isNonTaxLaw)
+      );
+
+      if (isNonTaxLaw && domainMode === 'TAX_ONLY') {
+        console.log(`🚪 EARLY EXIT: OUT_OF_SCOPE (non-tax law detected in TAX_ONLY mode)`);
+      }
 
       // --- EARLY EXIT: NEEDS_CLARIFICATION ---
       if (isEarlyAmbiguous) {
