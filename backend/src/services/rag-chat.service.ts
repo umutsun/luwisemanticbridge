@@ -1058,6 +1058,134 @@ ${questionLabel}: ${message}`;
         searchQuery = rewriteResult.rewritten;
       }
 
+      // ========================================
+      // 🚪 EARLY EXIT GUARDS (BEFORE retrieval/LLM)
+      // ========================================
+      // These guards prevent unnecessary retrieval and LLM calls for queries
+      // that we can deterministically handle with template responses.
+      // This is CRITICAL for:
+      // - Strong ambiguity: "6111", "ne?", "KDV" → NEEDS_CLARIFICATION immediately
+      // - Out-of-scope: "Einstein kimdir?", "Hava durumu" → OUT_OF_SCOPE immediately
+      //
+      // WHY HERE? Before semantic search to prevent:
+      // 1. Irrelevant docs being retrieved for out-of-scope queries
+      // 2. LLM hallucinating on ambiguous queries
+      // 3. Wasted compute on queries we can handle deterministically
+
+      const earlyQueryLower = message.toLowerCase().trim();
+      const earlyWordCount = earlyQueryLower.split(/\s+/).filter(w => w.length > 2).length;
+
+      // --- EARLY AMBIGUITY CHECK ---
+      const earlyAmbiguityCheck = {
+        justNumbers: /^\d+$/.test(message.trim()) || /^(\d+\s*\/\s*\d+)$/.test(message.trim()),
+        vagueQuestion: /^(ne|nasıl|nedir|neden|kim)\s*\??$/i.test(message.trim()),
+        tooShortNoQuestion: earlyWordCount < 2 && !message.includes('?'),
+        singleToken: message.trim().split(/\s+/).length === 1 && !/\?$/.test(message.trim())
+      };
+      const isEarlyAmbiguous = Object.values(earlyAmbiguityCheck).some(v => v);
+
+      // --- EARLY OUT-OF-SCOPE CHECK ---
+      // Domain terms from config (vergi, KDV, beyanname, etc.)
+      const earlyDomainTerms = [
+        ...domainConfig.keyTerms.map(t => t.toLowerCase()),
+        // Fallback tax terms if config is empty
+        ...(domainConfig.keyTerms.length === 0 ? [
+          'vergi', 'kdv', 'beyanname', 'mükellef', 'fatura', 'matrah', 'stopaj',
+          'tevkifat', 'muafiyet', 'istisna', 'kanun', 'madde', 'tebliğ', 'özelge',
+          'levha', 'vuk', 'gvk', 'kvk', 'damga', 'ötv', 'emlak'
+        ] : [])
+      ];
+      const hasDomainTerm = earlyDomainTerms.some(term => earlyQueryLower.includes(term));
+
+      // Non-tax patterns (clearly out of domain)
+      const OUT_OF_SCOPE_PATTERNS = [
+        /\b(einstein|newton|shakespeare|picasso)\b/i,  // Famous people
+        /\b(hava\s+durumu|weather)\b/i,                // Weather
+        /\b(futbol|basketbol|spor|maç)\b/i,            // Sports
+        /\b(yemek\s+tarifi|recipe)\b/i,                // Recipes
+        /\b(film|dizi|sinema|movie)\b/i,               // Entertainment
+        /^(merhaba|selam|hello|hi|hey)\s*\?*$/i,       // Greetings
+        /\b(astroloji|burç|horoscope)\b/i,             // Astrology
+      ];
+      const isEarlyOutOfScope = !hasDomainTerm && OUT_OF_SCOPE_PATTERNS.some(p => p.test(message));
+
+      // --- EARLY EXIT: NEEDS_CLARIFICATION ---
+      if (isEarlyAmbiguous) {
+        const ambiguityReason = Object.entries(earlyAmbiguityCheck)
+          .filter(([_, v]) => v)
+          .map(([k]) => k)
+          .join(', ');
+
+        console.log(`🚪 EARLY EXIT: NEEDS_CLARIFICATION (${ambiguityReason}) - skipping retrieval/LLM`);
+
+        // Save messages
+        await this.saveMessage(convId, 'user', message);
+        const clarificationResponse = this.generateClarificationResponse(message, responseLanguage);
+        await this.saveMessage(convId, 'assistant', clarificationResponse, [], activeModel);
+
+        return {
+          response: clarificationResponse,
+          sources: [],  // NO SOURCES for NEEDS_CLARIFICATION
+          relatedTopics: [],
+          followUpQuestions: [],
+          conversationId: convId,
+          provider: 'system',
+          model: 'deterministic',
+          providerDisplayName: 'Sistem',
+          language: responseLanguage,
+          fallbackUsed: false,
+          fastMode: false,
+          strictMode: false,
+          _debug: {
+            responseType: 'NEEDS_CLARIFICATION',
+            earlyExit: true,
+            earlyExitReason: ambiguityReason,
+            queryInScope: hasDomainTerm,
+            resultsCount: 0,
+            sourcesCount: 0,
+            deterministic: true
+          }
+        };
+      }
+
+      // --- EARLY EXIT: OUT_OF_SCOPE ---
+      if (isEarlyOutOfScope) {
+        console.log(`🚪 EARLY EXIT: OUT_OF_SCOPE - skipping retrieval/LLM`);
+
+        // Save messages
+        await this.saveMessage(convId, 'user', message);
+        const outOfScopeResponse = responseLanguage === 'tr'
+          ? 'Bu soru Vergilex kapsamı dışındadır. Türk vergi mevzuatı ile ilgili sorularınızda yardımcı olabilirim.'
+          : 'This question is outside Vergilex scope. I can help with questions about Turkish tax legislation.';
+        await this.saveMessage(convId, 'assistant', outOfScopeResponse, [], activeModel);
+
+        return {
+          response: outOfScopeResponse,
+          sources: [],  // NO SOURCES for OUT_OF_SCOPE
+          relatedTopics: [],
+          followUpQuestions: [],
+          conversationId: convId,
+          provider: 'system',
+          model: 'deterministic',
+          providerDisplayName: 'Sistem',
+          language: responseLanguage,
+          fallbackUsed: false,
+          fastMode: false,
+          strictMode: false,
+          _debug: {
+            responseType: 'OUT_OF_SCOPE',
+            earlyExit: true,
+            earlyExitReason: 'no_domain_term_plus_out_of_scope_pattern',
+            queryInScope: false,
+            resultsCount: 0,
+            sourcesCount: 0,
+            deterministic: true
+          }
+        };
+      }
+
+      console.log(`✅ EARLY EXIT CHECK PASSED: hasDomainTerm=${hasDomainTerm}, isAmbiguous=${isEarlyAmbiguous}, isOutOfScope=${isEarlyOutOfScope}`);
+
       // 🔍 Always perform semantic search (even when citations disabled)
       const searchMaxResults = citationsDisabled ? 5 : maxResults;
       if (citationsDisabled) {
