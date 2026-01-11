@@ -1962,79 +1962,43 @@ FORMAT:
         .map(([k, _]) => k)
         .join(', ');
 
-      // Detect OUT_OF_SCOPE patterns in response
-      const outOfScopePatterns = [
-        /kapsam\s*d[ıi][sş][ıi]/i,
-        /vergilex.*kapsam.*d[ıi][sş][ıi]/i,
-        /t[uü]rk\s+vergi\s+mevzuat[ıi].*ilgili\s+de[gğ]il/i,
-        /bu\s+(?:konu|soru).*(?:uzmanl[ıi]k|alan).*d[ıi][sş][ıi]nda/i
-      ];
-
-      // Detect NOT_FOUND patterns in response
-      const notFoundPatterns = [
-        /kaynaklarda.*bilgi\s+bulunamad[ıi]/i,
-        /bu\s+konuda.*(?:bilgi|kaynak).*bulunamad[ıi]/i,
-        /ilgili\s+kaynak\s+bulunamad[ıi]/i,
-        /yeterli\s+(?:bilgi|kaynak).*(?:yok|bulunamad[ıi])/i
-      ];
-
-      const responseContent = response.content;
-      const matchesOutOfScope = outOfScopePatterns.some(p => p.test(responseContent));
-      let matchesNotFound = notFoundPatterns.some(p => p.test(responseContent));
-
-      // 🔧 FIX: NOT_FOUND guard - if we have authoritative sources, LLM cannot say "bilgi yok"
-      // Authoritative sources: ozelge, kanun, teblig, danistay, sirkuler
-      const AUTHORITATIVE_TYPES = ['ozelge', 'özelge', 'kanun', 'teblig', 'tebliğ', 'danistay', 'danıştay', 'sirkuler', 'sirküler'];
-      const authoritativeCount = searchResults.filter(r => {
-        const sourceType = (r.source_type || r.source_table || '').toLowerCase();
-        return AUTHORITATIVE_TYPES.some(t => sourceType.includes(t));
-      }).length;
-
-      if (matchesNotFound && authoritativeCount > 0) {
-        console.log(`⚠️ NOT_FOUND OVERRIDE: LLM said "bulunamadı" but we have ${authoritativeCount} authoritative sources - forcing FOUND`);
-        matchesNotFound = false; // Override - we have sources, cannot say "not found"
-      }
-
       // ========================================
-      // 🎯 CONSOLIDATED RESPONSE TYPE DECISION
+      // 🎯 DETERMINISTIC RESPONSE TYPE (NO LLM PATTERN MATCHING)
       // ========================================
-      // This is the SINGLE source of truth for response type.
-      // NO contradictions - clear priority order with explicit conditions.
+      // ResponseType is PURELY based on:
+      // 1. searchResults.length (do we have results?)
+      // 2. isQueryInScope (does query contain domain terms?)
+      // 3. needsClarification (is query too short/unclear?)
       //
-      // Priority (highest to lowest):
-      // 1. FOUND: Have search results (in-scope or not) = answer it
-      // 2. NEEDS_CLARIFICATION: No results + unclear query + in-scope terms
-      // 3. NOT_FOUND: No results + LLM says not found + query was clear
-      // 4. OUT_OF_SCOPE: No results + query has no domain terms + LLM says out of scope
+      // LLM response content is NEVER checked for OUT_OF_SCOPE/NOT_FOUND patterns.
+      // This prevents regression when LLM produces unexpected responses.
       //
-      // KEY RULE: searchResults.length > 0 ALWAYS means FOUND (never override with NOT_FOUND)
+      // RULES (strict priority):
+      // 1. searchResults.length > 0 → FOUND (always)
+      // 2. searchResults.length == 0 + isQueryInScope → NOT_FOUND
+      // 3. searchResults.length == 0 + needsClarification → NEEDS_CLARIFICATION
+      // 4. searchResults.length == 0 + !isQueryInScope → OUT_OF_SCOPE
       let responseType: 'OUT_OF_SCOPE' | 'NOT_FOUND' | 'NEEDS_CLARIFICATION' | 'FOUND' = 'FOUND';
 
       if (searchResults.length > 0) {
-        // RULE 1: If we have results, ALWAYS answer (FOUND)
-        // Even if query doesn't match allowlist - results are relevant
+        // RULE 1: Results exist → FOUND (no exceptions)
         responseType = 'FOUND';
-        console.log(`✅ FOUND: ${searchResults.length} results found - proceeding to answer`);
-      } else if (isQueryInScope && needsClarification) {
-        // RULE 2: In-scope query but unclear + no results = ask for clarification
-        responseType = 'NEEDS_CLARIFICATION';
-        console.log(`🤔 NEEDS_CLARIFICATION: Query in scope but unclear (${clarificationReason})`);
-      } else if (!isQueryInScope && matchesOutOfScope) {
-        // RULE 3: Not in scope + LLM confirms = OUT_OF_SCOPE
-        responseType = 'OUT_OF_SCOPE';
-        console.log(`🚫 OUT_OF_SCOPE: Query not in domain scope`);
-      } else if (matchesNotFound) {
-        // RULE 4: No results + LLM says not found = NOT_FOUND
+        console.log(`✅ FOUND: ${searchResults.length} results - deterministic FOUND`);
+      } else if (isQueryInScope) {
+        // RULE 2: No results + in-scope → NOT_FOUND (single sentence, sources=[])
         responseType = 'NOT_FOUND';
-        console.log(`🔍 NOT_FOUND: No results and LLM confirms`);
+        console.log(`🔍 NOT_FOUND: No results for in-scope query - deterministic NOT_FOUND`);
       } else if (needsClarification) {
-        // RULE 5: Fallback - unclear query even if not in scope
+        // RULE 3: No results + unclear → NEEDS_CLARIFICATION
         responseType = 'NEEDS_CLARIFICATION';
         console.log(`🤔 NEEDS_CLARIFICATION: Unclear query (${clarificationReason})`);
+      } else {
+        // RULE 4: No results + not in scope → OUT_OF_SCOPE
+        responseType = 'OUT_OF_SCOPE';
+        console.log(`🚫 OUT_OF_SCOPE: No results, not in domain scope`);
       }
-      // Default: FOUND (be helpful rather than refusing)
 
-      console.log(`📋 RESPONSE TYPE: ${responseType} (queryInScope=${isQueryInScope}, matchesOutOfScope=${matchesOutOfScope}, matchesNotFound=${matchesNotFound}, needsClarification=${needsClarification}${needsClarification ? ' [' + clarificationReason + ']' : ''})`);
+      console.log(`📋 RESPONSE TYPE: ${responseType} [DETERMINISTIC] (results=${searchResults.length}, inScope=${isQueryInScope}, unclear=${needsClarification}${needsClarification ? ' [' + clarificationReason + ']' : ''})`);
 
       // ========================================
       // APPLY BEHAVIORAL CONTRACT
@@ -2060,10 +2024,12 @@ FORMAT:
         // NO enforceResponseFormat
       } else {
         // D) FOUND: Apply format enforcement ONLY for found responses
+        // Pass original message for verdict question detection
         response.content = this.enforceResponseFormat(
           response.content,
           searchResults,
-          responseLanguage
+          responseLanguage,
+          message  // Original user query for verdict detection
         );
       }
 
@@ -2154,15 +2120,15 @@ FORMAT:
           fastModeFinalSources = [];
         } else {
           // FOUND: Apply format enforcement only for found responses
-          fastModeResponse = this.enforceResponseFormat(response.content, searchResults, responseLanguage);
+          // Pass original message for verdict question detection
+          fastModeResponse = this.enforceResponseFormat(response.content, searchResults, responseLanguage, message);
         }
 
         // 📊 DEBUG INFO for fast mode
         const fastModeDebugInfo = {
           responseType,
           queryInScope: isQueryInScope,
-          matchesOutOfScope,
-          matchesNotFound,
+          resultsCount: searchResults.length,
           needsClarification,
           clarificationReason: needsClarification ? clarificationReason : null,
           sourcesCount: fastModeFinalSources.length,
@@ -2757,7 +2723,40 @@ FORMAT:
       }
     }
 
-    // Default: return full content if no specific section found
+    // ========================================
+    // 🔄 FALLBACK: Extract verdict-containing sentences when section headers not found
+    // ========================================
+    // If no explicit section headers found, look for sentences containing verdict patterns
+    const FALLBACK_VERDICT_PATTERNS = [
+      /bu\s+durumda[^.]*\./gi,           // "Bu durumda ... ."
+      /sonuç\s+olarak[^.]*\./gi,         // "Sonuç olarak ... ."
+      /uygun\s+görülmüştür[^.]*\./gi,    // "... uygun görülmüştür."
+      /mümkün\s+(?:değildir|bulunmaktadır)[^.]*\./gi,  // "... mümkün değildir/bulunmaktadır."
+      /mümkündür[^.]*\./gi,              // "... mümkündür."
+      /gerekmektedir[^.]*\./gi,          // "... gerekmektedir."
+      /zorunludur[^.]*\./gi,             // "... zorunludur."
+      /yasaktır[^.]*\./gi,               // "... yasaktır."
+      /asılabilir[^.]*\./gi,             // "... asılabilir."
+      /bulundurulabilir[^.]*\./gi,       // "... bulundurulabilir."
+      /kaldırılmıştır[^.]*\./gi          // "... kaldırılmıştır."
+    ];
+
+    const verdictSentences: string[] = [];
+    for (const pattern of FALLBACK_VERDICT_PATTERNS) {
+      const matches = content.match(pattern);
+      if (matches) {
+        verdictSentences.push(...matches);
+      }
+    }
+
+    if (verdictSentences.length > 0) {
+      // Return the first few verdict-containing sentences (max 3)
+      const extracted = verdictSentences.slice(0, 3).join(' ');
+      console.log('[SECTION-FINDER] Extracted fallback verdict sentences: ' + extracted.substring(0, 50) + '...');
+      return extracted;
+    }
+
+    // Default: return full content if no specific section or verdict patterns found
     return content;
   }
 
@@ -2770,11 +2769,17 @@ FORMAT:
    * 1. If **CEVAP** missing, wrap response content in **CEVAP** section
    * 2. If **ALINTI** missing, add empty **ALINTI** with appropriate message
    * 3. Never return response without both headers
+   *
+   * EVIDENCE-FIRST CONTRACT:
+   * For verdict questions (mümkün mü, zorunlu mu, etc.):
+   * - If ALINTI found: Show definitive verdict
+   * - If ALINTI NOT found: BLOCK all half-verdicts, show "hüküm cümlesi seçilemedi" + sources
    */
   private enforceResponseFormat(
     responseText: string,
     searchResults: any[],
-    language: string = 'tr'
+    language: string = 'tr',
+    originalQuery: string = ''  // Original user query for verdict detection
   ): string {
     let result = responseText;
 
@@ -2865,6 +2870,34 @@ FORMAT:
 
         for (const sentence of sentences) {
           const sentenceLower = sentence.toLowerCase();
+
+          // ========================================
+          // 🚫 HARD FILTER: Non-verdict sentences are NEVER candidates
+          // ========================================
+          // These patterns indicate preamble/question text, NOT rulings.
+          // Unlike penalty-based scoring, these sentences are SKIPPED entirely.
+          const NON_VERDICT_HARD_FILTERS = [
+            /ilgi\s+dilekçe/i,           // "İlgi dilekçenizden..."
+            /dilekçeniz(?:de|den|le)/i,  // "Dilekçenizde..."
+            /sorulmaktadır/i,            // "...sorulmaktadır"
+            /sorulmuştur/i,              // "...sorulmuştur"
+            /tereddüt/i,                 // Any mention of "tereddüt" = not a ruling
+            /talep\s+edilmektedir/i,     // "talep edilmektedir"
+            /bilgi\s+(?:verilmesi|istenmiş)/i,   // "bilgi verilmesi istenmiştir"
+            /(?:yukarıda|aşağıda)\s+(?:belirtilen|açıklanan)/i, // meta-references
+            /(?:hususunda|konusunda)\s+görüş/i,  // "hususunda görüşünüz"
+            /başvuru(?:nuz|da)/i,        // "başvurunuzda..."
+            /talebiniz/i,                // "talebiniz..."
+            /soru(?:nuz|larınız)/i       // "sorunuz..."
+          ];
+
+          // HARD FILTER: Skip this sentence entirely if it matches
+          const isNonVerdict = NON_VERDICT_HARD_FILTERS.some(p => p.test(sentence));
+          if (isNonVerdict) {
+            console.log(`[QUOTE-SCORER] 🚫 HARD FILTER: Skipping non-verdict sentence: "${sentence.substring(0, 40)}..."`);
+            continue; // Skip to next sentence - this one is NOT a candidate
+          }
+
           // Score based on how many key terms are present
           let score = 0;
           for (const term of keyTermsLower) {
@@ -2879,25 +2912,6 @@ FORMAT:
             score += 2;
           } else if (sourceTypeLower.includes('danistay') || sourceTypeLower.includes('danıştay')) {
             score += 2;
-          }
-
-          // 🔧 FIX: NEGATIVE score for non-verdict patterns (dilekçe, tereddüt, soru)
-          // These are preamble/question text, NOT rulings
-          const NON_VERDICT_PATTERNS = [
-            /ilgi\s+dilekçe/i,           // "İlgi dilekçenizden..."
-            /dilekçeniz(?:de|den)/i,     // "Dilekçenizde..."
-            /sorulmaktadır/i,            // "...sorulmaktadır"
-            /sorulmuştur/i,              // "...sorulmuştur"
-            /tereddüt\s+(?:edilmiş|hasıl|oluş)/i, // "tereddüt edilmiştir"
-            /talep\s+edilmektedir/i,     // "talep edilmektedir"
-            /bilgi\s+(?:verilmesi|istenmiş)/i,   // "bilgi verilmesi istenmiştir"
-            /(?:yukarıda|aşağıda)\s+(?:belirtilen|açıklanan)/i, // meta-references
-            /(?:hususunda|konusunda)\s+görüş/i   // "hususunda görüşünüz"
-          ];
-          for (const pattern of NON_VERDICT_PATTERNS) {
-            if (pattern.test(sentence)) {
-              score -= 5; // Heavy penalty - this is NOT a ruling
-            }
           }
 
           // 🔧 AGGRESSIVE: Bonus for verdict-like sentences
@@ -2943,7 +2957,11 @@ FORMAT:
         // Sistem asla "bilgi yok" demesin; kaynakları göstersin
         console.log('[FORMAT] 🔒 EVIDENCE-FIRST: No quote found (bestScore=' + bestScore + ') - applying contract');
 
-        // Detect if this is a "hukuki hüküm" question (evet/hayır, zorunlu mu, kaldırıldı mı)
+        // ========================================
+        // 🔒 VERDICT QUESTION DETECTION
+        // ========================================
+        // Uses ORIGINAL user query, NOT LLM response text!
+        // This prevents false negatives when LLM doesn't echo the question.
         const VERDICT_QUESTION_PATTERNS = [
           /\b(?:mümkün\s+mü|mümkün\s+müdür|olabilir\s+mi)\b/i,
           /\b(?:zorunlu\s+mu|mecburi\s+mi|gerekli\s+mi|şart\s+mı)\b/i,
@@ -2951,24 +2969,43 @@ FORMAT:
           /\b(?:kaldırıldı\s+mı|kalktı\s+mı|yürürlükte\s+mi)\b/i,
           /\b(?:asılabilir\s+mi|asılır\s+mı|bulundurulabilir\s+mi)\b/i,
           /\b(?:uygulanır\s+mı|geçerli\s+mi)\b/i,
-          /\b(?:var\s+mı|yok\s+mu)\b/i
+          /\b(?:var\s+mı|yok\s+mu)\b/i,
+          // Additional patterns for implicit verdict questions
+          /\b(?:zorunlu(?:luk|luğu)?)\s+var\b/i,  // "zorunluluk var mı"
+          /\b(?:asma|bulundurma)\s+(?:mecburiyeti|zorunluluğu)\b/i  // "asma zorunluluğu"
         ];
 
-        const originalMessage = answerText; // from cevapMatch earlier
-        const isVerdictQuestion = VERDICT_QUESTION_PATTERNS.some(p => p.test(originalMessage));
+        // Check ORIGINAL query, not LLM response
+        const queryToCheck = originalQuery || answerText;
+        const isVerdictQuestion = VERDICT_QUESTION_PATTERNS.some(p => p.test(queryToCheck));
+
+        console.log(`[FORMAT] Verdict check: query="${queryToCheck.substring(0, 50)}...", isVerdict=${isVerdictQuestion}`);
 
         if (isVerdictQuestion && searchResults.length > 0) {
-          // 🔒 CONTRACT: Verdict question but no quote = cannot give definitive answer
-          console.log('[FORMAT] 🔒 Verdict question detected - replacing with source-reference response');
+          // ========================================
+          // 🔒 HARD GATE: Verdict question + no quote = BLOCK ALL HALF-VERDICTS
+          // ========================================
+          // "asılabilir", "mümkün olabilir", "zorunlu olabilir" gibi yarım-hükümler YASAK.
+          // Sadece "hüküm cümlesi seçilemedi" mesajı ve kaynaklar gösterilir.
+          console.log('[FORMAT] 🔒 HARD GATE: Verdict question with no quote - blocking half-verdicts');
 
-          // Build source list (top 3)
-          const topSources = searchResults.slice(0, 3).map((r, i) => {
+          // Build source list (top 3, sorted by hierarchy: Kanun > Tebliğ > Özelge > Danıştay)
+          const sourceHierarchy = ['kanun', 'teblig', 'tebliğ', 'ozelge', 'özelge', 'danistay', 'danıştay', 'sirkuler'];
+          const sortedSources = [...searchResults].sort((a, b) => {
+            const typeA = (a.source_type || a.source_table || '').toLowerCase();
+            const typeB = (b.source_type || b.source_table || '').toLowerCase();
+            const indexA = sourceHierarchy.findIndex(h => typeA.includes(h));
+            const indexB = sourceHierarchy.findIndex(h => typeB.includes(h));
+            return (indexA === -1 ? 99 : indexA) - (indexB === -1 ? 99 : indexB);
+          });
+
+          const topSources = sortedSources.slice(0, 3).map((r, i) => {
             const title = r.title || 'Kaynak';
             const type = r.source_type || r.source_table || 'Belge';
             return `${i + 1}. **${title}** (${type})`;
           }).join('\n');
 
-          // 🔒 REPLACE entire response with evidence-first message
+          // 🔒 REPLACE entire response - NO HALF-VERDICTS ALLOWED
           const evidenceFirstResponse = language === 'tr'
             ? `**CEVAP**\nBu konuda kaynak bulunmakla birlikte, net hüküm cümlesi otomatik olarak seçilememiştir.\n\nAşağıdaki kaynaklarda ilgili bölümün incelenmesi önerilir:\n${topSources}\n\n_Kesin bilgi için yukarıdaki kaynaklara doğrudan başvurunuz._`
             : `**ANSWER**\nSources were found on this topic, but a clear ruling sentence could not be automatically extracted.\n\nPlease review the relevant sections in these sources:\n${topSources}\n\n_Please refer directly to the sources above for definitive information._`;
@@ -2979,65 +3016,29 @@ FORMAT:
             : '_A clear ruling sentence could not be automatically extracted. Please review the relevant sections in the sources above._';
 
         } else {
-          // Non-verdict question (tanım, açıklama) - soften but allow
-          console.log('[FORMAT] Non-verdict question - softening claims');
-
-          // Strong claim patterns that MUST be softened without quote support
-          const strongClaimPatterns = [
-            { pattern: /\bzorunludur\b/gi, soft: 'zorunlu olabilir' },
-            { pattern: /\bmecburidir\b/gi, soft: 'mecburi olabilir' },
-            { pattern: /\byasaktır\b/gi, soft: 'yasak olabilir' },
-            { pattern: /\bmümkündür\b/gi, soft: 'mümkün olabilir' },
-            { pattern: /\bmümkün değildir\b/gi, soft: 'mümkün olmayabilir' },
-            { pattern: /\basılabilir\b/gi, soft: 'asılabileceği değerlendirilebilir' },
-            { pattern: /\basılamaz\b/gi, soft: 'asılamayabileceği değerlendirilebilir' },
-            { pattern: /\bbulundurulabilir\b/gi, soft: 'bulundurulabileceği değerlendirilebilir' },
-            { pattern: /\bbulundurulamaz\b/gi, soft: 'bulundurulamayabileceği değerlendirilebilir' },
-            { pattern: /\bkesinlikle\s+(?:yapılamaz|olamaz)\b/gi, soft: 'yapılamayabileceği değerlendirilebilir' },
-            { pattern: /\bceza\s+(?:uygulanır|kesilir)\b/gi, soft: 'ceza uygulanabilir' }
-          ];
-
-          const hasCevapHeader = result.includes('**CEVAP**');
-          if (hasCevapHeader) {
-            const cevapMatch = result.match(/\*\*CEVAP\*\*\s*([\s\S]*?)(?=\*\*[A-Z]|\n\n\n|$)/i);
-            if (cevapMatch && cevapMatch[1]) {
-              let cevapContent = cevapMatch[1];
-              let softenedCount = 0;
-
-              for (const { pattern, soft } of strongClaimPatterns) {
-                if (pattern.test(cevapContent)) {
-                  cevapContent = cevapContent.replace(pattern, soft);
-                  softenedCount++;
-                  pattern.lastIndex = 0;
-                }
-              }
-
-              if (softenedCount > 0) {
-                console.log(`[FORMAT] 🔄 Softened ${softenedCount} strong claim(s)`);
-                result = result.replace(
-                  /(\*\*CEVAP\*\*\s*)([\s\S]*?)(?=\*\*[A-Z]|\n\n\n|$)/i,
-                  '$1' + cevapContent
-                );
-              }
-            }
-          }
+          // Non-verdict question (tanım, açıklama, nedir, nasıl)
+          // These can show LLM response with disclaimer, but NO HALF-VERDICTS
+          console.log('[FORMAT] Non-verdict question - adding disclaimer only (no softening)');
 
           // Add disclaimer for non-verdict questions
+          // NOTE: We do NOT soften claims anymore - softening creates half-verdicts like "asılamayabilir"
           const noQuoteDisclaimer = language === 'tr'
-            ? '\n\n_⚠️ Uyarı: Bu değerlendirme kaynaklara dayanmaktadır ancak doğrudan destekleyen alıntı tespit edilememiştir._'
-            : '\n\n_⚠️ Warning: This assessment is based on sources but no direct supporting quote was found._';
+            ? '\n\n_⚠️ Bu bilgi kaynaklara dayanmaktadır ancak doğrudan destekleyen alıntı tespit edilememiştir. Kesin bilgi için ilgili mevzuata başvurunuz._'
+            : '\n\n_⚠️ This information is based on sources but no direct supporting quote was found. Please refer to the relevant legislation for definitive information._';
 
-          result = result.replace(
-            /(\*\*CEVAP\*\*\s*[\s\S]*?)(?=\*\*[A-Z]|\n\n\n|$)/i,
-            '$1' + noQuoteDisclaimer
-          );
+          // Only add disclaimer, do not modify content
+          if (!result.includes('⚠️')) {
+            result = result.replace(
+              /(\*\*CEVAP\*\*\s*[\s\S]*?)(?=\*\*[A-Z]|\n\n\n|$)/i,
+              '$1' + noQuoteDisclaimer
+            );
+          }
 
           // Set ALINTI content for non-verdict questions (no quote found)
           alintıContent = language === 'tr'
             ? '_Kaynaklarda bu konuya ilişkin içerik bulunmakla birlikte, cevabı doğrudan destekleyen kısa ve net bir alıntı tespit edilememiştir._'
             : '_While sources contain relevant content, no short and clear quote directly supporting this answer was found._';
         }
-        // NOTE: For verdict questions, alintıContent was already set above (lines 2788-2790)
       }
 
       // Append ALINTI section

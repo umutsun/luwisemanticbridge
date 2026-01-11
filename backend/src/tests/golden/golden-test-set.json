@@ -1,0 +1,203 @@
+{
+  "version": "1.1",
+  "created": "2026-01-11",
+  "description": "Golden test set for RAG pipeline regression testing - 6 ACCEPTANCE CRITERIA",
+  "acceptanceCriteria": {
+    "1_verdict_no_quote_no_verdict": {
+      "description": "Verdict questions without quote get 'hüküm cümlesi seçilemedi' - NO half-verdicts",
+      "rule": "If verdict question + no ALINTI → response must be 'kaynak var ancak hüküm cümlesi seçilemedi' with sources"
+    },
+    "2_section_finder_correct": {
+      "description": "Section finder targets correct parts of document",
+      "rule": "Özelge: Açıklamalar/Sonuç/Cevap | Danıştay: HÜKÜM/SONUÇ/Karar | Kanun: Madde"
+    },
+    "3_quote_scorer_hard_filter": {
+      "description": "dilekçe/tereddüt sentences are NEVER selected as quotes",
+      "rule": "Hard filter (skip), not penalty - these sentences cannot win even with high term matches"
+    },
+    "4_response_type_deterministic": {
+      "description": "ResponseType is purely based on results count and scope - NO LLM pattern matching",
+      "rule": "results > 0 → FOUND | results == 0 + inScope → NOT_FOUND | results == 0 + unclear → NEEDS_CLARIFICATION | results == 0 + !inScope → OUT_OF_SCOPE"
+    },
+    "5_source_display": {
+      "description": "3-5 sentences max, top 3 sources by hierarchy",
+      "rule": "Hierarchy: Kanun > Tebliğ > Özelge > Danıştay | FOUND shows sources, others show sources=[]"
+    },
+    "6_ci_integration": {
+      "description": "This file must be in repo (not gitignored) for CI integration",
+      "rule": "File at backend/src/tests/golden/golden-test-set.json - deploy gate checks invariants"
+    }
+  },
+  "tests": [
+    {
+      "id": 1,
+      "category": "verdict",
+      "question": "Şube işyerlerinde merkez için tasdikli vergi levhası fotokopisi asılabilir mi?",
+      "expectedResponseType": "FOUND",
+      "verdictQuestion": true,
+      "requiresQuote": true,
+      "expectedBehavior": "If quote found → definitive answer | If no quote → 'hüküm cümlesi seçilemedi' + sources",
+      "tags": ["levha", "şube", "fotokopi", "critical"]
+    },
+    {
+      "id": 2,
+      "category": "verdict",
+      "question": "Nakliye araçlarında vergi levhası fotokopisi bulundurmak mümkün mü?",
+      "expectedResponseType": "FOUND",
+      "verdictQuestion": true,
+      "requiresQuote": true,
+      "expectedBehavior": "If quote found → definitive answer | If no quote → 'hüküm cümlesi seçilemedi' + sources",
+      "tags": ["levha", "araç", "fotokopi", "critical"]
+    },
+    {
+      "id": 3,
+      "category": "verdict",
+      "question": "Vergi levhasını işyerine asma zorunluluğu var mı?",
+      "expectedResponseType": "FOUND",
+      "verdictQuestion": true,
+      "requiresQuote": true,
+      "expectedBehavior": "If quote found → definitive answer | If no quote → 'hüküm cümlesi seçilemedi' + sources",
+      "tags": ["levha", "zorunluluk", "critical"]
+    },
+    {
+      "id": 4,
+      "category": "verdict",
+      "question": "6111/82 vergi levhası asma zorunluluğunu kaldırdı mı?",
+      "expectedResponseType": "FOUND",
+      "verdictQuestion": true,
+      "requiresQuote": true,
+      "expectedBehavior": "Must find 6111 kanun sources | If quote → answer | If no quote → sources only",
+      "tags": ["6111", "levha", "kaldırıldı", "critical"]
+    },
+    {
+      "id": 5,
+      "category": "verdict",
+      "question": "Fason tekstil ve konfeksiyon işlerinde KDV tevkifatı 107 mi 117 mi; güncel çerçeve hangisi?",
+      "expectedResponseType": "FOUND",
+      "verdictQuestion": true,
+      "requiresQuote": true,
+      "expectedBehavior": "Requires tebliğ/özelge source | If quote → answer | If no quote → sources only",
+      "tags": ["KDV", "tevkifat", "fason"]
+    },
+    {
+      "id": 6,
+      "category": "definition",
+      "question": "KDV tevkifatı nedir?",
+      "expectedResponseType": "FOUND",
+      "verdictQuestion": false,
+      "requiresQuote": false,
+      "expectedBehavior": "Definition question - LLM can answer with disclaimer if no quote",
+      "tags": ["KDV", "tevkifat", "tanım"]
+    },
+    {
+      "id": 7,
+      "category": "short_query",
+      "question": "vergi levha fotokopi",
+      "expectedResponseType": "FOUND",
+      "verdictQuestion": false,
+      "requiresQuote": false,
+      "expectedBehavior": "Short query but valid domain terms - should find results",
+      "tags": ["levha", "fotokopi", "short"]
+    },
+    {
+      "id": 8,
+      "category": "short_query",
+      "question": "6111",
+      "expectedResponseType": ["FOUND", "NEEDS_CLARIFICATION"],
+      "verdictQuestion": false,
+      "requiresQuote": false,
+      "expectedBehavior": "Query rewriting should expand to '6111 vergi yapılandırma VUK 5'",
+      "tags": ["6111", "short", "expansion"]
+    },
+    {
+      "id": 9,
+      "category": "edge_case",
+      "question": "ne?",
+      "expectedResponseType": "NEEDS_CLARIFICATION",
+      "verdictQuestion": false,
+      "requiresQuote": false,
+      "expectedBehavior": "Too short, unclear - ask for clarification, sources=[]",
+      "invariants": {
+        "sourcesCount": 0
+      },
+      "tags": ["unclear", "short"]
+    },
+    {
+      "id": 10,
+      "category": "out_of_scope",
+      "question": "Einstein kimdir?",
+      "expectedResponseType": "OUT_OF_SCOPE",
+      "verdictQuestion": false,
+      "requiresQuote": false,
+      "expectedBehavior": "Not in domain scope, no results expected, sources=[]",
+      "invariants": {
+        "sourcesCount": 0
+      },
+      "tags": ["out_of_scope", "non_tax"]
+    },
+    {
+      "id": 11,
+      "category": "edge_case",
+      "question": "111 sayılı Kanun'un 82. maddesi vergi levhası",
+      "expectedResponseType": ["FOUND", "NEEDS_CLARIFICATION"],
+      "verdictQuestion": false,
+      "requiresQuote": false,
+      "expectedBehavior": "Possible typo (6111 vs 111) - should either find results or ask for clarification",
+      "tags": ["typo", "clarification"]
+    },
+    {
+      "id": 12,
+      "category": "policy_test",
+      "question": "Türk Medeni Kanunu'nda miras payı nedir?",
+      "expectedResponseType": ["OUT_OF_SCOPE", "NOT_FOUND"],
+      "verdictQuestion": false,
+      "requiresQuote": false,
+      "expectedBehavior": "Policy: Either OUT_OF_SCOPE (not tax law) or correct TMK source - NEVER answer with tax özelge",
+      "invariants": {
+        "mustNotIncludeSourceType": ["ozelge", "özelge"]
+      },
+      "tags": ["policy", "scope", "TMK"]
+    }
+  ],
+  "invariants": {
+    "responseType_FOUND": {
+      "condition": "responseType === 'FOUND'",
+      "assertions": ["sourcesCount >= 1", "hasCevap === true"]
+    },
+    "responseType_NOT_FOUND": {
+      "condition": "responseType === 'NOT_FOUND'",
+      "assertions": ["sourcesCount === 0"]
+    },
+    "responseType_NEEDS_CLARIFICATION": {
+      "condition": "responseType === 'NEEDS_CLARIFICATION'",
+      "assertions": ["sourcesCount === 0"]
+    },
+    "responseType_OUT_OF_SCOPE": {
+      "condition": "responseType === 'OUT_OF_SCOPE'",
+      "assertions": ["sourcesCount === 0"]
+    },
+    "verdict_question_no_quote": {
+      "condition": "verdictQuestion === true && hasAlinti === false",
+      "assertions": [
+        "response does NOT contain 'mümkün olabilir'",
+        "response does NOT contain 'asılamayabilir'",
+        "response does NOT contain 'zorunlu olabilir'",
+        "response contains 'hüküm cümlesi' or 'seçilemedi'"
+      ]
+    },
+    "quote_selection": {
+      "condition": "hasAlinti === true",
+      "assertions": [
+        "quote does NOT contain 'dilekçe'",
+        "quote does NOT contain 'tereddüt'",
+        "quote does NOT contain 'sorulmaktadır'"
+      ]
+    }
+  },
+  "ciGate": {
+    "required": true,
+    "description": "Deploy gate must pass all invariants before deployment",
+    "failOnViolation": true,
+    "criticalTests": [1, 2, 3, 4, 9, 10]
+  }
+}
