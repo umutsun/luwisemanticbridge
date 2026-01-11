@@ -2132,65 +2132,89 @@ FORMAT:
       });
 
       // ========================================
-      // 6b. RANK AND LIMIT SOURCES (Hierarchy + Relevance)
+      // 6b. RANK AND LIMIT SOURCES (Hierarchy + Relevance + Threshold)
       // ========================================
-      // Sort by: 1) Source type hierarchy weight, 2) Similarity score
-      // Then limit to maxSourcesToShow (configurable via RAG Settings)
-      const maxSourcesToShow = parseInt(settingsMap.get('ragSettings.maxSourcesToShow') || '3');
+      // 1. Add hierarchy weight + combined score to all sources
+      // 2. Filter by similarity threshold (from RAG Settings)
+      // 3. Apply min/max bounds (from RAG Settings)
+      const maxSourcesToShow = parseInt(settingsMap.get('ragSettings.maxSourcesToShow') || '5');
       const minSourcesToShow = parseInt(settingsMap.get('ragSettings.minSourcesToShow') || '1');
+      // Use the same threshold as search (already loaded earlier)
+      const sourceThreshold = parseFloat(
+        settingsMap.get('ragSettings.similarityThreshold') ||
+        settingsMap.get('similarityThreshold') ||
+        '0.25'
+      );
 
-      // Rank sources by hierarchy weight (from sourceTypeHierarchy) + similarity score
-      const rankedSources = formattedSources
-        .map(source => {
-          // Get source type from multiple possible fields
-          // Priority: source_type > sourceTable > category > metadata.source_type
-          const rawSourceType = (
-            source.source_type ||
-            source.sourceTable ||
-            source.category ||
-            source.metadata?.source_type ||
-            source.metadata?.sourceTable ||
-            'document'
-          ).toLowerCase();
+      // Step 1: Add hierarchy weight and combined score to all sources
+      const sourcesWithScores = formattedSources.map(source => {
+        // Get source type from multiple possible fields
+        const rawSourceType = (
+          source.source_type ||
+          source.sourceTable ||
+          source.category ||
+          source.metadata?.source_type ||
+          source.metadata?.sourceTable ||
+          'document'
+        ).toLowerCase();
 
-          // Normalize source type (remove csv_ prefix, etc.)
-          const sourceType = rawSourceType
-            .replace(/^csv_/, '')
-            .replace(/_/g, '')
-            .replace(/arsiv.*/, '');  // "makale_arsiv_2021" -> "makale"
+        // Normalize source type (remove csv_ prefix, etc.)
+        const sourceType = rawSourceType
+          .replace(/^csv_/, '')
+          .replace(/_/g, '')
+          .replace(/arsiv.*/, '');  // "makale_arsiv_2021" -> "makale"
 
-          // Get hierarchy weight from domainConfig.authorityLevels (loaded from RAG Settings)
-          let hierarchyWeight = domainConfig.authorityLevels[sourceType] || 0;
+        // Get hierarchy weight from domainConfig.authorityLevels (loaded from RAG Settings)
+        let hierarchyWeight = domainConfig.authorityLevels[sourceType] || 0;
 
-          // Try partial matches for source types like "danistaykararlari" -> "danistay"
-          if (hierarchyWeight === 0) {
-            for (const [key, weight] of Object.entries(domainConfig.authorityLevels)) {
-              if (sourceType.includes(key) || key.includes(sourceType)) {
-                hierarchyWeight = weight;
-                break;
-              }
+        // Try partial matches for source types like "danistaykararlari" -> "danistay"
+        if (hierarchyWeight === 0) {
+          for (const [key, weight] of Object.entries(domainConfig.authorityLevels)) {
+            if (sourceType.includes(key) || key.includes(sourceType)) {
+              hierarchyWeight = weight;
+              break;
             }
           }
+        }
 
-          // Final fallback to default weight
-          if (hierarchyWeight === 0) {
-            hierarchyWeight = 20; // Low default for unknown sources
-          }
+        // Final fallback to default weight
+        if (hierarchyWeight === 0) {
+          hierarchyWeight = 20; // Low default for unknown sources
+        }
 
-          // Combined score: hierarchy weight (70%) + similarity score (30%)
-          const similarityScore = source.score || source.similarity_score || 0.5;
-          const combinedScore = (hierarchyWeight / 100) * 0.7 + similarityScore * 0.3;
+        // Get similarity score (normalized 0-1)
+        const similarityScore = source.score || source.similarity_score || 0;
 
-          return {
-            ...source,
-            _hierarchyWeight: hierarchyWeight,
-            _combinedScore: combinedScore
-          };
-        })
-        .sort((a, b) => b._combinedScore - a._combinedScore)
-        .slice(0, Math.max(minSourcesToShow, maxSourcesToShow));
+        // Combined score: hierarchy weight (70%) + similarity score (30%)
+        const combinedScore = (hierarchyWeight / 100) * 0.7 + similarityScore * 0.3;
 
-      console.log(`📊 [SOURCES] Ranked ${formattedSources.length} → Top ${rankedSources.length} (max=${maxSourcesToShow})`);
+        return {
+          ...source,
+          _hierarchyWeight: hierarchyWeight,
+          _similarityScore: similarityScore,
+          _combinedScore: combinedScore
+        };
+      });
+
+      // Step 2: Sort by combined score (hierarchy + similarity)
+      const sortedSources = sourcesWithScores.sort((a, b) => b._combinedScore - a._combinedScore);
+
+      // Step 3: Filter by similarity threshold, then apply min/max bounds
+      const sourcesAboveThreshold = sortedSources.filter(s => s._similarityScore >= sourceThreshold);
+
+      let rankedSources: typeof sortedSources;
+      if (sourcesAboveThreshold.length >= maxSourcesToShow) {
+        // More than max passed threshold → take top max
+        rankedSources = sourcesAboveThreshold.slice(0, maxSourcesToShow);
+      } else if (sourcesAboveThreshold.length >= minSourcesToShow) {
+        // Between min and max passed threshold → take all that passed
+        rankedSources = sourcesAboveThreshold;
+      } else {
+        // Less than min passed threshold → take top min (even below threshold)
+        rankedSources = sortedSources.slice(0, minSourcesToShow);
+      }
+
+      console.log(`📊 [SOURCES] Total=${formattedSources.length}, AboveThreshold(${(sourceThreshold * 100).toFixed(0)}%)=${sourcesAboveThreshold.length}, Showing=${rankedSources.length} (min=${minSourcesToShow}, max=${maxSourcesToShow})`);
       rankedSources.forEach((s, i) => {
         const detectedType = s.sourceTable || s.category || s.source_type || 'unknown';
         console.log(`   ${i + 1}. ${detectedType} (weight=${s._hierarchyWeight}, combined=${(s._combinedScore * 100).toFixed(1)}%): ${s.title?.substring(0, 40)}...`);
