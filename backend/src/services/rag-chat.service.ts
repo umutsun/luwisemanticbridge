@@ -3197,16 +3197,41 @@ FORMAT:
             return (indexA === -1 ? 99 : indexA) - (indexB === -1 ? 99 : indexB);
           });
 
+          // Enhanced source list with relevance context
           const topSources = sortedSources.slice(0, 3).map((r, i) => {
             const title = r.title || 'Kaynak';
             const type = r.source_type || r.source_table || 'Belge';
-            return `${i + 1}. **${title}** (${type})`;
-          }).join('\n');
+            const score = r.similarity_score || r.score || 0;
+            const relevance = score > 0.7 ? '●●●' : score > 0.5 ? '●●○' : '●○○';
+            // Extract date if available
+            const date = r.metadata?.tarih || r.metadata?.date || '';
+            const dateStr = date ? ` (${date})` : '';
+            return `${i + 1}. **${title}**${dateStr}\n   _Tür: ${type} | Eşleşme: ${relevance}_`;
+          }).join('\n\n');
+
+          // Count source types for justification
+          const sourceTypeCounts = sortedSources.slice(0, 5).reduce((acc, r) => {
+            const type = (r.source_type || r.source_table || 'diger').toLowerCase();
+            if (type.includes('ozelge') || type.includes('özelge')) acc.ozelge++;
+            else if (type.includes('kanun')) acc.kanun++;
+            else if (type.includes('teblig') || type.includes('tebliğ')) acc.teblig++;
+            else if (type.includes('danistay') || type.includes('danıştay')) acc.danistay++;
+            else acc.diger++;
+            return acc;
+          }, { ozelge: 0, kanun: 0, teblig: 0, danistay: 0, diger: 0 });
+
+          // Build justification based on what we found
+          const foundTypes = [];
+          if (sourceTypeCounts.kanun > 0) foundTypes.push(`${sourceTypeCounts.kanun} kanun`);
+          if (sourceTypeCounts.teblig > 0) foundTypes.push(`${sourceTypeCounts.teblig} tebliğ`);
+          if (sourceTypeCounts.ozelge > 0) foundTypes.push(`${sourceTypeCounts.ozelge} özelge`);
+          if (sourceTypeCounts.danistay > 0) foundTypes.push(`${sourceTypeCounts.danistay} Danıştay kararı`);
+          const foundTypesStr = foundTypes.length > 0 ? foundTypes.join(', ') : 'çeşitli belgeler';
 
           // 🔒 REPLACE entire response - NO HALF-VERDICTS ALLOWED
           const evidenceFirstResponse = language === 'tr'
-            ? `**CEVAP**\nBu konuda kaynak bulunmakla birlikte, net hüküm cümlesi otomatik olarak seçilememiştir.\n\nAşağıdaki kaynaklarda ilgili bölümün incelenmesi önerilir:\n${topSources}\n\n_Kesin bilgi için yukarıdaki kaynaklara doğrudan başvurunuz._`
-            : `**ANSWER**\nSources were found on this topic, but a clear ruling sentence could not be automatically extracted.\n\nPlease review the relevant sections in these sources:\n${topSources}\n\n_Please refer directly to the sources above for definitive information._`;
+            ? `**CEVAP**\n🔍 **Arama Sonucu:** Bu konuda ${foundTypesStr} bulundu.\n\n⚠️ **Neden net hüküm yok?**\nBulunan belgelerde sorunuzla doğrudan örtüşen tek bir hüküm cümlesi tespit edilemedi. Bu durum şu nedenlerden kaynaklanabilir:\n• İlgili hüküm belgenin farklı bir bölümünde olabilir\n• Konu birden fazla mevzuatta ele alınmış olabilir\n• Sorunun kapsamı mevcut belgelerden daha spesifik olabilir\n\n📚 **İncelenecek Kaynaklar:**\n${topSources}\n\n_💡 Öneri: Yukarıdaki kaynakların "Sonuç", "Açıklamalar" veya "Hüküm" bölümlerini inceleyiniz._`
+            : `**ANSWER**\n🔍 **Search Result:** Found ${foundTypesStr} on this topic.\n\n⚠️ **Why no clear verdict?**\nNo single ruling sentence directly matching your question was found in the documents. This may be because:\n• The relevant ruling may be in a different section of the document\n• The topic may be addressed in multiple regulations\n• Your question may be more specific than available documents\n\n📚 **Sources to Review:**\n${topSources}\n\n_💡 Tip: Review the "Conclusion", "Explanations" or "Ruling" sections of the sources above._`;
 
           result = evidenceFirstResponse;
           alintıContent = language === 'tr'
