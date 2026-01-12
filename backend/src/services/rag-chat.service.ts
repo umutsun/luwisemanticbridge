@@ -1369,8 +1369,9 @@ ${questionLabel}: ${message}`;
       // Create enhanced context with actual content for better response generation
       // Now includes schema metadata for richer LLM context
       // 🔧 FIX: Limit context length to prevent model hallucination with small models
-      const maxContextLength = parseInt(settingsMap.get('ragSettings.maxContextLength') || '6000');
-      const maxExcerptLength = parseInt(settingsMap.get('ragSettings.maxExcerptLength') || '250');
+      // 📝 NOTE: maxExcerptLength increased from 250 to 600 for better source detail extraction
+      const maxContextLength = parseInt(settingsMap.get('ragSettings.maxContextLength') || '8000');
+      const maxExcerptLength = parseInt(settingsMap.get('ragSettings.maxExcerptLength') || '600');
 
       let contextParts: string[] = [];
       let currentContextLength = 0;
@@ -1801,27 +1802,38 @@ FORMAT:
           // Supports {sourceCount} and {maxLength} placeholders for dynamic values
           const defaultSummaryEn =
             `RESPONSE INSTRUCTIONS:\n` +
-            ` Write a comprehensive natural language summary that synthesizes ALL {sourceCount} sources provided above\n` +
-            ` DO NOT use citation markers like [1], [2], [3] - write as a cohesive narrative\n` +
-            ` Aim for approximately {maxLength} characters (adjust as needed for completeness)\n` +
-            ` Write ONLY natural paragraphs like an expert explaining the topic\n` +
-            ` Combine related information from multiple sources into unified insights\n` +
-            ` NEVER add section headings or labels like "SUMMARY:" or "CONCLUSION:"\n` +
+            `• Write a DETAILED natural language summary that synthesizes ALL {sourceCount} sources provided above\n` +
+            `• DO NOT use citation markers like [1], [2], [3] - write as a cohesive narrative\n` +
+            `• Aim for approximately {maxLength} characters (write LONGER if needed for completeness)\n` +
+            `• MUST include:\n` +
+            `  - Specific NUMBERS (rates, periods, amounts, dates)\n` +
+            `  - CONDITIONS and REQUIREMENTS (when what applies)\n` +
+            `  - EXCEPTIONS and EXEMPTIONS (if any)\n` +
+            `  - RELEVANT LEGISLATION (law/article/regulation numbers)\n` +
+            `• DO NOT skip information from sources - TRANSFER it fully\n` +
+            `• Provide CONCRETE and SPECIFIC information like a tax expert\n` +
+            `• NEVER add section headings or labels like "SUMMARY:" or "CONCLUSION:"\n` +
             `Provide a flowing, informative overview that addresses the question comprehensively.`;
 
           const defaultSummaryTr =
             `YANIT TALİMATLARI:\n` +
-            ` Yukarıda verilen TÜM {sourceCount} kaynağı sentezleyen kapsamlı bir doğal dil özeti yaz\n` +
-            ` [1], [2], [3] gibi kaynak işaretleri KULLANMA - tutarlı bir anlatım olarak yaz\n` +
-            ` Yaklaşık {maxLength} karakter hedefle (bütünlük için gerekirse ayarla)\n` +
-            ` SADECE doğal paragraflar yaz, bir uzman konuyu anlatıyormuş gibi\n` +
-            ` Birden fazla kaynaktan ilgili bilgileri birleşik içgörüler halinde birleştir\n` +
-            ` ASLA "ÖZET:" veya "SONUÇ:" gibi bölüm başlıkları ekleme\n` +
+            `• Yukarıda verilen TÜM {sourceCount} kaynağı sentezleyen DETAYLI bir doğal dil özeti yaz\n` +
+            `• [1], [2], [3] gibi kaynak işaretleri KULLANMA - tutarlı bir anlatım olarak yaz\n` +
+            `• Yaklaşık {maxLength} karakter hedefle (bütünlük için gerekirse DAHA UZUN yaz)\n` +
+            `• MUTLAKA şunları içer:\n` +
+            `  - Spesifik SAYILAR (oranlar, süreler, tutarlar, tarihler)\n` +
+            `  - ŞARTLAR ve KOŞULLAR (hangi durumda ne geçerli)\n` +
+            `  - İSTİSNALAR ve MUAFIYETLER (varsa)\n` +
+            `  - İLGİLİ MEVZUAT (kanun/madde/tebliğ numaraları)\n` +
+            `• Kaynaklardaki BİLGİYİ ATLA DEĞİL, AKTAR - kısa kesme\n` +
+            `• Bir vergi uzmanı gibi SOMUT ve SPESİFİK bilgi ver\n` +
+            `• ASLA "ÖZET:" veya "SONUÇ:" gibi bölüm başlıkları ekleme\n` +
             `Soruyu kapsamlı bir şekilde ele alan akıcı, bilgilendirici bir genel bakış sun.`;
 
           // Get max summary length from settings (used in citation excerpt generation)
+          // 📝 NOTE: Increased default from 800 to 1500 for more detailed responses
           const maxSummaryLength = parseInt(
-            settingsMap.get('ragSettings.summaryMaxLength') || '800'
+            settingsMap.get('ragSettings.summaryMaxLength') || '1500'
           );
 
           // Get instruction from settings or use default, then replace placeholders
