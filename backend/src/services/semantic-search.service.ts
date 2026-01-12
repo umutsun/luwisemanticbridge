@@ -1197,7 +1197,8 @@ export class SemanticSearchService {
 
       // DYNAMIC: Add all unified record types from database (not hardcoded!)
       // IMPORTANT: Filter out tables with weight = 0 (disabled by user)
-      if (this.enableUnifiedEmbeddings && this.unifiedRecordTypes.length > 0) {
+      // 🔧 FIX: When databasePriority = 0, skip ALL unified_embeddings sources entirely
+      if (this.enableUnifiedEmbeddings && this.unifiedRecordTypes.length > 0 && this.databasePriority > 0) {
         const activeTypes = this.unifiedRecordTypes.filter(tableType => {
           const weight = this.sourceTableWeights[tableType];
           // Include if weight is undefined (default 1.0) or > 0
@@ -1210,6 +1211,8 @@ export class SemanticSearchService {
         }
 
         enabledTypes.push(...activeTypes);
+      } else if (this.databasePriority === 0) {
+        console.log('[SemanticSearch] 🔒 databasePriority=0: Skipping ALL unified_embeddings sources');
       }
 
       // If no types enabled, return empty results
@@ -1229,7 +1232,11 @@ export class SemanticSearchService {
         enableUnifiedEmbeddings: this.enableUnifiedEmbeddings,
         unifiedRecordTypesCount: this.unifiedRecordTypes.length,
         enableDocumentEmbeddings: this.enableDocumentEmbeddings,
-        enableScrapeEmbeddings: this.enableScrapeEmbeddings
+        enableScrapeEmbeddings: this.enableScrapeEmbeddings,
+        // 🔧 NEW: Log priorities for debugging
+        databasePriority: this.databasePriority,
+        documentsPriority: this.documentsPriority,
+        webPriority: this.webPriority
       });
 
       // Build CASE statement for priority boost - only for unified record types
@@ -1245,11 +1252,12 @@ export class SemanticSearchService {
       const unionParts: string[] = [];
 
       // Always include unified_embeddings if enabled types exist for it
+      // 🔧 FIX: Also check databasePriority > 0
       const unifiedEnabledTypes = enabledTypes.filter(t =>
         !['document_embeddings', 'scrape_embeddings', 'message_embeddings'].includes(t)
       );
 
-      if (this.enableUnifiedEmbeddings && (unifiedEnabledTypes.length > 0 || enabledTypes.includes('message_embeddings'))) {
+      if (this.enableUnifiedEmbeddings && this.databasePriority > 0 && (unifiedEnabledTypes.length > 0 || enabledTypes.includes('message_embeddings'))) {
         const allUnifiedTypes = [...unifiedEnabledTypes];
         if (enabledTypes.includes('message_embeddings')) {
           allUnifiedTypes.push('message_embeddings');
@@ -1314,6 +1322,9 @@ export class SemanticSearchService {
         console.log('[SemanticSearch] No embedding sources enabled');
         return [];
       }
+
+      // 🔧 NEW: Log which source tables are being queried
+      console.log(`[SemanticSearch] 🔍 Building search query with ${unionParts.length} source table(s)`);
 
       const combinedQuery = unionParts.join(' UNION ALL ');
 
