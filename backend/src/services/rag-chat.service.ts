@@ -3314,7 +3314,28 @@ FORMAT:
 
           // Build source list (top 3, sorted by hierarchy: Kanun > Tebliğ > Özelge > Danıştay)
           const sourceHierarchy = ['kanun', 'teblig', 'tebliğ', 'ozelge', 'özelge', 'danistay', 'danıştay', 'sirkuler'];
-          const sortedSources = [...searchResults].sort((a, b) => {
+
+          // 🔒 FIX #1: Filter out irrelevant document_embeddings (kobi, kosgeb, generic PDFs)
+          const IRRELEVANT_KEYWORDS = ['kobi', 'kosgeb', 'destekleri', 'hibe', 'teşvik programı', 'girişimci'];
+          const relevantSources = [...searchResults].filter(r => {
+            const title = (r.title || '').toLowerCase();
+            const sourceTable = (r.source_table || '').toLowerCase();
+            const content = (r.content || '').toLowerCase().substring(0, 500);
+
+            // Skip document_embeddings with irrelevant keywords
+            if (sourceTable.includes('document_embeddings') || sourceTable.includes('döküman')) {
+              const hasIrrelevantKeyword = IRRELEVANT_KEYWORDS.some(kw =>
+                title.includes(kw) || content.includes(kw)
+              );
+              if (hasIrrelevantKeyword) {
+                console.log(`[FORMAT] Filtering out irrelevant source: ${title.substring(0, 50)}`);
+                return false;
+              }
+            }
+            return true;
+          });
+
+          const sortedSources = relevantSources.sort((a, b) => {
             const typeA = (a.source_type || a.source_table || '').toLowerCase();
             const typeB = (b.source_type || b.source_table || '').toLowerCase();
             const indexA = sourceHierarchy.findIndex(h => typeA.includes(h));
@@ -3322,8 +3343,11 @@ FORMAT:
             return (indexA === -1 ? 99 : indexA) - (indexB === -1 ? 99 : indexB);
           });
 
+          // 🔒 FIX #2: Use consistent slice size (top 3) for both display AND count
+          const TOP_SOURCE_COUNT = 3;
+
           // Enhanced source list with relevance context
-          const topSources = sortedSources.slice(0, 3).map((r, i) => {
+          const topSources = sortedSources.slice(0, TOP_SOURCE_COUNT).map((r, i) => {
             const title = r.title || 'Kaynak';
             const type = r.source_type || r.source_table || 'Belge';
             const score = r.similarity_score || r.score || 0;
@@ -3334,8 +3358,8 @@ FORMAT:
             return `${i + 1}. **${title}**${dateStr}\n   _Tür: ${type} | Eşleşme: ${relevance}_`;
           }).join('\n\n');
 
-          // Count source types for justification
-          const sourceTypeCounts = sortedSources.slice(0, 5).reduce((acc, r) => {
+          // Count source types for justification - 🔒 FIX #2: Use same TOP_SOURCE_COUNT
+          const sourceTypeCounts = sortedSources.slice(0, TOP_SOURCE_COUNT).reduce((acc, r) => {
             const type = (r.source_type || r.source_table || 'diger').toLowerCase();
             if (type.includes('ozelge') || type.includes('özelge')) acc.ozelge++;
             else if (type.includes('kanun')) acc.kanun++;
@@ -3362,6 +3386,11 @@ FORMAT:
           alintıContent = language === 'tr'
             ? '_Net hüküm cümlesi otomatik seçilemedi. Yukarıdaki kaynaklarda ilgili bölüm incelenmelidir._'
             : '_A clear ruling sentence could not be automatically extracted. Please review the relevant sections in the sources above._';
+
+          // 🔒 FIX #3: Clarify responseType for verdict questions
+          // Verdict + no quote = FOUND (sources exist, just no extractable verdict)
+          // NOT NOT_FOUND (that would mean no relevant sources at all)
+          console.log(`[FORMAT] 🔒 Verdict HARD GATE applied: responseType=FOUND (${sortedSources.length} sources, but no extractable verdict)`);
 
         } else {
           // Non-verdict question (tanım, açıklama, nedir, nasıl)
