@@ -3266,17 +3266,21 @@ FORMAT:
         // ========================================
         // Uses ORIGINAL user query, NOT LLM response text!
         // This prevents false negatives when LLM doesn't echo the question.
+        // NOTE: Turkish characters (ı, ğ, ş, ü, ö, ç, İ) are NOT word characters in JS regex!
+        // So \b after Turkish chars fails. Use (?=\s|$|[?!,.)]) instead of trailing \b
+        const TR_END = '(?=\\s|$|[?!,.);:\\]])';  // Turkish-safe word end boundary
         const VERDICT_QUESTION_PATTERNS = [
           // === YES/NO VERDICT PATTERNS ===
-          /\b(?:mümkün\s+mü|mümkün\s+müdür|olabilir\s+mi)\b/i,
-          /\b(?:zorunlu\s+mu|mecburi\s+mi|gerekli\s+mi|şart\s+mı)\b/i,
-          /\b(?:zorunda\s+mı|zorunda\s+mıdır)\b/i,  // "asılmak zorunda mı"
-          /\b(?:yasak\s+mı|yasaklandı\s+mı)\b/i,
-          /\b(?:kaldırıldı\s+mı|kalktı\s+mı|yürürlükte\s+mi)\b/i,
-          /\b(?:kaldırdı\s+mı|kaldırır\s+mı|kaldırıyor\s+mu)\b/i,  // Active voice: "kaldırdı mı"
-          /\b(?:asılabilir\s+mi|asılır\s+mı|bulundurulabilir\s+mi)\b/i,
-          /\b(?:uygulanır\s+mı|geçerli\s+mi)\b/i,
-          /\b(?:var\s+mı|yok\s+mu)\b/i,
+          // Turkish-safe: no trailing \b, use TR_END lookahead
+          new RegExp(`\\b(?:mümkün\\s+mü|mümkün\\s+müdür|olabilir\\s+mi)${TR_END}`, 'i'),
+          new RegExp(`\\b(?:zorunlu\\s+mu|mecburi\\s+mi|gerekli\\s+mi|şart\\s+mı)${TR_END}`, 'i'),
+          new RegExp(`\\b(?:zorunda\\s+mı|zorunda\\s+mıdır)${TR_END}`, 'i'),  // "asılmak zorunda mı"
+          new RegExp(`\\b(?:yasak\\s+mı|yasaklandı\\s+mı)${TR_END}`, 'i'),
+          new RegExp(`\\b(?:kaldırıldı\\s+mı|kalktı\\s+mı|yürürlükte\\s+mi)${TR_END}`, 'i'),
+          new RegExp(`\\b(?:kaldırdı\\s+mı|kaldırır\\s+mı|kaldırıyor\\s+mu)${TR_END}`, 'i'),  // Active voice
+          new RegExp(`\\b(?:asılabilir\\s+mi|asılır\\s+mı|bulundurulabilir\\s+mi)${TR_END}`, 'i'),
+          new RegExp(`\\b(?:uygulanır\\s+mı|geçerli\\s+mi)${TR_END}`, 'i'),
+          new RegExp(`\\b(?:var\\s+mı|yok\\s+mu)${TR_END}`, 'i'),
           // Additional patterns for implicit verdict questions
           /\b(?:zorunlu(?:luk|luğu)?)\s+var\b/i,  // "zorunluluk var mı"
           /\b(?:asma|bulundurma)\s+(?:mecburiyeti|zorunluluğu)\b/i,  // "asma zorunluluğu"
