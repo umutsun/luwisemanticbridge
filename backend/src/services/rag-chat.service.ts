@@ -1104,15 +1104,22 @@ ${questionLabel}: ${message}`;
 
       // Non-tax law patterns (for TAX_ONLY mode)
       // These are valid laws but NOT tax-related - should be OUT_OF_SCOPE in TAX_ONLY mode
+      // NOTE: Turkish suffixes handled with optional ['\u2019]?\w* pattern
       const NON_TAX_LAW_PATTERNS = [
-        /\b(medeni\s+kanun|tmk)\b/i,           // Türk Medeni Kanunu
-        /\b(borçlar\s+kanun|tbk)\b/i,          // Türk Borçlar Kanunu
-        /\b(ceza\s+kanun|tck)\b/i,             // Türk Ceza Kanunu
-        /\b(ticaret\s+kanun|ttk)\b/i,          // Türk Ticaret Kanunu (except tax provisions)
-        /\b(iş\s+kanun)\b/i,                   // İş Kanunu
-        /\b(miras\s+payı|miras\s+hukuk)\b/i,   // Inheritance law (Medeni Kanun)
+        /medeni\s*kanun/i,                     // Türk Medeni Kanunu (with Turkish suffixes)
+        /\btmk['\u2019]?\w*/i,                 // TMK, TMK'da, TMK'nın etc.
+        /borçlar\s*kanun/i,                    // Türk Borçlar Kanunu
+        /\btbk['\u2019]?\w*/i,                 // TBK, TBK'da, TBK'nın etc.
+        /ceza\s*kanun/i,                       // Türk Ceza Kanunu
+        /\btck['\u2019]?\w*/i,                 // TCK, TCK'da, TCK'nın etc.
+        /ticaret\s*kanun/i,                    // Türk Ticaret Kanunu (except tax provisions)
+        /\bttk['\u2019]?\w*/i,                 // TTK, TTK'da, TTK'nın etc.
+        /\biş\s*kanun/i,                       // İş Kanunu
+        /miras\s*(payı|hukuk|bırakan)/i,       // Inheritance law (Medeni Kanun)
         /\b(velayet|nafaka|boşanma)\b/i,       // Family law (Medeni Kanun)
-        /\b(kira\s+sözleşme|tahliye)\b/i,      // Lease law (Borçlar Kanunu)
+        /kira\s*(artış|sözleşme|bedeli)/i,     // Lease law (Borçlar Kanunu)
+        /\b(tahliye|kiracı\s*hakk)/i,          // Tenant rights (Borçlar Kanunu)
+        /\b(tazminat\s*davas|haksız\s*fiil)/i, // Tort law (Borçlar Kanunu)
       ];
       const isNonTaxLaw = NON_TAX_LAW_PATTERNS.some(p => p.test(message));
 
@@ -3219,14 +3226,34 @@ FORMAT:
         }
       }
 
-      // 🔧 FIX: Increased threshold - require stronger match
-      const MIN_QUOTE_SCORE = 3;
+      // 🔧 FIX: Increased threshold + query relevance check
+      const MIN_QUOTE_SCORE = 4;  // Increased from 3
 
-      if (bestQuote && bestScore >= MIN_QUOTE_SCORE) {
+      // 🔒 QUOTE RELEVANCE VALIDATION
+      // Even if score is high, verify quote actually relates to query
+      const queryTerms = (originalQuery || answerText)
+        .toLowerCase()
+        .split(/\s+/)
+        .filter((t: string) => t.length > 3 && !['mümkün', 'zorunlu', 'nedir', 'nasıl', 'hangi', 'kadar'].includes(t));
+
+      const quoteHasQueryRelevance = bestQuote
+        ? queryTerms.some((term: string) => bestQuote.toLowerCase().includes(term))
+        : false;
+
+      // Quote must score >= MIN AND have query term overlap
+      const isValidQuote = bestQuote &&
+        bestScore >= MIN_QUOTE_SCORE &&
+        (quoteHasQueryRelevance || bestScore >= 8);  // Very high score can bypass relevance check
+
+      if (isValidQuote) {
         // Good quote found - use it
         alintıContent = '> "' + bestQuote + '..."\n\n' + bestSource;
         console.log('[FORMAT] ✅ Found relevant quote with score ' + bestScore + ' from ' + bestSourceType + ': ' + bestQuote.substring(0, 50) + '...');
       } else {
+        // Log why quote was rejected
+        if (bestQuote && bestScore >= MIN_QUOTE_SCORE && !quoteHasQueryRelevance) {
+          console.log('[FORMAT] ❌ Quote rejected: score=' + bestScore + ' but no query term overlap. Query terms: ' + queryTerms.slice(0, 5).join(', '));
+        }
         // ========================================
         // 🔒 EVIDENCE-FIRST CONTRACT
         // ========================================
@@ -3332,11 +3359,38 @@ FORMAT:
 
         } else {
           // Non-verdict question (tanım, açıklama, nedir, nasıl)
-          // These can show LLM response with disclaimer, but NO HALF-VERDICTS
-          console.log('[FORMAT] Non-verdict question - adding disclaimer only (no softening)');
+          // These can show LLM response with disclaimer
+          // BUT we must still strip any definitive verdict words that LLM might have generated
+          console.log('[FORMAT] Non-verdict question - stripping verdicts + adding disclaimer');
+
+          // 🔒 STRIP DEFINITIVE VERDICT WORDS from LLM response
+          // These create false certainty when no supporting quote exists
+          const DEFINITIVE_VERDICT_WORDS = [
+            // Affirmative verdicts
+            [/\b(mümkündür|mümkün\s+bulunmaktadır)\b/gi, 'mümkün olabilir'],
+            [/\b(zorunludur|mecburidir|zorunlu\s+bulunmaktadır)\b/gi, 'zorunlu olabilir'],
+            [/\b(yasaktır|yasaklanmıştır)\b/gi, 'yasak olabilir'],
+            [/\b(uygulanır|uygulanmaktadır|uygulanacaktır)\b/gi, 'uygulanabilir'],
+            [/\b(kaldırılmıştır|yürürlükten\s+kalkmıştır)\b/gi, 'kaldırılmış olabilir'],
+            [/\b(gerekir|gerekmektedir|gereklidir)\b/gi, 'gerekebilir'],
+            // Negative verdicts
+            [/\b(mümkün\s+değildir|mümkün\s+bulunmamaktadır)\b/gi, 'mümkün olmayabilir'],
+            [/\b(uygulanamaz|uygulanmaz)\b/gi, 'uygulanmayabilir'],
+            [/\b(gerekmez|gerekmemektedir)\b/gi, 'gerekmeyebilir'],
+            // Specific verdicts
+            [/\b(asılabilir|asılması\s+mümkündür)\b/gi, 'asılması mümkün olabilir'],
+            [/\b(asılamaz|asılması\s+mümkün\s+değildir)\b/gi, 'asılması mümkün olmayabilir'],
+            [/\b(bulundurulabilir)\b/gi, 'bulundurulabilir olabilir'],
+          ];
+
+          for (const [pattern, replacement] of DEFINITIVE_VERDICT_WORDS) {
+            if ((pattern as RegExp).test(result)) {
+              console.log('[FORMAT] 🔒 Stripping definitive verdict: ' + (pattern as RegExp).source);
+              result = result.replace(pattern as RegExp, replacement as string);
+            }
+          }
 
           // Add disclaimer for non-verdict questions
-          // NOTE: We do NOT soften claims anymore - softening creates half-verdicts like "asılamayabilir"
           const noQuoteDisclaimer = language === 'tr'
             ? '\n\n_⚠️ Bu bilgi kaynaklara dayanmaktadır ancak doğrudan destekleyen alıntı tespit edilememiştir. Kesin bilgi için ilgili mevzuata başvurunuz._'
             : '\n\n_⚠️ This information is based on sources but no direct supporting quote was found. Please refer to the relevant legislation for definitive information._';

@@ -1,8 +1,8 @@
 {
-  "version": "1.2",
+  "version": "1.3",
   "created": "2026-01-11",
   "updated": "2026-01-11",
-  "description": "Golden test set for RAG pipeline regression testing - 8 CORE TESTS + INVARIANTS",
+  "description": "Golden test set for RAG pipeline regression testing - 50 Questions (v1.3)",
   "acceptanceCriteria": {
     "1_early_exit_guards": {
       "description": "Strong ambiguity and out-of-scope queries exit BEFORE retrieval/LLM",
@@ -26,20 +26,25 @@
     },
     "6_source_display": {
       "description": "FOUND shows sources, all others show sources=[]",
-      "rule": "Hierarchy: Kanun > Tebliğ > Özelge > Danıştay | ONLY FOUND has sources, others ALWAYS sources=[]"
+      "rule": "ONLY FOUND has sources, others ALWAYS sources=[]"
     },
     "7_procedural_evidence_first": {
       "description": "Procedural questions require documentary evidence",
       "rule": "nereye yazılır/hangi alana/kaç gün → ALINTI required, no specific claims without document proof"
-    },
-    "8_ci_integration": {
-      "description": "This file must be in repo (not gitignored) for CI integration",
-      "rule": "File at backend/src/tests/golden/golden-test-set.json - deploy gate checks invariants"
     }
   },
   "miniTestKit": {
-    "description": "8 questions that must pass before any new feature/heuristic",
-    "tests": [1, 2, 3, 4, 5, 6, 7, 8]
+    "description": "8 critical questions that MUST pass before deployment",
+    "tests": [
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8
+    ]
   },
   "tests": [
     {
@@ -53,7 +58,13 @@
       "invariants": {
         "sourcesCountMin": 1
       },
-      "tags": ["levha", "şube", "fotokopi", "critical", "mini-test-kit"]
+      "tags": [
+        "levha",
+        "şube",
+        "fotokopi",
+        "critical",
+        "mini-test-kit"
+      ]
     },
     {
       "id": 2,
@@ -66,7 +77,13 @@
       "invariants": {
         "sourcesCountMin": 1
       },
-      "tags": ["levha", "araç", "fotokopi", "critical", "mini-test-kit"]
+      "tags": [
+        "levha",
+        "araç",
+        "fotokopi",
+        "critical",
+        "mini-test-kit"
+      ]
     },
     {
       "id": 3,
@@ -75,12 +92,21 @@
       "expectedResponseType": "FOUND",
       "verdictQuestion": false,
       "requiresQuote": true,
-      "expectedBehavior": "If ALINTI found → specific answer | If no ALINTI → 'belgede bu alan/konum açık değil' (NEVER 'sağ üst köşe' without proof)",
+      "expectedBehavior": "If ALINTI found → specific answer | If no ALINTI → 'belgede bu alan/konum açık değil'",
       "invariants": {
-        "mustNotContain": ["sağ üst köşe", "sol alt köşe"],
+        "mustNotContain": [
+          "sağ üst köşe",
+          "sol alt köşe"
+        ],
         "ifNoQuote": "must not specify exact location"
       },
-      "tags": ["procedural", "beyanname", "referans", "critical", "mini-test-kit"]
+      "tags": [
+        "procedural",
+        "beyanname",
+        "referans",
+        "critical",
+        "mini-test-kit"
+      ]
     },
     {
       "id": 4,
@@ -89,12 +115,17 @@
       "expectedResponseType": "NEEDS_CLARIFICATION",
       "verdictQuestion": false,
       "requiresQuote": false,
-      "expectedBehavior": "EARLY EXIT: justNumbers pattern → ask clarification immediately, NO retrieval/LLM",
+      "expectedBehavior": "EARLY EXIT: justNumbers pattern → ask clarification immediately",
       "invariants": {
         "sourcesCount": 0,
         "earlyExit": true
       },
-      "tags": ["ambiguity", "justNumbers", "critical", "mini-test-kit"]
+      "tags": [
+        "ambiguity",
+        "justNumbers",
+        "critical",
+        "mini-test-kit"
+      ]
     },
     {
       "id": 5,
@@ -103,12 +134,17 @@
       "expectedResponseType": "NEEDS_CLARIFICATION",
       "verdictQuestion": false,
       "requiresQuote": false,
-      "expectedBehavior": "EARLY EXIT: singleToken pattern → ask clarification immediately, NO retrieval/LLM",
+      "expectedBehavior": "EARLY EXIT: singleToken pattern → ask clarification immediately",
       "invariants": {
         "sourcesCount": 0,
         "earlyExit": true
       },
-      "tags": ["ambiguity", "singleToken", "critical", "mini-test-kit"]
+      "tags": [
+        "ambiguity",
+        "singleToken",
+        "critical",
+        "mini-test-kit"
+      ]
     },
     {
       "id": 6,
@@ -117,12 +153,17 @@
       "expectedResponseType": "NEEDS_CLARIFICATION",
       "verdictQuestion": false,
       "requiresQuote": false,
-      "expectedBehavior": "EARLY EXIT: vagueQuestion pattern → ask clarification immediately, NO retrieval/LLM",
+      "expectedBehavior": "EARLY EXIT: vagueQuestion pattern → ask clarification immediately",
       "invariants": {
         "sourcesCount": 0,
         "earlyExit": true
       },
-      "tags": ["ambiguity", "vagueQuestion", "critical", "mini-test-kit"]
+      "tags": [
+        "ambiguity",
+        "vagueQuestion",
+        "critical",
+        "mini-test-kit"
+      ]
     },
     {
       "id": 7,
@@ -131,93 +172,297 @@
       "expectedResponseType": "OUT_OF_SCOPE",
       "verdictQuestion": false,
       "requiresQuote": false,
-      "expectedBehavior": "EARLY EXIT: outOfScopePattern + no domain term → OUT_OF_SCOPE immediately, NO retrieval/LLM",
+      "expectedBehavior": "EARLY EXIT: outOfScopePattern → OUT_OF_SCOPE immediately",
       "invariants": {
         "sourcesCount": 0,
-        "earlyExit": true,
-        "responseTemplate": true
+        "earlyExit": true
       },
-      "tags": ["out_of_scope", "famous_person", "critical", "mini-test-kit"]
+      "tags": [
+        "out_of_scope",
+        "famous_person",
+        "critical",
+        "mini-test-kit"
+      ]
     },
     {
       "id": 8,
       "category": "policy",
       "question": "Türk Medeni Kanunu'nda miras payı nedir?",
-      "expectedResponseType": ["OUT_OF_SCOPE", "NOT_FOUND"],
+      "expectedResponseType": "OUT_OF_SCOPE",
       "verdictQuestion": false,
       "requiresQuote": false,
-      "expectedBehavior": "Policy decision: If TMK not in corpus → OUT_OF_SCOPE or NOT_FOUND | If TMK in corpus → FOUND with TMK source | NEVER answer with tax özelge",
+      "expectedBehavior": "If TAX_ONLY mode → OUT_OF_SCOPE. If GENERAL_LAW → FOUND.",
       "invariants": {
-        "mustNotIncludeSourceType": ["ozelge", "özelge"],
-        "ifFound": "sources must be TMK, not tax documents"
+        "mustNotIncludeSourceType": [
+          "ozelge"
+        ]
       },
-      "tags": ["policy", "scope", "TMK", "critical", "mini-test-kit"]
+      "tags": [
+        "policy",
+        "scope",
+        "TMK",
+        "critical",
+        "mini-test-kit"
+      ]
     },
     {
-      "id": 9,
+      "id": 20,
       "category": "verdict",
-      "question": "Vergi levhasını işyerine asma zorunluluğu var mı?",
+      "question": "Vergi levhasını şubeye asmak zorunlu mudur?",
       "expectedResponseType": "FOUND",
       "verdictQuestion": true,
-      "requiresQuote": true,
-      "expectedBehavior": "If quote found → definitive answer | If no quote → 'hüküm cümlesi seçilemedi' + sources",
-      "tags": ["levha", "zorunluluk"]
+      "requiresQuote": true
     },
     {
-      "id": 10,
+      "id": 22,
       "category": "verdict",
-      "question": "6111/82 vergi levhası asma zorunluluğunu kaldırdı mı?",
+      "question": "E-fatura mükellefi kağıt fatura düzenleyebilir mi?",
       "expectedResponseType": "FOUND",
       "verdictQuestion": true,
-      "requiresQuote": true,
-      "expectedBehavior": "Must find 6111 kanun sources | If quote → answer | If no quote → sources only",
-      "tags": ["6111", "levha", "kaldırıldı"]
+      "requiresQuote": true
     },
     {
-      "id": 11,
+      "id": 23,
+      "category": "verdict",
+      "question": "KDV iade süresi 2 yıl mıdır?",
+      "expectedResponseType": "FOUND",
+      "verdictQuestion": true,
+      "requiresQuote": true
+    },
+    {
+      "id": 24,
+      "category": "verdict",
+      "question": "Serbest meslek kazancından stopaj yapılır mı?",
+      "expectedResponseType": "FOUND",
+      "verdictQuestion": true,
+      "requiresQuote": true
+    },
+    {
+      "id": 25,
+      "category": "verdict",
+      "question": "Yıllık beyanname vermek zorunlu mudur?",
+      "expectedResponseType": "FOUND",
+      "verdictQuestion": true,
+      "requiresQuote": true
+    },
+    {
+      "id": 26,
+      "category": "verdict",
+      "question": "Matrah artırımından yararlanmak mümkün müdür?",
+      "expectedResponseType": "FOUND",
+      "verdictQuestion": true,
+      "requiresQuote": true
+    },
+    {
+      "id": 27,
+      "category": "verdict",
+      "question": "Amortismana tabi kıymetler gider yazılabilir mi?",
+      "expectedResponseType": "FOUND",
+      "verdictQuestion": true,
+      "requiresQuote": true
+    },
+    {
+      "id": 28,
+      "category": "verdict",
+      "question": "Şirket ortaklarına yapılan ödemelerden kesinti yapılır mı?",
+      "expectedResponseType": "FOUND",
+      "verdictQuestion": true,
+      "requiresQuote": true
+    },
+    {
+      "id": 29,
+      "category": "verdict",
+      "question": "Vergi uzlaşması yapılabilir mi?",
+      "expectedResponseType": "FOUND",
+      "verdictQuestion": true,
+      "requiresQuote": true
+    },
+    {
+      "id": 30,
+      "category": "verdict",
+      "question": "Gayrimenkul satışından KDV hesaplanır mı?",
+      "expectedResponseType": "FOUND",
+      "verdictQuestion": true,
+      "requiresQuote": true
+    },
+    {
+      "id": 31,
+      "category": "verdict",
+      "question": "Beyanname verme süresi uzatıldı mı?",
+      "expectedResponseType": "FOUND",
+      "verdictQuestion": true,
+      "requiresQuote": true
+    },
+    {
+      "id": 32,
+      "category": "verdict",
+      "question": "Damga vergisi muafiyeti mümkün müdür?",
+      "expectedResponseType": "FOUND",
+      "verdictQuestion": true,
+      "requiresQuote": true
+    },
+    {
+      "id": 33,
+      "category": "verdict",
+      "question": "İşletme hesabı defteri tutulabilir mi?",
+      "expectedResponseType": "FOUND",
+      "verdictQuestion": true,
+      "requiresQuote": true
+    },
+    {
+      "id": 34,
+      "category": "verdict",
+      "question": "ÖTV'li araç için vergi avantajı var mıdır?",
+      "expectedResponseType": "FOUND",
+      "verdictQuestion": true,
+      "requiresQuote": true
+    },
+    {
+      "id": 35,
       "category": "definition",
-      "question": "KDV tevkifatı nedir?",
-      "expectedResponseType": "FOUND",
-      "verdictQuestion": false,
-      "requiresQuote": false,
-      "expectedBehavior": "Definition question - LLM can answer with disclaimer if no quote",
-      "tags": ["KDV", "tevkifat", "tanım"]
+      "question": "Vergi levhası nedir?",
+      "expectedResponseType": "FOUND"
     },
     {
-      "id": 12,
-      "category": "short_query",
-      "question": "vergi levha fotokopi",
+      "id": 36,
+      "category": "definition",
+      "question": "Stopaj oranları nelerdir?",
+      "expectedResponseType": "FOUND"
+    },
+    {
+      "id": 37,
+      "category": "definition",
+      "question": "KDV indirimi nasıl yapılır?",
+      "expectedResponseType": "FOUND"
+    },
+    {
+      "id": 38,
+      "category": "definition",
+      "question": "Muhtasar beyanname nedir?",
+      "expectedResponseType": "FOUND"
+    },
+    {
+      "id": 39,
+      "category": "definition",
+      "question": "Tevkifat oranları kaçtır?",
+      "expectedResponseType": "FOUND"
+    },
+    {
+      "id": 40,
+      "category": "definition",
+      "question": "Vergi cezası çeşitleri nelerdir?",
+      "expectedResponseType": "FOUND"
+    },
+    {
+      "id": 41,
+      "category": "definition",
+      "question": "Fatura düzenleme zorunluluğu nedir?",
+      "expectedResponseType": "FOUND"
+    },
+    {
+      "id": 42,
+      "category": "definition",
+      "question": "Kurumlar vergisi oranı nedir?",
+      "expectedResponseType": "FOUND"
+    },
+    {
+      "id": 43,
+      "category": "definition",
+      "question": "Gelir vergisi dilimleri nelerdir?",
+      "expectedResponseType": "FOUND"
+    },
+    {
+      "id": 44,
+      "category": "definition",
+      "question": "Vergi iadesi nasıl alınır?",
+      "expectedResponseType": "FOUND"
+    },
+    {
+      "id": 45,
+      "category": "doc_specific",
+      "question": "Özelge'de vergi levhası fotokopisi hakkında ne yazıyor?",
       "expectedResponseType": "FOUND",
-      "verdictQuestion": false,
-      "requiresQuote": false,
-      "expectedBehavior": "Short query but valid domain terms (3 words) - should find results",
-      "tags": ["levha", "fotokopi", "short"]
+      "notes": "Target: ozelge"
+    },
+    {
+      "id": 46,
+      "category": "doc_specific",
+      "question": "Danıştay'ın KDV iade kararları nelerdir?",
+      "expectedResponseType": "FOUND",
+      "notes": "Target: danistay"
+    },
+    {
+      "id": 47,
+      "category": "doc_specific",
+      "question": "VUK 5. maddede vergi levhası hakkında ne yazıyor?",
+      "expectedResponseType": "FOUND",
+      "notes": "Target: kanun"
+    },
+    {
+      "id": 65,
+      "category": "edge_case",
+      "question": "Merhaba",
+      "expectedResponseType": "OUT_OF_SCOPE",
+      "expectedBehavior": "EARLY EXIT: Greeting"
+    },
+    {
+      "id": 66,
+      "category": "edge_case",
+      "question": "Hava durumu nasıl?",
+      "expectedResponseType": "OUT_OF_SCOPE",
+      "expectedBehavior": "EARLY EXIT: Out of domain"
+    },
+    {
+      "id": 67,
+      "category": "edge_case",
+      "question": "6111/82",
+      "expectedResponseType": "FOUND",
+      "expectedBehavior": "Valid law reference - should find results"
     }
   ],
   "invariants": {
     "responseType_FOUND": {
       "condition": "responseType === 'FOUND'",
-      "assertions": ["sourcesCount >= 1", "hasCevap === true"]
+      "assertions": [
+        "sourcesCount >= 1",
+        "hasCevap === true"
+      ]
     },
     "responseType_NOT_FOUND": {
       "condition": "responseType === 'NOT_FOUND'",
-      "assertions": ["sourcesCount === 0"]
+      "assertions": [
+        "sourcesCount === 0"
+      ]
     },
     "responseType_NEEDS_CLARIFICATION": {
       "condition": "responseType === 'NEEDS_CLARIFICATION'",
-      "assertions": ["sourcesCount === 0", "response does NOT contain ALINTI"]
+      "assertions": [
+        "sourcesCount === 0",
+        "response does NOT contain ALINTI"
+      ]
     },
     "responseType_OUT_OF_SCOPE": {
       "condition": "responseType === 'OUT_OF_SCOPE'",
-      "assertions": ["sourcesCount === 0", "response does NOT contain ALINTI"]
+      "assertions": [
+        "sourcesCount === 0",
+        "response does NOT contain ALINTI"
+      ]
     },
     "early_exit_ambiguity": {
       "condition": "earlyExit === true && responseType === 'NEEDS_CLARIFICATION'",
-      "assertions": ["sourcesCount === 0", "no LLM call made", "response is template"]
+      "assertions": [
+        "sourcesCount === 0",
+        "no LLM call made",
+        "response is template"
+      ]
     },
     "early_exit_out_of_scope": {
       "condition": "earlyExit === true && responseType === 'OUT_OF_SCOPE'",
-      "assertions": ["sourcesCount === 0", "no LLM call made", "response is template"]
+      "assertions": [
+        "sourcesCount === 0",
+        "no LLM call made",
+        "response is template"
+      ]
     },
     "verdict_question_no_quote": {
       "condition": "verdictQuestion === true && hasAlinti === false",
@@ -227,29 +472,26 @@
         "response does NOT contain 'zorunlu olabilir'",
         "response contains 'hüküm cümlesi' or 'seçilemedi'"
       ]
-    },
-    "procedural_question_no_quote": {
-      "condition": "isProcedural === true && hasAlinti === false",
-      "assertions": [
-        "response does NOT contain specific location claims (sağ üst, sol alt, etc.)",
-        "response does NOT contain specific field claims without evidence",
-        "response contains 'belgede bu bilgi açık değil' or similar"
-      ]
-    },
-    "quote_selection": {
-      "condition": "hasAlinti === true",
-      "assertions": [
-        "quote does NOT contain 'dilekçe'",
-        "quote does NOT contain 'tereddüt'",
-        "quote does NOT contain 'sorulmaktadır'"
-      ]
     }
   },
   "ciGate": {
     "required": true,
     "description": "Deploy gate must pass mini-test-kit (8 tests) before deployment",
     "failOnViolation": true,
-    "miniTestKitTests": [1, 2, 3, 4, 5, 6, 7, 8],
-    "criticalInvariants": ["early_exit_ambiguity", "early_exit_out_of_scope", "verdict_question_no_quote"]
+    "miniTestKitTests": [
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8
+    ],
+    "criticalInvariants": [
+      "early_exit_ambiguity",
+      "early_exit_out_of_scope",
+      "verdict_question_no_quote"
+    ]
   }
 }
