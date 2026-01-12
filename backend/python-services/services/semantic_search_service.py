@@ -660,8 +660,10 @@ class SemanticSearchService:
             all_results = []
 
             # 1. Query unified_embeddings (main source)
-            if settings.enable_unified_embeddings:
+            # 🔧 FIX: Skip unified_embeddings when database_priority = 0
+            if settings.enable_unified_embeddings and settings.database_priority > 0:
                 try:
+                    logger.info(f"[VectorSearch] Querying unified_embeddings (database_priority={settings.database_priority})")
                     unified_query = """
                         SELECT
                             id, content, source_table, source_type, source_id, metadata,
@@ -680,10 +682,13 @@ class SemanticSearchService:
                             all_results.append(dict(row))
                 except Exception as e:
                     logger.warning(f"unified_embeddings query error: {e}")
+            elif settings.database_priority == 0:
+                logger.info(f"[VectorSearch] 🔒 Skipping unified_embeddings (database_priority=0)")
 
             # 2. Query document_embeddings (PDFs, Word docs)
             if settings.enable_document_embeddings:
                 try:
+                    logger.info(f"[VectorSearch] Querying document_embeddings (documents_priority={settings.documents_priority})")
                     doc_query = """
                         SELECT
                             id, chunk_text as content,
