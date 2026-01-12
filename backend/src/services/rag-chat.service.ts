@@ -3270,8 +3270,10 @@ FORMAT:
           // === YES/NO VERDICT PATTERNS ===
           /\b(?:mümkün\s+mü|mümkün\s+müdür|olabilir\s+mi)\b/i,
           /\b(?:zorunlu\s+mu|mecburi\s+mi|gerekli\s+mi|şart\s+mı)\b/i,
+          /\b(?:zorunda\s+mı|zorunda\s+mıdır)\b/i,  // "asılmak zorunda mı"
           /\b(?:yasak\s+mı|yasaklandı\s+mı)\b/i,
           /\b(?:kaldırıldı\s+mı|kalktı\s+mı|yürürlükte\s+mi)\b/i,
+          /\b(?:kaldırdı\s+mı|kaldırır\s+mı|kaldırıyor\s+mu)\b/i,  // Active voice: "kaldırdı mı"
           /\b(?:asılabilir\s+mi|asılır\s+mı|bulundurulabilir\s+mi)\b/i,
           /\b(?:uygulanır\s+mı|geçerli\s+mi)\b/i,
           /\b(?:var\s+mı|yok\s+mu)\b/i,
@@ -3369,14 +3371,17 @@ FORMAT:
             // Affirmative verdicts
             [/\b(mümkündür|mümkün\s+bulunmaktadır)\b/gi, 'mümkün olabilir'],
             [/\b(zorunludur|mecburidir|zorunlu\s+bulunmaktadır)\b/gi, 'zorunlu olabilir'],
+            [/\b(zorunluluğu\s+(?:bulunmaktadır|vardır|devam\s+etmektedir))\b/gi, 'zorunluluğu olabilir'],  // "zorunluluğu bulunmaktadır"
             [/\b(yasaktır|yasaklanmıştır)\b/gi, 'yasak olabilir'],
             [/\b(uygulanır|uygulanmaktadır|uygulanacaktır)\b/gi, 'uygulanabilir'],
             [/\b(kaldırılmıştır|yürürlükten\s+kalkmıştır)\b/gi, 'kaldırılmış olabilir'],
+            [/\b(kaldırmıştır|kaldırmaktadır)\b/gi, 'kaldırmış olabilir'],  // Active voice: "kaldırmıştır"
             [/\b(gerekir|gerekmektedir|gereklidir)\b/gi, 'gerekebilir'],
             // Negative verdicts
             [/\b(mümkün\s+değildir|mümkün\s+bulunmamaktadır)\b/gi, 'mümkün olmayabilir'],
             [/\b(uygulanamaz|uygulanmaz)\b/gi, 'uygulanmayabilir'],
             [/\b(gerekmez|gerekmemektedir)\b/gi, 'gerekmeyebilir'],
+            [/\b(zorunluluğu\s+(?:kaldırılmıştır|yoktur|bulunmamaktadır))\b/gi, 'zorunluluğu kaldırılmış olabilir'],  // "zorunluluğu kaldırılmıştır"
             // Specific verdicts
             [/\b(asılabilir|asılması\s+mümkündür)\b/gi, 'asılması mümkün olabilir'],
             [/\b(asılamaz|asılması\s+mümkün\s+değildir)\b/gi, 'asılması mümkün olmayabilir'],

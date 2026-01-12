@@ -438,7 +438,8 @@
       "condition": "responseType === 'NEEDS_CLARIFICATION'",
       "assertions": [
         "sourcesCount === 0",
-        "response does NOT contain ALINTI"
+        "response does NOT contain ALINTI",
+        "hasSuggestions === true"
       ]
     },
     "responseType_OUT_OF_SCOPE": {
