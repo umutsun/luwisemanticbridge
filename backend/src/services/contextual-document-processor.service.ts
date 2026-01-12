@@ -655,7 +655,13 @@ export class ContextualDocumentProcessorService {
     const chunks: string[] = [];
 
     // Split by semantic paragraphs
-    const paragraphs = text.split(/\n\s*\n/);
+    const paragraphs = text.split(/\n\s*\n/).filter(p => p.trim().length > 0);
+
+    // 🔧 FIX: If only one huge paragraph, force split it
+    if (paragraphs.length === 1 && paragraphs[0].length > this.chunkSize) {
+      console.log(`[Chunking] Force-splitting ${paragraphs[0].length} char structured text`);
+      return this.forceSplitLongText(paragraphs[0]);
+    }
 
     let currentChunk = '';
 
@@ -665,19 +671,14 @@ export class ContextualDocumentProcessorService {
           chunks.push(currentChunk.trim());
           currentChunk = paragraph;
         } else {
-          // Split long paragraph
-          const sentences = paragraph.match(/[^.!?]+[.!?]+/g) || [paragraph];
-          for (const sentence of sentences) {
-            if (currentChunk.length + sentence.length > this.chunkSize) {
-              if (currentChunk) {
-                chunks.push(currentChunk.trim());
-                currentChunk = sentence;
-              } else {
-                chunks.push(sentence.trim());
-              }
-            } else {
-              currentChunk += (currentChunk ? ' ' : '') + sentence;
-            }
+          // 🔧 FIX: Force split long paragraph properly
+          if (paragraph.length > this.chunkSize) {
+            const splitChunks = this.forceSplitLongText(paragraph);
+            chunks.push(...splitChunks.slice(0, -1));
+            currentChunk = splitChunks[splitChunks.length - 1] || '';
+          } else {
+            chunks.push(paragraph.trim());
+            currentChunk = '';
           }
         }
       } else {
@@ -685,8 +686,14 @@ export class ContextualDocumentProcessorService {
       }
     }
 
+    // 🔧 FIX: Handle remaining content that might be too long
     if (currentChunk.trim().length > 0) {
-      chunks.push(currentChunk.trim());
+      if (currentChunk.length > this.chunkSize) {
+        const remainingChunks = this.forceSplitLongText(currentChunk);
+        chunks.push(...remainingChunks);
+      } else {
+        chunks.push(currentChunk.trim());
+      }
     }
 
     return chunks;
@@ -694,7 +701,19 @@ export class ContextualDocumentProcessorService {
 
   private createTextChunks(text: string): string[] {
     const chunks: string[] = [];
-    const sentences = text.match(/[^.!?]+[.!?]+/g) || [text];
+    // 🔧 FIX: Use Turkish-aware sentence splitting with fallback to paragraph/line splitting
+    let sentences = text.match(/[^.!?]+[.!?]+/g);
+
+    // If no sentence endings found, try splitting by newlines or paragraphs
+    if (!sentences || sentences.length === 0) {
+      sentences = text.split(/\n+/).filter(s => s.trim().length > 0);
+    }
+
+    // If still just one huge block, force split by chunkSize
+    if (sentences.length === 1 && sentences[0].length > this.chunkSize) {
+      console.log(`[Chunking] Force-splitting ${sentences[0].length} char text into ${Math.ceil(sentences[0].length / this.chunkSize)} chunks`);
+      return this.forceSplitLongText(sentences[0]);
+    }
 
     let currentChunk = '';
 
@@ -704,19 +723,59 @@ export class ContextualDocumentProcessorService {
           chunks.push(currentChunk.trim());
           currentChunk = sentence;
         } else {
-          chunks.push(sentence.substring(0, this.chunkSize).trim());
-          currentChunk = sentence.substring(this.chunkSize);
+          // Sentence is longer than chunkSize, force split it
+          const splitChunks = this.forceSplitLongText(sentence);
+          chunks.push(...splitChunks.slice(0, -1)); // Add all but last
+          currentChunk = splitChunks[splitChunks.length - 1] || ''; // Keep last as current
         }
       } else {
         currentChunk += ' ' + sentence;
       }
     }
 
+    // 🔧 FIX: Properly handle remaining currentChunk if it's too long
     if (currentChunk.trim().length > 0) {
-      chunks.push(currentChunk.trim());
+      if (currentChunk.length > this.chunkSize) {
+        // Force split the remaining content
+        const remainingChunks = this.forceSplitLongText(currentChunk);
+        chunks.push(...remainingChunks);
+      } else {
+        chunks.push(currentChunk.trim());
+      }
     }
 
     return chunks;
+  }
+
+  // 🔧 NEW: Helper to force-split long text without sentence boundaries
+  private forceSplitLongText(text: string): string[] {
+    const chunks: string[] = [];
+    let remaining = text;
+
+    while (remaining.length > 0) {
+      if (remaining.length <= this.chunkSize) {
+        if (remaining.trim().length > 0) {
+          chunks.push(remaining.trim());
+        }
+        break;
+      }
+
+      // Try to find a good break point (space, newline) near chunkSize
+      let breakPoint = this.chunkSize;
+      const searchStart = Math.max(0, this.chunkSize - 200); // Look back 200 chars
+
+      for (let i = this.chunkSize; i >= searchStart; i--) {
+        if (remaining[i] === ' ' || remaining[i] === '\n') {
+          breakPoint = i;
+          break;
+        }
+      }
+
+      chunks.push(remaining.substring(0, breakPoint).trim());
+      remaining = remaining.substring(breakPoint).trim();
+    }
+
+    return chunks.filter(c => c.length > 0);
   }
 
   async createEmbeddingsWithMetadata(text: string, documentType: string, chunkIndex: number, totalChunks: number, documentId: number, documentTitle: string): Promise<EmbeddingInfo> {
