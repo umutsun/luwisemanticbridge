@@ -5,6 +5,16 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Switch } from '@/components/ui/switch';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
 import {
   Play,
   Pause,
@@ -15,7 +25,12 @@ import {
   Loader2,
   Calendar,
   Activity,
-  AlertCircle
+  AlertCircle,
+  Plus,
+  Globe,
+  Database,
+  Sparkles,
+  Trash2
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -46,11 +61,57 @@ interface SchedulerStats {
   scheduler_running: boolean;
 }
 
+interface CrawlerOption {
+  name: string;
+  label: string;
+  description: string;
+}
+
+interface TableOption {
+  name: string;
+  label: string;
+}
+
+interface NewCrawlerJob {
+  name: string;
+  crawler: string;
+  targetTable: string;
+  enableEmbed: boolean;
+  enableUpsert: boolean;
+  scheduleType: 'cron' | 'interval';
+  cronExpression: string;
+  intervalMinutes: number;
+}
+
+const AVAILABLE_CRAWLERS: CrawlerOption[] = [
+  { name: 'gib_sirkuler', label: 'GİB Sirküleri', description: 'Gelir İdaresi Başkanlığı sirkülerleri' },
+  { name: 'mevzuat_kanun', label: 'Mevzuat Kanunlar', description: 'mevzuat.gov.tr kanunları' },
+  { name: 'mevzuat_teblig', label: 'Mevzuat Tebliğler', description: 'mevzuat.gov.tr tebliğleri' },
+  { name: 'mevzuat_yonetmelik', label: 'Mevzuat Yönetmelikler', description: 'mevzuat.gov.tr yönetmelikleri' },
+  { name: 'sahibinden', label: 'Sahibinden', description: 'Sahibinden.com gayrimenkul ilanları' },
+  { name: 'generic', label: 'Genel Crawler', description: 'Özel URL için genel web scraper' },
+];
+
 export default function SchedulerSection() {
   const [jobs, setJobs] = useState<ScheduledJob[]>([]);
   const [stats, setStats] = useState<SchedulerStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
+
+  // Modal states
+  const [showAddModal, setShowAddModal] = useState(false);
+  const [availableTables, setAvailableTables] = useState<TableOption[]>([]);
+  const [newJob, setNewJob] = useState<NewCrawlerJob>({
+    name: '',
+    crawler: '',
+    targetTable: '',
+    enableEmbed: false,
+    enableUpsert: true,
+    scheduleType: 'cron',
+    cronExpression: '0 6 * * *', // Daily at 6 AM
+    intervalMinutes: 60
+  });
+  const [creating, setCreating] = useState(false);
 
   const fetchData = useCallback(async () => {
     try {
@@ -81,6 +142,113 @@ export default function SchedulerSection() {
     const interval = setInterval(fetchData, 30000);
     return () => clearInterval(interval);
   }, [fetchData]);
+
+  // Fetch available tables when modal opens
+  useEffect(() => {
+    if (showAddModal) {
+      fetchAvailableTables();
+    }
+  }, [showAddModal]);
+
+  const fetchAvailableTables = async () => {
+    try {
+      const res = await fetch('/api/v2/source/tables');
+      if (res.ok) {
+        const data = await res.json();
+        const tables = (data.tables || []).map((t: string) => ({
+          name: t,
+          label: t.replace(/_/g, ' ').replace(/^csv /, '')
+        }));
+        setAvailableTables(tables);
+      }
+    } catch (error) {
+      console.error('Failed to fetch tables:', error);
+    }
+  };
+
+  const handleCreateJob = async () => {
+    if (!newJob.name || !newJob.crawler) {
+      toast.error('İsim ve crawler seçimi zorunludur');
+      return;
+    }
+
+    setCreating(true);
+    try {
+      // Use scrape_and_embed job type which supports full pipeline
+      const crawlerInfo = AVAILABLE_CRAWLERS.find(c => c.name === newJob.crawler);
+
+      const res = await fetch('/api/v2/scheduler/jobs', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: newJob.name,
+          job_type: 'scrape_and_embed',
+          description: `${crawlerInfo?.label || newJob.crawler} → ${newJob.targetTable || 'Redis'}`,
+          schedule_type: newJob.scheduleType,
+          cron_expression: newJob.scheduleType === 'cron' ? newJob.cronExpression : undefined,
+          interval_seconds: newJob.scheduleType === 'interval' ? newJob.intervalMinutes * 60 : undefined,
+          job_config: {
+            scraper_type: newJob.crawler.includes('mevzuat') || newJob.crawler === 'gib_sirkuler' ? 'custom' : newJob.crawler,
+            scraper_url: '', // Will be filled by crawler's default URL
+            scraper_name: newJob.crawler,
+            max_pages: 100,
+            redis_db: 2, // Vergilex uses DB 2
+            export_to_table: newJob.targetTable === '__none__' ? '' : (newJob.targetTable || ''),
+            export_mode: 'upsert',
+            generate_embeddings: newJob.enableEmbed,
+            embedding_content_column: 'content',
+            skip_scrape_if_recent: false,
+          },
+          enabled: true
+        })
+      });
+
+      if (res.ok) {
+        toast.success('İş başarıyla oluşturuldu');
+        setShowAddModal(false);
+        setNewJob({
+          name: '',
+          crawler: '',
+          targetTable: '',
+          enableEmbed: false,
+          enableUpsert: true,
+          scheduleType: 'cron',
+          cronExpression: '0 6 * * *',
+          intervalMinutes: 60
+        });
+        fetchData();
+      } else {
+        const error = await res.json();
+        toast.error(error.message || 'İş oluşturulamadı');
+      }
+    } catch (error) {
+      toast.error('İş oluşturulurken hata oluştu');
+    } finally {
+      setCreating(false);
+    }
+  };
+
+  const handleDeleteJob = async (jobId: string) => {
+    if (!confirm('Bu işi silmek istediğinize emin misiniz?')) return;
+
+    setActionLoading(jobId);
+    try {
+      const res = await fetch(`/api/v2/scheduler/jobs/${jobId}`, {
+        method: 'DELETE'
+      });
+
+      if (res.ok) {
+        setJobs(prev => prev.filter(j => j.id !== jobId));
+        toast.success('İş silindi');
+      } else {
+        toast.error('İş silinemedi');
+      }
+    } catch (error) {
+      toast.error('İş silinemedi');
+    } finally {
+      setActionLoading(null);
+    }
+  };
 
   const handleToggle = async (jobId: string) => {
     setActionLoading(jobId);
@@ -230,10 +398,16 @@ export default function SchedulerSection() {
                 APScheduler-based job scheduling system
               </CardDescription>
             </div>
-            <Button variant="outline" size="sm" onClick={fetchData}>
-              <RefreshCw className="h-4 w-4 mr-1" />
-              Refresh
-            </Button>
+            <div className="flex items-center gap-2">
+              <Button variant="outline" size="sm" onClick={() => setShowAddModal(true)}>
+                <Plus className="h-4 w-4 mr-1" />
+                İş Ekle
+              </Button>
+              <Button variant="outline" size="sm" onClick={fetchData}>
+                <RefreshCw className="h-4 w-4 mr-1" />
+                Yenile
+              </Button>
+            </div>
           </div>
         </CardHeader>
         <CardContent>
@@ -296,6 +470,17 @@ export default function SchedulerSection() {
                       onCheckedChange={() => handleToggle(job.id)}
                       disabled={actionLoading === job.id}
                     />
+
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => handleDeleteJob(job.id)}
+                      disabled={actionLoading === job.id}
+                      className="text-red-500 hover:text-red-600 hover:bg-red-500/10"
+                      title="Sil"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
                   </div>
                 </div>
               ))}
@@ -303,6 +488,172 @@ export default function SchedulerSection() {
           )}
         </CardContent>
       </Card>
+
+      {/* Add Crawler Job Modal */}
+      <Dialog open={showAddModal} onOpenChange={setShowAddModal}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Globe className="h-5 w-5" />
+              Crawler İşi Ekle
+            </DialogTitle>
+            <DialogDescription>
+              Zamanlanmış crawler pipeline oluşturun
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 py-4">
+            {/* Job Name */}
+            <div className="space-y-2">
+              <Label htmlFor="jobName">İş Adı</Label>
+              <Input
+                id="jobName"
+                placeholder="Örn: GİB Sirküler Günlük"
+                value={newJob.name}
+                onChange={(e) => setNewJob({ ...newJob, name: e.target.value })}
+              />
+            </div>
+
+            {/* Crawler Selection */}
+            <div className="space-y-2">
+              <Label>Crawler</Label>
+              <Select
+                value={newJob.crawler}
+                onValueChange={(value) => setNewJob({ ...newJob, crawler: value })}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Crawler seçin" />
+                </SelectTrigger>
+                <SelectContent>
+                  {AVAILABLE_CRAWLERS.map((crawler) => (
+                    <SelectItem key={crawler.name} value={crawler.name}>
+                      <div className="flex items-center gap-2">
+                        <Globe className="h-4 w-4" />
+                        {crawler.label}
+                      </div>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* Target Table */}
+            <div className="space-y-2">
+              <Label>Hedef Tablo (Upsert)</Label>
+              <Select
+                value={newJob.targetTable}
+                onValueChange={(value) => setNewJob({ ...newJob, targetTable: value })}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Tablo seçin (opsiyonel)" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__none__">Yok</SelectItem>
+                  {availableTables.map((table) => (
+                    <SelectItem key={table.name} value={table.name}>
+                      <div className="flex items-center gap-2">
+                        <Database className="h-4 w-4" />
+                        {table.name}
+                      </div>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* Toggles */}
+            <div className="flex items-center gap-6">
+              <div className="flex items-center gap-2">
+                <Switch
+                  id="enableEmbed"
+                  checked={newJob.enableEmbed}
+                  onCheckedChange={(checked) => setNewJob({ ...newJob, enableEmbed: checked })}
+                />
+                <Label htmlFor="enableEmbed" className="flex items-center gap-1 cursor-pointer">
+                  <Sparkles className="h-4 w-4" />
+                  Embed
+                </Label>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <Switch
+                  id="enableUpsert"
+                  checked={newJob.enableUpsert}
+                  onCheckedChange={(checked) => setNewJob({ ...newJob, enableUpsert: checked })}
+                />
+                <Label htmlFor="enableUpsert" className="flex items-center gap-1 cursor-pointer">
+                  <Database className="h-4 w-4" />
+                  Upsert
+                </Label>
+              </div>
+            </div>
+
+            {/* Schedule Type */}
+            <div className="space-y-2">
+              <Label>Zamanlama Tipi</Label>
+              <Select
+                value={newJob.scheduleType}
+                onValueChange={(value: 'cron' | 'interval') => setNewJob({ ...newJob, scheduleType: value })}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="cron">Cron (Belirli zamanda)</SelectItem>
+                  <SelectItem value="interval">Interval (Periyodik)</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* Cron / Interval Input */}
+            {newJob.scheduleType === 'cron' ? (
+              <div className="space-y-2">
+                <Label htmlFor="cronExpr">Cron İfadesi</Label>
+                <Input
+                  id="cronExpr"
+                  placeholder="0 6 * * *"
+                  value={newJob.cronExpression}
+                  onChange={(e) => setNewJob({ ...newJob, cronExpression: e.target.value })}
+                />
+                <p className="text-xs text-muted-foreground">
+                  Örnek: 0 6 * * * = Her gün saat 06:00
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                <Label htmlFor="intervalMin">Interval (dakika)</Label>
+                <Input
+                  id="intervalMin"
+                  type="number"
+                  min={1}
+                  value={newJob.intervalMinutes}
+                  onChange={(e) => setNewJob({ ...newJob, intervalMinutes: parseInt(e.target.value) || 60 })}
+                />
+              </div>
+            )}
+          </div>
+
+          {/* Actions */}
+          <div className="flex justify-end gap-2">
+            <Button variant="outline" onClick={() => setShowAddModal(false)}>
+              İptal
+            </Button>
+            <Button onClick={handleCreateJob} disabled={creating}>
+              {creating ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                  Oluşturuluyor...
+                </>
+              ) : (
+                <>
+                  <Plus className="h-4 w-4 mr-1" />
+                  Oluştur
+                </>
+              )}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

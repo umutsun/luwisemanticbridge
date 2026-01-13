@@ -309,6 +309,50 @@ export default function CrawlerDataPage() {
     fetchScheduledCrawlers();
   }, []);
 
+  // Poll scheduler for running crawler jobs (adds to runningScripts for animations)
+  useEffect(() => {
+    const baseUrl = config.api.baseUrl;
+
+    const pollSchedulerJobs = async () => {
+      try {
+        const response = await fetchWithAuth(`${baseUrl}/api/v2/scheduler/jobs`);
+        if (response.ok) {
+          const jobs = await response.json();
+
+          // Find jobs with running status
+          const runningJobs = jobs.filter((job: any) =>
+            job.last_run_status === 'running' &&
+            (job.job_type === 'crawler' || job.job_type === 'scrape_and_embed')
+          );
+
+          if (runningJobs.length > 0) {
+            // Extract crawler names from job configs
+            const crawlerNames = runningJobs.map((job: any) =>
+              job.job_config?.scraper_name || job.job_config?.crawler_name || job.name
+            ).filter(Boolean);
+
+            // Add to running scripts for animations
+            setRunningScripts(prev => {
+              const next = new Set(prev);
+              crawlerNames.forEach((name: string) => next.add(name));
+              return next;
+            });
+          }
+        }
+      } catch (error) {
+        // Silent fail - polling is optional enhancement
+      }
+    };
+
+    // Initial poll
+    pollSchedulerJobs();
+
+    // Poll every 10 seconds
+    const interval = setInterval(pollSchedulerJobs, 10000);
+
+    return () => clearInterval(interval);
+  }, []);
+
   // Debug: Track isAddingNewSource state changes
   useEffect(() => {
     console.log('🟡 [DEBUG] isAddingNewSource state changed to:', isAddingNewSource);

@@ -120,6 +120,8 @@ export const DEFAULT_RAG_ROUTING_SCHEMA: RAGRoutingSchema = {
         ],
 
         // Dipnot Format Şablonları
+        // NOT: Dipnotlar artık backend'de sources metadata'dan üretiliyor (generateFootnotes)
+        // LLM dipnot yazmıyor, sadece metin içinde [1], [2] şeklinde atıf yapıyor
         footnoteFormat: {
           makale: 'yazar, başlık, dergi adı, tarih, sayı (+ varsa cilt/sayfa)',
           ozelge: 'tarih + sayı (+ mümkünse birim)',

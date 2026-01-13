@@ -240,15 +240,9 @@ Aşağıdaki 4 başlığı MUTLAKA kullan ve sırayla yanıtla:
 
       prompt += `
 DİPNOT KURALLARI:
-- Metin içinde [1], [2] şeklinde atıf yap
-- En sonda "**Dipnotlar:**" başlığı altında kaynakları listele
-- Format:
+- Metin içinde [1], [2] şeklinde atıf yap (kaynak sırasına göre)
+- DİPNOT LİSTESİ YAZMA - dipnotlar sistem tarafından otomatik eklenecek
 `;
-      Object.entries(footnoteFormat).forEach(([type, format]) => {
-        if (format) {
-          prompt += `  • ${type}: ${format}\n`;
-        }
-      });
 
       prompt += `
 ÇELİŞKİ DURUMU:
@@ -2847,6 +2841,16 @@ FORMAT:
           const keywordsSection = `\n\n---\n\n**ANAHTAR KELİMELER:** ${extractedKeywords.join(' • ')}`;
           finalResponse = finalResponse + keywordsSection;
           console.log(`🏷️ [KEYWORDS] Added ${extractedKeywords.length} keywords to response`);
+        }
+      }
+
+      // 📝 FOOTNOTES: Generate footnotes from sources metadata (BACKEND-GENERATED)
+      // This ensures footnotes are accurate and not hallucinated by LLM
+      if (finalSources.length > 0 && responseType === 'FOUND') {
+        const footnotes = this.generateFootnotes(finalSources);
+        if (footnotes) {
+          finalResponse = finalResponse + footnotes;
+          console.log(`📝 [FOOTNOTES] Added ${finalSources.length} footnotes from metadata`);
         }
       }
 
@@ -5485,6 +5489,106 @@ FORMAT:
 
     console.log(` Formatted ${formattedResults.length} sources successfully`);
     return formattedResults;
+  }
+
+  /**
+   * 📝 Generate footnotes from sources metadata (BACKEND-GENERATED)
+   * This ensures footnotes are accurate and not hallucinated by LLM
+   * @param sources - Formatted sources array
+   * @returns Footnotes string to append to response
+   */
+  private generateFootnotes(sources: any[]): string {
+    if (!sources || sources.length === 0) {
+      return '';
+    }
+
+    const footnotes: string[] = [];
+
+    sources.forEach((source, idx) => {
+      const num = idx + 1;
+      const parts: string[] = [];
+
+      // Source type detection
+      const sourceType = (
+        source.category ||
+        source.sourceTable ||
+        source.metadata?.source_type ||
+        'Kaynak'
+      ).toLowerCase();
+
+      // Type label mapping (Turkish)
+      const typeLabels: Record<string, string> = {
+        'kanun': 'Kanun',
+        'teblig': 'Tebliğ',
+        'tebliğ': 'Tebliğ',
+        'sirkuler': 'Sirküler',
+        'sirkü': 'Sirküler',
+        'ozelge': 'Özelge',
+        'özelge': 'Özelge',
+        'yonetmelik': 'Yönetmelik',
+        'yönetmelik': 'Yönetmelik',
+        'rehber': 'Rehber',
+        'makale': 'Makale',
+        'danistay': 'Danıştay Kararı',
+        'yargi': 'Yargı Kararı',
+        'sorucevap': 'Soru-Cevap',
+        'document': 'Doküman',
+        'documents': 'Doküman'
+      };
+
+      // Find matching type label
+      let typeLabel = 'Kaynak';
+      for (const [key, label] of Object.entries(typeLabels)) {
+        if (sourceType.includes(key)) {
+          typeLabel = label;
+          break;
+        }
+      }
+      parts.push(typeLabel);
+
+      // Add metadata fields if available
+      const metadata = source.metadata || {};
+
+      // Institution/Authority
+      if (metadata.kurum) {
+        parts.push(metadata.kurum);
+      } else if (metadata.makam) {
+        parts.push(metadata.makam);
+      }
+
+      // Date
+      if (metadata.tarih) {
+        parts.push(metadata.tarih);
+      } else if (metadata.yil) {
+        parts.push(metadata.yil);
+      } else if (metadata.karar_tarihi) {
+        parts.push(metadata.karar_tarihi);
+      }
+
+      // Number/Reference
+      if (metadata.sayi) {
+        parts.push(`Sayı: ${metadata.sayi}`);
+      } else if (metadata.esas_no) {
+        parts.push(`Esas: ${metadata.esas_no}`);
+      } else if (metadata.karar_no) {
+        parts.push(`Karar: ${metadata.karar_no}`);
+      }
+
+      // Subject (if short enough)
+      if (metadata.konu && metadata.konu.length < 50) {
+        parts.push(`"${metadata.konu}"`);
+      }
+
+      // Build footnote line
+      const footnoteText = parts.join(' - ');
+      footnotes.push(`[${num}] ${footnoteText}`);
+    });
+
+    if (footnotes.length === 0) {
+      return '';
+    }
+
+    return '\n\n---\n\n**Dipnotlar:**\n' + footnotes.join('\n');
   }
 
   /**
