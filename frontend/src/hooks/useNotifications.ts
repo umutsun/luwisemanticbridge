@@ -149,7 +149,7 @@ export function useNotifications() {
     }
 
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const wsUrl = `${protocol}//${window.location.host}`;
+    const wsUrl = `${protocol}//${window.location.host}/ws/notifications`;
 
     try {
       const ws = new WebSocket(wsUrl);
