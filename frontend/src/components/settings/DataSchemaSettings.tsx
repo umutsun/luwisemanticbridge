@@ -385,6 +385,8 @@ export default function DataSchemaSettings() {
       setEditedSchema({ ...editedSchema, llmConfig: { ...editedSchema.llmConfig, topicEntities: entities } });
     } else if (field === 'analyzePrompt') {
       setEditedSchema({ ...editedSchema, templates: { ...editedSchema.templates, analyze: value } });
+    } else if (field === 'citationTemplate') {
+      setEditedSchema({ ...editedSchema, templates: { ...editedSchema.templates, citation: value } });
     } else if (field === 'chatbotContext') {
       setEditedSchema({ ...editedSchema, llmConfig: { ...editedSchema.llmConfig, chatbotContext: value } });
     } else if (field === 'fields') {
@@ -672,22 +674,25 @@ export default function DataSchemaSettings() {
               <div className="border-t pt-4 space-y-2">
                 <h3 className="text-sm font-medium mb-3">LLM Konfigürasyonu</h3>
 
-                {/* Citation Template - Inline (short) */}
-                <div>
-                  <Label className="text-xs">Citation Template</Label>
-                  <Input
-                    value={editedSchema.templates.citation || ''}
-                    onChange={e => setEditedSchema({
-                      ...editedSchema,
-                      templates: { ...editedSchema.templates, citation: e.target.value }
+                {/* Clickable Cards - 3 columns */}
+                <div className="grid grid-cols-3 gap-2">
+                  {/* Citation Template Card */}
+                  <div
+                    className="p-3 border rounded-lg cursor-pointer hover:bg-muted/50 transition-colors"
+                    onClick={() => setEditModal({
+                      open: true,
+                      field: 'citationTemplate',
+                      title: 'Citation Template',
+                      value: editedSchema.templates.citation || '',
+                      placeholder: '[{{vergi_turu}}] {{kanun_no}} Sayılı Kanun Md.{{madde_no}}{{fikra_no ? "/" + fikra_no : ""}} ({{tarih}})'
                     })}
-                    placeholder="{{madde_no}} - {{tarih}}"
-                    className="h-8 mt-1 font-mono"
-                  />
-                </div>
+                  >
+                    <div className="text-xs font-medium mb-1">Citation Template</div>
+                    <div className="text-xs text-muted-foreground font-mono truncate">
+                      {editedSchema.templates.citation?.substring(0, 30) || '{{madde_no}}...'}
+                    </div>
+                  </div>
 
-                {/* Clickable Cards for longer fields */}
-                <div className="grid grid-cols-2 gap-2 mt-3">
                   {/* Analyze Prompt Card */}
                   <div
                     className="p-3 border rounded-lg cursor-pointer hover:bg-muted/50 transition-colors"
@@ -700,8 +705,8 @@ export default function DataSchemaSettings() {
                     })}
                   >
                     <div className="text-xs font-medium mb-1">Analyze Prompt</div>
-                    <div className="text-xs text-muted-foreground line-clamp-2">
-                      {editedSchema.templates.analyze?.substring(0, 60) || 'Tanımsız'}...
+                    <div className="text-xs text-muted-foreground line-clamp-1">
+                      {editedSchema.templates.analyze?.substring(0, 30) || 'Tanımsız'}...
                     </div>
                   </div>
 
@@ -717,8 +722,8 @@ export default function DataSchemaSettings() {
                     })}
                   >
                     <div className="text-xs font-medium mb-1">Chatbot Context</div>
-                    <div className="text-xs text-muted-foreground line-clamp-2">
-                      {editedSchema.llmConfig?.chatbotContext?.substring(0, 60) || 'Tanımsız'}...
+                    <div className="text-xs text-muted-foreground line-clamp-1">
+                      {editedSchema.llmConfig?.chatbotContext?.substring(0, 30) || 'Tanımsız'}...
                     </div>
                   </div>
                 </div>
@@ -1156,6 +1161,7 @@ export default function DataSchemaSettings() {
                 {editModal.field === 'fields' && 'JSON formatında alan tanımları'}
                 {editModal.field === 'analyzePrompt' && 'Doküman analizi için LLM talimatları'}
                 {editModal.field === 'chatbotContext' && 'Chat yanıtları için domain bağlamı'}
+                {editModal.field === 'citationTemplate' && 'Kaynak gösterim şablonu: {{alan_adi}} formatında değişkenler kullanın'}
                 {editModal.field === 'routingSchema' && 'RAG yanıt formatı ve routing kuralları'}
               </p>
             </div>
