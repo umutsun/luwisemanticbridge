@@ -96,8 +96,8 @@ export function NotificationPanel() {
                 onClick={() => !n.read && markAsRead(n.id)}
               >
                 {getIcon(n.type)}
-                <span className={cn("flex-1 text-xs truncate", !n.read && "font-medium")}>
-                  {n.title}
+                <span className={cn("flex-1 text-[11px] truncate", !n.read && "font-medium")}>
+                  {n.message || n.title}
                 </span>
                 <span className="text-[9px] text-muted-foreground">{timeAgo(n.timestamp)}</span>
                 <Button
