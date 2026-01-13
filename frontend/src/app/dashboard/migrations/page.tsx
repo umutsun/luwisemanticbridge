@@ -169,6 +169,25 @@ export default function EmbeddingsManagerPage() {
   const [healthProgress, setHealthProgress] = useState(0);
   const [showHealthModal, setShowHealthModal] = useState(false);
   const [isOptimizing, setIsOptimizing] = useState(false);
+  const [optimizeProgress, setOptimizeProgress] = useState<{
+    status: 'idle' | 'processing' | 'completed' | 'error';
+    currentTable: string;
+    tablesProcessed: number;
+    totalTables: number;
+    orphansDeleted: number;
+    duplicatesDeleted: number;
+    metadataFixed: number;
+    message: string;
+  }>({
+    status: 'idle',
+    currentTable: '',
+    tablesProcessed: 0,
+    totalTables: 0,
+    orphansDeleted: 0,
+    duplicatesDeleted: 0,
+    metadataFixed: 0,
+    message: ''
+  });
   const [healthReport, setHealthReport] = useState<{
     summary: { total_embeddings: number; orphan_count: number; missing_metadata_count: number; duplicate_count: number; health_score: number };
     tables: Record<string, any>;
@@ -1268,10 +1287,18 @@ export default function EmbeddingsManagerPage() {
                 {/* Progress Circle - Always visible, above Batch Size */}
                 <div className="flex flex-col items-center gap-3 pb-2">
                   <ProgressCircle
-                    progress={Math.round(progress?.percentage || 0)}
-                    showPulse={progress?.status === 'processing'}
+                    progress={
+                      isOptimizing
+                        ? (optimizeProgress.totalTables > 0
+                            ? Math.round((optimizeProgress.tablesProcessed / optimizeProgress.totalTables) * 100)
+                            : 0)
+                        : Math.round(progress?.percentage || 0)
+                    }
+                    showPulse={isOptimizing || progress?.status === 'processing'}
                     size={120}
                     statusText={
+                      isOptimizing ? "Optimizing" :
+                      optimizeProgress.status === 'completed' ? "Optimized" :
                       progress?.status === 'processing' ? "Processing" :
                       progress?.status === 'completed' ? "Complete" :
                       progress?.status === 'idle' ? "Ready" :
@@ -1279,8 +1306,65 @@ export default function EmbeddingsManagerPage() {
                     }
                   />
 
+                  {/* Optimize Mode - Processing */}
+                  {isOptimizing && (
+                    <div className="w-full space-y-1.5 text-sm bg-violet-50 dark:bg-violet-950/30 rounded-lg p-3 border border-violet-200 dark:border-violet-800">
+                      <div className="flex justify-between">
+                        <span className="text-violet-600 dark:text-violet-400">Durum:</span>
+                        <span className="font-medium text-violet-900 dark:text-violet-100">Veri Optimizasyonu</span>
+                      </div>
+                      {optimizeProgress.currentTable && (
+                        <div className="flex justify-between">
+                          <span className="text-violet-600 dark:text-violet-400">Tablo:</span>
+                          <span className="font-medium text-violet-900 dark:text-violet-100">{optimizeProgress.currentTable}</span>
+                        </div>
+                      )}
+                      <div className="flex justify-between">
+                        <span className="text-violet-600 dark:text-violet-400">İlerleme:</span>
+                        <span className="font-medium text-violet-900 dark:text-violet-100">
+                          {optimizeProgress.tablesProcessed} / {optimizeProgress.totalTables} tablo
+                        </span>
+                      </div>
+                      {optimizeProgress.message && (
+                        <div className="text-xs text-violet-700 dark:text-violet-300 mt-2 pt-2 border-t border-violet-200 dark:border-violet-700">
+                          {optimizeProgress.message}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Optimize Completed */}
+                  {!isOptimizing && optimizeProgress.status === 'completed' && (
+                    <div className="w-full space-y-1.5 text-sm bg-violet-50 dark:bg-violet-950/30 rounded-lg p-3 border border-violet-200 dark:border-violet-800">
+                      <div className="flex justify-between">
+                        <span className="text-violet-600 dark:text-violet-400">Durum:</span>
+                        <span className="font-medium text-violet-900 dark:text-violet-100">Optimizasyon Tamamlandı</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-violet-600 dark:text-violet-400">Orphan:</span>
+                        <span className="font-medium text-violet-900 dark:text-violet-100">{optimizeProgress.orphansDeleted} silindi</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-violet-600 dark:text-violet-400">Duplicate:</span>
+                        <span className="font-medium text-violet-900 dark:text-violet-100">{optimizeProgress.duplicatesDeleted} silindi</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-violet-600 dark:text-violet-400">Metadata:</span>
+                        <span className="font-medium text-violet-900 dark:text-violet-100">{optimizeProgress.metadataFixed} düzeltildi</span>
+                      </div>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="w-full mt-2 text-violet-600 hover:text-violet-700"
+                        onClick={() => setOptimizeProgress(prev => ({ ...prev, status: 'idle' }))}
+                      >
+                        Kapat
+                      </Button>
+                    </div>
+                  )}
+
                   {/* Real-time Status Info - Processing */}
-                  {progress?.status === 'processing' && (
+                  {!isOptimizing && optimizeProgress.status !== 'completed' && progress?.status === 'processing' && (
                     <div className="w-full space-y-1.5 text-sm bg-blue-50 dark:bg-blue-950/30 rounded-lg p-3 border border-blue-200 dark:border-blue-800">
                       {progress.currentTable && (
                         <div className="flex justify-between">
@@ -1313,11 +1397,11 @@ export default function EmbeddingsManagerPage() {
                   )}
 
                   {/* Completed Status */}
-                  {progress?.status === 'completed' && (
+                  {!isOptimizing && optimizeProgress.status !== 'completed' && progress?.status === 'completed' && (
                     <div className="w-full space-y-1.5 text-sm bg-green-50 dark:bg-green-950/30 rounded-lg p-3 border border-green-200 dark:border-green-800">
                       <div className="flex justify-between">
                         <span className="text-green-600 dark:text-green-400">Status:</span>
-                        <span className="font-medium text-green-900 dark:text-green-100">✓ Completed</span>
+                        <span className="font-medium text-green-900 dark:text-green-100">Completed</span>
                       </div>
                       {progress.current !== undefined && (
                         <div className="flex justify-between">
@@ -2184,24 +2268,53 @@ export default function EmbeddingsManagerPage() {
                     className="flex-1"
                     disabled={isOptimizing}
                     onClick={async () => {
+                      // Modal'ı kapat ve sol kartta progress göster
+                      setShowHealthModal(false);
                       setIsOptimizing(true);
+
+                      // Tablo sayısını tahmin et
+                      const tableCount = Object.keys(healthReport?.tables || {}).length || 1;
+                      setOptimizeProgress({
+                        status: 'processing',
+                        currentTable: 'Başlatılıyor...',
+                        tablesProcessed: 0,
+                        totalTables: tableCount,
+                        orphansDeleted: 0,
+                        duplicatesDeleted: 0,
+                        metadataFixed: 0,
+                        message: 'Veri optimizasyonu başlatıldı'
+                      });
+
                       try {
                         const response = await fetchWithAuth('/api/data-health/optimize?dry_run=false', {
                           method: 'POST',
                         });
                         if (response.ok) {
                           const result = await response.json();
-                          setShowHealthModal(false);
-                          toast({
-                            title: 'Optimizasyon tamamlandı',
-                            description: `${result.orphans_deleted} orphan, ${result.duplicates_deleted} duplicate silindi, ${result.metadata_fixed} metadata düzeltildi.`,
+
+                          // Progress'i tamamlandı olarak güncelle
+                          setOptimizeProgress({
+                            status: 'completed',
+                            currentTable: '',
+                            tablesProcessed: result.tables_processed?.length || tableCount,
+                            totalTables: result.tables_processed?.length || tableCount,
+                            orphansDeleted: result.orphans_deleted || 0,
+                            duplicatesDeleted: result.duplicates_deleted || 0,
+                            metadataFixed: result.metadata_fixed || 0,
+                            message: ''
                           });
+
                           // Raporu yenile
                           fetchHealthReport();
                         } else {
                           throw new Error('Optimizasyon başarısız');
                         }
                       } catch (error) {
+                        setOptimizeProgress(prev => ({
+                          ...prev,
+                          status: 'error',
+                          message: 'Optimizasyon sırasında hata oluştu'
+                        }));
                         toast({
                           title: 'Hata',
                           description: 'Optimizasyon sırasında bir hata oluştu.',
@@ -2212,7 +2325,7 @@ export default function EmbeddingsManagerPage() {
                       }
                     }}
                   >
-                    {isOptimizing ? 'İşleniyor...' : 'Optimize Et'}
+                    Optimize Et
                   </Button>
                 )}
               </div>
