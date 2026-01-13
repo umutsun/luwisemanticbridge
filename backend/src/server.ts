@@ -63,6 +63,7 @@ import logsRoutes, { initializeLogWebSocket } from "./routes/logs.routes";
 import { initializeMetricsWebSocket } from "./services/metrics-websocket.service";
 import translateRoutes from "./routes/translate.routes";
 import translationEmbeddingsRoutes from "./routes/translation-embeddings.routes";
+import notificationsRoutes, { setupNotificationBroadcast } from "./routes/notifications.routes";
 import schedulerRoutes from "./routes/scheduler.routes";
 import {
   preventNoSQLInjection,
@@ -583,6 +584,7 @@ app.use("/api/v2/devops", devopsRoutes);  // DevOps Dashboard: SSH, security, de
 app.use("/api/v2/websocket-log-stream", websocketLogStreamRoutes);
 app.use("/api/whisper", whisperRoutes);
 app.use(ttsRoutes);  // TTS routes at /api/v2/tts/*
+app.use("/api/v2/notifications", notificationsRoutes);  // Real-time notifications
 
 // GraphQL server
 try {
@@ -1047,6 +1049,12 @@ async function startServer() {
       initializeMetricsWebSocket(metricsWss, lsembPool, redis);
       metricsWebSocketInitialized = true;
       console.log(" Metrics WebSocket: Initialized");
+    }
+
+    // Initialize Notification Broadcast WebSocket
+    if (SERVER.WEBSOCKET.ENABLED && wss) {
+      setupNotificationBroadcast(wss);
+      console.log(" Notification WebSocket: Initialized");
     }
 
     // Check Redis database info
