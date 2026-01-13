@@ -1,10 +1,6 @@
 /**
  * useNotifications Hook
- *
  * Real-time notification consumer via WebSocket
- * - Connects to backend WebSocket notification service
- * - Listens for real-time notifications
- * - Manages notification state
  */
 
 import { useEffect, useState, useCallback, useRef } from 'react';
@@ -20,6 +16,23 @@ export interface Notification {
   read: boolean;
 }
 
+// Get auth token from various storage locations
+const getAuthToken = (): string | null => {
+  if (typeof window === 'undefined') return null;
+
+  let token = getAuthToken() || localStorage.getItem('accessToken');
+  if (token) return token;
+
+  const authStorage = localStorage.getItem('auth-storage');
+  if (authStorage) {
+    try {
+      const parsed = JSON.parse(authStorage);
+      if (parsed.state?.token) return parsed.state.token;
+    } catch (e) {}
+  }
+  return null;
+};
+
 export function useNotifications() {
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
@@ -29,15 +42,17 @@ export function useNotifications() {
 
   // Fetch initial notifications
   const fetchNotifications = useCallback(async () => {
+    const token = getAuthToken();
+    if (!token) return;
+
     try {
       const res = await fetch('/api/v2/notifications?limit=50', {
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
-        }
+        headers: { 'Authorization': `Bearer ${token}` }
       });
       const data = await res.json();
-      if (data.success) {
+      if (data.success && data.notifications) {
         setNotifications(data.notifications);
+        setUnreadCount(data.notifications.filter((n: Notification) => !n.read).length);
       }
     } catch (error) {
       console.error('Failed to fetch notifications:', error);
@@ -46,11 +61,12 @@ export function useNotifications() {
 
   // Fetch unread count
   const fetchUnreadCount = useCallback(async () => {
+    const token = getAuthToken();
+    if (!token) return;
+
     try {
       const res = await fetch('/api/v2/notifications/unread-count', {
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
-        }
+        headers: { 'Authorization': `Bearer ${token}` }
       });
       const data = await res.json();
       if (data.success) {
@@ -67,7 +83,7 @@ export function useNotifications() {
       const res = await fetch(`/api/v2/notifications/${notificationId}/read`, {
         method: 'PUT',
         headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
+          'Authorization': `Bearer ${getAuthToken()}`
         }
       });
       const data = await res.json();
@@ -88,7 +104,7 @@ export function useNotifications() {
       const res = await fetch('/api/v2/notifications/read-all', {
         method: 'PUT',
         headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
+          'Authorization': `Bearer ${getAuthToken()}`
         }
       });
       const data = await res.json();
@@ -107,7 +123,7 @@ export function useNotifications() {
       const res = await fetch(`/api/v2/notifications/${notificationId}`, {
         method: 'DELETE',
         headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
+          'Authorization': `Bearer ${getAuthToken()}`
         }
       });
       const data = await res.json();
@@ -126,7 +142,7 @@ export function useNotifications() {
       const res = await fetch('/api/v2/notifications/all', {
         method: 'DELETE',
         headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
+          'Authorization': `Bearer ${getAuthToken()}`
         }
       });
       const data = await res.json();
