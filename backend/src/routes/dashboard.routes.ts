@@ -2427,4 +2427,94 @@ router.get('/graph/data-sources', authenticateToken, async (req: AuthenticatedRe
   }
 });
 
+/**
+ * GET /dashboard/crawler-stats
+ * Get real-time crawler and scraped data statistics
+ */
+router.get('/crawler-stats', async (_req: Request, res: Response) => {
+  try {
+    const { redis } = require('../server');
+
+    // Get scraped_pages count from database
+    let scrapedPagesCount = 0;
+    try {
+      const scrapedResult = await lsembPool.query('SELECT COUNT(*) as count FROM scraped_pages');
+      scrapedPagesCount = parseInt(scrapedResult.rows[0]?.count || 0);
+    } catch (error) {
+      console.warn('scraped_pages table not found:', error);
+    }
+
+    // Get Redis crawler data
+    let crawlerItemsCount = 0;
+    let activeCrawlers: string[] = [];
+
+    try {
+      // Get all crawl4ai keys
+      const keys = await redis.keys('crawl4ai:*');
+
+      // Count unique crawler names and items
+      const crawlerMap = new Map<string, number>();
+
+      for (const key of keys) {
+        const parts = key.split(':');
+        if (parts.length >= 2) {
+          const crawlerName = parts[1];
+
+          // Skip internal keys
+          if (crawlerName === '_init' || crawlerName === 'status' || crawlerName === 'running') {
+            continue;
+          }
+
+          if (!crawlerMap.has(crawlerName)) {
+            crawlerMap.set(crawlerName, 0);
+            activeCrawlers.push(crawlerName);
+          }
+
+          // Count actual data keys (not status keys)
+          if (parts.length > 2 && parts[2] !== '_init') {
+            crawlerMap.set(crawlerName, (crawlerMap.get(crawlerName) || 0) + 1);
+          }
+        }
+      }
+
+      // Sum all crawler items
+      crawlerItemsCount = Array.from(crawlerMap.values()).reduce((a, b) => a + b, 0);
+    } catch (error) {
+      console.warn('Redis crawler data fetch failed:', error);
+    }
+
+    // Get embedding stats for scraped data
+    let scrapedEmbeddingsCount = 0;
+    try {
+      const embResult = await lsembPool.query(`
+        SELECT COUNT(*) as count
+        FROM unified_embeddings
+        WHERE source_type = 'scraped' OR source_type LIKE '%crawl%'
+      `);
+      scrapedEmbeddingsCount = parseInt(embResult.rows[0]?.count || 0);
+    } catch (error) {
+      console.warn('Scraped embeddings count failed:', error);
+    }
+
+    res.json({
+      success: true,
+      stats: {
+        scrapedPages: scrapedPagesCount,
+        crawlerItems: crawlerItemsCount,
+        scrapedEmbeddings: scrapedEmbeddingsCount,
+        totalScrapedData: scrapedPagesCount + crawlerItemsCount,
+        activeCrawlers: activeCrawlers,
+        crawlerCount: activeCrawlers.length
+      },
+      timestamp: new Date().toISOString()
+    });
+  } catch (error: any) {
+    console.error('Crawler stats error:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to fetch crawler stats'
+    });
+  }
+});
+
 export default router;

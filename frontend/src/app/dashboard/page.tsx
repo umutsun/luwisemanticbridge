@@ -355,6 +355,16 @@ export default function DashboardPage() {
     totalDocuments: 0
   });
 
+  // Crawler stats - real-time
+  const [crawlerStats, setCrawlerStats] = useState({
+    scrapedPages: 0,
+    crawlerItems: 0,
+    scrapedEmbeddings: 0,
+    totalScrapedData: 0,
+    activeCrawlers: [] as string[],
+    crawlerCount: 0
+  });
+
   // SSE connection status
   const [sseConnected, setSseConnected] = useState(false);
 
@@ -541,6 +551,37 @@ export default function DashboardPage() {
 
     // Poll every 3 seconds
     intervalId = setInterval(fetchMetrics, 3000);
+
+    return () => {
+      isMounted = false;
+      if (intervalId) clearInterval(intervalId);
+    };
+  }, []);
+
+  // Fetch crawler stats - real-time polling
+  useEffect(() => {
+    let intervalId: NodeJS.Timeout | null = null;
+    let isMounted = true;
+
+    const fetchCrawlerStats = async () => {
+      try {
+        const response = await fetchWithAuth(apiConfig.getApiUrl('/api/v2/dashboard/crawler-stats'));
+        if (response.ok && isMounted) {
+          const data = await safeJsonParse(response);
+          if (data?.stats) {
+            setCrawlerStats(data.stats);
+          }
+        }
+      } catch (error) {
+        console.error('Crawler stats fetch error:', error);
+      }
+    };
+
+    // Initial fetch after short delay
+    setTimeout(fetchCrawlerStats, 1500);
+
+    // Poll every 5 seconds
+    intervalId = setInterval(fetchCrawlerStats, 5000);
 
     return () => {
       isMounted = false;
@@ -1533,6 +1574,45 @@ export default function DashboardPage() {
             value={<AnimatedNumber value={embeddingStats?.total_embeddings || 0} />}
             description={`${performanceMetrics.totalDocuments} documents indexed`}
             status={embeddingStats?.total_embeddings ? 'online' : 'warning'}
+          />
+        </div>
+
+        {/* Scraped Data Stats Row - New Real-time Data */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+          {/* Scraped Pages */}
+          <GlassCard
+            title="Kazınan Sayfalar"
+            value={<AnimatedNumber value={crawlerStats.scrapedPages} />}
+            description="scraped_pages tablosundan"
+            live={true}
+            status="online"
+          />
+
+          {/* Crawler Items (Redis) */}
+          <GlassCard
+            title="Crawler Verileri"
+            value={<AnimatedNumber value={crawlerStats.crawlerItems} />}
+            description={`${crawlerStats.crawlerCount} aktif crawler (Redis)`}
+            live={true}
+            status={crawlerStats.crawlerItems > 0 ? 'online' : 'warning'}
+          />
+
+          {/* Total Scraped Data */}
+          <GlassCard
+            title="Toplam Kazınan Veri"
+            value={<AnimatedNumber value={crawlerStats.totalScrapedData} />}
+            description="Sayfa + Crawler verileri"
+            live={true}
+            status="online"
+          />
+
+          {/* Scraped Embeddings */}
+          <GlassCard
+            title="Kazınan Veri Embeddings"
+            value={<AnimatedNumber value={crawlerStats.scrapedEmbeddings} />}
+            description="Vektörize edilmiş kazınan veri"
+            live={true}
+            status={crawlerStats.scrapedEmbeddings > 0 ? 'online' : 'warning'}
           />
         </div>
 
