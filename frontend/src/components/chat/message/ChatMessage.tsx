@@ -103,6 +103,31 @@ function parseStructuredResponse(content: string): ParsedResponse {
 }
 
 /**
+ * Clean raw markdown artifacts from assessment text
+ * Removes: ## headers, **bold markers**, [Kaynak X] references, section labels
+ */
+function cleanAssessmentText(content: string): string {
+  if (!content) return '';
+
+  return content
+    // Remove ## headers completely
+    .replace(/^##\s*[^\n]+\n?/gm, '')
+    // Remove **Section:** style headers
+    .replace(/^\*\*(?:Konu|Anahtar\s*Terim|Dayanaklar|Değerlendirme|Dipnot)[^*]*\*\*:?\s*/gim, '')
+    // Remove [Kaynak X] references (already shown in sources)
+    .replace(/\[Kaynak\s*\d+\]/gi, '')
+    // Remove [1], [2] style references (sources shown separately)
+    .replace(/\[\d+\]/g, '')
+    // Remove standalone bold markers around single words/short phrases in middle of text
+    .replace(/\*\*([^*]{1,30})\*\*/g, '$1')
+    // Clean up multiple spaces
+    .replace(/\s{2,}/g, ' ')
+    // Clean up multiple newlines
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+}
+
+/**
  * Format markdown content for better visual presentation
  * - Adds line breaks before/after bold headings for paragraph separation
  * - Converts inline numbered items to proper list format
@@ -306,10 +331,11 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
     return parseStructuredResponse(message.content);
   }, [message.content, message.role, message.isTyping, message.isStreaming]);
 
-  // Get display content - either parsed assessment or full content
+  // Get display content - either cleaned parsed assessment or full content
   const displayContent = useMemo(() => {
     if (parsedResponse?.hasStructure && parsedResponse.assessment) {
-      return parsedResponse.assessment;
+      // Clean markdown artifacts from assessment text
+      return cleanAssessmentText(parsedResponse.assessment);
     }
     return message.content;
   }, [parsedResponse, message.content]);
@@ -449,20 +475,7 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
                                 {formatMarkdownContent(displayContent)}
                               </ReactMarkdown>
                             </div>
-
-                            {/* Footnotes Section */}
-                            {parsedResponse.footnotes.length > 0 && (
-                              <div className="mt-3 pt-2 border-t border-border/50">
-                                <div className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-1">
-                                  Dipnotlar
-                                </div>
-                                <div className="text-[11px] sm:text-xs text-muted-foreground space-y-0.5">
-                                  {parsedResponse.footnotes.map((fn, idx) => (
-                                    <div key={idx}>{fn}</div>
-                                  ))}
-                                </div>
-                              </div>
-                            )}
+                            {/* Footnotes removed - already shown in Sources/Atıflar section below */}
                           </div>
                         ) : (
                           /* Fallback: Original unstructured rendering */
