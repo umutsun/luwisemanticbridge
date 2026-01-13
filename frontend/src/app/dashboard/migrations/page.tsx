@@ -2195,68 +2195,118 @@ export default function EmbeddingsManagerPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Health Check Modal */}
+      {/* Health Check Modal - Tailwind UI Style */}
       <Dialog open={showHealthModal} onOpenChange={setShowHealthModal}>
-        <DialogContent className="max-w-sm">
-          <DialogHeader>
-            <DialogTitle>Veri Sağlığı</DialogTitle>
-          </DialogHeader>
-
+        <DialogContent className="sm:max-w-md p-0 gap-0 overflow-hidden">
           {healthReport && (
-            <div className="space-y-4">
-              {/* Score + Total */}
-              <div className="flex items-baseline gap-3 pb-3 border-b">
-                <span className="text-3xl font-semibold">%{Math.round(healthReport.summary.health_score)}</span>
-                <span className="text-sm text-muted-foreground">
-                  {healthReport.summary.total_embeddings.toLocaleString('tr-TR')} kayıt
-                </span>
+            <>
+              {/* Header with Score Circle */}
+              <div className="relative bg-gradient-to-br from-slate-50 to-slate-100 dark:from-slate-900 dark:to-slate-800 px-6 py-8">
+                <div className="flex items-center gap-6">
+                  {/* Circular Progress */}
+                  <div className="relative">
+                    <svg className="w-20 h-20 -rotate-90" viewBox="0 0 36 36">
+                      <circle
+                        cx="18" cy="18" r="15.5"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="3"
+                        className="text-slate-200 dark:text-slate-700"
+                      />
+                      <circle
+                        cx="18" cy="18" r="15.5"
+                        fill="none"
+                        stroke="url(#healthGradient)"
+                        strokeWidth="3"
+                        strokeLinecap="round"
+                        strokeDasharray={`${healthReport.summary.health_score} 100`}
+                      />
+                      <defs>
+                        <linearGradient id="healthGradient" x1="0%" y1="0%" x2="100%" y2="0%">
+                          <stop offset="0%" stopColor={healthReport.summary.health_score >= 70 ? '#10b981' : healthReport.summary.health_score >= 40 ? '#f59e0b' : '#ef4444'} />
+                          <stop offset="100%" stopColor={healthReport.summary.health_score >= 70 ? '#059669' : healthReport.summary.health_score >= 40 ? '#d97706' : '#dc2626'} />
+                        </linearGradient>
+                      </defs>
+                    </svg>
+                    <div className="absolute inset-0 flex items-center justify-center">
+                      <span className="text-xl font-bold text-slate-900 dark:text-slate-100">
+                        {Math.round(healthReport.summary.health_score)}%
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Title & Subtitle */}
+                  <div>
+                    <h3 className="text-lg font-semibold text-slate-900 dark:text-slate-100">
+                      Veri Sağlığı
+                    </h3>
+                    <p className="text-sm text-slate-500 dark:text-slate-400 mt-0.5">
+                      {healthReport.summary.total_embeddings.toLocaleString('tr-TR')} kayıt analiz edildi
+                    </p>
+                  </div>
+                </div>
               </div>
 
-              {/* Issues */}
-              {(healthReport.summary.missing_metadata_count > 0 || healthReport.summary.duplicate_count > 0) && (
-                <div className="text-sm space-y-2">
-                  {healthReport.summary.missing_metadata_count > 0 && (
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground">Eksik metadata</span>
-                      <span className="font-medium">{healthReport.summary.missing_metadata_count.toLocaleString('tr-TR')}</span>
-                    </div>
-                  )}
-                  {healthReport.summary.duplicate_count > 0 && (
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground">Duplicate</span>
-                      <span className="font-medium">{healthReport.summary.duplicate_count.toLocaleString('tr-TR')}</span>
-                    </div>
-                  )}
+              {/* Stats Grid */}
+              <div className="px-6 py-4 border-b border-slate-200 dark:border-slate-700">
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="bg-amber-50 dark:bg-amber-900/20 rounded-lg p-3">
+                    <p className="text-xs font-medium text-amber-600 dark:text-amber-400 uppercase tracking-wide">Eksik Metadata</p>
+                    <p className="text-2xl font-semibold text-amber-900 dark:text-amber-100 mt-1">
+                      {healthReport.summary.missing_metadata_count.toLocaleString('tr-TR')}
+                    </p>
+                  </div>
+                  <div className="bg-rose-50 dark:bg-rose-900/20 rounded-lg p-3">
+                    <p className="text-xs font-medium text-rose-600 dark:text-rose-400 uppercase tracking-wide">Duplicate</p>
+                    <p className="text-2xl font-semibold text-rose-900 dark:text-rose-100 mt-1">
+                      {healthReport.summary.duplicate_count.toLocaleString('tr-TR')}
+                    </p>
+                  </div>
                 </div>
-              )}
+              </div>
 
               {/* Problem Tables */}
               {(() => {
                 const problemTables = Object.entries(healthReport.tables)
                   .filter(([_, stats]: [string, any]) => stats.health_score < 80)
                   .sort((a: any, b: any) => a[1].health_score - b[1].health_score)
-                  .slice(0, 4);
+                  .slice(0, 5);
 
                 if (problemTables.length === 0) return null;
 
                 return (
-                  <div className="text-sm">
-                    <p className="text-xs text-muted-foreground mb-2">Düşük skorlu tablolar</p>
-                    {problemTables.map(([table, stats]: [string, any]) => (
-                      <div key={table} className="flex justify-between py-1">
-                        <span className="truncate mr-2">{table}</span>
-                        <span className="text-muted-foreground">%{Math.round(stats.health_score || 0)}</span>
-                      </div>
-                    ))}
+                  <div className="px-6 py-4 border-b border-slate-200 dark:border-slate-700">
+                    <p className="text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wide mb-3">
+                      Dikkat Gerektiren Tablolar
+                    </p>
+                    <div className="space-y-2">
+                      {problemTables.map(([table, stats]: [string, any]) => (
+                        <div key={table} className="flex items-center justify-between">
+                          <span className="text-sm text-slate-700 dark:text-slate-300 truncate mr-3">{table}</span>
+                          <div className="flex items-center gap-2">
+                            <div className="w-16 h-1.5 bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden">
+                              <div
+                                className={`h-full rounded-full ${
+                                  (stats.health_score || 0) >= 50 ? 'bg-amber-500' : 'bg-rose-500'
+                                }`}
+                                style={{ width: `${stats.health_score || 0}%` }}
+                              />
+                            </div>
+                            <span className="text-xs font-medium text-slate-500 dark:text-slate-400 w-8 text-right">
+                              {Math.round(stats.health_score || 0)}%
+                            </span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
                   </div>
                 );
               })()}
 
               {/* Actions */}
-              <div className="flex gap-2 pt-3 border-t">
+              <div className="px-6 py-4 bg-slate-50 dark:bg-slate-800/50 flex gap-3">
                 <Button
                   variant="outline"
-                  size="sm"
                   className="flex-1"
                   onClick={() => setShowHealthModal(false)}
                 >
@@ -2264,15 +2314,12 @@ export default function EmbeddingsManagerPage() {
                 </Button>
                 {healthReport.summary.health_score < 95 && (
                   <Button
-                    size="sm"
-                    className="flex-1"
+                    className="flex-1 bg-gradient-to-r from-indigo-500 to-purple-500 hover:from-indigo-600 hover:to-purple-600 text-white border-0"
                     disabled={isOptimizing}
                     onClick={async () => {
-                      // Modal'ı kapat ve sol kartta progress göster
                       setShowHealthModal(false);
                       setIsOptimizing(true);
 
-                      // Tablo sayısını tahmin et
                       const tableCount = Object.keys(healthReport?.tables || {}).length || 1;
                       setOptimizeProgress({
                         status: 'processing',
@@ -2291,8 +2338,6 @@ export default function EmbeddingsManagerPage() {
                         });
                         if (response.ok) {
                           const result = await response.json();
-
-                          // Progress'i tamamlandı olarak güncelle
                           setOptimizeProgress({
                             status: 'completed',
                             currentTable: '',
@@ -2303,8 +2348,6 @@ export default function EmbeddingsManagerPage() {
                             metadataFixed: result.metadata_fixed || 0,
                             message: ''
                           });
-
-                          // Raporu yenile
                           fetchHealthReport();
                         } else {
                           throw new Error('Optimizasyon başarısız');
@@ -2329,7 +2372,7 @@ export default function EmbeddingsManagerPage() {
                   </Button>
                 )}
               </div>
-            </div>
+            </>
           )}
         </DialogContent>
       </Dialog>
