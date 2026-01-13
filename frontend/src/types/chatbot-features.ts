@@ -21,6 +21,7 @@ export interface ChatbotFeatures {
   enableFollowUpQuestions: boolean;       // Show follow-up questions
   enableActionButtons: boolean;           // Thumbs up/down, copy, refresh
   enableSourceClick: boolean;             // Clickable sources for deep dive
+  enableSourceQuestionGeneration: boolean; // Generate question when source is clicked
 
   // UI Style
   inputStyle: 'inline' | 'floating';      // Input position
@@ -85,6 +86,7 @@ export const defaultFeatures: ChatbotFeatures = {
   enableFollowUpQuestions: false,
   enableActionButtons: false,
   enableSourceClick: true,
+  enableSourceQuestionGeneration: true, // Default: ON
 
   // UI Style
   inputStyle: 'inline',

@@ -26,6 +26,7 @@ export interface EnhancedQueryOptions {
   includeRelevanceContext?: boolean;
   maxSemanticTerms?: number;
   queryStyle?: 'formal' | 'conversational' | 'detailed' | 'concise';
+  enableQuestionGeneration?: boolean; // Toggle question generation on source click
 }
 
 /**

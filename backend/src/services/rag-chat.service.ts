@@ -5565,18 +5565,30 @@ FORMAT:
         parts.push(metadata.karar_tarihi);
       }
 
-      // Number/Reference
-      if (metadata.sayi) {
+      // Number/Reference (check various field names from source DB)
+      if (metadata.sayisirano) {
+        parts.push(`Sayı: ${metadata.sayisirano}`);
+      } else if (metadata.sayi) {
         parts.push(`Sayı: ${metadata.sayi}`);
+      } else if (metadata.sayı) {
+        parts.push(`Sayı: ${metadata.sayı}`);
       } else if (metadata.esas_no) {
         parts.push(`Esas: ${metadata.esas_no}`);
       } else if (metadata.karar_no) {
         parts.push(`Karar: ${metadata.karar_no}`);
+      } else if (metadata.sirkuler_no) {
+        parts.push(`No: ${metadata.sirkuler_no}`);
       }
 
-      // Subject (if short enough)
-      if (metadata.konu && metadata.konu.length < 50) {
-        parts.push(`"${metadata.konu}"`);
+      // Department/Daire (for özelge)
+      if (metadata.daire && !parts.some(p => p.includes(metadata.daire))) {
+        parts.push(metadata.daire);
+      }
+
+      // Subject (check various field names: konusu from ozelge, konu from others)
+      const subject = metadata.konusu || metadata.konu;
+      if (subject && subject.length < 60) {
+        parts.push(`"${subject}"`);
       }
 
       // Build footnote line

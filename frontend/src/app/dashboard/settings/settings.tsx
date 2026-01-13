@@ -2921,6 +2921,20 @@ function RAGSettings() {
                     onCheckedChange={(checked) => updateRAGSetting('enableKeywordBoost', checked)}
                   />
                 </div>
+
+                {/* Source Question Generation Toggle */}
+                <div className="flex items-center justify-between">
+                  <div className="flex-1">
+                    <Label>Kaynak Tıklama Sorusu</Label>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Alıntı/kaynak tıklandığında otomatik soru üret
+                    </p>
+                  </div>
+                  <Switch
+                    checked={tempRAGConfig?.ragSettings?.enableSourceQuestionGeneration ?? true}
+                    onCheckedChange={(checked) => updateRAGSetting('enableSourceQuestionGeneration', checked)}
+                  />
+                </div>
               </div>
             </div>
 

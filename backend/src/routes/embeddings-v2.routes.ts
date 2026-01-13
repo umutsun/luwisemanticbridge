@@ -1252,9 +1252,9 @@ async function processTableWithParallelBatches(table: string, batchSize: number,
           throw new Error('Invalid CONCAT format in content column');
         }
       } else {
-        // Normal single column case
+        // Normal single column case - SELECT * to capture all metadata columns
         batchQuery = `
-          SELECT ${primaryKey}, ${contentColumn} as text_content
+          SELECT *, ${contentColumn} as text_content
           FROM public."${table}"
           WHERE ${primaryKey} >= $1
           ORDER BY ${primaryKey}
@@ -2323,6 +2323,55 @@ async function processTables(tables: string[], batchSize: number, embeddingMetho
   }
 }
 
+/**
+ * Build metadata object from source row
+ * Extracts all non-embedding, non-content columns as metadata
+ * This enables proper footnote generation with tarih, sayı, kurum, konu etc.
+ */
+function buildMetadataFromRow(row: any, table: string, id: any, contentHash: string): Record<string, any> {
+  const metadata: Record<string, any> = {
+    table,
+    id,
+    content_hash: contentHash
+  };
+
+  // Skip these columns from metadata (they're stored separately or are too large)
+  const skipColumns = new Set([
+    'text_content', 'content', 'icerik', 'embedding', 'metin',
+    'row_id', 'id', 'created_at', 'updated_at'
+  ]);
+
+  // Common metadata field mappings for footnote generation
+  const metadataFields = [
+    'tarih', 'daire', 'sayisirano', 'sayı', 'sayi', 'konusu', 'konu',
+    'kurum', 'makam', 'yil', 'yazar', 'baslik', 'başlık',
+    'esas_no', 'karar_no', 'karar_tarihi', 'madde_no',
+    'resmi_gazete_tarihi', 'resmi_gazete_sayisi',
+    'sirkuler_no', 'teblig_no', 'kanun_no', 'original_url', 'url'
+  ];
+
+  // Extract metadata from row
+  for (const field of metadataFields) {
+    if (row[field] !== undefined && row[field] !== null && row[field] !== '') {
+      metadata[field] = row[field];
+    }
+  }
+
+  // Also include any other non-skipped string/number fields
+  for (const [key, value] of Object.entries(row)) {
+    if (!skipColumns.has(key) && !metadata[key] && value !== null && value !== undefined) {
+      // Only include small string/number values
+      if (typeof value === 'string' && value.length < 500) {
+        metadata[key] = value;
+      } else if (typeof value === 'number') {
+        metadata[key] = value;
+      }
+    }
+  }
+
+  return metadata;
+}
+
 // Save embedding to database
 async function saveEmbedding(table: string, row: any, id: any, text: string, embedding: number[], model: string, sourceDbName?: string) {
   // Update heartbeat to show activity
@@ -2428,7 +2477,7 @@ async function saveEmbedding(table: string, row: any, id: any, text: string, emb
           numericId,
           text,
           `[${embedding.join(',')}]`,
-          JSON.stringify({ table, id, content_hash: contentHash }),
+          JSON.stringify(buildMetadataFromRow(row, table, id, contentHash)),
           Math.ceil(text.length / 3), // Estimated tokens
           model,
           contentHash  // $10: NEW content_hash parameter
