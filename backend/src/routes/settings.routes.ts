@@ -933,4 +933,92 @@ router.put('/semantic-analyzer/:key', async (req: Request, res: Response) => {
   }
 });
 
+// ============================================
+// RAG ROUTING SCHEMA ENDPOINTS
+// ============================================
+
+/**
+ * GET /settings/key/:key - Get a specific setting by key
+ */
+router.get('/key/:key', async (req: Request, res: Response) => {
+  try {
+    const { key } = req.params;
+    const result = await lsembPool.query(
+      'SELECT key, value, category, description FROM settings WHERE key = $1',
+      [key]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Setting not found', key });
+    }
+
+    const row = result.rows[0];
+    let value = row.value;
+
+    // Try to parse JSON value
+    try {
+      value = JSON.parse(value);
+    } catch {
+      // Keep as string if not valid JSON
+    }
+
+    res.json({
+      key: row.key,
+      value,
+      category: row.category,
+      description: row.description
+    });
+  } catch (error: any) {
+    console.error('❌ [SETTINGS] Get key error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * PUT /settings/key/:key - Update a specific setting by key
+ */
+router.put('/key/:key', async (req: Request, res: Response) => {
+  try {
+    const { key } = req.params;
+    const { value, category, description } = req.body;
+
+    // Stringify value if it's an object
+    const valueStr = typeof value === 'object' ? JSON.stringify(value) : String(value);
+
+    await lsembPool.query(
+      `INSERT INTO settings (key, value, category, description, updated_at)
+       VALUES ($1, $2, $3, $4, NOW())
+       ON CONFLICT (key) DO UPDATE SET
+         value = $2,
+         category = COALESCE($3, settings.category),
+         description = COALESCE($4, settings.description),
+         updated_at = NOW()`,
+      [key, valueStr, category || null, description || null]
+    );
+
+    // Clear cache
+    settingsCache.clear();
+
+    console.log(`✅ [SETTINGS] Key ${key} saved`);
+    res.json({ success: true, key });
+  } catch (error: any) {
+    console.error('❌ [SETTINGS] Put key error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * GET /settings/rag-routing-schema/default - Get default RAG routing schema
+ */
+router.get('/rag-routing-schema/default', async (_req: Request, res: Response) => {
+  try {
+    // Import default schema from config
+    const { DEFAULT_RAG_ROUTING_SCHEMA } = await import('../config/rag-routing-schema.config');
+    res.json({ schema: DEFAULT_RAG_ROUTING_SCHEMA });
+  } catch (error: any) {
+    console.error('❌ [SETTINGS] Get default routing schema error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 export default router;

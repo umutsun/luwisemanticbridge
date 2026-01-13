@@ -1,50 +1,55 @@
 {
-  "version": "1.3",
+  "version": "1.4",
   "created": "2026-01-11",
-  "updated": "2026-01-11",
-  "description": "Golden test set for RAG pipeline regression testing - 50 Questions (v1.3)",
+  "updated": "2026-01-13",
+  "description": "Golden test set for RAG pipeline regression testing - 50 Questions (v1.4 - Routing Schema)",
   "acceptanceCriteria": {
-    "1_early_exit_guards": {
-      "description": "Strong ambiguity and out-of-scope queries exit BEFORE retrieval/LLM",
-      "rule": "justNumbers/vagueQuestion/singleToken → NEEDS_CLARIFICATION immediately | outOfScopePattern → OUT_OF_SCOPE immediately"
+    "1_routing_needs_clarification": {
+      "description": "Ambiguous queries get NEEDS_CLARIFICATION with suggestions",
+      "rule": "singleToken/justNumbers/vagueQuestion/tooShort → NEEDS_CLARIFICATION + suggestedQuestions + sources=[]",
+      "examples": ["6111", "KDV", "ne?", "?"]
     },
-    "2_verdict_no_quote_no_verdict": {
-      "description": "Verdict questions without quote get 'hüküm cümlesi seçilemedi' - NO half-verdicts",
-      "rule": "If verdict question + no ALINTI → response must be 'kaynak var ancak hüküm cümlesi seçilemedi' with sources"
+    "2_routing_out_of_scope": {
+      "description": "Non-tax queries get OUT_OF_SCOPE single line response",
+      "rule": "outOfScopePattern/nonTaxLaw/greeting → OUT_OF_SCOPE + single line + sources=[]",
+      "examples": ["Einstein kimdir?", "TMK'da miras payı", "Merhaba"]
     },
-    "3_section_finder_correct": {
-      "description": "Section finder targets correct parts of document",
-      "rule": "Özelge: Açıklamalar/Sonuç/Cevap | Danıştay: HÜKÜM/SONUÇ/Karar | Kanun: Madde"
+    "3_routing_not_found": {
+      "description": "In-scope queries with no results get NOT_FOUND",
+      "rule": "inScope + noResults → NOT_FOUND + brief explanation + sources=[]"
     },
-    "4_quote_scorer_hard_filter": {
-      "description": "dilekçe/tereddüt sentences are NEVER selected as quotes",
-      "rule": "Hard filter (skip), not penalty - these sentences cannot win even with high term matches"
+    "4_routing_found_article_format": {
+      "description": "FOUND uses 4-section mini-article format with footnotes",
+      "rule": "hasResults → FOUND + 4 sections + dipnotlar + sources≥1",
+      "sections": [
+        "1. Soru hangi konu veya konularla ilgili?",
+        "2. Soruyla ilgili anahtar kelimeler neler?",
+        "3. Yasal düzenlemeler neler (Kanun, Tebliğ vb.)?",
+        "4. Vergilex değerlendirmesi (dipnotlarla)"
+      ]
     },
-    "5_response_type_deterministic": {
-      "description": "ResponseType is purely based on early exit + results count + scope - NO LLM pattern matching",
-      "rule": "earlyAmbiguity → NEEDS_CLARIFICATION | earlyOutOfScope → OUT_OF_SCOPE | results > 0 → FOUND | results == 0 + inScope → NOT_FOUND"
+    "5_source_priority": {
+      "description": "Sources ordered by authority level",
+      "rule": "Kanun > Tebliğ > Rehber > Yargı > Özelge > Makale"
     },
-    "6_source_display": {
-      "description": "FOUND shows sources, all others show sources=[]",
-      "rule": "ONLY FOUND has sources, others ALWAYS sources=[]"
+    "6_footnote_format": {
+      "description": "Footnotes follow standard format by source type",
+      "rule": "makale: yazar+başlık+tarih | özelge: tarih+sayı | yargı: daire+E.No+K.No"
     },
-    "7_procedural_evidence_first": {
-      "description": "Procedural questions require documentary evidence",
-      "rule": "nereye yazılır/hangi alana/kaç gün → ALINTI required, no specific claims without document proof"
+    "7_prohibited_content": {
+      "description": "Response must not contain search engine language",
+      "rule": "NO 'Arama sonucu', 'X belge bulundu', 'ALINTI' labels"
     }
   },
   "miniTestKit": {
-    "description": "8 critical questions that MUST pass before deployment",
-    "tests": [
-      1,
-      2,
-      3,
-      4,
-      5,
-      6,
-      7,
-      8
-    ]
+    "description": "4 critical routing tests that MUST pass before deployment",
+    "tests": [4, 6, 7, 1],
+    "testMapping": {
+      "4": "6111 → NEEDS_CLARIFICATION",
+      "6": "ne? → NEEDS_CLARIFICATION",
+      "7": "Einstein kimdir? → OUT_OF_SCOPE",
+      "1": "Şube vergi levhası → FOUND (article format)"
+    }
   },
   "tests": [
     {

@@ -71,6 +71,11 @@ export default function DataSchemaSettings() {
   const [searchQuery, setSearchQuery] = useState('');
   const [fileInputRef, setFileInputRef] = useState<HTMLInputElement | null>(null);
 
+  // RAG Routing Schema state
+  const [routingSchema, setRoutingSchema] = useState<string>('');
+  const [routingSchemaLoading, setRoutingSchemaLoading] = useState(false);
+  const [routingSchemaSaving, setRoutingSchemaSaving] = useState(false);
+
   // Modal state for editing
   const [editModal, setEditModal] = useState<{
     open: boolean;
@@ -107,7 +112,7 @@ export default function DataSchemaSettings() {
     }
   };
 
-  useEffect(() => { loadData(); }, []);
+  useEffect(() => { loadData(); loadRoutingSchema(); }, []);
 
   const loadData = async () => {
     try {
@@ -141,6 +146,64 @@ export default function DataSchemaSettings() {
       toast.error(errorMsg);
     } finally {
       setLoading(false);
+    }
+  };
+
+  // Load RAG Routing Schema from settings
+  const loadRoutingSchema = async () => {
+    try {
+      setRoutingSchemaLoading(true);
+      const res = await apiClient.get('/api/v2/settings/key/ragRoutingSchema');
+      if (res?.data?.value) {
+        const schema = typeof res.data.value === 'string' ? res.data.value : JSON.stringify(res.data.value, null, 2);
+        setRoutingSchema(schema);
+      }
+    } catch (error: any) {
+      // If not found, that's OK - will use defaults
+      if (error?.response?.status !== 404) {
+        console.error('Failed to load routing schema:', error);
+      }
+    } finally {
+      setRoutingSchemaLoading(false);
+    }
+  };
+
+  // Save RAG Routing Schema to settings
+  const saveRoutingSchema = async () => {
+    try {
+      setRoutingSchemaSaving(true);
+      // Validate JSON
+      const parsed = JSON.parse(routingSchema);
+      await apiClient.put('/api/v2/settings/key/ragRoutingSchema', {
+        value: parsed,
+        category: 'rag',
+        description: 'RAG Response Routing Schema'
+      });
+      toast.success('Routing schema kaydedildi');
+    } catch (error: any) {
+      if (error instanceof SyntaxError) {
+        toast.error('Geçersiz JSON formatı');
+      } else {
+        toast.error('Kaydetme hatası: ' + (error?.message || 'Bilinmeyen hata'));
+      }
+    } finally {
+      setRoutingSchemaSaving(false);
+    }
+  };
+
+  // Reset routing schema to defaults
+  const resetRoutingSchema = async () => {
+    try {
+      setRoutingSchemaLoading(true);
+      const res = await apiClient.get('/api/v2/settings/rag-routing-schema/default');
+      if (res?.data?.schema) {
+        setRoutingSchema(JSON.stringify(res.data.schema, null, 2));
+        toast.success('Varsayılan şema yüklendi');
+      }
+    } catch (error: any) {
+      toast.error('Varsayılan şema yüklenemedi');
+    } finally {
+      setRoutingSchemaLoading(false);
     }
   };
 
@@ -729,6 +792,74 @@ export default function DataSchemaSettings() {
               <p className="text-sm">Düzenlemek için şema seçin</p>
             </div>
           )}
+        </CardContent>
+      </Card>
+
+      {/* RAG Routing Schema - Response Format Configuration */}
+      <Card className="mt-6">
+        <CardHeader className="flex flex-row items-center justify-between">
+          <div>
+            <CardTitle className="text-lg flex items-center gap-2">
+              <Sparkles className="w-5 h-5 text-violet-500" />
+              RAG Yanıt Format Şeması
+            </CardTitle>
+            <p className="text-xs text-muted-foreground mt-1">
+              4 route tipi: NEEDS_CLARIFICATION, OUT_OF_SCOPE, NOT_FOUND, FOUND (mini-makale formatı)
+            </p>
+          </div>
+          <div className="flex gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={resetRoutingSchema}
+              disabled={routingSchemaLoading}
+            >
+              <RefreshCw className={`w-4 h-4 mr-1 ${routingSchemaLoading ? 'animate-spin' : ''}`} />
+              Varsayılan
+            </Button>
+            <Button
+              size="sm"
+              onClick={saveRoutingSchema}
+              disabled={routingSchemaSaving || !routingSchema.trim()}
+            >
+              {routingSchemaSaving ? (
+                <Loader2 className="w-4 h-4 mr-1 animate-spin" />
+              ) : (
+                <Save className="w-4 h-4 mr-1" />
+              )}
+              Kaydet
+            </Button>
+          </div>
+        </CardHeader>
+        <CardContent>
+          <div className="space-y-4">
+            {/* Quick Guide */}
+            <div className="bg-violet-50 dark:bg-violet-950/20 border border-violet-200 dark:border-violet-900 rounded-lg p-3">
+              <h4 className="text-sm font-medium text-violet-800 dark:text-violet-200 mb-2">Format Yapısı:</h4>
+              <div className="grid grid-cols-2 gap-2 text-xs text-violet-700 dark:text-violet-300">
+                <div><strong>NEEDS_CLARIFICATION:</strong> Belirsiz sorgular → öneri sorular</div>
+                <div><strong>OUT_OF_SCOPE:</strong> Kapsam dışı → tek satır uyarı</div>
+                <div><strong>NOT_FOUND:</strong> Kaynak yok → kısa açıklama</div>
+                <div><strong>FOUND:</strong> Kaynak var → 4 başlıklı mini-makale + dipnotlar</div>
+              </div>
+            </div>
+
+            {/* JSON Editor */}
+            <div>
+              <Label className="text-sm font-medium">Schema JSON</Label>
+              <Textarea
+                value={routingSchema}
+                onChange={(e) => setRoutingSchema(e.target.value)}
+                placeholder='{"version": "1.0", "routes": {...}, "globalSettings": {...}}'
+                rows={15}
+                className="font-mono text-xs mt-2"
+                disabled={routingSchemaLoading}
+              />
+              <p className="text-xs text-muted-foreground mt-2">
+                Boş bırakılırsa backend varsayılan şemayı kullanır. JSON formatı gereklidir.
+              </p>
+            </div>
+          </div>
         </CardContent>
       </Card>
 

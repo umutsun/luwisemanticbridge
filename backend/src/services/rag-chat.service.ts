@@ -7,6 +7,8 @@ import { redis } from '../config/redis';
 import dotenv from 'dotenv';
 import { TIMEOUTS } from '../config';
 import { TopicEntity, LLMConfig } from '../types/data-schema.types';
+import { RAGRoutingSchema, RAGResponseType } from '../types/settings.types';
+import { DEFAULT_RAG_ROUTING_SCHEMA, getRAGRoutingSchema } from '../config/rag-routing-schema.config';
 
 // Settings service interface
 interface SettingsService {
@@ -163,10 +165,130 @@ interface ChatOptions {
 export class RAGChatService {
   private pool = pool;
   private llmManager: LLMManager;
+  private routingSchema: RAGRoutingSchema = DEFAULT_RAG_ROUTING_SCHEMA;
+  private routingSchemaLoadedAt: number = 0;
+  private readonly SCHEMA_CACHE_TTL = 60000; // 1 minute cache
 
   constructor() {
     this.llmManager = LLMManager.getInstance();
     console.log(' RAG Chat Service initialized with LLM Manager');
+  }
+
+  /**
+   * 📋 Load RAG Routing Schema from settings
+   * Caches schema for 1 minute to avoid DB hits on every request
+   */
+  private async loadRoutingSchema(): Promise<RAGRoutingSchema> {
+    const now = Date.now();
+    if (now - this.routingSchemaLoadedAt < this.SCHEMA_CACHE_TTL) {
+      return this.routingSchema;
+    }
+
+    try {
+      const result = await this.pool.query(
+        "SELECT value FROM settings WHERE key = 'ragRoutingSchema'"
+      );
+
+      if (result.rows[0]?.value) {
+        const parsed = typeof result.rows[0].value === 'string'
+          ? JSON.parse(result.rows[0].value)
+          : result.rows[0].value;
+        this.routingSchema = getRAGRoutingSchema(parsed);
+        console.log(`📋 Routing schema loaded from DB (v${this.routingSchema.version})`);
+      } else {
+        this.routingSchema = DEFAULT_RAG_ROUTING_SCHEMA;
+        console.log(`📋 Using default routing schema (v${this.routingSchema.version})`);
+      }
+
+      this.routingSchemaLoadedAt = now;
+      return this.routingSchema;
+    } catch (error) {
+      console.error('Failed to load routing schema:', error);
+      return DEFAULT_RAG_ROUTING_SCHEMA;
+    }
+  }
+
+  /**
+   * 📝 Build article format prompt for FOUND responses
+   * Uses mini-makale format with 4 required sections
+   */
+  private buildArticleFormatPrompt(schema: RAGRoutingSchema, language: string = 'tr'): string {
+    const foundFormat = schema.routes.FOUND.format;
+    const sections = foundFormat.articleSections || [];
+    const sourcePriority = foundFormat.sourcePriority || [];
+    const footnoteFormat = foundFormat.footnoteFormat || {};
+
+    if (language === 'tr') {
+      let prompt = `YANITLAMA FORMAT (ZORUNLU):
+
+Aşağıdaki 4 başlığı MUTLAKA kullan ve sırayla yanıtla:
+
+`;
+      sections.forEach((section, idx) => {
+        prompt += `**${idx + 1}. ${section.title}**\n`;
+        if (section.description) {
+          prompt += `   ${section.description}\n`;
+        }
+        prompt += '\n';
+      });
+
+      prompt += `KAYNAK ÖNCELİK SIRASI (yüksekten düşüğe):
+`;
+      sourcePriority.forEach((sp, idx) => {
+        prompt += `${idx + 1}. ${sp.label}\n`;
+      });
+
+      prompt += `
+DİPNOT KURALLARI:
+- Metin içinde [1], [2] şeklinde atıf yap
+- En sonda "**Dipnotlar:**" başlığı altında kaynakları listele
+- Format:
+`;
+      Object.entries(footnoteFormat).forEach(([type, format]) => {
+        if (format) {
+          prompt += `  • ${type}: ${format}\n`;
+        }
+      });
+
+      prompt += `
+ÇELİŞKİ DURUMU:
+- Kaynaklar arasında çelişki varsa açıkça belirt
+- Daha yeni tarihli ve daha üst normu (Kanun > Tebliğ > Özelge) esas al
+
+YASAKLAR:
+- "Arama sonucu / X belge bulundu" gibi ifadeler KULLANMA
+- "ALINTI" etiketi KULLANMA
+- Kaynak dışı bilgi VERME
+`;
+      return prompt;
+    } else {
+      // English version
+      let prompt = `RESPONSE FORMAT (MANDATORY):
+
+Use the following 4 headings in order:
+
+`;
+      sections.forEach((section, idx) => {
+        prompt += `**${idx + 1}. ${section.title}**\n`;
+        if (section.description) {
+          prompt += `   ${section.description}\n`;
+        }
+        prompt += '\n';
+      });
+
+      prompt += `SOURCE PRIORITY (highest to lowest):
+`;
+      sourcePriority.forEach((sp, idx) => {
+        prompt += `${idx + 1}. ${sp.label}\n`;
+      });
+
+      prompt += `
+FOOTNOTE RULES:
+- Use [1], [2] citations in text
+- List sources under "**Footnotes:**" at the end
+`;
+      return prompt;
+    }
   }
 
   /**
@@ -941,6 +1063,9 @@ ${questionLabel}: ${message}`;
     // 📋 Load domain config (topic entities and key terms) from active schema
     // This is loaded once at the start and reused throughout the method
     const domainConfig = await this.getDomainConfig();
+
+    // 📋 Load RAG routing schema (cached for 1 minute)
+    const routingSchema = await this.loadRoutingSchema();
 
     try {
       // 1. Create or get conversation
@@ -1731,8 +1856,16 @@ ${questionLabel}: ${message}`;
         const strictModeLevel = settingsMap.get('ragSettings.strictModeLevel') || 'medium'; // Default to medium for better recall
         console.log(`✅ STRICT MODE ACTIVE - Level: ${strictModeLevel.toUpperCase()}`);
 
+        // 📋 Use article format from routing schema (mini-makale format)
+        // This is the Murat-requested 4-section format with footnotes
+        const useArticleFormat = routingSchema.routes.FOUND.format.articleSections &&
+                                 routingSchema.routes.FOUND.format.articleSections.length > 0;
+
         // Default medium-mode prompts (better recall, still requires citation)
-        const defaultMediumPromptTr = `Aşağıda numaralanmış kaynaklar var.
+        // If article format is enabled, use the 4-section mini-makale format
+        const defaultMediumPromptTr = useArticleFormat
+          ? this.buildArticleFormatPrompt(routingSchema, 'tr')
+          : `Aşağıda numaralanmış kaynaklar var.
 
 CEVAPLAMA KURALLARI:
 1. SADECE kaynaklardaki bilgiyi kullan
@@ -1744,7 +1877,9 @@ FORMAT:
 **CEVAP**
 [Cevabın] [Kaynak X]`;
 
-        const defaultMediumPromptEn = `Sources are numbered below.
+        const defaultMediumPromptEn = useArticleFormat
+          ? this.buildArticleFormatPrompt(routingSchema, 'en')
+          : `Sources are numbered below.
 
 ANSWERING RULES:
 1. Use ONLY information from sources
@@ -1755,6 +1890,10 @@ ANSWERING RULES:
 FORMAT:
 **ANSWER**
 [Your answer] [Source X]`;
+
+        if (useArticleFormat) {
+          console.log(`📋 ARTICLE FORMAT: Using ${routingSchema.routes.FOUND.format.articleSections?.length || 0}-section mini-makale format`);
+        }
 
         // Select prompt based on strictModeLevel
         let strictInstructionTr: string;

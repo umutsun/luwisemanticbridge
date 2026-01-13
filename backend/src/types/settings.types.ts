@@ -217,3 +217,117 @@ export interface SettingRecord {
     created_at?: Date;
     updated_at?: Date;
 }
+
+// ============================================
+// RAG ROUTING SCHEMA - Dynamic Response Formatting
+// ============================================
+
+/**
+ * Response types for RAG queries
+ * Each route has specific behavior and format rules
+ */
+export type RAGResponseType = 'NEEDS_CLARIFICATION' | 'OUT_OF_SCOPE' | 'NOT_FOUND' | 'FOUND';
+
+/**
+ * Trigger conditions for route detection
+ */
+export interface RouteTriggers {
+    // Pattern-based triggers (regex patterns)
+    patterns?: string[];
+    // Condition-based triggers (logic conditions)
+    conditions?: Array<'noResults' | 'hasResults' | 'inScope' | 'outOfScope'>;
+}
+
+/**
+ * Article section definition for FOUND format
+ */
+export interface ArticleSection {
+    id: string;
+    title: string;
+    required: boolean;
+    footnoteRequired?: boolean;
+    description?: string;
+}
+
+/**
+ * Source type priority definition
+ */
+export interface SourceTypePriority {
+    type: string;
+    label: string;
+    priority: number;
+}
+
+/**
+ * Footnote format templates by source type
+ */
+export interface FootnoteFormats {
+    makale: string;
+    ozelge: string;
+    yargi: string;
+    pdf: string;
+    kanun: string;
+    teblig: string;
+    sorucevap: string;
+    [key: string]: string;
+}
+
+/**
+ * Format configuration for each route
+ */
+export interface RouteFormat {
+    type: 'clarification' | 'single_line' | 'article';
+    showSources: boolean;
+    template: string;
+    templateEn?: string;
+    maxSuggestions?: number;
+    // Article format specific (for FOUND)
+    articleSections?: ArticleSection[];
+    sourcePriority?: SourceTypePriority[];
+    footnoteFormat?: FootnoteFormats;
+    conflictHandling?: {
+        showConflict: boolean;
+        preferNewer: boolean;
+        preferHigherNorm: boolean;
+    };
+    prohibitedContent?: string[];
+}
+
+/**
+ * Route definition with triggers and format
+ */
+export interface RouteDefinition {
+    triggers: RouteTriggers;
+    format: RouteFormat;
+}
+
+/**
+ * Global settings for routing schema
+ */
+export interface RoutingGlobalSettings {
+    domainMode: 'TAX_ONLY' | 'GENERAL_LAW';
+    domainTerms: string[];
+    outOfScopePatterns: string[];
+    nonTaxLawPatterns: string[];
+    ambiguityPatterns: {
+        justNumbers: string;
+        vagueQuestion: string;
+        singleToken: string;
+        tooShort: string;
+    };
+}
+
+/**
+ * Complete RAG Routing Schema
+ * Stored in settings table as JSON under key 'ragRoutingSchema'
+ */
+export interface RAGRoutingSchema {
+    version: string;
+    routes: {
+        NEEDS_CLARIFICATION: RouteDefinition;
+        OUT_OF_SCOPE: RouteDefinition;
+        NOT_FOUND: RouteDefinition;
+        FOUND: RouteDefinition;
+    };
+    globalSettings: RoutingGlobalSettings;
+}
