@@ -55,11 +55,13 @@ router.get('/', authenticateToken, async (req: AuthenticatedRequest, res: Respon
 
 /**
  * POST /api/v2/notifications
- * Create notification (system/admin only - for testing)
+ * Create notification for current user
  */
 router.post('/', authenticateToken, async (req: AuthenticatedRequest, res: Response) => {
   try {
-    const { type, title, message, userId, metadata, ttl } = req.body;
+    const { type, title, message, metadata, ttl } = req.body;
+    // Use authenticated user's ID - notifications belong to the user who creates them
+    const userId = req.user?.userId;
 
     if (!type || !title || !message) {
       return res.status(400).json({
