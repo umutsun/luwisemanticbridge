@@ -550,8 +550,8 @@ export default function Header() {
             {/* Theme Toggle */}
             <ThemeToggle />
 
-            {/* Real-time Notification Panel (Redis-based) */}
-            <NotificationPanel />
+            {/* Real-time Notification Panel (Redis-based) - Temporarily disabled for debugging */}
+            {/* <NotificationPanel /> */}
 
             {/* Notification Center */}
             <NotificationCenter />
