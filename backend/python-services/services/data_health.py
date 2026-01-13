@@ -141,10 +141,14 @@ class DataHealthService:
         """Unified embeddings'de kayıtlı tabloları listele"""
         query = """
             SELECT DISTINCT
-                COALESCE(source_table, metadata->>'table') as table_name
+                COALESCE(source_table, metadata->>'table') as table_name,
+                COUNT(*) as cnt
             FROM unified_embeddings
-            WHERE source_type = 'database'
-            ORDER BY table_name
+            WHERE source_table IS NOT NULL
+              AND source_table != ''
+              AND source_table != 'documents'
+            GROUP BY COALESCE(source_table, metadata->>'table')
+            ORDER BY cnt DESC
         """
         rows = await self.system_pool.fetch(query)
         return [r['table_name'] for r in rows if r['table_name']]
@@ -185,9 +189,20 @@ class DataHealthService:
 
         return metrics
 
+    def _get_source_table_name(self, table_name: str) -> str:
+        """Source DB'de gerçek tablo adını bul (csv_ prefix'li olabilir)"""
+        # csv_ prefix'i varsa aynen döndür
+        if table_name.startswith('csv_'):
+            return table_name
+        # Yoksa csv_ prefix'li versiyonu dene
+        return f"csv_{table_name}"
+
     async def _count_orphans(self, table_name: str) -> int:
         """Source DB'de karşılığı olmayan kayıtları say"""
         try:
+            # Source tablo adını belirle (csv_ prefix'li olabilir)
+            source_table = self._get_source_table_name(table_name)
+
             # Source tablosunun varlığını kontrol et
             check_query = """
                 SELECT EXISTS (
@@ -195,15 +210,18 @@ class DataHealthService:
                     WHERE table_schema = 'public' AND table_name = $1
                 )
             """
-            exists = await self.source_pool.fetchval(check_query, table_name)
+            exists = await self.source_pool.fetchval(check_query, source_table)
 
             if not exists:
-                # Tablo yoksa tüm kayıtlar orphan
-                count_query = """
-                    SELECT COUNT(*) FROM unified_embeddings
-                    WHERE source_table = $1 OR metadata->>'table' = $1
-                """
-                return await self.system_pool.fetchval(count_query, table_name)
+                # csv_ olmadan da dene
+                exists = await self.source_pool.fetchval(check_query, table_name)
+                if exists:
+                    source_table = table_name
+
+            if not exists:
+                # Tablo yoksa tüm kayıtlar orphan sayılmaz (veri kaynağı farklı olabilir)
+                logger.warning(f"Source table not found: {table_name} or {source_table}")
+                return 0
 
             # Primary key bul
             pk = self.PRIMARY_KEYS.get(table_name, self.PRIMARY_KEYS['default'])
@@ -213,7 +231,7 @@ class DataHealthService:
                 SELECT COUNT(*) FROM unified_embeddings ue
                 WHERE (ue.source_table = $1 OR ue.metadata->>'table' = $1)
                 AND NOT EXISTS (
-                    SELECT 1 FROM "{table_name}" src
+                    SELECT 1 FROM "{source_table}" src
                     WHERE src.{pk} = ue.source_id
                 )
             """
@@ -297,6 +315,9 @@ class DataHealthService:
         )
 
         try:
+            # Source tablo adını belirle
+            source_table = self._get_source_table_name(table_name)
+
             # Source tablo varlığını kontrol et
             check_query = """
                 SELECT EXISTS (
@@ -304,10 +325,16 @@ class DataHealthService:
                     WHERE table_schema = 'public' AND table_name = $1
                 )
             """
-            exists = await self.source_pool.fetchval(check_query, table_name)
+            exists = await self.source_pool.fetchval(check_query, source_table)
 
             if not exists:
-                logger.warning(f"Source table {table_name} does not exist")
+                # csv_ olmadan da dene
+                exists = await self.source_pool.fetchval(check_query, table_name)
+                if exists:
+                    source_table = table_name
+
+            if not exists:
+                logger.warning(f"Source table {table_name} or {source_table} does not exist")
                 return result
 
             # Metadata alanlarını al
@@ -351,7 +378,7 @@ class DataHealthService:
                 fields_sql = ", ".join(meta_fields)
                 source_query = f"""
                     SELECT {pk} as source_id, {fields_sql}
-                    FROM "{table_name}"
+                    FROM "{source_table}"
                     WHERE {pk} = ANY($1)
                 """
                 source_data = await self.source_pool.fetch(source_query, source_ids)
@@ -436,13 +463,35 @@ class DataHealthService:
         try:
             pk = self.PRIMARY_KEYS.get(table_name, self.PRIMARY_KEYS['default'])
 
+            # Source tablo adını belirle
+            source_table = self._get_source_table_name(table_name)
+
+            # Source tablosunun varlığını kontrol et
+            check_query = """
+                SELECT EXISTS (
+                    SELECT FROM information_schema.tables
+                    WHERE table_schema = 'public' AND table_name = $1
+                )
+            """
+            exists = await self.source_pool.fetchval(check_query, source_table)
+
+            if not exists:
+                # csv_ olmadan da dene
+                exists = await self.source_pool.fetchval(check_query, table_name)
+                if exists:
+                    source_table = table_name
+
+            if not exists:
+                logger.warning(f"Source table not found for orphan check: {table_name}")
+                return result
+
             # Orphan kayıtları bul
             orphan_query = f"""
                 SELECT ue.id, ue.source_id, ue.source_name, ue.created_at
                 FROM unified_embeddings ue
                 WHERE (ue.source_table = $1 OR ue.metadata->>'table' = $1)
                 AND NOT EXISTS (
-                    SELECT 1 FROM "{table_name}" src
+                    SELECT 1 FROM "{source_table}" src
                     WHERE src.{pk} = ue.source_id
                 )
                 LIMIT $2
