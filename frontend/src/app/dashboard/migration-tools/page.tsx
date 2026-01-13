@@ -26,7 +26,12 @@ import {
   DollarSign,
   Activity,
   AlertCircle,
-  Clock
+  Clock,
+  HeartPulse,
+  Wrench,
+  AlertTriangle,
+  Copy,
+  Ghost
 } from 'lucide-react';
 import { ProgressCircle } from '@/components/ui/progress-circle';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -65,6 +70,37 @@ interface EmbeddingProgress {
   };
 }
 
+interface DataHealthReport {
+  generated_at: string;
+  summary: {
+    total_embeddings: number;
+    orphan_count: number;
+    missing_metadata_count: number;
+    duplicate_count: number;
+    stale_count: number;
+    healthy_count: number;
+    health_score: number;
+  };
+  tables: Record<string, {
+    total_embeddings: number;
+    orphan_count: number;
+    missing_metadata_count: number;
+    duplicate_count: number;
+    stale_count: number;
+    healthy_count: number;
+    health_score: number;
+  }>;
+  recommendations: string[];
+}
+
+interface FixResult {
+  table: string;
+  dry_run: boolean;
+  orphans?: { orphans_found: number; deleted_count: number };
+  duplicates?: { duplicates_found: number; deleted_count: number };
+  metadata?: { total_records: number; fixed_count: number; skipped_count: number; error_count: number };
+}
+
 export default function MigrationToolsPage() {
 
   const [activeTab, setActiveTab] = useState('database');
@@ -73,6 +109,14 @@ export default function MigrationToolsPage() {
   const [progress, setProgress] = useState<EmbeddingProgress | null>(null);
   const [message, setMessage] = useState<{ type: 'success' | 'error' | 'info'; text: string } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Data Health State
+  const [healthReport, setHealthReport] = useState<DataHealthReport | null>(null);
+  const [healthLoading, setHealthLoading] = useState(false);
+  const [fixLoading, setFixLoading] = useState<string | null>(null);
+  const [fixResult, setFixResult] = useState<FixResult | null>(null);
+  const [selectedHealthTable, setSelectedHealthTable] = useState<string>('all');
+  const [dryRun, setDryRun] = useState(true);
   
   // Source selection
   const [sourceType, setSourceType] = useState<'database' | 'file' | 'url'>('database');
@@ -260,6 +304,156 @@ export default function MigrationToolsPage() {
     }
   };
 
+  // ==================== DATA HEALTH FUNCTIONS ====================
+
+  const loadHealthReport = async () => {
+    setHealthLoading(true);
+    try {
+      const response = await fetch('http://localhost:8002/api/python/data-health/report');
+      if (response.ok) {
+        const data = await response.json();
+        setHealthReport(data);
+      } else {
+        throw new Error('Failed to load health report');
+      }
+    } catch (error: any) {
+      setMessage({ type: 'error', text: `Sağlık raporu yüklenemedi: ${error.message}` });
+    } finally {
+      setHealthLoading(false);
+    }
+  };
+
+  const runQuickFix = async (tableName: string) => {
+    setFixLoading(tableName);
+    setFixResult(null);
+    try {
+      const response = await fetch(`http://localhost:8002/api/python/data-health/quick-fix/${tableName}?dry_run=${dryRun}`, {
+        method: 'POST',
+      });
+      if (response.ok) {
+        const data = await response.json();
+        setFixResult(data);
+        setMessage({
+          type: 'success',
+          text: dryRun
+            ? `${tableName} için simülasyon tamamlandı (değişiklik yapılmadı)`
+            : `${tableName} için temizlik tamamlandı!`
+        });
+        // Reload health report after fix
+        if (!dryRun) {
+          await loadHealthReport();
+        }
+      } else {
+        throw new Error('Quick fix failed');
+      }
+    } catch (error: any) {
+      setMessage({ type: 'error', text: `Düzeltme başarısız: ${error.message}` });
+    } finally {
+      setFixLoading(null);
+    }
+  };
+
+  const runMetadataFix = async (tableName: string) => {
+    setFixLoading(`metadata-${tableName}`);
+    try {
+      const response = await fetch('http://localhost:8002/api/python/data-health/fix-metadata', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          table_name: tableName,
+          dry_run: dryRun,
+          batch_size: 100,
+          limit: 5000
+        })
+      });
+      if (response.ok) {
+        const data = await response.json();
+        setMessage({
+          type: 'success',
+          text: dryRun
+            ? `${data.fixed_count} kayıt düzeltilecek (simülasyon)`
+            : `${data.fixed_count} kayıt düzeltildi!`
+        });
+        if (!dryRun) await loadHealthReport();
+      } else {
+        throw new Error('Metadata fix failed');
+      }
+    } catch (error: any) {
+      setMessage({ type: 'error', text: `Metadata düzeltme başarısız: ${error.message}` });
+    } finally {
+      setFixLoading(null);
+    }
+  };
+
+  const runOrphanDelete = async (tableName: string) => {
+    setFixLoading(`orphan-${tableName}`);
+    try {
+      const response = await fetch('http://localhost:8002/api/python/data-health/delete-orphans', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          table_name: tableName,
+          dry_run: dryRun,
+          limit: 5000
+        })
+      });
+      if (response.ok) {
+        const data = await response.json();
+        setMessage({
+          type: 'success',
+          text: dryRun
+            ? `${data.orphans_found} orphan kayıt bulundu (simülasyon)`
+            : `${data.deleted_count} orphan kayıt silindi!`
+        });
+        if (!dryRun) await loadHealthReport();
+      } else {
+        throw new Error('Orphan delete failed');
+      }
+    } catch (error: any) {
+      setMessage({ type: 'error', text: `Orphan silme başarısız: ${error.message}` });
+    } finally {
+      setFixLoading(null);
+    }
+  };
+
+  const runDuplicateDelete = async (tableName: string) => {
+    setFixLoading(`duplicate-${tableName}`);
+    try {
+      const response = await fetch('http://localhost:8002/api/python/data-health/delete-duplicates', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          table_name: tableName,
+          dry_run: dryRun,
+          keep: 'newest'
+        })
+      });
+      if (response.ok) {
+        const data = await response.json();
+        setMessage({
+          type: 'success',
+          text: dryRun
+            ? `${data.duplicates_found} duplicate kayıt bulundu (simülasyon)`
+            : `${data.deleted_count} duplicate kayıt silindi!`
+        });
+        if (!dryRun) await loadHealthReport();
+      } else {
+        throw new Error('Duplicate delete failed');
+      }
+    } catch (error: any) {
+      setMessage({ type: 'error', text: `Duplicate silme başarısız: ${error.message}` });
+    } finally {
+      setFixLoading(null);
+    }
+  };
+
+  // Load health report when switching to health tab
+  useEffect(() => {
+    if (activeTab === 'health' && !healthReport) {
+      loadHealthReport();
+    }
+  }, [activeTab]);
+
   return (
     <div className="p-6 lg:p-8 container mx-auto p-6 max-w-7xl">
       <div className="mb-8">
@@ -421,7 +615,7 @@ export default function MigrationToolsPage() {
       )}
 
       <Tabs value={activeTab} onValueChange={setActiveTab}>
-        <TabsList className="grid w-full grid-cols-4">
+        <TabsList className="grid w-full grid-cols-5">
           <TabsTrigger value="database">
             <Database className="h-4 w-4 mr-2" />
             Veritabanı
@@ -437,6 +631,10 @@ export default function MigrationToolsPage() {
           <TabsTrigger value="embeddings">
             <Sparkles className="h-4 w-4 mr-2" />
             Embeddings
+          </TabsTrigger>
+          <TabsTrigger value="health">
+            <HeartPulse className="h-4 w-4 mr-2" />
+            Veri Sağlığı
           </TabsTrigger>
         </TabsList>
 
@@ -864,6 +1062,287 @@ export default function MigrationToolsPage() {
               </CardContent>
             </Card>
           )}
+        </TabsContent>
+
+        {/* Data Health Tab */}
+        <TabsContent value="health" className="space-y-4">
+          {/* Health Summary */}
+          <Card>
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle className="flex items-center gap-2">
+                    <HeartPulse className="h-5 w-5" />
+                    Veri Sağlığı Raporu
+                  </CardTitle>
+                  <CardDescription>
+                    Embedding verilerinin sağlık durumu ve temizlik araçları
+                  </CardDescription>
+                </div>
+                <Button
+                  onClick={loadHealthReport}
+                  disabled={healthLoading}
+                  variant="outline"
+                  size="sm"
+                >
+                  {healthLoading ? (
+                    <RefreshCw className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <RefreshCw className="h-4 w-4" />
+                  )}
+                </Button>
+              </div>
+            </CardHeader>
+            <CardContent>
+              {healthLoading && !healthReport ? (
+                <div className="flex items-center justify-center py-8">
+                  <RefreshCw className="h-8 w-8 animate-spin text-muted-foreground" />
+                </div>
+              ) : healthReport ? (
+                <div className="space-y-6">
+                  {/* Health Score */}
+                  <div className="flex items-center gap-6">
+                    <div className="relative">
+                      <ProgressCircle
+                        progress={healthReport.summary.health_score}
+                        size={100}
+                        showPulse={healthReport.summary.health_score < 80}
+                      />
+                    </div>
+                    <div className="flex-1 grid grid-cols-2 md:grid-cols-5 gap-4">
+                      <div className="text-center p-3 bg-gray-50 rounded-lg">
+                        <p className="text-xs text-muted-foreground">Toplam</p>
+                        <p className="text-lg font-bold">{healthReport.summary.total_embeddings.toLocaleString()}</p>
+                      </div>
+                      <div className="text-center p-3 bg-green-50 rounded-lg">
+                        <p className="text-xs text-green-600">Sağlıklı</p>
+                        <p className="text-lg font-bold text-green-700">{healthReport.summary.healthy_count.toLocaleString()}</p>
+                      </div>
+                      <div className="text-center p-3 bg-orange-50 rounded-lg">
+                        <p className="text-xs text-orange-600 flex items-center justify-center gap-1">
+                          <Ghost className="h-3 w-3" /> Orphan
+                        </p>
+                        <p className="text-lg font-bold text-orange-700">{healthReport.summary.orphan_count.toLocaleString()}</p>
+                      </div>
+                      <div className="text-center p-3 bg-yellow-50 rounded-lg">
+                        <p className="text-xs text-yellow-600 flex items-center justify-center gap-1">
+                          <AlertTriangle className="h-3 w-3" /> Eksik Meta
+                        </p>
+                        <p className="text-lg font-bold text-yellow-700">{healthReport.summary.missing_metadata_count.toLocaleString()}</p>
+                      </div>
+                      <div className="text-center p-3 bg-purple-50 rounded-lg">
+                        <p className="text-xs text-purple-600 flex items-center justify-center gap-1">
+                          <Copy className="h-3 w-3" /> Duplicate
+                        </p>
+                        <p className="text-lg font-bold text-purple-700">{healthReport.summary.duplicate_count.toLocaleString()}</p>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Recommendations */}
+                  {healthReport.recommendations.length > 0 && (
+                    <div className="space-y-2">
+                      <h4 className="text-sm font-medium">Öneriler</h4>
+                      <div className="space-y-1">
+                        {healthReport.recommendations.map((rec, idx) => (
+                          <p key={idx} className="text-sm text-muted-foreground">
+                            {rec}
+                          </p>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <Alert>
+                  <AlertCircle className="h-4 w-4" />
+                  <AlertDescription>
+                    Sağlık raporu yüklemek için yukarıdaki butona tıklayın.
+                  </AlertDescription>
+                </Alert>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Quick Fix Controls */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Wrench className="h-5 w-5" />
+                Hızlı Düzeltme
+              </CardTitle>
+              <CardDescription>
+                Tablo bazlı veri temizleme ve düzeltme işlemleri
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {/* Dry Run Toggle */}
+              <div className="flex items-center justify-between p-3 bg-amber-50 rounded-lg border border-amber-200">
+                <div className="flex items-center gap-2">
+                  <AlertTriangle className="h-4 w-4 text-amber-600" />
+                  <div>
+                    <p className="text-sm font-medium text-amber-800">Simülasyon Modu</p>
+                    <p className="text-xs text-amber-600">
+                      Açık: Değişiklik yapmaz, sadece raporlar | Kapalı: Gerçek silme/düzeltme yapar
+                    </p>
+                  </div>
+                </div>
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={dryRun}
+                    onChange={(e) => setDryRun(e.target.checked)}
+                    className="w-5 h-5"
+                  />
+                  <span className="text-sm font-medium text-amber-800">
+                    {dryRun ? 'Simülasyon' : 'GERÇEK İŞLEM'}
+                  </span>
+                </label>
+              </div>
+
+              {/* Table Selection */}
+              {healthReport && Object.keys(healthReport.tables).length > 0 && (
+                <div className="space-y-3">
+                  <Label>Tablo Seçin</Label>
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                    {Object.entries(healthReport.tables).map(([tableName, tableStats]) => (
+                      <div
+                        key={tableName}
+                        className={`p-4 border rounded-lg cursor-pointer transition-all ${
+                          selectedHealthTable === tableName
+                            ? 'border-primary bg-primary/5'
+                            : 'hover:border-gray-400'
+                        }`}
+                        onClick={() => setSelectedHealthTable(tableName)}
+                      >
+                        <div className="flex items-center justify-between mb-2">
+                          <span className="font-medium text-sm">{tableName}</span>
+                          <Badge
+                            variant={tableStats.health_score >= 80 ? 'default' : tableStats.health_score >= 50 ? 'secondary' : 'destructive'}
+                          >
+                            {tableStats.health_score.toFixed(0)}%
+                          </Badge>
+                        </div>
+                        <div className="grid grid-cols-4 gap-1 text-xs text-muted-foreground">
+                          <div title="Toplam">{tableStats.total_embeddings}</div>
+                          <div className="text-orange-600" title="Orphan">{tableStats.orphan_count}</div>
+                          <div className="text-yellow-600" title="Eksik Meta">{tableStats.missing_metadata_count}</div>
+                          <div className="text-purple-600" title="Duplicate">{tableStats.duplicate_count}</div>
+                        </div>
+                        <Progress
+                          value={tableStats.health_score}
+                          className="mt-2 h-1"
+                        />
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Action Buttons */}
+              {selectedHealthTable && selectedHealthTable !== 'all' && (
+                <div className="space-y-3 pt-4 border-t">
+                  <h4 className="text-sm font-medium">
+                    İşlemler: <span className="text-primary">{selectedHealthTable}</span>
+                  </h4>
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                    <Button
+                      onClick={() => runQuickFix(selectedHealthTable)}
+                      disabled={!!fixLoading}
+                      className="flex items-center gap-2"
+                    >
+                      {fixLoading === selectedHealthTable ? (
+                        <RefreshCw className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <Wrench className="h-4 w-4" />
+                      )}
+                      Hızlı Düzelt
+                    </Button>
+
+                    <Button
+                      onClick={() => runMetadataFix(selectedHealthTable)}
+                      disabled={!!fixLoading}
+                      variant="outline"
+                      className="flex items-center gap-2"
+                    >
+                      {fixLoading === `metadata-${selectedHealthTable}` ? (
+                        <RefreshCw className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <FileText className="h-4 w-4" />
+                      )}
+                      Metadata Düzelt
+                    </Button>
+
+                    <Button
+                      onClick={() => runOrphanDelete(selectedHealthTable)}
+                      disabled={!!fixLoading}
+                      variant="outline"
+                      className="flex items-center gap-2 text-orange-600 hover:text-orange-700"
+                    >
+                      {fixLoading === `orphan-${selectedHealthTable}` ? (
+                        <RefreshCw className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <Ghost className="h-4 w-4" />
+                      )}
+                      Orphan Sil
+                    </Button>
+
+                    <Button
+                      onClick={() => runDuplicateDelete(selectedHealthTable)}
+                      disabled={!!fixLoading}
+                      variant="outline"
+                      className="flex items-center gap-2 text-purple-600 hover:text-purple-700"
+                    >
+                      {fixLoading === `duplicate-${selectedHealthTable}` ? (
+                        <RefreshCw className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <Copy className="h-4 w-4" />
+                      )}
+                      Duplicate Sil
+                    </Button>
+                  </div>
+                </div>
+              )}
+
+              {/* Fix Result */}
+              {fixResult && (
+                <div className="mt-4 p-4 bg-gray-50 rounded-lg">
+                  <h4 className="text-sm font-medium mb-2">
+                    İşlem Sonucu {fixResult.dry_run && <Badge variant="secondary">Simülasyon</Badge>}
+                  </h4>
+                  <div className="grid grid-cols-3 gap-4 text-sm">
+                    {fixResult.orphans && (
+                      <div>
+                        <p className="text-muted-foreground">Orphan</p>
+                        <p className="font-medium">
+                          {fixResult.orphans.orphans_found} bulundu
+                          {!fixResult.dry_run && ` → ${fixResult.orphans.deleted_count} silindi`}
+                        </p>
+                      </div>
+                    )}
+                    {fixResult.duplicates && (
+                      <div>
+                        <p className="text-muted-foreground">Duplicate</p>
+                        <p className="font-medium">
+                          {fixResult.duplicates.duplicates_found} bulundu
+                          {!fixResult.dry_run && ` → ${fixResult.duplicates.deleted_count} silindi`}
+                        </p>
+                      </div>
+                    )}
+                    {fixResult.metadata && (
+                      <div>
+                        <p className="text-muted-foreground">Metadata</p>
+                        <p className="font-medium">
+                          {fixResult.metadata.fixed_count} / {fixResult.metadata.total_records}
+                          {!fixResult.dry_run && ' düzeltildi'}
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+            </CardContent>
+          </Card>
         </TabsContent>
       </Tabs>
     </div>

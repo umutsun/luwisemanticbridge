@@ -45,6 +45,7 @@ logger.add(
 # Import routers
 from routers import crawl_router, pgai_router, health_router, whisper_router, import_router, worker_router, pdf_router, csv_transform_router, embedding_router, document_analyzer_router, semantic_search_router, devops_router, semantic_analyzer_router, pdf_vision_router
 from routers.scheduler_router import router as scheduler_router
+from routers.data_health_router import router as data_health_router
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -239,6 +240,11 @@ app.include_router(
     tags=["pdf-vision"]
     # Intelligent PDF visual analysis: tapu, fatura, harita, etc.
 )
+app.include_router(
+    data_health_router,
+    tags=["data-health"]
+    # Data health: orphan cleanup, metadata fix, duplicate removal
+)
 
 # Global exception handler
 @app.exception_handler(Exception)
@@ -271,6 +277,7 @@ async def root():
             "pdf_vision": "/api/python/pdf-vision",
             "scheduler": "/api/python/scheduler",
             "devops": "/api/python/devops",
+            "data_health": "/api/python/data-health",
             "docs": "/docs"
         }
     }
