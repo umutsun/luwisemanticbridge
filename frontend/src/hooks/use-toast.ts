@@ -11,6 +11,28 @@ import type {
 const TOAST_LIMIT = 1
 const TOAST_REMOVE_DELAY = 1000000
 
+// Get auth token from various storage locations
+const getAuthToken = (): string | null => {
+  // Try direct token keys first
+  let token = localStorage.getItem('token') || localStorage.getItem('accessToken');
+  if (token) return token;
+
+  // Try zustand auth-storage (primary source after login)
+  const authStorage = localStorage.getItem('auth-storage');
+  if (authStorage) {
+    try {
+      const parsed = JSON.parse(authStorage);
+      if (parsed.state?.token) {
+        return parsed.state.token;
+      }
+    } catch (e) {
+      // Ignore parse errors
+    }
+  }
+
+  return null;
+};
+
 // Notification API integration - send toasts to backend for persistence
 const sendToNotificationService = async (
   title: string,
@@ -18,7 +40,7 @@ const sendToNotificationService = async (
   variant?: string
 ) => {
   try {
-    const token = localStorage.getItem('token');
+    const token = getAuthToken();
     if (!token) return; // Skip if not authenticated
 
     const type = variant === 'destructive' ? 'error' : 'success';
