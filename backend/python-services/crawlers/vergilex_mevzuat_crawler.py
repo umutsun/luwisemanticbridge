@@ -83,6 +83,63 @@ RATE_LIMIT_MAX_RETRIES = 5
 r = redis.Redis(host=REDIS_HOST, port=REDIS_PORT, db=REDIS_DB, decode_responses=True)
 
 
+def clean_title(title: str) -> str:
+    """Clean and normalize title text"""
+    if not title:
+        return ''
+
+    # Remove UI elements
+    ui_patterns = [
+        r'SAYFAYI\s*İNDİR',
+        r'Sayfayı\s*İndir',
+        r'SAYFA\s*İNDİR',
+        r'İNDİR',
+        r'Yazdır',
+        r'YAZDIR',
+        r'Paylaş',
+        r'PAYLAŞ',
+        r'Üyelik\s*Bilgileri',
+        r'Anasayfa',
+    ]
+    for pattern in ui_patterns:
+        title = re.sub(pattern, '', title, flags=re.IGNORECASE)
+
+    # Fix spacing: add space before capital letters following lowercase
+    # "KanunNumarası" -> "Kanun Numarası"
+    title = re.sub(r'([a-zçğıöşü])([A-ZÇĞİÖŞÜ])', r'\1 \2', title)
+
+    # Fix spacing: add space between number and text
+    # "213Kanun" -> "213 Kanun", "Kanun213" -> "Kanun 213"
+    title = re.sub(r'(\d)([A-ZÇĞİÖŞÜa-zçğıöşü])', r'\1 \2', title)
+    title = re.sub(r'([A-ZÇĞİÖŞÜa-zçğıöşü])(\d)', r'\1 \2', title)
+
+    # Remove duplicate consecutive words (case insensitive)
+    # "KANUNUKanun" -> "KANUNU"
+    words = title.split()
+    cleaned_words = []
+    for i, word in enumerate(words):
+        if i == 0:
+            cleaned_words.append(word)
+        else:
+            # Check if this word is similar to previous (ignoring case)
+            prev_word = cleaned_words[-1].upper()
+            curr_word = word.upper()
+            # If current word is contained in previous or vice versa, skip
+            if curr_word in prev_word or prev_word in curr_word:
+                continue
+            cleaned_words.append(word)
+
+    title = ' '.join(cleaned_words)
+
+    # Normalize whitespace
+    title = re.sub(r'\s+', ' ', title).strip()
+
+    # Remove leading/trailing punctuation
+    title = re.sub(r'^[\s\-:.,/×]+|[\s\-:.,/×]+$', '', title)
+
+    return title
+
+
 def load_links_from_file(filepath: str) -> dict:
     """Load URLs from the links file, categorized by type"""
     result = {
@@ -238,7 +295,7 @@ class MevzuatCrawler:
                         title = await element.inner_text()
                         # Skip generic titles
                         if title and len(title) > 10 and 'Mevzuat Bilgi Sistemi' not in title:
-                            content_data['title'] = title.strip()
+                            content_data['title'] = clean_title(title)
                             break
                 except:
                     continue
@@ -294,7 +351,7 @@ class MevzuatCrawler:
                     for pattern in title_patterns:
                         match = re.search(pattern, full_text[:2000])
                         if match:
-                            extracted_title = match.group(1).strip()
+                            extracted_title = clean_title(match.group(1))
                             # Clean and validate
                             if len(extracted_title) > 15 and len(extracted_title) < 200:
                                 if 'Mevzuat Bilgi Sistemi' not in extracted_title:
@@ -405,7 +462,7 @@ class MevzuatCrawler:
                 if h1:
                     title_text = h1.get_text(strip=True)
                     if title_text and 'Mevzuat Bilgi Sistemi' not in title_text:
-                        content_data['title'] = title_text
+                        content_data['title'] = clean_title(title_text)
 
                 # If still no title, extract from content
                 if not content_data['title'] or content_data['title'] == 'Mevzuat Bilgi Sistemi':
@@ -421,7 +478,7 @@ class MevzuatCrawler:
                     for pattern in title_patterns:
                         match = re.search(pattern, full_text[:2000])
                         if match:
-                            extracted_title = match.group(1).strip()
+                            extracted_title = clean_title(match.group(1))
                             if len(extracted_title) > 15 and len(extracted_title) < 250:
                                 if 'Mevzuat Bilgi Sistemi' not in extracted_title:
                                     content_data['title'] = extracted_title

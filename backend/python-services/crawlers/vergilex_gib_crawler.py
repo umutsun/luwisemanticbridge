@@ -70,6 +70,61 @@ RATE_LIMIT_MAX_RETRIES = 5
 r = redis.Redis(host=REDIS_HOST, port=REDIS_PORT, db=REDIS_DB, decode_responses=True)
 
 
+def clean_title(title: str) -> str:
+    """Clean and normalize title text"""
+    if not title:
+        return ''
+
+    # Remove UI elements
+    ui_patterns = [
+        r'SAYFAYI\s*İNDİR',
+        r'Sayfayı\s*İndir',
+        r'SAYFA\s*İNDİR',
+        r'İNDİR',
+        r'Yazdır',
+        r'YAZDIR',
+        r'Paylaş',
+        r'PAYLAŞ',
+    ]
+    for pattern in ui_patterns:
+        title = re.sub(pattern, '', title, flags=re.IGNORECASE)
+
+    # Fix spacing: add space before capital letters following lowercase
+    # "KanunNumarası" -> "Kanun Numarası"
+    title = re.sub(r'([a-zçğıöşü])([A-ZÇĞİÖŞÜ])', r'\1 \2', title)
+
+    # Fix spacing: add space between number and text
+    # "213Kanun" -> "213 Kanun", "Kanun213" -> "Kanun 213"
+    title = re.sub(r'(\d)([A-ZÇĞİÖŞÜa-zçğıöşü])', r'\1 \2', title)
+    title = re.sub(r'([A-ZÇĞİÖŞÜa-zçğıöşü])(\d)', r'\1 \2', title)
+
+    # Remove duplicate consecutive words (case insensitive)
+    # "KANUNUKanun" -> "KANUNU"
+    words = title.split()
+    cleaned_words = []
+    for i, word in enumerate(words):
+        if i == 0:
+            cleaned_words.append(word)
+        else:
+            # Check if this word is similar to previous (ignoring case)
+            prev_word = cleaned_words[-1].upper()
+            curr_word = word.upper()
+            # If current word is contained in previous or vice versa, skip
+            if curr_word in prev_word or prev_word in curr_word:
+                continue
+            cleaned_words.append(word)
+
+    title = ' '.join(cleaned_words)
+
+    # Normalize whitespace
+    title = re.sub(r'\s+', ' ', title).strip()
+
+    # Remove leading/trailing punctuation
+    title = re.sub(r'^[\s\-:.,/]+|[\s\-:.,/]+$', '', title)
+
+    return title
+
+
 def load_links_from_file(filepath: str) -> list:
     """Load URLs from the links file"""
     links = []
@@ -175,7 +230,7 @@ class GIBSirkulerCrawler:
             # Get page title
             title = await page.title()
             if title and 'Gelir İdaresi' not in title:
-                content_data['title'] = title.strip()
+                content_data['title'] = clean_title(title)
 
             # Try multiple selectors for content extraction
             selectors_to_try = [
@@ -276,7 +331,7 @@ class GIBSirkulerCrawler:
                     if h1:
                         title_text = h1.get_text(strip=True)
                         if title_text and 'Gelir İdaresi' not in title_text:
-                            content_data['title'] = title_text
+                            content_data['title'] = clean_title(title_text)
 
                 # If still no title, try pattern matching
                 if not content_data['title']:
@@ -296,7 +351,7 @@ class GIBSirkulerCrawler:
                         if match:
                             extracted_title = match.group(1).strip()
                             if len(extracted_title) > 15 and len(extracted_title) < 250:
-                                content_data['title'] = extracted_title
+                                content_data['title'] = clean_title(extracted_title)
                                 break
 
                 # Last resort: use sirkuler info
@@ -304,7 +359,7 @@ class GIBSirkulerCrawler:
                     if content_data.get('kanun_kodu') and content_data.get('sirkuler_id'):
                         content_data['title'] = f"Sirküler - Kanun {content_data['kanun_kodu']} / {content_data['sirkuler_id']}"
                     elif unique_paragraphs:
-                        content_data['title'] = unique_paragraphs[0][:200]
+                        content_data['title'] = clean_title(unique_paragraphs[0][:200])
 
             return content_data
 
