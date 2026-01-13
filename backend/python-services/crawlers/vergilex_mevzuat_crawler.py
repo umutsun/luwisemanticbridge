@@ -363,12 +363,25 @@ class MevzuatCrawler:
 
             content_data['mevzuat_no'] = params.get('MevzuatNo', '')
 
-            # Get page content
+            # Check if there's an iframe (like kanun pages) and extract content from it
+            target_page = page
+            iframe_element = await page.query_selector('iframe')
+            if iframe_element:
+                try:
+                    frame = await iframe_element.content_frame()
+                    if frame:
+                        await frame.wait_for_load_state('networkidle', timeout=15000)
+                        target_page = frame
+                        print("  [INFO] Found iframe, extracting content from frame")
+                except Exception as e:
+                    print(f"  [WARN] Could not access iframe: {str(e)[:50]}")
+
+            # Get page content from target (either main page or iframe)
             body_html = ""
             try:
                 # Try main content selectors
-                for selector in ['main', 'article', '.content', '.mevzuat-icerik', 'body']:
-                    element = await page.query_selector(selector)
+                for selector in ['main', 'article', '.content', '.mevzuat-icerik', '#icerik', '.icerik', 'body']:
+                    element = await target_page.query_selector(selector)
                     if element:
                         html = await element.inner_html()
                         if len(html) > 500:
@@ -448,7 +461,22 @@ class MevzuatCrawler:
 
             # Fallback: get title from page
             if not content_data['title']:
-                content_data['title'] = await page.title() or ''
+                content_data['title'] = await target_page.title() if target_page else await page.title() or ''
+
+            # Validate content - detect and mark invalid pages
+            content = content_data.get('content', '')
+            if content:
+                # Check for common error page patterns
+                error_patterns = [
+                    'Kanunlar Fihristindeyapılan aramada',
+                    'Kanunlar Fihristi',
+                    'aramada çıkan Kanunun',
+                    'butonundan arama yapılması gerekmektedir'
+                ]
+                is_error_page = any(pattern in content for pattern in error_patterns)
+                if is_error_page:
+                    print("  [WARN] Detected error/info page content, marking as failed")
+                    return None
 
             return content_data
 
@@ -552,6 +580,25 @@ class MevzuatCrawler:
             self.state['stats']['failed'] += 1
             return False
 
+    def _convert_to_iframe_url(self, url: str) -> str:
+        """Convert regular mevzuat URL to iframe URL format for better content extraction"""
+        # Extract parameters
+        params = {}
+        if '?' in url:
+            query = url.split('?')[1]
+            for param in query.split('&'):
+                if '=' in param:
+                    key, value = param.split('=', 1)
+                    params[key] = value
+
+        mevzuat_no = params.get('MevzuatNo', '')
+        mevzuat_tur = params.get('MevzuatTur', '9')  # 9 for tebliğ
+        mevzuat_tertip = params.get('MevzuatTertip', '5')
+
+        # Build iframe URL (same format as kanunlar)
+        iframe_url = f"https://mevzuat.gov.tr/anasayfa/MevzuatFihristDetayIframe?MevzuatTur={mevzuat_tur}&MevzuatNo={mevzuat_no}&MevzuatTertip={mevzuat_tertip}"
+        return iframe_url
+
     async def process_teblig(self, page, url: str, index: int, retry_count: int = 0) -> bool:
         """Process a single communique URL with rate limit handling"""
         if url in self.state['completed_tebligler']:
@@ -574,8 +621,13 @@ class MevzuatCrawler:
 
         print(f"\n[TEBLİĞ {index}/{len(self.links['tebligler'])}] MevzuatNo: {mevzuat_no}")
 
+        # Try iframe URL first (better content extraction)
+        iframe_url = self._convert_to_iframe_url(url)
+        actual_url = iframe_url
+        print(f"  Trying iframe URL: {iframe_url}")
+
         try:
-            response = await page.goto(url, wait_until='domcontentloaded', timeout=30000)
+            response = await page.goto(actual_url, wait_until='domcontentloaded', timeout=30000)
 
             if not response:
                 print(f"  [ERROR] No response")
@@ -604,10 +656,10 @@ class MevzuatCrawler:
             if is_rate_limited(page_text, page_title):
                 return await self._handle_rate_limit_teblig(page, url, index, retry_count, "Rate limit page detected")
 
-            content = await self.extract_teblig_content(page, url)
+            content = await self.extract_teblig_content(page, actual_url)
 
             if not content:
-                content = {'content': f"İçerik yüklenemedi. URL: {url}"}
+                content = {'content': f"İçerik yüklenemedi. URL: {actual_url}"}
 
             timestamp = datetime.utcnow().isoformat()
             data = {
@@ -617,7 +669,8 @@ class MevzuatCrawler:
                 'resmi_gazete_tarihi': content.get('resmi_gazete_tarihi', ''),
                 'resmi_gazete_sayisi': content.get('resmi_gazete_sayisi', ''),
                 'content': content.get('content', ''),
-                'url': url,
+                'url': actual_url,  # Use iframe URL for consistency
+                'original_url': url,  # Keep original URL for reference
                 'source': 'mevzuat.gov.tr',
                 'source_type': 'teblig',
                 'crawled_at': timestamp,
