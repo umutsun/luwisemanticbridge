@@ -2,11 +2,12 @@
  * Email Service
  *
  * Handles email sending via SMTP (Brevo, SendGrid, etc.)
- * Reads SMTP configuration from settings table or environment variables
+ * Reads SMTP configuration from database settings table first, then env variables
  */
 
 import nodemailer, { Transporter } from 'nodemailer';
 import { logger } from '../utils/logger';
+import { lsembPool } from '../config/database.config';
 
 interface SMTPConfig {
   host: string;
@@ -37,19 +38,53 @@ class EmailService {
   private config: SMTPConfig | null = null;
 
   /**
-   * Initialize SMTP transporter with config from settings or env
+   * Load SMTP config from database settings table
+   */
+  private async loadFromDatabase(): Promise<Partial<SMTPConfig>> {
+    try {
+      const result = await lsembPool.query(`
+        SELECT key, value FROM settings
+        WHERE key LIKE 'smtp.%'
+      `);
+
+      const dbConfig: Record<string, string> = {};
+      for (const row of result.rows) {
+        const shortKey = row.key.replace('smtp.', '');
+        dbConfig[shortKey] = row.value;
+      }
+
+      return {
+        host: dbConfig.host || undefined,
+        port: dbConfig.port ? parseInt(dbConfig.port) : undefined,
+        secure: dbConfig.secure ? dbConfig.secure === 'true' : undefined,
+        user: dbConfig.username || dbConfig.user || undefined,
+        pass: dbConfig.password || dbConfig.pass || undefined,
+        from: dbConfig.from || dbConfig.fromEmail || undefined,
+        fromName: dbConfig.fromName || undefined
+      };
+    } catch (error) {
+      logger.warn('Failed to load SMTP config from database:', error);
+      return {};
+    }
+  }
+
+  /**
+   * Initialize SMTP transporter with config from database > env
    */
   async initialize(settingsConfig?: Partial<SMTPConfig>): Promise<boolean> {
     try {
-      // Priority: settings config > environment variables
+      // Load from database first
+      const dbConfig = await this.loadFromDatabase();
+
+      // Priority: explicit settings > database > environment variables
       this.config = {
-        host: settingsConfig?.host || process.env.SMTP_HOST || '',
-        port: settingsConfig?.port || parseInt(process.env.SMTP_PORT || '587'),
-        secure: settingsConfig?.secure ?? (process.env.SMTP_SECURE === 'true'),
-        user: settingsConfig?.user || process.env.SMTP_USER || '',
-        pass: settingsConfig?.pass || process.env.SMTP_PASS || '',
-        from: settingsConfig?.from || process.env.SMTP_FROM || '',
-        fromName: settingsConfig?.fromName || process.env.SMTP_FROM_NAME || 'Vergilex'
+        host: settingsConfig?.host || dbConfig.host || process.env.SMTP_HOST || '',
+        port: settingsConfig?.port || dbConfig.port || parseInt(process.env.SMTP_PORT || '587'),
+        secure: settingsConfig?.secure ?? dbConfig.secure ?? (process.env.SMTP_SECURE === 'true'),
+        user: settingsConfig?.user || dbConfig.user || process.env.SMTP_USER || '',
+        pass: settingsConfig?.pass || dbConfig.pass || process.env.SMTP_PASS || '',
+        from: settingsConfig?.from || dbConfig.from || process.env.SMTP_FROM || '',
+        fromName: settingsConfig?.fromName || dbConfig.fromName || process.env.SMTP_FROM_NAME || 'Vergilex'
       };
 
       if (!this.config.host || !this.config.user || !this.config.pass) {
