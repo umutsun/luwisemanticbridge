@@ -274,11 +274,37 @@ class GIBSirkulerCrawler:
                 if not content_data['title']:
                     h1 = soup.find('h1')
                     if h1:
-                        content_data['title'] = h1.get_text(strip=True)
-                    else:
-                        # Use first paragraph as title
-                        if unique_paragraphs:
-                            content_data['title'] = unique_paragraphs[0][:200]
+                        title_text = h1.get_text(strip=True)
+                        if title_text and 'Gelir İdaresi' not in title_text:
+                            content_data['title'] = title_text
+
+                # If still no title, try pattern matching
+                if not content_data['title']:
+                    title_patterns = [
+                        # Sirküler with number
+                        r'(\d+\s*(?:SAYILI|Sayılı|Seri\s*No[:\s]*\d*)\s*[A-ZÇĞİÖŞÜa-zçğıöşü\s]+(?:SİRKÜLERİ?|Sirküleri?))',
+                        # Sirküler başlığı
+                        r'([A-ZÇĞİÖŞÜ][A-ZÇĞİÖŞÜa-zçğıöşü\s]+(?:SİRKÜLERİ?|Sirküleri?))',
+                        # Kanun-ilgili başlıklar
+                        r'([A-ZÇĞİÖŞÜ][A-ZÇĞİÖŞÜa-zçğıöşü\s]+(?:KANUNU?|Kanunu?)\s*(?:ile|İle|hakkında|Hakkında)?[A-ZÇĞİÖŞÜa-zçğıöşü\s]*)',
+                        # Genel Tebliğ
+                        r'([A-ZÇĞİÖŞÜa-zçğıöşü\s]+(?:GENEL\s*TEBLİĞİ?|Genel\s*Tebliği?))',
+                    ]
+
+                    for pattern in title_patterns:
+                        match = re.search(pattern, text_content[:2000])
+                        if match:
+                            extracted_title = match.group(1).strip()
+                            if len(extracted_title) > 15 and len(extracted_title) < 250:
+                                content_data['title'] = extracted_title
+                                break
+
+                # Last resort: use sirkuler info
+                if not content_data['title']:
+                    if content_data.get('kanun_kodu') and content_data.get('sirkuler_id'):
+                        content_data['title'] = f"Sirküler - Kanun {content_data['kanun_kodu']} / {content_data['sirkuler_id']}"
+                    elif unique_paragraphs:
+                        content_data['title'] = unique_paragraphs[0][:200]
 
             return content_data
 

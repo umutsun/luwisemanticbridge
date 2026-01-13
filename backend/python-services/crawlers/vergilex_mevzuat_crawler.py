@@ -216,24 +216,32 @@ class MevzuatCrawler:
                 except:
                     pass
 
-            # Get title
-            title_selectors = ['h1', '.baslik', '.title', '[class*="baslik"]', '.kanun-adi']
+            # Get title - try multiple strategies
+            title_selectors = [
+                'h1',
+                'h2',
+                '.baslik',
+                '.title',
+                '[class*="baslik"]',
+                '.kanun-adi',
+                '#icerik h1',
+                '#icerik h2',
+                '.mevzuat-baslik',
+                'div[class*="kanun"] h1',
+                'div[class*="kanun"] h2'
+            ]
+
             for selector in title_selectors:
                 try:
                     element = await target_page.query_selector(selector)
                     if element:
                         title = await element.inner_text()
-                        if title and len(title) > 10:
+                        # Skip generic titles
+                        if title and len(title) > 10 and 'Mevzuat Bilgi Sistemi' not in title:
                             content_data['title'] = title.strip()
                             break
                 except:
                     continue
-
-            # If no title from page, try to get from document
-            if not content_data['title']:
-                page_title = await page.title()
-                if page_title:
-                    content_data['title'] = page_title.strip()
 
             # Extract metadata
             meta_patterns = {
@@ -268,6 +276,36 @@ class MevzuatCrawler:
                         if match:
                             content_data[field] = match.group(1)
                             break
+
+                # If still no title, extract from content using patterns
+                if not content_data['title'] or content_data['title'] == 'Mevzuat Bilgi Sistemi':
+                    # Common law name patterns
+                    title_patterns = [
+                        # Full law names ending with KANUNU/KANUN
+                        r'([A-ZÇĞİÖŞÜ][A-ZÇĞİÖŞÜa-zçğıöşü\s]+(?:KANUNU|KANUN))',
+                        # Law names with number
+                        r'(\d+\s*(?:SAYILI|Sayılı)\s+[A-ZÇĞİÖŞÜa-zçğıöşü\s]+(?:KANUNU?|Kanunu?))',
+                        # Tebliğ names
+                        r'([A-ZÇĞİÖŞÜ][A-ZÇĞİÖŞÜa-zçğıöşü\s]+(?:TEBLİĞİ?|Tebliği?))',
+                        # Yönetmelik names
+                        r'([A-ZÇĞİÖŞÜ][A-ZÇĞİÖŞÜa-zçğıöşü\s]+(?:YÖNETMELİĞİ?|Yönetmeliği?))',
+                    ]
+
+                    for pattern in title_patterns:
+                        match = re.search(pattern, full_text[:2000])
+                        if match:
+                            extracted_title = match.group(1).strip()
+                            # Clean and validate
+                            if len(extracted_title) > 15 and len(extracted_title) < 200:
+                                if 'Mevzuat Bilgi Sistemi' not in extracted_title:
+                                    content_data['title'] = extracted_title
+                                    break
+
+                    # Last resort: use mevzuat_no as title
+                    if not content_data['title'] or content_data['title'] == 'Mevzuat Bilgi Sistemi':
+                        mevzuat_no = content_data.get('mevzuat_no', '')
+                        if mevzuat_no:
+                            content_data['title'] = f"Kanun No: {mevzuat_no}"
 
                 # Extract articles (Madde)
                 madde_pattern = r'(Madde\s*\d+[^M]*?)(?=Madde\s*\d+|$)'
@@ -349,15 +387,38 @@ class MevzuatCrawler:
 
                 full_text = soup.get_text(' ', strip=True)
 
-                # Extract title
+                # Extract title - try multiple strategies
                 h1 = soup.find('h1')
                 if h1:
-                    content_data['title'] = h1.get_text(strip=True)
-                else:
-                    # Try to find title pattern
-                    title_match = re.search(r'(?:Tebliğ|TEBLİĞ)[^.]*', full_text)
-                    if title_match:
-                        content_data['title'] = title_match.group(0)[:200]
+                    title_text = h1.get_text(strip=True)
+                    if title_text and 'Mevzuat Bilgi Sistemi' not in title_text:
+                        content_data['title'] = title_text
+
+                # If still no title, extract from content
+                if not content_data['title'] or content_data['title'] == 'Mevzuat Bilgi Sistemi':
+                    title_patterns = [
+                        # Tebliğ with full name
+                        r'([A-ZÇĞİÖŞÜ][A-ZÇĞİÖŞÜa-zçğıöşü\s,]+(?:TEBLİĞİ?|Tebliği?)(?:\s*\([^)]+\))?)',
+                        # Genel Tebliğ
+                        r'((?:GENEL\s+)?TEBLİĞ[^.]{10,100})',
+                        # Sirküler
+                        r'([A-ZÇĞİÖŞÜ][A-ZÇĞİÖŞÜa-zçğıöşü\s]+(?:SİRKÜLERİ?|Sirküleri?))',
+                    ]
+
+                    for pattern in title_patterns:
+                        match = re.search(pattern, full_text[:2000])
+                        if match:
+                            extracted_title = match.group(1).strip()
+                            if len(extracted_title) > 15 and len(extracted_title) < 250:
+                                if 'Mevzuat Bilgi Sistemi' not in extracted_title:
+                                    content_data['title'] = extracted_title
+                                    break
+
+                    # Last resort: use mevzuat_no
+                    if not content_data['title'] or content_data['title'] == 'Mevzuat Bilgi Sistemi':
+                        mevzuat_no = content_data.get('mevzuat_no', '')
+                        if mevzuat_no:
+                            content_data['title'] = f"Tebliğ No: {mevzuat_no}"
 
                 # Extract dates
                 rg_tarih = re.search(r'Resmî?\s*Gazete\s*Tarihi\s*[:\s]*(\d{1,2}[./]\d{1,2}[./]\d{4})', full_text)
