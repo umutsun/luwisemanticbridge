@@ -5,6 +5,8 @@ import fs from 'fs';
 import path from 'path';
 import multer from 'multer';
 
+import { execSync } from 'child_process';
+
 const router = Router();
 
 // Setup multer for file uploads
@@ -2222,6 +2224,125 @@ router.get('/embed-stats', async (req: Request, res: Response) => {
     res.status(500).json({
       success: false,
       error: error.message || 'Failed to get embed stats'
+    });
+  }
+});
+
+/**
+ * GET /scheduled-crawlers
+ * Get status of scheduled crawlers (Vergilex GIB and Mevzuat)
+ */
+router.get('/scheduled-crawlers', async (req: Request, res: Response) => {
+  try {
+    // Get PM2 process list
+    const pm2Command = process.platform === 'win32'
+      ? 'pm2 jlist'
+      : 'pm2 jlist 2>/dev/null || echo "[]"';
+
+    let processes: any[] = [];
+    try {
+      const pm2Output = execSync(pm2Command, {
+        encoding: 'utf8',
+        timeout: 10000
+      });
+      processes = JSON.parse(pm2Output || '[]');
+    } catch (pm2Error) {
+      console.log('[ScheduledCrawlers] PM2 not available locally, returning empty list');
+      return res.json({
+        success: true,
+        crawlers: [],
+        message: 'PM2 not available - check production server'
+      });
+    }
+
+    // Filter for Vergilex crawlers
+    const crawlerPatterns = ['vergilex-gib-crawler', 'vergilex-mevzuat-crawler'];
+    const scheduledCrawlers = processes
+      .filter((p: any) => crawlerPatterns.some(pattern => p.name?.includes(pattern)))
+      .map((p: any) => {
+        const cronExpression = p.pm2_env?.cron_restart || null;
+        let scheduleDisplay = 'Not scheduled';
+
+        if (cronExpression) {
+          // Parse cron expression for display
+          const cronParts = cronExpression.split(' ');
+          if (cronParts.length === 5) {
+            const [minute, hour, dayOfMonth, month, dayOfWeek] = cronParts;
+            if (dayOfWeek === '0') {
+              scheduleDisplay = 'Her Pazar ' + hour.padStart(2, '0') + ':' + minute.padStart(2, '0');
+            } else {
+              scheduleDisplay = cronExpression;
+            }
+          }
+        }
+
+        return {
+          name: p.name,
+          displayName: p.name === 'vergilex-gib-crawler' ? 'GIB Sirküleri' : 'Mevzuat.gov.tr',
+          status: p.pm2_env?.status || 'unknown',
+          pid: p.pid || null,
+          uptime: p.pm2_env?.pm_uptime ? Date.now() - p.pm2_env.pm_uptime : 0,
+          restarts: p.pm2_env?.restart_time || 0,
+          memory: p.monit?.memory || 0,
+          cpu: p.monit?.cpu || 0,
+          cronExpression,
+          scheduleDisplay,
+          lastExecTime: p.pm2_env?.pm_uptime || null,
+          mode: p.pm2_env?.exec_mode || 'fork'
+        };
+      });
+
+    res.json({
+      success: true,
+      crawlers: scheduledCrawlers
+    });
+
+  } catch (error: any) {
+    console.error('[ScheduledCrawlers] Error:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message || 'Failed to get scheduled crawlers'
+    });
+  }
+});
+
+/**
+ * POST /scheduled-crawlers/:name/action
+ * Perform action on a scheduled crawler (start, stop, restart)
+ */
+router.post('/scheduled-crawlers/:name/action', async (req: Request, res: Response) => {
+  try {
+    const { name } = req.params;
+    const { action } = req.body;
+
+    if (!['start', 'stop', 'restart'].includes(action)) {
+      return res.status(400).json({
+        success: false,
+        error: 'Invalid action. Use: start, stop, restart'
+      });
+    }
+
+    const command = 'pm2 ' + action + ' ' + name;
+
+    try {
+      execSync(command, { encoding: 'utf8', timeout: 30000 });
+
+      res.json({
+        success: true,
+        message: 'Crawler ' + name + ' ' + action + 'ed successfully'
+      });
+    } catch (execError: any) {
+      res.status(500).json({
+        success: false,
+        error: 'Failed to ' + action + ' crawler: ' + execError.message
+      });
+    }
+
+  } catch (error: any) {
+    console.error('[ScheduledCrawlers] Action error:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message || 'Failed to perform action'
     });
   }
 });

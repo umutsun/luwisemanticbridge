@@ -262,7 +262,7 @@ export const ZenMessage: React.FC<ZenMessageProps> = ({
             {message.isStreaming ? (
               <div className="flex items-center gap-2">
                 <ZenTypingIndicator />
-                <span className="text-cyan-400/60 text-sm">Thinking...</span>
+                <span className="text-cyan-400/60 text-sm">Değerlendiriliyor...</span>
               </div>
             ) : isUser ? (
               <div className="text-slate-700 dark:text-slate-200 leading-relaxed whitespace-pre-wrap">
@@ -303,7 +303,7 @@ export const ZenMessage: React.FC<ZenMessageProps> = ({
                       };
 
                       return (
-                        <p className="text-slate-700 dark:text-slate-200 leading-relaxed my-4 first:mt-0 last:mb-0">
+                        <p className="text-slate-700 dark:text-slate-100 leading-relaxed my-4 first:mt-0 last:mb-0">
                           {processChildren(children)}
                         </p>
                       );
@@ -316,25 +316,25 @@ export const ZenMessage: React.FC<ZenMessageProps> = ({
                     ),
                     // Italic
                     em: ({ children }) => (
-                      <em className="italic text-slate-600 dark:text-slate-300">
+                      <em className="italic text-slate-600 dark:text-slate-200">
                         {children}
                       </em>
                     ),
                     // Unordered lists
                     ul: ({ children }) => (
-                      <ul className="list-disc list-outside ml-4 my-2 space-y-1 text-slate-700 dark:text-slate-200">
+                      <ul className="list-disc list-outside ml-4 my-2 space-y-1 text-slate-700 dark:text-slate-100">
                         {children}
                       </ul>
                     ),
                     // Ordered lists
                     ol: ({ children }) => (
-                      <ol className="list-decimal list-outside ml-4 my-2 space-y-1 text-slate-700 dark:text-slate-200">
+                      <ol className="list-decimal list-outside ml-4 my-2 space-y-1 text-slate-700 dark:text-slate-100">
                         {children}
                       </ol>
                     ),
                     // List items
                     li: ({ children }) => (
-                      <li className="text-slate-700 dark:text-slate-200 pl-1">
+                      <li className="text-slate-700 dark:text-slate-100 pl-1">
                         {children}
                       </li>
                     ),
@@ -353,7 +353,7 @@ export const ZenMessage: React.FC<ZenMessageProps> = ({
                     },
                     // Blockquotes
                     blockquote: ({ children }) => (
-                      <blockquote className="border-l-4 border-cyan-500/50 pl-4 my-2 text-slate-600 dark:text-slate-300 italic">
+                      <blockquote className="border-l-4 border-cyan-500/50 pl-4 my-2 text-slate-600 dark:text-slate-100 italic">
                         {children}
                       </blockquote>
                     ),
@@ -387,7 +387,7 @@ export const ZenMessage: React.FC<ZenMessageProps> = ({
                       </th>
                     ),
                     td: ({ children }) => (
-                      <td className="px-3 py-2 text-sm text-slate-600 dark:text-slate-300 border-b border-cyan-200/30 dark:border-cyan-500/20">
+                      <td className="px-3 py-2 text-sm text-slate-600 dark:text-slate-200 border-b border-cyan-200/30 dark:border-cyan-500/20">
                         {children}
                       </td>
                     ),

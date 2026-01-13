@@ -49,6 +49,21 @@ LINKS_FILE = os.path.join(os.path.dirname(__file__), '..', '..', '..', 'docs', '
 # Rate limiting
 MIN_DELAY = 3  # seconds
 MAX_DELAY = 6  # seconds
+
+# Rate limit detection patterns
+RATE_LIMIT_PATTERNS = [
+    'ÇOK FAZLA İSTEK',
+    'TOO MANY REQUESTS',
+    'RATE LIMIT',
+    'ERİŞİM ENGELLENDİ',
+    'BLOCKED',
+    '429',
+]
+
+# Exponential backoff settings
+RATE_LIMIT_INITIAL_WAIT = 60  # seconds
+RATE_LIMIT_MAX_WAIT = 600  # 10 minutes max
+RATE_LIMIT_MAX_RETRIES = 5
 # --- End of Configuration ---
 
 # Redis connection
@@ -109,6 +124,15 @@ def load_state() -> dict:
 def compute_content_hash(content: str) -> str:
     """Compute MD5 hash of content for change detection"""
     return hashlib.md5(content.encode('utf-8')).hexdigest()
+
+
+def is_rate_limited(page_content: str, page_title: str = "") -> bool:
+    """Check if page indicates rate limiting"""
+    check_text = (page_content + " " + page_title).upper()
+    for pattern in RATE_LIMIT_PATTERNS:
+        if pattern.upper() in check_text:
+            return True
+    return False
 
 
 class GIBSirkulerCrawler:
@@ -262,8 +286,8 @@ class GIBSirkulerCrawler:
             print(f"  [ERROR] Content extraction failed: {str(e)[:100]}")
             return None
 
-    async def process_url(self, page, url: str, index: int) -> bool:
-        """Process a single URL"""
+    async def process_url(self, page, url: str, index: int, retry_count: int = 0) -> bool:
+        """Process a single URL with rate limit handling"""
         # Generate Redis key
         url_match = re.search(r'/kanun/(\d+)/sirkuler/(\d+)', url)
         if url_match:
@@ -304,10 +328,27 @@ class GIBSirkulerCrawler:
                 self.state['failed'].append(url)
                 return False
 
+            # Check for HTTP 429 rate limit
+            if response.status == 429:
+                return await self._handle_rate_limit(page, url, index, retry_count, "HTTP 429")
+
             if response.status >= 400:
                 print(f"  [ERROR] HTTP {response.status}")
                 self.state['failed'].append(url)
                 return False
+
+            # Check page content for rate limit indicators
+            page_title = await page.title() or ""
+            page_text = ""
+            try:
+                body = await page.query_selector('body')
+                if body:
+                    page_text = await body.inner_text()
+            except:
+                pass
+
+            if is_rate_limited(page_text, page_title):
+                return await self._handle_rate_limit(page, url, index, retry_count, "Rate limit page detected")
 
             # Extract content
             content = await self.extract_sirkuler_content(page)
@@ -372,6 +413,28 @@ class GIBSirkulerCrawler:
             self.state['failed'].append(url)
             self.state['stats']['failed'] += 1
             return False
+
+    async def _handle_rate_limit(self, page, url: str, index: int, retry_count: int, reason: str) -> bool:
+        """Handle rate limiting with exponential backoff"""
+        if retry_count >= RATE_LIMIT_MAX_RETRIES:
+            print(f"  [RATE LIMIT] Max retries ({RATE_LIMIT_MAX_RETRIES}) exceeded for {url}")
+            self.state['failed'].append(url)
+            self.state['stats']['failed'] += 1
+            return False
+
+        # Calculate exponential backoff wait time
+        wait_time = min(RATE_LIMIT_INITIAL_WAIT * (2 ** retry_count), RATE_LIMIT_MAX_WAIT)
+
+        print(f"  [RATE LIMIT] {reason}")
+        print(f"  [RATE LIMIT] Waiting {wait_time} seconds before retry {retry_count + 1}/{RATE_LIMIT_MAX_RETRIES}...")
+
+        # Save state before waiting
+        save_state(self.state)
+
+        await asyncio.sleep(wait_time)
+
+        # Retry the URL
+        return await self.process_url(page, url, index, retry_count + 1)
 
     async def run(self):
         """Run the crawler"""

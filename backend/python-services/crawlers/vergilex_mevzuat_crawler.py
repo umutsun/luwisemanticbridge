@@ -29,6 +29,15 @@ def compute_content_hash(content: str) -> str:
     """Compute MD5 hash of content for change detection"""
     return hashlib.md5(content.encode('utf-8')).hexdigest()
 
+
+def is_rate_limited(page_content: str, page_title: str = "") -> bool:
+    """Check if page indicates rate limiting"""
+    check_text = (page_content + " " + page_title).upper()
+    for pattern in RATE_LIMIT_PATTERNS:
+        if pattern.upper() in check_text:
+            return True
+    return False
+
 try:
     from playwright.async_api import async_playwright, TimeoutError as PlaywrightTimeoutError
 except ImportError:
@@ -53,6 +62,21 @@ LINKS_FILE = os.path.join(os.path.dirname(__file__), '..', '..', '..', 'docs', '
 # Rate limiting
 MIN_DELAY = 3
 MAX_DELAY = 6
+
+# Rate limit detection patterns
+RATE_LIMIT_PATTERNS = [
+    'ÇOK FAZLA İSTEK',
+    'TOO MANY REQUESTS',
+    'RATE LIMIT',
+    'ERİŞİM ENGELLENDİ',
+    'BLOCKED',
+    '429',
+]
+
+# Exponential backoff settings
+RATE_LIMIT_INITIAL_WAIT = 60  # seconds
+RATE_LIMIT_MAX_WAIT = 600  # 10 minutes max
+RATE_LIMIT_MAX_RETRIES = 5
 # --- End of Configuration ---
 
 # Redis connection
@@ -371,8 +395,8 @@ class MevzuatCrawler:
             print(f"  [ERROR] Teblig extraction failed: {str(e)[:100]}")
             return None
 
-    async def process_kanun(self, page, url: str, index: int) -> bool:
-        """Process a single law URL"""
+    async def process_kanun(self, page, url: str, index: int, retry_count: int = 0) -> bool:
+        """Process a single law URL with rate limit handling"""
         if url in self.state['completed_kanunlar']:
             print(f"[K-{index}] SKIP (already done)")
             return True
@@ -396,10 +420,32 @@ class MevzuatCrawler:
         try:
             response = await page.goto(url, wait_until='domcontentloaded', timeout=30000)
 
-            if not response or response.status >= 400:
-                print(f"  [ERROR] HTTP {response.status if response else 'No response'}")
+            if not response:
+                print(f"  [ERROR] No response")
                 self.state['failed'].append(url)
                 return False
+
+            # Check for HTTP 429 rate limit
+            if response.status == 429:
+                return await self._handle_rate_limit_kanun(page, url, index, retry_count, "HTTP 429")
+
+            if response.status >= 400:
+                print(f"  [ERROR] HTTP {response.status}")
+                self.state['failed'].append(url)
+                return False
+
+            # Check page content for rate limit indicators
+            page_title = await page.title() or ""
+            page_text = ""
+            try:
+                body = await page.query_selector('body')
+                if body:
+                    page_text = await body.inner_text()
+            except:
+                pass
+
+            if is_rate_limited(page_text, page_title):
+                return await self._handle_rate_limit_kanun(page, url, index, retry_count, "Rate limit page detected")
 
             content = await self.extract_kanun_content(page, url)
 
@@ -445,8 +491,8 @@ class MevzuatCrawler:
             self.state['stats']['failed'] += 1
             return False
 
-    async def process_teblig(self, page, url: str, index: int) -> bool:
-        """Process a single communique URL"""
+    async def process_teblig(self, page, url: str, index: int, retry_count: int = 0) -> bool:
+        """Process a single communique URL with rate limit handling"""
         if url in self.state['completed_tebligler']:
             print(f"[T-{index}] SKIP (already done)")
             return True
@@ -470,10 +516,32 @@ class MevzuatCrawler:
         try:
             response = await page.goto(url, wait_until='domcontentloaded', timeout=30000)
 
-            if not response or response.status >= 400:
-                print(f"  [ERROR] HTTP {response.status if response else 'No response'}")
+            if not response:
+                print(f"  [ERROR] No response")
                 self.state['failed'].append(url)
                 return False
+
+            # Check for HTTP 429 rate limit
+            if response.status == 429:
+                return await self._handle_rate_limit_teblig(page, url, index, retry_count, "HTTP 429")
+
+            if response.status >= 400:
+                print(f"  [ERROR] HTTP {response.status}")
+                self.state['failed'].append(url)
+                return False
+
+            # Check page content for rate limit indicators
+            page_title = await page.title() or ""
+            page_text = ""
+            try:
+                body = await page.query_selector('body')
+                if body:
+                    page_text = await body.inner_text()
+            except:
+                pass
+
+            if is_rate_limited(page_text, page_title):
+                return await self._handle_rate_limit_teblig(page, url, index, retry_count, "Rate limit page detected")
 
             content = await self.extract_teblig_content(page, url)
 
@@ -515,6 +583,42 @@ class MevzuatCrawler:
             self.state['failed'].append(url)
             self.state['stats']['failed'] += 1
             return False
+
+    async def _handle_rate_limit_kanun(self, page, url: str, index: int, retry_count: int, reason: str) -> bool:
+        """Handle rate limiting with exponential backoff for kanun"""
+        if retry_count >= RATE_LIMIT_MAX_RETRIES:
+            print(f"  [RATE LIMIT] Max retries ({RATE_LIMIT_MAX_RETRIES}) exceeded for {url}")
+            self.state['failed'].append(url)
+            self.state['stats']['failed'] += 1
+            return False
+
+        wait_time = min(RATE_LIMIT_INITIAL_WAIT * (2 ** retry_count), RATE_LIMIT_MAX_WAIT)
+
+        print(f"  [RATE LIMIT] {reason}")
+        print(f"  [RATE LIMIT] Waiting {wait_time} seconds before retry {retry_count + 1}/{RATE_LIMIT_MAX_RETRIES}...")
+
+        save_state(self.state)
+        await asyncio.sleep(wait_time)
+
+        return await self.process_kanun(page, url, index, retry_count + 1)
+
+    async def _handle_rate_limit_teblig(self, page, url: str, index: int, retry_count: int, reason: str) -> bool:
+        """Handle rate limiting with exponential backoff for teblig"""
+        if retry_count >= RATE_LIMIT_MAX_RETRIES:
+            print(f"  [RATE LIMIT] Max retries ({RATE_LIMIT_MAX_RETRIES}) exceeded for {url}")
+            self.state['failed'].append(url)
+            self.state['stats']['failed'] += 1
+            return False
+
+        wait_time = min(RATE_LIMIT_INITIAL_WAIT * (2 ** retry_count), RATE_LIMIT_MAX_WAIT)
+
+        print(f"  [RATE LIMIT] {reason}")
+        print(f"  [RATE LIMIT] Waiting {wait_time} seconds before retry {retry_count + 1}/{RATE_LIMIT_MAX_RETRIES}...")
+
+        save_state(self.state)
+        await asyncio.sleep(wait_time)
+
+        return await self.process_teblig(page, url, index, retry_count + 1)
 
     async def run(self):
         """Run the crawler"""

@@ -406,6 +406,91 @@ export class RAGChatService {
     return [...new Set(words)].slice(0, 5);
   }
 
+  /**
+   * 🏷️ Extract keywords from sources for display at end of response
+   * Extracts meaningful terms from source titles and content
+   */
+  private extractKeywordsFromSources(sources: any[], userQuery: string): string[] {
+    // Turkish stop words to filter out
+    const stopWords = new Set([
+      've', 'veya', 'ile', 'için', 'de', 'da', 'bir', 'bu', 'şu', 'o',
+      'ne', 'nasıl', 'neden', 'niçin', 'nerede', 'kim', 'hangi',
+      'mı', 'mi', 'mu', 'mü', 'dır', 'dir', 'dur', 'dür',
+      'var', 'yok', 'olan', 'olarak', 'gibi', 'kadar', 'daha',
+      'en', 'çok', 'az', 'her', 'hiç', 'bazı', 'tüm', 'bütün',
+      'bana', 'beni', 'sana', 'seni', 'ona', 'onu', 'bize', 'size',
+      'hakkında', 'ile', 'ilgili', 'üzerine', 'üzerinde', 'içinde',
+      'the', 'a', 'an', 'is', 'are', 'was', 'were', 'what', 'how', 'why',
+      'listele', 'göster', 'anlat', 'açıkla', 'söyle', 'bilgi', 'ver',
+      'sayı', 'madde', 'kanun', 'yasa', 'fıkra', 'bent', 'tarih', 'sayılı',
+      'uyarınca', 'gereğince', 'kapsamında', 'çerçevesinde', 'bakımından'
+    ]);
+
+    // Legal/tax term patterns to prioritize (Turkish)
+    const legalTermPatterns = [
+      /\b(kdv|ötv|mtv|gelir\s*vergisi|kurumlar\s*vergisi|stopaj|tevkifat)\b/gi,
+      /\b(muafiyet|istisna|indirim|matrah|beyanname|tebliğ|yönetmelik)\b/gi,
+      /\b(mükellef|vergi\s*dairesi|maliye|hazine|gümrük)\b/gi,
+      /\b(fatura|e-fatura|e-defter|ba-bs|tahakkuk|tahsilat)\b/gi,
+      /\b(damga\s*vergisi|emlak\s*vergisi|veraset|harç)\b/gi,
+      /\b(serbest\s*meslek|ücret|kira|gayrimenkul|menkul)\b/gi
+    ];
+
+    const allKeywords: string[] = [];
+    const keywordCounts = new Map<string, number>();
+
+    // Process each source
+    for (const source of sources.slice(0, 5)) { // Limit to top 5 sources
+      const textToProcess = [
+        source.title || '',
+        source.excerpt || '',
+        (source.content || '').substring(0, 500) // First 500 chars of content
+      ].join(' ').toLowerCase();
+
+      // Extract legal terms first (high priority)
+      for (const pattern of legalTermPatterns) {
+        const matches = textToProcess.match(pattern);
+        if (matches) {
+          for (const match of matches) {
+            const normalized = match.toLowerCase().trim();
+            keywordCounts.set(normalized, (keywordCounts.get(normalized) || 0) + 2); // Higher weight
+          }
+        }
+      }
+
+      // Extract other meaningful words
+      const words = textToProcess
+        .replace(/[^\wğüşıöçĞÜŞİÖÇ\s]/g, ' ')
+        .split(/\s+/)
+        .filter(word => word.length > 3 && !stopWords.has(word));
+
+      for (const word of words) {
+        keywordCounts.set(word, (keywordCounts.get(word) || 0) + 1);
+      }
+    }
+
+    // Also extract from user query for relevance
+    const queryWords = userQuery
+      .toLowerCase()
+      .replace(/[^\wğüşıöçĞÜŞİÖÇ\s]/g, ' ')
+      .split(/\s+/)
+      .filter(word => word.length > 3 && !stopWords.has(word));
+
+    for (const word of queryWords) {
+      if (keywordCounts.has(word)) {
+        keywordCounts.set(word, (keywordCounts.get(word) || 0) + 3); // Boost query terms
+      }
+    }
+
+    // Sort by count and get top keywords
+    const sortedKeywords = [...keywordCounts.entries()]
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 8) // Max 8 keywords
+      .map(([keyword]) => keyword);
+
+    return sortedKeywords;
+  }
+
 
   /**
    * Get system prompt from database
@@ -1657,10 +1742,7 @@ CEVAPLAMA KURALLARI:
 
 FORMAT:
 **CEVAP**
-[Cevabın] [Kaynak X]
-
-**ALINTI**
-"[Kaynaktan alıntı]" — Tür: [tür], Başlık: [başlık] [Kaynak X]`;
+[Cevabın] [Kaynak X]`;
 
         const defaultMediumPromptEn = `Sources are numbered below.
 
@@ -1672,10 +1754,7 @@ ANSWERING RULES:
 
 FORMAT:
 **ANSWER**
-[Your answer] [Source X]
-
-**QUOTE**
-"[Quote from source]" — Type: [type], Title: [title] [Source X]`;
+[Your answer] [Source X]`;
 
         // Select prompt based on strictModeLevel
         let strictInstructionTr: string;
@@ -1894,9 +1973,10 @@ FORMAT:
         // ⚡ PERF: Extract topic entities ONCE using DB config and reuse throughout guardrails
         const topicEntities = this.extractTopicEntities(message, domainConfig.topicEntities);
 
-        // 0. AUTHORITY UPGRADE (Eksik-2 Fix) - If quote is from low-authority source,
-        // try to find a matching quote from a higher-authority source
-        if (topicEntities.length > 0 && response.content.includes('**ALINTI**')) {
+        // 0. AUTHORITY UPGRADE - DISABLED (ALINTI removed from UI)
+        // Original: try to find a matching quote from a higher-authority source
+        const showAlinti = false; // ALINTI no longer shown in UI
+        if (showAlinti && topicEntities.length > 0 && response.content.includes('**ALINTI**')) {
           const upgradeResult = this.tryUpgradeQuoteToHigherAuthority(
             response.content,
             searchResults,
@@ -2012,7 +2092,7 @@ FORMAT:
           return false;
         });
 
-        if (!hasHighAuthoritySource && response.content.includes('**ALINTI**')) {
+        if (!hasHighAuthoritySource && showAlinti && response.content.includes('**ALINTI**')) {
           // 📊 METRIC: AC-C1 - Source Type Bar Fail (no high-authority sources)
           const sourceTypeCounts: Record<string, number> = {};
           searchResults.forEach(r => {
@@ -2346,7 +2426,7 @@ FORMAT:
           sourcesCount: fastModeFinalSources.length,
           searchResultsCount: searchResults.length,
           hasCevap: fastModeResponse.includes('**CEVAP**'),
-          hasAlinti: fastModeResponse.includes('**ALINTI**'),
+          hasAlinti: false, // ALINTI removed from UI
           fastMode: true,
           suggestions: fastModeSuggestedQuestions.length > 0 ? fastModeSuggestedQuestions : undefined
         };
@@ -2616,10 +2696,20 @@ FORMAT:
         sourcesCount: finalSources.length,
         refusalDetected: isRefusalResponse,
         hasCevap: finalResponse.includes('**CEVAP**'),
-        hasAlinti: finalResponse.includes('**ALINTI**'),
+        hasAlinti: false, // ALINTI removed from UI
         deterministic: true  // Flag indicating no LLM pattern matching
       };
       console.log(`📊 DEBUG_INFO: ${JSON.stringify(debugInfo)}`);
+
+      // 🏷️ KEYWORDS: Extract and append keywords from sources to response
+      if (finalSources.length > 0 && responseType === 'FOUND') {
+        const extractedKeywords = this.extractKeywordsFromSources(finalSources, message);
+        if (extractedKeywords.length > 0) {
+          const keywordsSection = `\n\n---\n\n**ANAHTAR KELİMELER:** ${extractedKeywords.join(' • ')}`;
+          finalResponse = finalResponse + keywordsSection;
+          console.log(`🏷️ [KEYWORDS] Added ${extractedKeywords.length} keywords to response`);
+        }
+      }
 
       return {
         response: finalResponse,  // Use cleaned response if refusal detected
@@ -3057,19 +3147,12 @@ FORMAT:
   }
 
   /**
-   * 📋 ENFORCE RESPONSE FORMAT (CEVAP + ALINTI)
-   * Ensures response always has both **CEVAP** and **ALINTI** sections
-   * This is a response contract - users expect consistent format
+   * 📋 ENFORCE RESPONSE FORMAT (CEVAP only)
+   * Ensures response always has **CEVAP** section
+   * ALINTI removed - citations are shown separately in UI
    *
    * Rules:
    * 1. If **CEVAP** missing, wrap response content in **CEVAP** section
-   * 2. If **ALINTI** missing, add empty **ALINTI** with appropriate message
-   * 3. Never return response without both headers
-   *
-   * EVIDENCE-FIRST CONTRACT:
-   * For verdict questions (mümkün mü, zorunlu mu, etc.):
-   * - If ALINTI found: Show definitive verdict
-   * - If ALINTI NOT found: BLOCK all half-verdicts, show "hüküm cümlesi seçilemedi" + sources
    */
   private enforceResponseFormat(
     responseText: string,
@@ -3081,7 +3164,6 @@ FORMAT:
 
     // Check for CEVAP section
     const hasCevap = /\*\*CEVAP\*\*/i.test(result);
-    const hasAlinti = /\*\*ALINTI\*\*/i.test(result);
 
     // If no CEVAP header, wrap the response
     if (!hasCevap) {
@@ -3095,7 +3177,16 @@ FORMAT:
       }
     }
 
-    // If no ALINTI header, add one
+    // 🔧 ALINTI section removed - citations shown separately in UI
+    // Strip any existing ALINTI section from LLM response
+    result = result.replace(/\*\*ALINTI\*\*[\s\S]*?(?=\*\*[A-ZÇĞİÖŞÜ]|\n\n\n|$)/gi, '').trim();
+    result = result.replace(/\*\*QUOTE\*\*[\s\S]*?(?=\*\*[A-Z]|\n\n\n|$)/gi, '').trim();
+
+    return result;
+
+    // --- REMOVED: ALINTI handling code below is no longer used ---
+    /*
+    const hasAlinti = /\*\*ALINTI\*\*/i.test(result);
     if (!hasAlinti) {
       console.log('[FORMAT] Missing **ALINTI** header - adding section');
 
@@ -3465,6 +3556,7 @@ FORMAT:
     }
 
     return result;
+    */
   }
 
   /**

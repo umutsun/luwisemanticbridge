@@ -88,7 +88,10 @@ import {
   Shield,
   Code2,
   Check,
-  Edit2
+  Edit2,
+  Calendar,
+  Power,
+  PlayCircle
 } from 'lucide-react';
 import config from '@/config/api.config';
 import { fetchWithAuth } from '@/lib/auth-fetch';
@@ -147,6 +150,29 @@ interface Stats {
   totalItems: number;
   selectedItemsCount: number;
   mappedItems: number;
+}
+
+interface ScheduledCrawler {
+  id: string;
+  name: string;
+  description?: string;
+  job_type: string;
+  schedule_type: string;
+  cron_expression?: string;
+  job_config: {
+    crawler_name: string;
+    url: string;
+    pages: number;
+    export_to_db: boolean;
+    generate_embeddings?: boolean;
+  };
+  enabled: boolean;
+  last_run_at?: string;
+  last_run_status?: string;
+  next_run_at?: string;
+  total_runs: number;
+  successful_runs: number;
+  failed_runs: number;
 }
 
 type WorkflowStep = 'select-source' | 'preview-data' | 'select-target' | 'mapping' | 'import';
@@ -270,10 +296,17 @@ export default function CrawlerDataPage() {
     mappedItems: 0
   });
 
+  // Scheduled crawlers state
+  const [scheduledCrawlers, setScheduledCrawlers] = useState<ScheduledCrawler[]>([]);
+  const [scheduledCrawlersLoading, setScheduledCrawlersLoading] = useState(false);
+  const [scheduledCrawlersExpanded, setScheduledCrawlersExpanded] = useState(true);
+  const [actionLoadingCrawler, setActionLoadingCrawler] = useState<string | null>(null);
+
   useEffect(() => {
     fetchDirectories();
     fetchSourceTables();
     fetchAnalysisTemplates();
+    fetchScheduledCrawlers();
   }, []);
 
   // Debug: Track isAddingNewSource state changes
@@ -609,6 +642,63 @@ export default function CrawlerDataPage() {
       setAnalysisTemplates(data.templates || []);
     } catch (error: any) {
       console.error('Failed to fetch analysis templates:', error);
+    }
+  };
+
+  const fetchScheduledCrawlers = async () => {
+    try {
+      setScheduledCrawlersLoading(true);
+      // Use APScheduler API - filter by crawler job type
+      const response = await fetchWithAuth(`${config.api.baseUrl}/api/python/scheduler/jobs?job_type=crawler`);
+      if (!response.ok) throw new Error('Failed to fetch scheduled crawlers');
+      const data = await response.json();
+      setScheduledCrawlers(data || []);
+    } catch (error: any) {
+      console.error('Failed to fetch scheduled crawlers:', error);
+      setScheduledCrawlers([]);
+    } finally {
+      setScheduledCrawlersLoading(false);
+    }
+  };
+
+  const handleScheduledCrawlerAction = async (jobId: string, action: 'toggle' | 'run-now') => {
+    try {
+      setActionLoadingCrawler(jobId);
+
+      let response;
+      if (action === 'toggle') {
+        response = await fetchWithAuth(`${config.api.baseUrl}/api/python/scheduler/jobs/${jobId}/toggle`, {
+          method: 'POST'
+        });
+      } else if (action === 'run-now') {
+        response = await fetchWithAuth(`${config.api.baseUrl}/api/python/scheduler/jobs/${jobId}/run-now`, {
+          method: 'POST'
+        });
+      }
+
+      if (!response?.ok) {
+        const data = await response?.json();
+        throw new Error(data?.detail || 'Action failed');
+      }
+
+      const data = await response.json();
+      toast({
+        title: 'Başarılı',
+        description: action === 'toggle'
+          ? (data.enabled ? 'Crawler aktif edildi' : 'Crawler durduruldu')
+          : 'Crawler çalışmaya başladı'
+      });
+
+      // Refresh the list
+      await fetchScheduledCrawlers();
+    } catch (error: any) {
+      toast({
+        title: 'Hata',
+        description: error.message || `İşlem başarısız`,
+        variant: 'destructive'
+      });
+    } finally {
+      setActionLoadingCrawler(null);
     }
   };
 
@@ -3065,6 +3155,184 @@ export default function CrawlerDataPage() {
                 )}
               </div>
             </div>
+
+            {/* Scheduled Crawlers Section */}
+            <Card className="mt-6">
+              <CardHeader className="pb-3">
+                <div
+                  className="flex items-center justify-between cursor-pointer"
+                  onClick={() => setScheduledCrawlersExpanded(!scheduledCrawlersExpanded)}
+                >
+                  <div className="flex items-center gap-2">
+                    <Calendar className="w-4 h-4 text-blue-500" />
+                    <CardTitle className="text-lg">Zamanlanmış Crawlerlar</CardTitle>
+                    {scheduledCrawlers.length > 0 && (
+                      <Badge variant="secondary" className="text-xs">
+                        {scheduledCrawlers.length}
+                      </Badge>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-7 w-7 p-0"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        fetchScheduledCrawlers();
+                      }}
+                      disabled={scheduledCrawlersLoading}
+                      title="Yenile"
+                    >
+                      <RefreshCw className={`w-4 h-4 ${scheduledCrawlersLoading ? 'animate-spin' : ''}`} />
+                    </Button>
+                    <Button variant="ghost" size="sm" className="h-7 w-7 p-0">
+                      {scheduledCrawlersExpanded ? (
+                        <X className="w-4 h-4" />
+                      ) : (
+                        <Plus className="w-4 h-4" />
+                      )}
+                    </Button>
+                  </div>
+                </div>
+              </CardHeader>
+              {scheduledCrawlersExpanded && (
+                <CardContent>
+                  {scheduledCrawlersLoading ? (
+                    <div className="flex items-center justify-center py-8">
+                      <Loader2 className="w-6 h-6 animate-spin text-blue-500" />
+                    </div>
+                  ) : scheduledCrawlers.length === 0 ? (
+                    <div className="text-center py-8 text-muted-foreground">
+                      <Calendar className="w-12 h-12 mx-auto mb-3 opacity-40" />
+                      <p className="text-sm font-medium">Zamanlanmış crawler bulunamadı</p>
+                      <p className="text-xs mt-1">Settings &gt; Scheduler sayfasından yeni crawler job oluşturun</p>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="mt-4"
+                        onClick={() => window.location.href = '/dashboard/settings?tab=scheduler'}
+                      >
+                        <Plus className="w-3 h-3 mr-1" />
+                        Scheduler Ayarları
+                      </Button>
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                      {scheduledCrawlers.map(crawler => {
+                        const isLastRunFailed = crawler.last_run_status === 'failed';
+                        const isEnabled = crawler.enabled;
+
+                        return (
+                          <div
+                            key={crawler.id}
+                            className={`p-4 rounded-lg border-2 transition-all ${
+                              isEnabled && !isLastRunFailed
+                                ? 'border-green-200 bg-green-50 dark:border-green-900 dark:bg-green-950/30'
+                                : isLastRunFailed
+                                  ? 'border-red-200 bg-red-50 dark:border-red-900 dark:bg-red-950/30'
+                                  : 'border-slate-200 bg-slate-50 dark:border-slate-700 dark:bg-slate-900/50'
+                            }`}
+                          >
+                            <div className="flex items-start justify-between mb-3">
+                              <div className="flex items-center gap-2">
+                                <div className={`w-2 h-2 rounded-full ${
+                                  isEnabled && !isLastRunFailed
+                                    ? 'bg-green-500 animate-pulse'
+                                    : isLastRunFailed
+                                      ? 'bg-red-500'
+                                      : 'bg-slate-400'
+                                }`} />
+                                <h4 className="font-semibold text-sm">{crawler.name}</h4>
+                              </div>
+                              <Badge
+                                variant={isEnabled ? 'default' : 'secondary'}
+                                className={`text-xs ${
+                                  isEnabled && !isLastRunFailed
+                                    ? 'bg-green-500 hover:bg-green-600'
+                                    : isLastRunFailed
+                                      ? 'bg-red-500 hover:bg-red-600'
+                                      : ''
+                                }`}
+                              >
+                                {isEnabled ? (isLastRunFailed ? 'Hata' : 'Aktif') : 'Devre Dışı'}
+                              </Badge>
+                            </div>
+
+                            <div className="space-y-2 text-xs text-slate-600 dark:text-slate-400 mb-4">
+                              {crawler.cron_expression && (
+                                <div className="flex items-center gap-2">
+                                  <Clock className="w-3.5 h-3.5" />
+                                  <span className="font-mono">{crawler.cron_expression}</span>
+                                </div>
+                              )}
+                              {crawler.job_config?.url && (
+                                <div className="flex items-center gap-2">
+                                  <Globe className="w-3.5 h-3.5" />
+                                  <span className="truncate max-w-[200px]" title={crawler.job_config.url}>
+                                    {crawler.job_config.url}
+                                  </span>
+                                </div>
+                              )}
+                              <div className="flex items-center gap-2">
+                                <Database className="w-3.5 h-3.5" />
+                                <span>{crawler.successful_runs}/{crawler.total_runs} başarılı</span>
+                              </div>
+                              {crawler.last_run_at && (
+                                <div className="flex items-center gap-2">
+                                  <Activity className="w-3.5 h-3.5" />
+                                  <span>Son: {new Date(crawler.last_run_at).toLocaleString('tr-TR')}</span>
+                                </div>
+                              )}
+                              {crawler.next_run_at && (
+                                <div className="flex items-center gap-2">
+                                  <Calendar className="w-3.5 h-3.5" />
+                                  <span>Sonraki: {new Date(crawler.next_run_at).toLocaleString('tr-TR')}</span>
+                                </div>
+                              )}
+                            </div>
+
+                            <div className="flex gap-2">
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className={`flex-1 h-8 text-xs ${isEnabled ? 'hover:bg-red-100 dark:hover:bg-red-900/30' : 'hover:bg-green-100 dark:hover:bg-green-900/30'}`}
+                                onClick={() => handleScheduledCrawlerAction(crawler.id, 'toggle')}
+                                disabled={actionLoadingCrawler === crawler.id}
+                              >
+                                {actionLoadingCrawler === crawler.id ? (
+                                  <Loader2 className="w-3 h-3 animate-spin" />
+                                ) : isEnabled ? (
+                                  <>
+                                    <StopCircle className="w-3 h-3 mr-1" />
+                                    Durdur
+                                  </>
+                                ) : (
+                                  <>
+                                    <PlayCircle className="w-3 h-3 mr-1" />
+                                    Aktif Et
+                                  </>
+                                )}
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                className="h-8 w-8 p-0"
+                                onClick={() => handleScheduledCrawlerAction(crawler.id, 'run-now')}
+                                disabled={actionLoadingCrawler === crawler.id}
+                                title="Şimdi Çalıştır"
+                              >
+                                <Play className={`w-3.5 h-3.5 ${actionLoadingCrawler === crawler.id ? 'animate-spin' : ''}`} />
+                              </Button>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </CardContent>
+              )}
+            </Card>
           </div>
         </div>
       </div>
