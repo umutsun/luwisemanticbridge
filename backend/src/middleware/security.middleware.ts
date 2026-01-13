@@ -53,9 +53,10 @@ export const preventNoSQLInjection = (req: Request, res: Response, next: NextFun
   };
 
   const isDangerousKey = (key: string): boolean => {
+    // Only block keys starting with $ (MongoDB operators)
+    // Common field names like 'type', 'in', 'all' should be allowed
     const dangerousPatterns = [
-      /^\$/,
-      /^(where|gt|gte|lt|lte|ne|in|nin|regex|exists|expr|jsonSchema|mod|all|size|type)$/i,
+      /^\$/,  // MongoDB operators like $where, $gt, $type etc.
       /javascript:/i,
       /<script/i
     ];
