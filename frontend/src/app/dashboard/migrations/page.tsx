@@ -30,7 +30,8 @@ import {
   Filter,
   Plus,
   ChevronLeft,
-  ChevronRight
+  ChevronRight,
+  HeartPulse
 } from 'lucide-react';
 import {
   Dialog,
@@ -163,6 +164,17 @@ export default function EmbeddingsManagerPage() {
   const [skippedPage, setSkippedPage] = useState(1);
   const [skippedTotalCount, setSkippedTotalCount] = useState(0);
   const SKIPPED_PAGE_SIZE = 100;
+
+  // Data Health state
+  const [isHealthChecking, setIsHealthChecking] = useState(false);
+  const [healthProgress, setHealthProgress] = useState(0);
+  const [showHealthModal, setShowHealthModal] = useState(false);
+  const [healthReport, setHealthReport] = useState<{
+    summary: { total_embeddings: number; orphan_count: number; missing_metadata_count: number; duplicate_count: number; health_score: number };
+    tables: Record<string, any>;
+    recommendations: string[];
+  } | null>(null);
+
   const { toast } = useToast();
 
   // Settings state
@@ -1068,6 +1080,63 @@ export default function EmbeddingsManagerPage() {
     }
   };
 
+  // Run Data Health Check
+  const runHealthCheck = async () => {
+    setIsHealthChecking(true);
+    setHealthProgress(0);
+    setHealthReport(null);
+
+    try {
+      // Simulate progress animation while waiting for API
+      const progressInterval = setInterval(() => {
+        setHealthProgress(prev => {
+          if (prev >= 90) {
+            clearInterval(progressInterval);
+            return 90;
+          }
+          return prev + Math.random() * 15;
+        });
+      }, 300);
+
+      const response = await fetch('/api/python/data-health?endpoint=report');
+      clearInterval(progressInterval);
+
+      if (response.ok) {
+        const data = await response.json();
+        if (data.error) throw new Error(data.error);
+
+        setHealthProgress(100);
+        setHealthReport(data);
+        setShowHealthModal(true);
+
+        // Show toast with summary
+        const { summary } = data;
+        const issues = summary.orphan_count + summary.missing_metadata_count + summary.duplicate_count;
+
+        toast({
+          title: `Veri Sağlığı: ${summary.health_score.toFixed(0)}%`,
+          description: issues > 0
+            ? `${summary.total_embeddings.toLocaleString()} kayıt tarandı. ${issues.toLocaleString()} sorun bulundu.`
+            : `${summary.total_embeddings.toLocaleString()} kayıt tarandı. Sorun bulunamadı.`,
+          variant: issues > 100 ? 'destructive' : 'default'
+        });
+      } else {
+        throw new Error('Health check failed');
+      }
+    } catch (error: any) {
+      toast({
+        title: 'Sağlık Kontrolü Başarısız',
+        description: error.message || 'Python servise bağlanılamadı',
+        variant: 'destructive'
+      });
+    } finally {
+      setTimeout(() => {
+        setIsHealthChecking(false);
+        setHealthProgress(0);
+      }, 500);
+    }
+  };
+
   const handlePreviewTable = (table: TableInfo) => {
     // Normalize table name to lowercase for API query
     const normalizedName = table.name.toLowerCase();
@@ -1630,6 +1699,25 @@ export default function EmbeddingsManagerPage() {
                       </Button>
                       <Button
                         size="sm"
+                        variant="outline"
+                        onClick={runHealthCheck}
+                        disabled={isHealthChecking}
+                        className="h-7 text-xs border-emerald-300 text-emerald-700 hover:bg-emerald-50"
+                      >
+                        {isHealthChecking ? (
+                          <>
+                            <Loader2 className="w-3 h-3 mr-1 animate-spin" />
+                            {healthProgress.toFixed(0)}%
+                          </>
+                        ) : (
+                          <>
+                            <HeartPulse className="w-3 h-3 mr-1" />
+                            Veri Sağlığı
+                          </>
+                        )}
+                      </Button>
+                      <Button
+                        size="sm"
                         variant="ghost"
                         onClick={() => setSelectedTableRows(new Set())}
                         className="h-7 text-xs text-muted-foreground"
@@ -2020,6 +2108,104 @@ export default function EmbeddingsManagerPage() {
                     </Button>
                   </>
                 )}
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Health Check Modal */}
+      <Dialog open={showHealthModal} onOpenChange={setShowHealthModal}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <HeartPulse className="w-5 h-5 text-emerald-600" />
+              Veri Sağlığı Raporu
+            </DialogTitle>
+            <DialogDescription>
+              Embedding verilerinin sağlık durumu
+            </DialogDescription>
+          </DialogHeader>
+
+          {healthReport && (
+            <div className="space-y-4">
+              {/* Health Score */}
+              <div className="flex items-center gap-4 p-4 bg-gray-50 dark:bg-gray-900 rounded-lg">
+                <ProgressCircle
+                  progress={healthReport.summary.health_score}
+                  size={80}
+                  showPulse={healthReport.summary.health_score < 80}
+                />
+                <div className="flex-1 grid grid-cols-4 gap-2 text-center text-sm">
+                  <div>
+                    <p className="text-muted-foreground text-xs">Toplam</p>
+                    <p className="font-bold">{healthReport.summary.total_embeddings.toLocaleString()}</p>
+                  </div>
+                  <div>
+                    <p className="text-orange-600 text-xs">Orphan</p>
+                    <p className="font-bold text-orange-700">{healthReport.summary.orphan_count.toLocaleString()}</p>
+                  </div>
+                  <div>
+                    <p className="text-yellow-600 text-xs">Eksik Meta</p>
+                    <p className="font-bold text-yellow-700">{healthReport.summary.missing_metadata_count.toLocaleString()}</p>
+                  </div>
+                  <div>
+                    <p className="text-purple-600 text-xs">Duplicate</p>
+                    <p className="font-bold text-purple-700">{healthReport.summary.duplicate_count.toLocaleString()}</p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Recommendations */}
+              {healthReport.recommendations.length > 0 && (
+                <div className="space-y-2">
+                  <h4 className="text-sm font-medium">Öneriler</h4>
+                  <div className="space-y-1 text-sm text-muted-foreground">
+                    {healthReport.recommendations.slice(0, 5).map((rec, idx) => (
+                      <p key={idx}>{rec}</p>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Table Details */}
+              {Object.keys(healthReport.tables).length > 0 && (
+                <div className="space-y-2">
+                  <h4 className="text-sm font-medium">Tablo Detayları</h4>
+                  <div className="max-h-48 overflow-y-auto space-y-1">
+                    {Object.entries(healthReport.tables).map(([table, stats]: [string, any]) => (
+                      <div key={table} className="flex items-center justify-between p-2 bg-gray-50 dark:bg-gray-900 rounded text-sm">
+                        <span className="font-medium">{table}</span>
+                        <div className="flex items-center gap-3 text-xs">
+                          <span>{stats.total_embeddings}</span>
+                          <Badge variant={stats.health_score >= 80 ? 'default' : stats.health_score >= 50 ? 'secondary' : 'destructive'}>
+                            {stats.health_score?.toFixed(0) || 0}%
+                          </Badge>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Action Button */}
+              <div className="flex justify-end gap-2 pt-2 border-t">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setShowHealthModal(false)}
+                >
+                  Kapat
+                </Button>
+                <Button
+                  size="sm"
+                  onClick={() => {
+                    setShowHealthModal(false);
+                    window.location.href = '/dashboard/migration-tools';
+                  }}
+                >
+                  Detaylı Görünüm
+                </Button>
               </div>
             </div>
           )}
