@@ -30,8 +30,7 @@ import {
   Filter,
   Plus,
   ChevronLeft,
-  ChevronRight,
-  HeartPulse
+  ChevronRight
 } from 'lucide-react';
 import {
   Dialog,
@@ -1702,18 +1701,15 @@ export default function EmbeddingsManagerPage() {
                         variant="outline"
                         onClick={runHealthCheck}
                         disabled={isHealthChecking}
-                        className="h-7 text-xs border-emerald-300 text-emerald-700 hover:bg-emerald-50"
+                        className="h-7 text-xs"
                       >
                         {isHealthChecking ? (
                           <>
                             <Loader2 className="w-3 h-3 mr-1 animate-spin" />
-                            {healthProgress.toFixed(0)}%
+                            %{healthProgress.toFixed(0)}
                           </>
                         ) : (
-                          <>
-                            <HeartPulse className="w-3 h-3 mr-1" />
-                            Veri Sağlığı
-                          </>
+                          'Veri Sağlığı'
                         )}
                       </Button>
                       <Button
@@ -2116,43 +2112,41 @@ export default function EmbeddingsManagerPage() {
 
       {/* Health Check Modal */}
       <Dialog open={showHealthModal} onOpenChange={setShowHealthModal}>
-        <DialogContent className="max-w-2xl">
+        <DialogContent className="max-w-xl">
           <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <HeartPulse className="w-5 h-5 text-emerald-600" />
-              Veri Sağlığı Raporu
-            </DialogTitle>
+            <DialogTitle>Veri Sağlığı Raporu</DialogTitle>
             <DialogDescription>
-              Embedding verilerinin sağlık durumu
+              Embedding verilerinin sağlık durumu analizi
             </DialogDescription>
           </DialogHeader>
 
           {healthReport && (
             <div className="space-y-4">
-              {/* Health Score */}
-              <div className="flex items-center gap-4 p-4 bg-gray-50 dark:bg-gray-900 rounded-lg">
-                <ProgressCircle
-                  progress={healthReport.summary.health_score}
-                  size={80}
-                  showPulse={healthReport.summary.health_score < 80}
-                />
-                <div className="flex-1 grid grid-cols-4 gap-2 text-center text-sm">
-                  <div>
-                    <p className="text-muted-foreground text-xs">Toplam</p>
-                    <p className="font-bold">{healthReport.summary.total_embeddings.toLocaleString()}</p>
-                  </div>
-                  <div>
-                    <p className="text-orange-600 text-xs">Orphan</p>
-                    <p className="font-bold text-orange-700">{healthReport.summary.orphan_count.toLocaleString()}</p>
-                  </div>
-                  <div>
-                    <p className="text-yellow-600 text-xs">Eksik Meta</p>
-                    <p className="font-bold text-yellow-700">{healthReport.summary.missing_metadata_count.toLocaleString()}</p>
-                  </div>
-                  <div>
-                    <p className="text-purple-600 text-xs">Duplicate</p>
-                    <p className="font-bold text-purple-700">{healthReport.summary.duplicate_count.toLocaleString()}</p>
-                  </div>
+              {/* Summary Stats */}
+              <div className="grid grid-cols-4 gap-3 text-center">
+                <div className="p-3 bg-gray-50 dark:bg-gray-900 rounded-lg">
+                  <p className="text-2xl font-bold text-primary">
+                    %{Math.round(healthReport.summary.health_score)}
+                  </p>
+                  <p className="text-xs text-muted-foreground">Sağlık Skoru</p>
+                </div>
+                <div className="p-3 bg-gray-50 dark:bg-gray-900 rounded-lg">
+                  <p className="text-2xl font-bold">
+                    {healthReport.summary.total_embeddings.toLocaleString('tr-TR')}
+                  </p>
+                  <p className="text-xs text-muted-foreground">Toplam</p>
+                </div>
+                <div className="p-3 bg-gray-50 dark:bg-gray-900 rounded-lg">
+                  <p className="text-2xl font-bold text-yellow-600">
+                    {healthReport.summary.missing_metadata_count.toLocaleString('tr-TR')}
+                  </p>
+                  <p className="text-xs text-muted-foreground">Eksik Meta</p>
+                </div>
+                <div className="p-3 bg-gray-50 dark:bg-gray-900 rounded-lg">
+                  <p className="text-2xl font-bold text-purple-600">
+                    {healthReport.summary.duplicate_count.toLocaleString('tr-TR')}
+                  </p>
+                  <p className="text-xs text-muted-foreground">Duplicate</p>
                 </div>
               </div>
 
@@ -2160,9 +2154,11 @@ export default function EmbeddingsManagerPage() {
               {healthReport.recommendations.length > 0 && (
                 <div className="space-y-2">
                   <h4 className="text-sm font-medium">Öneriler</h4>
-                  <div className="space-y-1 text-sm text-muted-foreground">
-                    {healthReport.recommendations.slice(0, 5).map((rec, idx) => (
-                      <p key={idx}>{rec}</p>
+                  <div className="space-y-1 text-sm text-muted-foreground bg-gray-50 dark:bg-gray-900 rounded-lg p-3">
+                    {healthReport.recommendations.slice(0, 5).map((rec: string, idx: number) => (
+                      <p key={idx} className="leading-relaxed">
+                        {rec.replace(/[⚠️📝🔄🔴✅🗑️]/g, '').trim()}
+                      </p>
                     ))}
                   </div>
                 </div>
@@ -2172,23 +2168,41 @@ export default function EmbeddingsManagerPage() {
               {Object.keys(healthReport.tables).length > 0 && (
                 <div className="space-y-2">
                   <h4 className="text-sm font-medium">Tablo Detayları</h4>
-                  <div className="max-h-48 overflow-y-auto space-y-1">
-                    {Object.entries(healthReport.tables).map(([table, stats]: [string, any]) => (
-                      <div key={table} className="flex items-center justify-between p-2 bg-gray-50 dark:bg-gray-900 rounded text-sm">
-                        <span className="font-medium">{table}</span>
-                        <div className="flex items-center gap-3 text-xs">
-                          <span>{stats.total_embeddings}</span>
-                          <Badge variant={stats.health_score >= 80 ? 'default' : stats.health_score >= 50 ? 'secondary' : 'destructive'}>
-                            {stats.health_score?.toFixed(0) || 0}%
-                          </Badge>
-                        </div>
-                      </div>
-                    ))}
+                  <div className="max-h-52 overflow-y-auto border rounded-lg">
+                    <table className="w-full text-sm">
+                      <thead className="bg-gray-50 dark:bg-gray-900 sticky top-0">
+                        <tr>
+                          <th className="text-left p-2 font-medium">Tablo</th>
+                          <th className="text-right p-2 font-medium">Kayıt</th>
+                          <th className="text-right p-2 font-medium">Eksik Meta</th>
+                          <th className="text-right p-2 font-medium">Skor</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y">
+                        {Object.entries(healthReport.tables).map(([table, stats]: [string, any]) => (
+                          <tr key={table} className="hover:bg-gray-50 dark:hover:bg-gray-900">
+                            <td className="p-2 font-medium">{table}</td>
+                            <td className="p-2 text-right">{stats.total_embeddings?.toLocaleString('tr-TR')}</td>
+                            <td className="p-2 text-right text-yellow-600">{stats.missing_metadata_count?.toLocaleString('tr-TR')}</td>
+                            <td className="p-2 text-right">
+                              <span className={cn(
+                                'inline-block px-2 py-0.5 rounded text-xs font-medium',
+                                stats.health_score >= 80 ? 'bg-green-100 text-green-700' :
+                                stats.health_score >= 50 ? 'bg-yellow-100 text-yellow-700' :
+                                'bg-red-100 text-red-700'
+                              )}>
+                                %{Math.round(stats.health_score || 0)}
+                              </span>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
                   </div>
                 </div>
               )}
 
-              {/* Action Button */}
+              {/* Action Buttons */}
               <div className="flex justify-end gap-2 pt-2 border-t">
                 <Button
                   variant="outline"
@@ -2196,15 +2210,6 @@ export default function EmbeddingsManagerPage() {
                   onClick={() => setShowHealthModal(false)}
                 >
                   Kapat
-                </Button>
-                <Button
-                  size="sm"
-                  onClick={() => {
-                    setShowHealthModal(false);
-                    window.location.href = '/dashboard/migration-tools';
-                  }}
-                >
-                  Detaylı Görünüm
                 </Button>
               </div>
             </div>
