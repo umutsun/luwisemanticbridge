@@ -198,7 +198,7 @@ class DataHealthService:
         return f"csv_{table_name}"
 
     async def _count_orphans(self, table_name: str) -> int:
-        """Source DB'de karşılığı olmayan kayıtları say"""
+        """Source DB'de karşılığı olmayan kayıtları say (cross-database)"""
         try:
             # Source tablo adını belirle (csv_ prefix'li olabilir)
             source_table = self._get_source_table_name(table_name)
@@ -226,16 +226,33 @@ class DataHealthService:
             # Primary key bul
             pk = self.PRIMARY_KEYS.get(table_name, self.PRIMARY_KEYS['default'])
 
-            # Orphan count: unified'da var ama source'da yok
-            orphan_query = f"""
-                SELECT COUNT(*) FROM unified_embeddings ue
-                WHERE (ue.source_table = $1 OR ue.metadata->>'table' = $1)
-                AND NOT EXISTS (
-                    SELECT 1 FROM "{source_table}" src
-                    WHERE src.{pk} = ue.source_id
-                )
+            # Cross-database: Önce source'daki ID'leri al
+            source_ids_query = f'SELECT {pk} FROM "{source_table}"'
+            source_rows = await self.source_pool.fetch(source_ids_query)
+            source_ids = set(r[pk] for r in source_rows)
+
+            if not source_ids:
+                # Source boşsa tüm embeddings orphan
+                orphan_count_query = """
+                    SELECT COUNT(*) FROM unified_embeddings
+                    WHERE source_table = $1 OR metadata->>'table' = $1
+                """
+                return await self.system_pool.fetchval(orphan_count_query, table_name)
+
+            # System DB'deki source_id'leri al
+            embedded_ids_query = """
+                SELECT DISTINCT source_id FROM unified_embeddings
+                WHERE source_table = $1 OR metadata->>'table' = $1
             """
-            return await self.system_pool.fetchval(orphan_query, table_name)
+            embedded_rows = await self.system_pool.fetch(embedded_ids_query, table_name)
+
+            # Orphan = embedded'da var ama source'da yok
+            orphan_count = 0
+            for row in embedded_rows:
+                if row['source_id'] not in source_ids:
+                    orphan_count += 1
+
+            return orphan_count
 
         except Exception as e:
             logger.error(f"Error counting orphans for {table_name}: {e}")
@@ -485,18 +502,27 @@ class DataHealthService:
                 logger.warning(f"Source table not found for orphan check: {table_name}")
                 return result
 
-            # Orphan kayıtları bul
-            orphan_query = f"""
-                SELECT ue.id, ue.source_id, ue.source_name, ue.created_at
-                FROM unified_embeddings ue
-                WHERE (ue.source_table = $1 OR ue.metadata->>'table' = $1)
-                AND NOT EXISTS (
-                    SELECT 1 FROM "{source_table}" src
-                    WHERE src.{pk} = ue.source_id
-                )
-                LIMIT $2
+            # Cross-database: Önce source'daki ID'leri al
+            source_ids_query = f'SELECT {pk} FROM "{source_table}"'
+            source_rows = await self.source_pool.fetch(source_ids_query)
+            source_ids = set(r[pk] for r in source_rows)
+
+            # System DB'deki kayıtları al
+            embedded_query = """
+                SELECT id, source_id, source_name, created_at
+                FROM unified_embeddings
+                WHERE source_table = $1 OR metadata->>'table' = $1
             """
-            orphans = await self.system_pool.fetch(orphan_query, table_name, limit)
+            embedded_rows = await self.system_pool.fetch(embedded_query, table_name)
+
+            # Orphan = embedded'da var ama source'da yok
+            orphans = []
+            for row in embedded_rows:
+                if row['source_id'] not in source_ids:
+                    orphans.append(row)
+                    if len(orphans) >= limit:
+                        break
+
             result["orphans_found"] = len(orphans)
 
             # Sample kaydet
@@ -800,10 +826,25 @@ class DataHealthService:
         }
 
         try:
-            # Pending jobs (son 24 saat)
-            pending_query = """
-                SELECT id, source_type, source_id, table_name, status,
-                       created_at, updated_at, error_message
+            # Önce tablo ve kolon varlığını kontrol et
+            check_query = """
+                SELECT column_name FROM information_schema.columns
+                WHERE table_name = 'import_jobs' AND table_schema = 'public'
+            """
+            columns = await self.system_pool.fetch(check_query)
+            if not columns:
+                logger.info("import_jobs table not found, skipping queue status")
+                return result
+
+            column_names = [c['column_name'] for c in columns]
+
+            # Pending jobs (son 24 saat) - sadece mevcut kolonları kullan
+            base_cols = ['id', 'status', 'created_at', 'updated_at']
+            optional_cols = ['source_type', 'source_id', 'error_message']
+            select_cols = base_cols + [c for c in optional_cols if c in column_names]
+
+            pending_query = f"""
+                SELECT {', '.join(select_cols)}
                 FROM import_jobs
                 WHERE status IN ('pending', 'processing')
                 AND created_at > NOW() - INTERVAL '24 hours'
@@ -815,9 +856,8 @@ class DataHealthService:
             result["total_pending"] = len(pending)
 
             # Stuck jobs (processing > 10 dakika)
-            stuck_query = """
-                SELECT id, source_type, source_id, table_name, status,
-                       created_at, updated_at, error_message,
+            stuck_query = f"""
+                SELECT {', '.join(select_cols)},
                        EXTRACT(EPOCH FROM (NOW() - updated_at)) / 60 as minutes_stuck
                 FROM import_jobs
                 WHERE status = 'processing'
@@ -848,16 +888,28 @@ class DataHealthService:
         }
 
         try:
+            # Önce tablo varlığını kontrol et
+            check_query = """
+                SELECT EXISTS (
+                    SELECT FROM information_schema.tables
+                    WHERE table_schema = 'public' AND table_name = 'import_jobs'
+                )
+            """
+            exists = await self.system_pool.fetchval(check_query)
+            if not exists:
+                logger.info("import_jobs table not found, skipping stuck job reset")
+                return result
+
             # Stuck jobs bul
             stuck_query = """
-                SELECT id, table_name, source_id
+                SELECT id, source_id
                 FROM import_jobs
                 WHERE status = 'processing'
                 AND updated_at < NOW() - INTERVAL '10 minutes'
             """
             stuck = await self.system_pool.fetch(stuck_query)
             result["stuck_found"] = len(stuck)
-            result["reset_jobs"] = [{"id": r['id'], "table": r['table_name']} for r in stuck[:10]]
+            result["reset_jobs"] = [{"id": r['id'], "source_id": r['source_id']} for r in stuck[:10]]
 
             if not dry_run and stuck:
                 # Reset to pending
