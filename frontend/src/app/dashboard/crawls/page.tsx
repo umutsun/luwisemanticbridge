@@ -244,7 +244,9 @@ export default function CrawlerDataPage() {
     { name: 'woocommerce', label: 'WooCommerce' },
     { name: 'shopify', label: 'Shopify' },
     { name: 'wix', label: 'Wix' },
-    { name: 'cloudflare', label: 'Cloudflare' }
+    { name: 'cloudflare', label: 'Cloudflare' },
+    { name: 'vergilex_gib', label: 'GIB Sirküler' },
+    { name: 'vergilex_mevzuat', label: 'Mevzuat.gov.tr' }
   ];
 
   // Analyze functionality
