@@ -210,63 +210,122 @@ export class RAGChatService {
 
   /**
    * 📝 Build article format prompt for FOUND responses
-   * Uses mini-makale format with 4 required sections
-   * Format: Konu → Anahtar Terimler → Dayanaklar → Değerlendirme
+   * SCHEMA-DRIVEN: All sections, rules, and format come from schema config
+   * Settings-driven: Article length comes from ragSettings.summaryMaxLength
+   *
+   * @param schema - RAG routing schema with articleSections config
+   * @param language - 'tr' or 'en'
+   * @param articleLength - Target character count from settings (default 2000)
    */
-  private buildArticleFormatPrompt(schema: RAGRoutingSchema, language: string = 'tr'): string {
+  private buildArticleFormatPrompt(
+    schema: RAGRoutingSchema,
+    language: string = 'tr',
+    articleLength: number = 2000
+  ): string {
     const foundFormat = schema.routes.FOUND.format;
-    const sourcePriority = foundFormat.sourcePriority || [];
+    const articleSections = foundFormat.articleSections || [];
     const prohibitedContent = foundFormat.prohibitedContent || [];
+    const groundingRules = foundFormat.groundingRules || {};
+
+    // Build sections that LLM should write (exclude system-generated ones)
+    const llmSections = articleSections.filter(s => !s.systemGenerated);
+    const systemSections = articleSections.filter(s => s.systemGenerated);
 
     if (language === 'tr') {
-      let prompt = `YANITLAMA FORMATI (ZORUNLU - HARFİYEN UYGULANACAK):
+      // Build section instructions from schema
+      const sectionInstructions = llmSections.map(section => {
+        return `## ${section.title}\n${section.description}`;
+      }).join('\n\n');
 
-Yanıtını MUTLAKA aşağıdaki 2 bölümle yaz. Başka bölüm EKLEME.
+      // Build system-generated section notice
+      const systemSectionNotice = systemSections.length > 0
+        ? systemSections.map(s => `- "${s.title}" bölümü YAZMA (sistem ekleyecek)`).join('\n')
+        : '';
 
-## Konu
-Sorunun kapsadığı vergi konusunu 1-2 cümlede özetle.
-
-## Değerlendirme
-Kaynaklara dayalı detaylı analiz yaz. EN AZ 3-4 paragraf olsun.
-
-KRİTİK KURALLAR:
+      // Build grounding rules from schema
+      const groundingRulesText = groundingRules.tr || `
 1. Kanun/madde numarası SADECE kaynakta AÇIKÇA geçiyorsa yaz. Kaynak metninde geçmeyen madde numarası UYDURMA.
 2. "zorunda mıyım", "yapabilir miyim" gibi sorularda: Kaynakta AÇIK HÜKÜM yoksa "Kaynaklarda bu konuda açık bir düzenleme bulunamamıştır" de.
 3. "zorunludur", "yasaktır", "mümkündür" gibi KESİN İFADELER sadece kaynakta birebir varsa kullan.
-4. Emin değilsen: "Kaynaklara göre..." veya "...olarak değerlendirilebilir" gibi yumuşak ifadeler kullan.
+4. Emin değilsen: "Kaynaklara göre..." veya "...olarak değerlendirilebilir" gibi yumuşak ifadeler kullan.`;
+
+      // Calculate minimum length (80% of target)
+      const minLength = Math.floor(articleLength * 0.8);
+
+      let prompt = `AKADEMİK MAKALE FORMATI (ZORUNLU):
+
+Yanıtını akademik dergi makalesi formatında yaz.
+
+📏 UZUNLUK KURALLARI (KRİTİK):
+- HEDEF uzunluk: ${articleLength} karakter
+- MİNİMUM uzunluk: ${minLength} karakter (bu değerin ALTINDA yanıt kabul EDİLMEZ)
+- Değerlendirme bölümü DETAYLI olmalı: Kaynakları analiz et, karşılaştır, sentezle
+- Tek paragraf değil, birden fazla paragraf yaz
+- Her kaynağa [1], [2], [3] şeklinde referans ver
+
+${sectionInstructions}
+
+KAYNAK REFERANSLAMA (ZORUNLU):
+- Metin içinde mutlaka [1], [2], [3] gibi referanslar kullan
+- Her önemli bilgi için hangi kaynaktan geldiğini belirt
+- En az 3-5 farklı kaynak referansı olmalı
+
+GROUNDING KURALLARI (KRİTİK):
+${groundingRulesText}
 
 YASAKLAR:
-- "Anahtar Terimler" bölümü YAZMA (sistem ekleyecek)
-- "Dayanaklar" bölümü YAZMA (sistem ekleyecek)
-- "Dipnotlar" bölümü YAZMA (sistem ekleyecek)
+${systemSectionNotice}
 - Kaynak dışı bilgi verme
 - Kaynakta geçmeyen madde numarası uydurma
+- ${minLength} karakterden kısa yanıt verme
 ${prohibitedContent.map(p => `- "${p}"`).join('\n')}
 `;
       return prompt;
     } else {
-      let prompt = `RESPONSE FORMAT (MANDATORY - FOLLOW EXACTLY):
+      // English version
+      const sectionInstructions = llmSections.map(section => {
+        return `## ${section.titleEn || section.title}\n${section.descriptionEn || section.description}`;
+      }).join('\n\n');
 
-Write your response with ONLY these 2 sections. Do NOT add other sections.
+      const systemSectionNotice = systemSections.length > 0
+        ? systemSections.map(s => `- Do NOT write "${s.titleEn || s.title}" section (system will add)`).join('\n')
+        : '';
 
-## Topic
-Summarize the tax topic in 1-2 sentences.
-
-## Assessment
-Write detailed analysis based on sources. At least 3-4 paragraphs.
-
-CRITICAL RULES:
+      const groundingRulesText = groundingRules.en || `
 1. Only cite law/article numbers if they EXPLICITLY appear in the source text. Do NOT invent references.
 2. For "must I", "can I" questions: If no EXPLICIT ruling in sources, say "No clear regulation found in sources."
 3. Use definitive statements ("required", "prohibited", "possible") ONLY if source explicitly states so.
-4. When uncertain: Use hedged language like "According to sources..." or "...may be considered as"
+4. When uncertain: Use hedged language like "According to sources..." or "...may be considered as"`;
+
+      // Calculate minimum length (80% of target)
+      const minLength = Math.floor(articleLength * 0.8);
+
+      let prompt = `ACADEMIC ARTICLE FORMAT (MANDATORY):
+
+Write your response in academic journal article format.
+
+📏 LENGTH REQUIREMENTS (CRITICAL):
+- TARGET length: ${articleLength} characters
+- MINIMUM length: ${minLength} characters (responses BELOW this are NOT acceptable)
+- Assessment section must be DETAILED: Analyze, compare, and synthesize sources
+- Write multiple paragraphs, not just one
+- Reference each source with [1], [2], [3]
+
+${sectionInstructions}
+
+SOURCE REFERENCING (REQUIRED):
+- Use [1], [2], [3] references throughout the text
+- Indicate which source each piece of information comes from
+- Include at least 3-5 different source references
+
+GROUNDING RULES (CRITICAL):
+${groundingRulesText}
 
 PROHIBITED:
-- Do NOT write "Key Terms" section (system will add)
-- Do NOT write "Legal Basis" section (system will add)
-- Do NOT write "Footnotes" section (system will add)
+${systemSectionNotice}
 - Do NOT provide information not in sources
 - Do NOT invent article numbers not in sources
+- Do NOT write responses shorter than ${minLength} characters
 `;
       return prompt;
     }
@@ -1837,15 +1896,18 @@ ${questionLabel}: ${message}`;
         const strictModeLevel = settingsMap.get('ragSettings.strictModeLevel') || 'medium'; // Default to medium for better recall
         console.log(`✅ STRICT MODE ACTIVE - Level: ${strictModeLevel.toUpperCase()}`);
 
-        // 📋 Use article format from routing schema (mini-makale format)
-        // This is the Murat-requested 4-section format with footnotes
+        // 📋 Use article format from routing schema (akademik makale format)
+        // Article length comes from user settings (ragSettings.summaryMaxLength)
         const useArticleFormat = routingSchema.routes.FOUND.format.articleSections &&
                                  routingSchema.routes.FOUND.format.articleSections.length > 0;
 
+        // Get article length from settings (user-configurable)
+        const articleLength = parseInt(settingsMap.get('ragSettings.summaryMaxLength') || '2000');
+
         // Default medium-mode prompts (better recall, still requires citation)
-        // If article format is enabled, use the 4-section mini-makale format
+        // If article format is enabled, use schema-driven academic article format
         const defaultMediumPromptTr = useArticleFormat
-          ? this.buildArticleFormatPrompt(routingSchema, 'tr')
+          ? this.buildArticleFormatPrompt(routingSchema, 'tr', articleLength)
           : `Aşağıda numaralanmış kaynaklar var.
 
 CEVAPLAMA KURALLARI:
@@ -1859,7 +1921,7 @@ FORMAT:
 [Cevabın] [Kaynak X]`;
 
         const defaultMediumPromptEn = useArticleFormat
-          ? this.buildArticleFormatPrompt(routingSchema, 'en')
+          ? this.buildArticleFormatPrompt(routingSchema, 'en', articleLength)
           : `Sources are numbered below.
 
 ANSWERING RULES:
@@ -3303,25 +3365,85 @@ FORMAT:
   ): string {
     let result = responseText;
 
-    // 📋 ARTICLE FORMAT: Skip CEVAP enforcement - response uses ## section headers
+    // 📋 ARTICLE FORMAT: Backend generates Anahtar Terimler + Dayanaklar from sources
     if (formatType === 'article') {
-      console.log('[FORMAT] Article format detected - skipping CEVAP enforcement');
-      // Clean up any legacy CEVAP/ALINTI headers if LLM added them
+      console.log('[FORMAT] Article format detected - backend generating metadata sections');
+
+      // Clean up any legacy headers LLM might have added
       result = result.replace(/\*\*CEVAP\*\*\s*\n?/gi, '');
       result = result.replace(/\*\*ANSWER\*\*\s*\n?/gi, '');
       result = result.replace(/\*\*ALINTI\*\*[\s\S]*?(?=##|\*\*[A-ZÇĞİÖŞÜ]|\n\n\n|$)/gi, '');
       result = result.replace(/\*\*QUOTE\*\*[\s\S]*?(?=##|\*\*[A-Z]|\n\n\n|$)/gi, '');
 
+      // Remove LLM-generated Anahtar Terimler section (backend will generate from sources)
+      result = result.replace(/##\s*Anahtar\s*Terim[^\n]*[\s\S]*?(?=##|\n\n\n|$)/gi, '');
+      result = result.replace(/\*\*Anahtar\s*Terim[^*]*\*\*[\s\S]*?(?=##|\*\*[A-ZÇĞİÖŞÜ]|\n\n\n|$)/gi, '');
+
+      // Remove LLM-generated Dayanaklar section (backend will generate from sources)
+      result = result.replace(/##\s*Dayanaklar[^\n]*[\s\S]*?(?=##|\n\n\n|$)/gi, '');
+      result = result.replace(/\*\*Dayanaklar[^*]*\*\*[\s\S]*?(?=##|\*\*[A-ZÇĞİÖŞÜ]|\n\n\n|$)/gi, '');
+
       // Remove ALL Dipnotlar/Footnotes sections - citations shown in Atıflar UI component
-      // Multiple patterns to catch various formats LLM might use
       result = result.replace(/##\s*Dipnotlar:?[\s\S]*?(?=##|\n\n\n|$)/gi, '');
       result = result.replace(/##\s*Footnotes:?[\s\S]*?(?=##|\n\n\n|$)/gi, '');
       result = result.replace(/\*\*Dipnotlar:?\*\*[\s\S]*?(?=##|\*\*[A-ZÇĞİÖŞÜ]|\n\n\n|$)/gi, '');
       result = result.replace(/\*\*Footnotes:?\*\*[\s\S]*?(?=##|\*\*[A-Z]|\n\n\n|$)/gi, '');
-      // Also remove any standalone [1] [2] reference lists at the end
+      // Remove any standalone [1] [2] reference lists at the end
       result = result.replace(/\n\s*\[\d+\]\s+[^\n]+(?:\n\s*\[\d+\]\s+[^\n]+)*\s*$/gi, '');
 
-      return result.trim();
+      // ═══════════════════════════════════════════════════════════════
+      // BACKEND-GENERATED SECTIONS FROM SOURCES METADATA
+      // ═══════════════════════════════════════════════════════════════
+
+      // 1. Extract keywords from SOURCES (not query) - important terms from source content
+      const keywordsFromSources = this.extractKeywordsFromSourceContent(searchResults);
+
+      // 2. Extract legal references from source metadata (not LLM)
+      const dayanaklar = this.extractDayanaklarFromSources(searchResults);
+
+      // 3. Get min sources count from search results for citation requirement
+      const minSources = Math.min(searchResults.length, 5);
+
+      // Build the final formatted response (NO ## headers - frontend renders them)
+      let formattedResponse = '';
+
+      // Find Konu section from LLM response (remove ## header)
+      const konuMatch = result.match(/##\s*Konu\s*\n([\s\S]*?)(?=##|$)/i);
+      if (konuMatch) {
+        formattedResponse += `KONU:\n${konuMatch[1].trim()}\n\n`;
+      }
+
+      // Add backend-generated Anahtar Terimler (as simple label, not ## header)
+      if (keywordsFromSources.length > 0) {
+        formattedResponse += `ANAHTAR_TERIMLER:\n${keywordsFromSources.join(', ')}\n\n`;
+      }
+
+      // Add backend-generated Dayanaklar
+      if (dayanaklar.length > 0) {
+        formattedResponse += `DAYANAKLAR:\n${dayanaklar.join('\n')}\n\n`;
+      }
+
+      // Find ## Değerlendirme section from LLM response
+      // KEEP [1], [2] citation references in the text!
+      const assessmentMatch = result.match(/##\s*Değerlendirme\s*\n([\s\S]*?)(?=##|$)/i);
+      let assessmentText = '';
+      if (assessmentMatch) {
+        assessmentText = assessmentMatch[1].trim();
+      } else {
+        // If no Değerlendirme header, use remaining content after Konu
+        const afterKonu = result.replace(/##\s*Konu[\s\S]*?(?=##|$)/i, '').trim();
+        if (afterKonu) {
+          assessmentText = afterKonu;
+        }
+      }
+
+      // Ensure assessment has citation references [1], [2], etc.
+      // If LLM didn't add them, we don't force them - but we preserve any that exist
+      if (assessmentText) {
+        formattedResponse += `DEGERLENDIRME:\n${assessmentText}`;
+      }
+
+      return formattedResponse.trim() || result.trim();
     }
 
     // 📋 LEGACY FORMAT: Enforce **CEVAP** header
@@ -6582,6 +6704,222 @@ UNUT: ${conversationTone} üslubunda YORUMLA, kopyalama. KENDI KELİMELERİNLE a
 
     // All retries failed, throw the last error
     throw lastError || new Error('Failed to save message after retries');
+  }
+
+  /**
+   * 🔧 BACKEND KEYWORD EXTRACTOR
+   * Extracts keywords from query and source titles/metadata
+   * Does NOT use LLM - pure text extraction
+   */
+  private extractKeywordsFromSources(query: string, searchResults: any[]): string[] {
+    const keywords = new Set<string>();
+
+    // Turkish stopwords to exclude
+    const stopwords = new Set([
+      'vergi', 'vergisi', 'kanun', 'kanunu', 'madde', 'maddesi', 'hakkında', 'ilgili',
+      'nasıl', 'nedir', 'midir', 'mıdır', 'mudur', 'müdür', 'mıyım', 'miyim',
+      'bir', 'bu', 'şu', 'o', 've', 'ile', 'için', 'gibi', 'kadar', 'daha',
+      'olan', 'olarak', 'ise', 'veya', 'ya', 'de', 'da', 'den', 'dan', 'ne',
+      'var', 'yok', 'mi', 'mı', 'mu', 'mü', 'ki', 'ama', 'fakat', 'ancak'
+    ]);
+
+    // Extract meaningful words from query (2+ chars, not stopword)
+    const queryWords = query.toLowerCase()
+      .replace(/[?!.,;:'"()]/g, ' ')
+      .split(/\s+/)
+      .filter(w => w.length > 2 && !stopwords.has(w));
+
+    queryWords.forEach(w => {
+      if (w.length > 3) keywords.add(w);
+    });
+
+    // Extract keywords from source titles and metadata
+    for (const source of searchResults.slice(0, 5)) {
+      const title = source.title || '';
+      const sourceType = source.source_type || source.sourceType || '';
+
+      // Add source type as keyword
+      if (sourceType && sourceType.length > 2) {
+        keywords.add(sourceType.toLowerCase());
+      }
+
+      // Extract significant words from title
+      const titleWords = title.toLowerCase()
+        .replace(/[?!.,;:'"()]/g, ' ')
+        .split(/\s+/)
+        .filter((w: string) => w.length > 3 && !stopwords.has(w));
+
+      titleWords.slice(0, 3).forEach((w: string) => keywords.add(w));
+    }
+
+    // Return max 8 keywords, sorted by length (longer = more specific)
+    return Array.from(keywords)
+      .filter(k => k.length > 3)
+      .sort((a, b) => b.length - a.length)
+      .slice(0, 8);
+  }
+
+  /**
+   * 🔧 BACKEND DAYANAKLAR EXTRACTOR
+   * Extracts legal references from source metadata and content
+   * Does NOT use LLM - regex-based extraction from actual sources
+   */
+  private extractDayanaklarFromSources(searchResults: any[]): string[] {
+    const dayanaklar: string[] = [];
+    const seen = new Set<string>();
+
+    // Regex patterns for Turkish legal references
+    const patterns = [
+      // Kanun referansları: "3065 sayılı Kanun", "VUK 229", "KDV Kanunu"
+      /(\d{3,5})\s*sayılı\s*([A-ZÇĞİÖŞÜa-zçğıöşü\s]+?)\s*Kanun/gi,
+      // Madde referansları: "Madde 29", "m. 29", "29. madde"
+      /(?:madde|md\.?|m\.)\s*(\d+)/gi,
+      // Tebliğ referansları
+      /([A-ZÇĞİÖŞÜ][a-zçğıöşü]+\s+(?:Genel\s+)?Tebliğ[i]?)/gi,
+      // Sirküler referansları
+      /(Sirküler\s*(?:No[:\s]*)?[\d\/\-]+)/gi,
+      // Özelge referansları with date
+      /(Özelge[:\s]+\d{2}[\.\/]\d{2}[\.\/]\d{4})/gi,
+    ];
+
+    for (const source of searchResults.slice(0, 5)) {
+      const content = source.content || source.text || source.excerpt || '';
+      const title = source.title || '';
+      const sourceType = source.source_type || source.sourceType || 'belge';
+      const sourceDate = source.date || source.metadata?.date || '';
+
+      // Try to extract from title first (usually more accurate)
+      const titleText = title + ' ' + content.substring(0, 500);
+
+      for (const pattern of patterns) {
+        const matches = titleText.matchAll(pattern);
+        for (const match of matches) {
+          const ref = match[0].trim();
+          const normalizedRef = ref.toLowerCase().replace(/\s+/g, ' ');
+          if (!seen.has(normalizedRef) && ref.length > 5) {
+            seen.add(normalizedRef);
+            dayanaklar.push(ref);
+          }
+        }
+      }
+
+      // If no patterns found, create reference from source type + date
+      if (dayanaklar.length === 0 && sourceType) {
+        const typeLabel = this.getSourceTypeLabel(sourceType);
+        const dateStr = sourceDate ? ` (${sourceDate})` : '';
+        const refFromMeta = `${typeLabel}${dateStr}`;
+        if (!seen.has(refFromMeta.toLowerCase())) {
+          seen.add(refFromMeta.toLowerCase());
+          dayanaklar.push(refFromMeta);
+        }
+      }
+    }
+
+    // Return unique references, max 5
+    return dayanaklar.slice(0, 5);
+  }
+
+  /**
+   * Get human-readable label for source type
+   */
+  private getSourceTypeLabel(sourceType: string): string {
+    const labels: Record<string, string> = {
+      'ozelge': 'Özelge',
+      'sirkuler': 'Sirküler',
+      'teblig': 'Tebliğ',
+      'kanun': 'Kanun',
+      'yonetmelik': 'Yönetmelik',
+      'makale': 'Makale',
+      'yargi': 'Yargı Kararı',
+      'danistay': 'Danıştay Kararı',
+      'sorucevap': 'Soru-Cevap'
+    };
+    return labels[sourceType.toLowerCase()] || sourceType;
+  }
+
+  /**
+   * 🔧 BACKEND KEYWORD EXTRACTOR FROM SOURCE CONTENT
+   * Extracts semantically important terms from the actual source content
+   * NOT from the user query - these are the key concepts IN the sources
+   * Does NOT use LLM - TF-IDF style extraction
+   */
+  private extractKeywordsFromSourceContent(searchResults: any[]): string[] {
+    const termFrequency = new Map<string, number>();
+
+    // Turkish stopwords to exclude (common words that don't carry semantic meaning)
+    const stopwords = new Set([
+      // Question words
+      'nasıl', 'nedir', 'midir', 'mıdır', 'mudur', 'müdür', 'mıyım', 'miyim', 'neden', 'niçin',
+      // Common verbs/auxiliaries
+      'olan', 'olarak', 'olmak', 'olduğu', 'olup', 'olmayan', 'olabilir', 'olmaktadır',
+      'edilmiş', 'edilir', 'edilen', 'edilecek', 'edilmektedir', 'edilmesi',
+      'yapılır', 'yapılan', 'yapılacak', 'yapılması', 'yapılmaktadır',
+      'belirtilen', 'belirtilmiş', 'belirtilmektedir',
+      // Connectors/articles
+      'bir', 'bu', 'şu', 'her', 've', 'ile', 'için', 'gibi', 'kadar', 'daha', 'çok', 'en',
+      'ise', 'veya', 'ya', 'de', 'da', 'den', 'dan', 'ne', 'ki', 'ama', 'fakat', 'ancak',
+      'var', 'yok', 'mi', 'mı', 'mu', 'mü', 'hem', 'yani', 'aynı', 'başka', 'diğer',
+      // Pronouns
+      'ben', 'sen', 'biz', 'siz', 'onlar', 'bunlar', 'şunlar',
+      // Common document terms (too generic)
+      'tarih', 'sayı', 'konu', 'ilgi', 'kaynak', 'belge', 'dosya', 'numara',
+      // Meta terms
+      'hakkında', 'ilgili', 'ait', 'göre', 'bağlı', 'karşı', 'dolayı', 'nedeniyle',
+      'üzerine', 'üzerinde', 'altında', 'içinde', 'dışında', 'arasında',
+      // Generic legal boilerplate
+      'talep', 'başvuru', 'dilekçe', 'cevap', 'görüş', 'değerlendirme',
+      'yukarıda', 'aşağıda', 'söz', 'konusu', 'bahse', 'konu'
+    ]);
+
+    // Domain-specific important terms to boost (semantic weight)
+    const domainTerms = new Set([
+      // Tax/Finance terms
+      'vergi', 'kdv', 'ötv', 'gelir', 'kurumlar', 'stopaj', 'tevkifat', 'muafiyet', 'istisna',
+      'matrah', 'beyanname', 'fatura', 'sevk', 'irsaliye', 'tahakkuk', 'tahsilat', 'iade',
+      'indirim', 'gider', 'hasılat', 'kar', 'zarar', 'amortisman', 'reeskont',
+      // Legal terms
+      'kanun', 'madde', 'tebliğ', 'sirküler', 'özelge', 'yönetmelik', 'mevzuat',
+      'hüküm', 'yaptırım', 'ceza', 'usulsüzlük', 'denetim', 'inceleme',
+      // Business terms
+      'mükellef', 'şirket', 'işletme', 'ticaret', 'satış', 'alım', 'hizmet',
+      'serbest', 'meslek', 'ücret', 'maaş', 'kira', 'faiz', 'temettü'
+    ]);
+
+    // Process each source
+    for (const source of searchResults.slice(0, 5)) {
+      const content = source.content || source.text || source.excerpt || '';
+      const title = source.title || '';
+      const fullText = (title + ' ' + content).toLowerCase();
+
+      // Tokenize and count terms
+      const words = fullText
+        .replace(/[?!.,;:'"()\[\]{}\/\\<>«»""'']/g, ' ')
+        .replace(/\d+/g, ' ') // Remove numbers
+        .split(/\s+/)
+        .filter(w => w.length >= 3 && w.length <= 25);
+
+      for (const word of words) {
+        // Skip stopwords
+        if (stopwords.has(word)) continue;
+
+        // Count frequency with domain boost
+        const currentCount = termFrequency.get(word) || 0;
+        const boost = domainTerms.has(word) ? 2 : 1;
+        termFrequency.set(word, currentCount + boost);
+      }
+    }
+
+    // Sort by frequency and return top keywords
+    const sortedTerms = Array.from(termFrequency.entries())
+      .filter(([term, freq]) => freq >= 2) // Must appear at least twice
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 10)
+      .map(([term]) => term);
+
+    // Capitalize first letter for display
+    return sortedTerms.map(term =>
+      term.charAt(0).toUpperCase() + term.slice(1)
+    );
   }
 
   /**

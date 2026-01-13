@@ -34,11 +34,22 @@ function parseStructuredResponse(content: string): ParsedResponse {
 
   if (!content) return result;
 
-  // Check for section markers (## or **)
-  const hasKonu = /##\s*Konu|^\*\*Konu\*\*|\*\*1\.\s*Konu/im.test(content);
-  const hasKeywords = /##\s*Anahtar\s*Terim|^\*\*Anahtar\s*Terim|\*\*2\.\s*Anahtar/im.test(content);
-  const hasDayanaklar = /##\s*Dayanaklar|^\*\*Dayanaklar|\*\*3\.\s*Yasal/im.test(content);
-  const hasAssessment = /##\s*Değerlendirme|^\*\*Değerlendirme|\*\*4\.\s*Vergilex/im.test(content);
+  // Check for section markers - NEW format (KONU:, ANAHTAR_TERIMLER:) or LEGACY (## or **)
+  const hasNewKonu = /^KONU:\s*\n/im.test(content);
+  const hasNewKeywords = /^ANAHTAR_TERIMLER:\s*\n/im.test(content);
+  const hasNewDayanaklar = /^DAYANAKLAR:\s*\n/im.test(content);
+  const hasNewAssessment = /^DEGERLENDIRME:\s*\n/im.test(content);
+
+  // Legacy markers
+  const hasLegacyKonu = /##\s*Konu|^\*\*Konu\*\*|\*\*1\.\s*Konu/im.test(content);
+  const hasLegacyKeywords = /##\s*Anahtar\s*Terim|^\*\*Anahtar\s*Terim|\*\*2\.\s*Anahtar/im.test(content);
+  const hasLegacyDayanaklar = /##\s*Dayanaklar|^\*\*Dayanaklar|\*\*3\.\s*Yasal/im.test(content);
+  const hasLegacyAssessment = /##\s*Değerlendirme|^\*\*Değerlendirme|\*\*4\.\s*Vergilex/im.test(content);
+
+  const hasKonu = hasNewKonu || hasLegacyKonu;
+  const hasKeywords = hasNewKeywords || hasLegacyKeywords;
+  const hasDayanaklar = hasNewDayanaklar || hasLegacyDayanaklar;
+  const hasAssessment = hasNewAssessment || hasLegacyAssessment;
 
   // Only parse if we have at least 2 section markers
   if ([hasKonu, hasKeywords, hasDayanaklar, hasAssessment].filter(Boolean).length < 2) {
@@ -46,6 +57,47 @@ function parseStructuredResponse(content: string): ParsedResponse {
   }
 
   result.hasStructure = true;
+
+  // ═══════════════════════════════════════════════════════════════
+  // NEW FORMAT: KONU:, ANAHTAR_TERIMLER:, DAYANAKLAR:, DEGERLENDIRME:
+  // ═══════════════════════════════════════════════════════════════
+  if (hasNewKonu || hasNewKeywords || hasNewDayanaklar || hasNewAssessment) {
+    // Extract KONU section
+    const newKonuMatch = content.match(/^KONU:\s*\n([\s\S]*?)(?=^(?:ANAHTAR_TERIMLER|DAYANAKLAR|DEGERLENDIRME):|\n\n\n|$)/im);
+    if (newKonuMatch) {
+      result.topic = newKonuMatch[1].trim();
+    }
+
+    // Extract ANAHTAR_TERIMLER section
+    const newKeywordsMatch = content.match(/^ANAHTAR_TERIMLER:\s*\n([\s\S]*?)(?=^(?:DAYANAKLAR|DEGERLENDIRME):|\n\n\n|$)/im);
+    if (newKeywordsMatch) {
+      const keywordsText = newKeywordsMatch[1].trim();
+      // Parse comma-separated keywords
+      const keywords = keywordsText
+        .split(/[,،•\n]+/)
+        .map(k => k.trim())
+        .filter(k => k.length > 0 && k.length < 50);
+      result.keywords = keywords;
+    }
+
+    // Extract DAYANAKLAR section
+    const newDayanakMatch = content.match(/^DAYANAKLAR:\s*\n([\s\S]*?)(?=^DEGERLENDIRME:|\n\n\n|$)/im);
+    if (newDayanakMatch) {
+      result.legalBasis = newDayanakMatch[1].trim();
+    }
+
+    // Extract DEGERLENDIRME section (main content to display)
+    const newAssessmentMatch = content.match(/^DEGERLENDIRME:\s*\n([\s\S]*?)$/im);
+    if (newAssessmentMatch) {
+      result.assessment = newAssessmentMatch[1].trim();
+    }
+
+    return result;
+  }
+
+  // ═══════════════════════════════════════════════════════════════
+  // LEGACY FORMAT: ## headers or **bold** markers
+  // ═══════════════════════════════════════════════════════════════
 
   // Extract Konu section
   const konuMatch = content.match(/(?:##\s*Konu|\*\*(?:1\.\s*)?Konu[^*]*\*\*)[:\s]*\n?([\s\S]*?)(?=##|\*\*(?:2\.|Anahtar)|$)/i);
@@ -105,6 +157,8 @@ function parseStructuredResponse(content: string): ParsedResponse {
 /**
  * Clean raw markdown artifacts from assessment text
  * Removes: ## headers, **bold markers**, [Kaynak X] references, section labels, CEVAP/ALINTI, Dipnotlar
+ * Also removes duplicate ANAHTAR KELİMELER since it's shown separately by KeywordTags component
+ * KEEPS: [1], [2] citation references - these should be visible in text!
  */
 function cleanAssessmentText(content: string): string {
   if (!content) return '';
@@ -116,21 +170,38 @@ function cleanAssessmentText(content: string): string {
     // Remove **ALINTI** / **QUOTE** sections entirely
     .replace(/\*\*ALINTI\*\*[\s\S]*?(?=\*\*[A-ZÇĞİÖŞÜ]|##|\n\n\n|$)/gi, '')
     .replace(/\*\*QUOTE\*\*[\s\S]*?(?=\*\*[A-Z]|##|\n\n\n|$)/gi, '')
+    // Remove NEW format section labels (KONU:, ANAHTAR_TERIMLER:, DAYANAKLAR:, DEGERLENDIRME:)
+    .replace(/^KONU:\s*\n?/gim, '')
+    .replace(/^ANAHTAR_TERIMLER:\s*\n?/gim, '')
+    .replace(/^DAYANAKLAR:\s*\n?/gim, '')
+    .replace(/^DEGERLENDIRME:\s*\n?/gim, '')
+    // Remove ANAHTAR KELİMELER sections (shown by KeywordTags component)
+    .replace(/##\s*Anahtar\s*(?:Terim|Kelime)[^\n]*[\s\S]*?(?=##|\n\n\n|$)/gi, '')
+    .replace(/\*\*Anahtar\s*(?:Terim|Kelime)[^*]*\*\*[\s\S]*?(?=\*\*[A-ZÇĞİÖŞÜ]|##|\n\n\n|$)/gi, '')
+    .replace(/ANAHTAR\s*KEL[İI]MELER:?[\s\S]*?(?=\n\n|##|$)/gi, '')
+    // Remove Dayanaklar sections (shown separately)
+    .replace(/##\s*Dayanaklar[^\n]*[\s\S]*?(?=##|\n\n\n|$)/gi, '')
+    .replace(/\*\*Dayanaklar[^*]*\*\*[\s\S]*?(?=\*\*[A-ZÇĞİÖŞÜ]|##|\n\n\n|$)/gi, '')
     // Remove Dipnotlar/Footnotes sections entirely (citations shown in Atıflar component)
     .replace(/##\s*Dipnotlar:?[\s\S]*?(?=##|\n\n\n|$)/gi, '')
     .replace(/##\s*Footnotes:?[\s\S]*?(?=##|\n\n\n|$)/gi, '')
     .replace(/\*\*Dipnotlar:?\*\*[\s\S]*?(?=\*\*[A-ZÇĞİÖŞÜ]|##|\n\n\n|$)/gi, '')
     .replace(/\*\*Footnotes:?\*\*[\s\S]*?(?=\*\*[A-Z]|##|\n\n\n|$)/gi, '')
-    // Remove standalone reference lists like [1] Sirküler...
+    // Remove Konu section header (content kept but header removed)
+    .replace(/##\s*Konu\s*\n?/gi, '')
+    // Remove Değerlendirme section header (content kept but header removed)
+    .replace(/##\s*Değerlendirme\s*\n?/gi, '')
+    // Remove standalone reference LISTS at the end like [1] Sirküler...
+    // BUT KEEP inline [1], [2] in the text - user wants citation references visible!
     .replace(/\n\s*\[\d+\]\s+[^\n]+(?:\n\s*\[\d+\]\s+[^\n]+)*\s*$/gi, '')
     // Remove ## headers completely
     .replace(/^##\s*[^\n]+\n?/gm, '')
     // Remove **Section:** style headers
     .replace(/^\*\*(?:Konu|Anahtar\s*Terim|Dayanaklar|Değerlendirme|Dipnot)[^*]*\*\*:?\s*/gim, '')
-    // Remove [Kaynak X] references (already shown in sources)
+    // Remove [Kaynak X] references (verbose format - already shown in sources)
     .replace(/\[Kaynak\s*\d+\]/gi, '')
-    // Remove [1], [2] style inline references (sources shown separately)
-    .replace(/\[\d+\]/g, '')
+    // KEEP [1], [2] style inline citation references! User explicitly requested these
+    // .replace(/\[\d+\]/g, '')  -- REMOVED: Keep citations visible in text
     // Remove standalone bold markers around single words/short phrases in middle of text
     .replace(/\*\*([^*]{1,30})\*\*/g, '$1')
     // Clean up multiple spaces

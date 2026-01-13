@@ -173,15 +173,34 @@ router.get('/unread-count', authenticateToken, async (req: AuthenticatedRequest,
  * Called from server.ts after WebSocket server is initialized
  */
 export async function setupNotificationBroadcast(wss: any) {
-  // Subscribe to Redis pub/sub channel
-  const subscriber = redis.duplicate();
+  // For ioredis pub/sub, we need a dedicated subscriber instance
+  // duplicate() creates a new client but we need to handle connection properly
+  const Redis = require('ioredis');
 
+  const subscriberConfig = {
+    host: process.env.REDIS_HOST || 'localhost',
+    port: 6379,
+    db: parseInt(process.env.REDIS_DB || '2'),
+    password: process.env.REDIS_PASSWORD || undefined,
+    retryStrategy(times: number) {
+      return Math.min(times * 50, 2000);
+    },
+    connectTimeout: 10000,
+    maxRetriesPerRequest: 3,
+  };
+
+  const subscriber = new Redis(subscriberConfig);
+
+  subscriber.on('error', (err: any) => {
+    logger.error('Redis subscriber error:', err.message);
+  });
+
+  subscriber.on('connect', () => {
+    logger.info('✅ Redis notification subscriber connected');
+  });
+
+  // Subscribe to notifications channel using ioredis pattern
   try {
-    // Connect the duplicated Redis client
-    await subscriber.connect();
-    logger.info('✅ Redis subscriber connected');
-
-    // Subscribe to notifications channel
     await subscriber.subscribe('notifications:broadcast');
     logger.info('✅ Subscribed to Redis notifications:broadcast channel');
   } catch (err) {
@@ -189,22 +208,25 @@ export async function setupNotificationBroadcast(wss: any) {
     return;
   }
 
-  subscriber.on('message', (channel, message) => {
+  // Handle incoming messages
+  subscriber.on('message', (channel: string, message: string) => {
     if (channel === 'notifications:broadcast') {
       try {
         const notification = JSON.parse(message);
 
         // Broadcast to all connected WebSocket clients
+        let clientCount = 0;
         wss.clients.forEach((client: WebSocket) => {
           if (client.readyState === WebSocket.OPEN) {
             client.send(JSON.stringify({
               type: 'notification',
               data: notification
             }));
+            clientCount++;
           }
         });
 
-        logger.info(`📢 Broadcasted notification ${notification.id} to ${wss.clients.size} clients`);
+        logger.info(`📢 Broadcasted notification ${notification.id} to ${clientCount} clients`);
       } catch (error) {
         logger.error('Failed to broadcast notification:', error);
       }

@@ -21,6 +21,12 @@ import argparse
 from datetime import datetime, timezone
 from pathlib import Path
 import random
+import io
+
+# Fix Windows console encoding for Turkish characters
+if sys.platform == 'win32':
+    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
+    sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8', errors='replace')
 
 import redis
 

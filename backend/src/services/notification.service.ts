@@ -82,10 +82,11 @@ export class NotificationService {
    */
   static async broadcast(notification: Notification): Promise<void> {
     try {
-      await redis.publish(
+      const subscribers = await redis.publish(
         this.NOTIFICATION_CHANNEL,
         JSON.stringify(notification)
       );
+      logger.info(`📡 Published notification ${notification.id} to ${subscribers} subscribers`);
     } catch (error) {
       logger.error('Failed to broadcast notification:', error);
     }

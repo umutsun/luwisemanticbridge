@@ -2621,20 +2621,43 @@ export default function CrawlerDataPage() {
                                         )}
                                       </div>
                                     ) : showCrawlerSelect === directory.name ? (
-                                      // Crawler selection dropdown
-                                      <div className="flex flex-col gap-1 w-full" onClick={(e) => e.stopPropagation()}>
-                                        <div className="text-[8px] text-muted-foreground mb-0.5">Select Crawler:</div>
-                                        <div className="grid grid-cols-2 gap-1">
-                                          {builtInCrawlers.map(crawler => (
-                                            <button
-                                              key={crawler.name}
-                                              onClick={() => handleSelectBuiltInCrawler(directory, crawler.name)}
-                                              className="px-2 py-1 text-[9px] rounded bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-left transition-colors"
-                                            >
-                                              {crawler.label}
-                                            </button>
-                                          ))}
-                                        </div>
+                                      // Crawler selection dropdown - grouped by category
+                                      <div className="flex flex-col gap-1 w-full max-h-[200px] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+                                        <div className="text-[8px] text-muted-foreground mb-0.5">Crawler Seç:</div>
+                                        {crawlerCategories.length > 0 ? (
+                                          crawlerCategories.map(category => (
+                                            <div key={category} className="mb-1">
+                                              <div className="text-[7px] font-medium text-slate-500 uppercase mb-0.5">{category}</div>
+                                              <div className="grid grid-cols-2 gap-1">
+                                                {builtInCrawlers
+                                                  .filter(c => c.category === category)
+                                                  .map(crawler => (
+                                                    <button
+                                                      key={crawler.id}
+                                                      onClick={() => handleSelectBuiltInCrawler(directory, crawler.filename.replace('.py', ''))}
+                                                      className="px-2 py-1 text-[9px] rounded bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-left transition-colors truncate"
+                                                      title={crawler.description}
+                                                    >
+                                                      {crawler.name}
+                                                    </button>
+                                                  ))}
+                                              </div>
+                                            </div>
+                                          ))
+                                        ) : (
+                                          <div className="grid grid-cols-2 gap-1">
+                                            {builtInCrawlers.map(crawler => (
+                                              <button
+                                                key={crawler.id}
+                                                onClick={() => handleSelectBuiltInCrawler(directory, crawler.filename.replace('.py', ''))}
+                                                className="px-2 py-1 text-[9px] rounded bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-left transition-colors truncate"
+                                                title={crawler.description}
+                                              >
+                                                {crawler.name}
+                                              </button>
+                                            ))}
+                                          </div>
+                                        )}
                                         <div className="flex items-center gap-1 mt-1">
                                           <label className="flex items-center gap-1 cursor-pointer text-[10px] text-blue-600 dark:text-blue-400 hover:underline flex-1">
                                             <Plus className="w-3 h-3" />

@@ -240,13 +240,18 @@ export interface RouteTriggers {
 
 /**
  * Article section definition for FOUND format
+ * systemGenerated: true = Backend generates from sources (LLM doesn't write)
+ * systemGenerated: false/undefined = LLM writes this section
  */
 export interface ArticleSection {
     id: string;
     title: string;
+    titleEn?: string;
     required: boolean;
+    systemGenerated?: boolean;  // true = backend generates, false = LLM writes
     footnoteRequired?: boolean;
     description?: string;
+    descriptionEn?: string;
 }
 
 /**
@@ -291,6 +296,11 @@ export interface RouteFormat {
         preferHigherNorm: boolean;
     };
     prohibitedContent?: string[];
+    // Grounding rules for verdict protection
+    groundingRules?: {
+        tr?: string;
+        en?: string;
+    };
 }
 
 /**

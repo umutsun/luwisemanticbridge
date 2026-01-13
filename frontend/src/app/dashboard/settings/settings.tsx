@@ -2849,13 +2849,13 @@ function RAGSettings() {
                   {/* Chunk Size & Overlap - Disabled (not currently used, reserved for future large document processing) */}
                 </div>
                 <div>
-                  <Label>{t('settings.rag.summaryMaxLength')}: {tempRAGConfig?.ragSettings?.summaryMaxLength || ragConfig?.ragSettings?.summaryMaxLength || 800}</Label>
+                  <Label>{t('settings.rag.summaryMaxLength')}: {tempRAGConfig?.ragSettings?.summaryMaxLength || ragConfig?.ragSettings?.summaryMaxLength || 4000}</Label>
                   <p className="text-xs text-muted-foreground mt-1">{t('settings.rag.summaryMaxLengthHelp')}</p>
                   <Slider
-                    value={[tempRAGConfig?.ragSettings?.summaryMaxLength || ragConfig?.ragSettings?.summaryMaxLength || 800]}
-                    max={2000}
-                    min={100}
-                    step={50}
+                    value={[tempRAGConfig?.ragSettings?.summaryMaxLength || ragConfig?.ragSettings?.summaryMaxLength || 4000]}
+                    max={10000}
+                    min={1000}
+                    step={500}
                     className="mt-2"
                     onValueChange={([value]) => updateRAGSetting('summaryMaxLength', value)}
                   />
