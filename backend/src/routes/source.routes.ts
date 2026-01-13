@@ -376,7 +376,10 @@ router.post('/tables/:tableName/insert', async (req: Request, res: Response) => 
 
         // Check if URL column exists for duplicate prevention
         const hasUrlColumn = columns.some(c => c.toLowerCase() === 'url');
-        const updateColumns = columns.filter(c => c.toLowerCase() !== 'url' && c.toLowerCase() !== 'content_hash');
+        // Exclude url, content_hash, updated_at, created_at from update set (updated_at set manually)
+        const updateColumns = columns.filter(c =>
+          !['url', 'content_hash', 'updated_at', 'created_at'].includes(c.toLowerCase())
+        );
 
         let insertQuery;
         if (hasUrlColumn && updateColumns.length > 0) {
