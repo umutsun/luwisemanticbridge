@@ -173,6 +173,8 @@ router.get('/unread-count', authenticateToken, async (req: AuthenticatedRequest,
  * Called from server.ts after WebSocket server is initialized
  */
 export async function setupNotificationBroadcast(wss: any) {
+  logger.info('[NotificationBroadcast] Starting setup...');
+
   // For ioredis pub/sub, we need a dedicated subscriber instance
   // duplicate() creates a new client but we need to handle connection properly
   const Redis = require('ioredis');
@@ -189,22 +191,40 @@ export async function setupNotificationBroadcast(wss: any) {
     maxRetriesPerRequest: 3,
   };
 
-  const subscriber = new Redis(subscriberConfig);
+  logger.info('[NotificationBroadcast] Creating Redis subscriber with config:', {
+    host: subscriberConfig.host,
+    port: subscriberConfig.port,
+    db: subscriberConfig.db,
+    hasPassword: !!subscriberConfig.password
+  });
+
+  let subscriber: any;
+  try {
+    subscriber = new Redis(subscriberConfig);
+  } catch (createError) {
+    logger.error('[NotificationBroadcast] Failed to create Redis instance:', createError);
+    return;
+  }
 
   subscriber.on('error', (err: any) => {
-    logger.error('Redis subscriber error:', err.message);
+    logger.error('[NotificationBroadcast] Redis subscriber error:', err.message);
   });
 
   subscriber.on('connect', () => {
-    logger.info('✅ Redis notification subscriber connected');
+    logger.info('✅ [NotificationBroadcast] Redis notification subscriber connected');
+  });
+
+  subscriber.on('ready', () => {
+    logger.info('✅ [NotificationBroadcast] Redis notification subscriber ready');
   });
 
   // Subscribe to notifications channel using ioredis pattern
   try {
+    logger.info('[NotificationBroadcast] Subscribing to notifications:broadcast...');
     await subscriber.subscribe('notifications:broadcast');
-    logger.info('✅ Subscribed to Redis notifications:broadcast channel');
-  } catch (err) {
-    logger.error('❌ Failed to subscribe to notifications channel:', err);
+    logger.info('✅ [NotificationBroadcast] Subscribed to Redis notifications:broadcast channel');
+  } catch (err: any) {
+    logger.error('❌ [NotificationBroadcast] Failed to subscribe:', err.message || err);
     return;
   }
 
