@@ -55,6 +55,7 @@ import {
 } from 'lucide-react';
 import ThemeToggle from '@/components/ThemeToggle';
 import NotificationCenter from '@/components/NotificationCenter';
+import { NotificationPanel } from '@/components/NotificationPanel';
 import { getAppSettings } from '@/lib/api/settings';
 import { API_BASE_URL } from '@/config/api.config';
 import { safeJsonParse } from '@/lib/auth-fetch';
@@ -548,6 +549,9 @@ export default function Header() {
           <div className="flex items-center gap-2">
             {/* Theme Toggle */}
             <ThemeToggle />
+
+            {/* Real-time Notification Panel (Redis-based) */}
+            <NotificationPanel />
 
             {/* Notification Center */}
             <NotificationCenter />
