@@ -3218,11 +3218,13 @@ router.post('/reset', async (req: Request, res: Response) => {
   try {
     console.log(' Resetting migration progress...');
 
-    // Clear Redis progress data
+    // Clear ALL Redis progress data (including v2 keys)
     await redis.del('embedding:progress');
     await redis.del('embedding:status');
     await redis.del('embedding:startTime');
     await redis.del('embedding:lastUpdate');
+    await redis.del('embedding:selected_tables');
+    await redis.del('migration:progress');
 
     // Clear any stuck processes in database
     await lsembPool.query(`
