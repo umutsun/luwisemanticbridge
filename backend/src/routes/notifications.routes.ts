@@ -176,12 +176,10 @@ export function setupNotificationBroadcast(wss: any) {
   // Subscribe to Redis pub/sub channel
   const subscriber = redis.duplicate();
 
-  subscriber.subscribe('notifications:broadcast', (err) => {
-    if (err) {
-      logger.error('Failed to subscribe to notifications channel:', err);
-      return;
-    }
+  subscriber.subscribe('notifications:broadcast').then(() => {
     logger.info('✅ Subscribed to Redis notifications:broadcast channel');
+  }).catch((err) => {
+    logger.error('Failed to subscribe to notifications channel:', err);
   });
 
   subscriber.on('message', (channel, message) => {
