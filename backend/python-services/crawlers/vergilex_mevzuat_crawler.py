@@ -1,14 +1,24 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Vergilex Mevzuat Crawler
-Crawls laws (Kanunlar) and general communiques (Genel Tebligler) from mevzuat.gov.tr
+Vergilex Mevzuat Multi-Category Crawler
+Crawls all legislation types from mevzuat.gov.tr for Vergilex platform
 Uses Playwright for dynamic content and iframe handling
 
+Categories (MevzuatTur):
+- kanunlar (1): Kanunlar (Laws)
+- tuzukler (2): Tüzükler (Old-style Regulations)
+- yonetmelikler (3): Yönetmelikler (Regulations)
+- khk (4): Kanun Hükmünde Kararnameler (Decree Laws)
+- cbk (6): Cumhurbaşkanlığı Kararnameleri (Presidential Decrees)
+- tebligler (9): Genel Tebliğler (Communiques)
+
 Usage:
-  python vergilex_mevzuat_crawler.py [kanunlar|tebligler|all] [start_index]
-  python vergilex_mevzuat_crawler.py --update all          # Update mode
-  python vergilex_mevzuat_crawler.py --force kanunlar      # Force mode
+  python vergilex_mevzuat_crawler.py kanunlar                 # Crawl laws
+  python vergilex_mevzuat_crawler.py tebligler                # Crawl communiques
+  python vergilex_mevzuat_crawler.py yonetmelikler --force    # Force recrawl regulations
+  python vergilex_mevzuat_crawler.py all                      # Crawl all categories
+  python vergilex_mevzuat_crawler.py --list                   # List available categories
 """
 
 import asyncio
@@ -30,20 +40,6 @@ if sys.platform == 'win32':
 
 import redis
 
-
-def compute_content_hash(content: str) -> str:
-    """Compute MD5 hash of content for change detection"""
-    return hashlib.md5(content.encode('utf-8')).hexdigest()
-
-
-def is_rate_limited(page_content: str, page_title: str = "") -> bool:
-    """Check if page indicates rate limiting"""
-    check_text = (page_content + " " + page_title).upper()
-    for pattern in RATE_LIMIT_PATTERNS:
-        if pattern.upper() in check_text:
-            return True
-    return False
-
 try:
     from playwright.async_api import async_playwright, TimeoutError as PlaywrightTimeoutError
 except ImportError:
@@ -52,24 +48,26 @@ except ImportError:
     print("[ERROR] Then: playwright install chromium")
     sys.exit(1)
 
+try:
+    from bs4 import BeautifulSoup
+except ImportError:
+    print("[ERROR] BeautifulSoup not installed")
+    print("[ERROR] Install: pip install beautifulsoup4")
+    sys.exit(1)
+
 # --- Configuration ---
-CRAWLER_NAME = "vergilex_mevzuat"
 REDIS_HOST = os.getenv('REDIS_HOST', 'localhost')
 REDIS_PORT = int(os.getenv('REDIS_PORT', 6379))
 REDIS_DB = int(os.getenv('REDIS_DB', 2))  # Vergilex uses DB 2
-REDIS_KEY_PREFIX = f'crawl4ai:{CRAWLER_NAME}'
 
-# State file for resume support
-STATE_FILE = os.path.join(os.path.dirname(__file__), f'{CRAWLER_NAME}_state.json')
+# Base directory for docs
+DOCS_DIR = os.path.join(os.path.dirname(__file__), '..', '..', '..', 'docs')
 
-# Link file path
-LINKS_FILE = os.path.join(os.path.dirname(__file__), '..', '..', '..', 'docs', 'MEVZUATGOVTR-KANUN LINKLERI.html')
+# Rate limiting - mevzuat.gov.tr is sensitive to rate limits
+MIN_DELAY = 25
+MAX_DELAY = 40
 
-# Rate limiting - significantly increased to avoid mevzuat.gov.tr rate limits
-MIN_DELAY = 30
-MAX_DELAY = 45
-
-# Rate limit detection patterns - be specific to avoid false positives
+# Rate limit detection patterns
 RATE_LIMIT_PATTERNS = [
     'ÇOK FAZLA İSTEK',
     'TOO MANY REQUESTS',
@@ -82,9 +80,62 @@ RATE_LIMIT_PATTERNS = [
 ]
 
 # Exponential backoff settings
-RATE_LIMIT_INITIAL_WAIT = 60  # seconds
-RATE_LIMIT_MAX_WAIT = 600  # 10 minutes max
+RATE_LIMIT_INITIAL_WAIT = 60
+RATE_LIMIT_MAX_WAIT = 600
 RATE_LIMIT_MAX_RETRIES = 5
+
+# Mevzuat Category Configuration
+MEVZUAT_CATEGORIES = {
+    'kanunlar': {
+        'name': 'Laws',
+        'name_tr': 'Kanunlar',
+        'crawler_name': 'vergilex_mevzuat_kanunlar',
+        'mevzuat_tur': '1',
+        'links_file': 'MEVZUATGOVTR-KANUNLAR_LINKLERI.json',
+        'source_type': 'kanun'
+    },
+    'tuzukler': {
+        'name': 'Regulations (Old)',
+        'name_tr': 'Tüzükler',
+        'crawler_name': 'vergilex_mevzuat_tuzukler',
+        'mevzuat_tur': '2',
+        'links_file': 'MEVZUATGOVTR-TUZUKLER_LINKLERI.json',
+        'source_type': 'tuzuk'
+    },
+    'yonetmelikler': {
+        'name': 'Regulations',
+        'name_tr': 'Yönetmelikler',
+        'crawler_name': 'vergilex_mevzuat_yonetmelikler',
+        'mevzuat_tur': '3',
+        'links_file': 'MEVZUATGOVTR-YONETMELIKLER_LINKLERI.json',
+        'source_type': 'yonetmelik'
+    },
+    'khk': {
+        'name': 'Decree Laws',
+        'name_tr': 'Kanun Hükmünde Kararnameler',
+        'crawler_name': 'vergilex_mevzuat_khk',
+        'mevzuat_tur': '4',
+        'links_file': 'MEVZUATGOVTR-KHK_LINKLERI.json',
+        'source_type': 'khk'
+    },
+    'cbk': {
+        'name': 'Presidential Decrees',
+        'name_tr': 'Cumhurbaşkanlığı Kararnameleri',
+        'crawler_name': 'vergilex_mevzuat_cbk',
+        'mevzuat_tur': '6',
+        'links_file': 'MEVZUATGOVTR-CBK_LINKLERI.json',
+        'source_type': 'cbk'
+    },
+    'tebligler': {
+        'name': 'Communiques',
+        'name_tr': 'Genel Tebliğler',
+        'crawler_name': 'vergilex_mevzuat_tebligler',
+        'mevzuat_tur': '9',
+        'links_file': 'MEVZUATGOVTR-TEBLIGLER_LINKLERI.json',
+        'source_type': 'teblig'
+    }
+}
+
 # --- End of Configuration ---
 
 # Redis connection
@@ -108,55 +159,81 @@ def clean_title(title: str) -> str:
         r'PAYLAŞ',
         r'Üyelik\s*Bilgileri',
         r'Anasayfa',
+        r'Mevzuat Bilgi Sistemi',
     ]
     for pattern in ui_patterns:
         title = re.sub(pattern, '', title, flags=re.IGNORECASE)
 
-    # Fix spacing: add space before capital letters following lowercase
-    # "KanunNumarası" -> "Kanun Numarası"
+    # Fix spacing
     title = re.sub(r'([a-zçğıöşü])([A-ZÇĞİÖŞÜ])', r'\1 \2', title)
-
-    # Fix spacing: add space between number and text
-    # "213Kanun" -> "213 Kanun", "Kanun213" -> "Kanun 213"
     title = re.sub(r'(\d)([A-ZÇĞİÖŞÜa-zçğıöşü])', r'\1 \2', title)
     title = re.sub(r'([A-ZÇĞİÖŞÜa-zçğıöşü])(\d)', r'\1 \2', title)
 
-    # Remove duplicate consecutive words (case insensitive)
-    # "KANUNUKanun" -> "KANUNU"
+    # Remove duplicate consecutive words
     words = title.split()
     cleaned_words = []
     for i, word in enumerate(words):
         if i == 0:
             cleaned_words.append(word)
         else:
-            # Check if this word is similar to previous (ignoring case)
             prev_word = cleaned_words[-1].upper()
             curr_word = word.upper()
-            # If current word is contained in previous or vice versa, skip
             if curr_word in prev_word or prev_word in curr_word:
                 continue
             cleaned_words.append(word)
 
     title = ' '.join(cleaned_words)
-
-    # Normalize whitespace
     title = re.sub(r'\s+', ' ', title).strip()
-
-    # Remove leading/trailing punctuation
     title = re.sub(r'^[\s\-:.,/×]+|[\s\-:.,/×]+$', '', title)
 
     return title
 
 
-def load_links_from_file(filepath: str) -> dict:
-    """Load URLs from the links file, categorized by type"""
-    result = {
-        'kanunlar': [],
-        'tebligler': []
-    }
+def compute_content_hash(content: str) -> str:
+    """Compute MD5 hash of content for change detection"""
+    return hashlib.md5(content.encode('utf-8')).hexdigest()
 
+
+def is_rate_limited(page_content: str, page_title: str = "") -> bool:
+    """Check if page indicates rate limiting"""
+    check_text = (page_content + " " + page_title).upper()
+    for pattern in RATE_LIMIT_PATTERNS:
+        if pattern.upper() in check_text:
+            return True
+    return False
+
+
+def load_links_from_json(filepath: str) -> list:
+    """Load URLs from JSON links file"""
+    links = []
     try:
-        # Try different encodings
+        if not os.path.exists(filepath):
+            print(f"[WARN] Links file not found: {filepath}")
+            return links
+
+        with open(filepath, 'r', encoding='utf-8') as f:
+            data = json.load(f)
+
+        if 'links' in data:
+            for link_item in data['links']:
+                if isinstance(link_item, dict) and 'url' in link_item:
+                    links.append(link_item['url'])
+                elif isinstance(link_item, str):
+                    links.append(link_item)
+
+        print(f"[INFO] Loaded {len(links)} links from {filepath}")
+    except Exception as e:
+        print(f"[ERROR] Failed to load links from JSON: {e}")
+    return links
+
+
+def load_links_from_html(filepath: str, category_config: dict) -> list:
+    """Load URLs from HTML links file (legacy support)"""
+    links = []
+    try:
+        if not os.path.exists(filepath):
+            return links
+
         content = None
         for encoding in ['utf-8', 'utf-8-sig', 'latin-1', 'cp1254']:
             try:
@@ -167,92 +244,108 @@ def load_links_from_file(filepath: str) -> dict:
                 continue
 
         if not content:
-            print(f"[ERROR] Could not read file with any encoding")
-            return result
+            return links
 
-        # Split by sections
-        lines = content.split('\n')
-        current_section = None
+        mevzuat_tur = category_config['mevzuat_tur']
 
-        for line in lines:
-            line = line.strip()
+        # Extract URLs
+        url_pattern = r'https?://[^\s<>"\']+mevzuat\.gov\.tr[^\s<>"\']*'
+        found_urls = re.findall(url_pattern, content)
 
-            # Detect section headers
-            if 'KANUNLAR' in line.upper():
-                current_section = 'kanunlar'
-                continue
-            elif 'TEBLİĞ' in line.upper() or 'TEBLIG' in line.upper():
-                current_section = 'tebligler'
-                continue
+        for url in found_urls:
+            url = url.strip().replace('&amp;', '&')
+            # Filter by MevzuatTur
+            if f'MevzuatTur={mevzuat_tur}' in url and url not in links:
+                links.append(url)
 
-            # Extract URLs
-            if 'mevzuat.gov.tr' in line:
-                # Clean the URL
-                url = line.strip()
-                # Handle HTML entities
-                url = url.replace('&amp;', '&')
-
-                if 'MevzuatFihristDetayIframe' in url:
-                    if url not in result['kanunlar']:
-                        result['kanunlar'].append(url)
-                elif 'MevzuatNo=' in url and 'MevzuatTur=9' in url:
-                    if url not in result['tebligler']:
-                        result['tebligler'].append(url)
-
+        print(f"[INFO] Loaded {len(links)} links from HTML: {filepath}")
     except Exception as e:
-        print(f"[ERROR] Failed to load links: {e}")
+        print(f"[ERROR] Failed to load links from HTML: {e}")
+    return links
 
-    return result
 
-
-def save_state(state: dict):
+def save_state(state: dict, category: str):
     """Save crawler state for resume"""
+    state_file = os.path.join(os.path.dirname(__file__), f'vergilex_mevzuat_{category}_state.json')
     try:
-        with open(STATE_FILE, 'w', encoding='utf-8') as f:
+        with open(state_file, 'w', encoding='utf-8') as f:
             json.dump(state, f, ensure_ascii=False, indent=2)
     except Exception as e:
         print(f"[ERROR] Failed to save state: {e}")
 
 
-def load_state() -> dict:
+def load_state(category: str) -> dict:
     """Load crawler state"""
+    state_file = os.path.join(os.path.dirname(__file__), f'vergilex_mevzuat_{category}_state.json')
     try:
-        if os.path.exists(STATE_FILE):
-            with open(STATE_FILE, 'r', encoding='utf-8') as f:
+        if os.path.exists(state_file):
+            with open(state_file, 'r', encoding='utf-8') as f:
                 return json.load(f)
     except:
         pass
-    return {
-        'completed_kanunlar': [],
-        'completed_tebligler': [],
-        'failed': [],
-        'stats': {'kanunlar': 0, 'tebligler': 0, 'failed': 0}
+    return {'completed': [], 'failed': [], 'stats': {'success': 0, 'failed': 0, 'updated': 0, 'unchanged': 0}}
+
+
+def set_crawler_running(category_config: dict, total_links: int):
+    """Set crawler running status in Redis for UI"""
+    job_data = {
+        "jobId": f"mevzuat_{category_config['source_type']}_{datetime.now().strftime('%Y%m%d_%H%M%S')}",
+        "startedAt": datetime.now(timezone.utc).isoformat(),
+        "status": "running",
+        "category": category_config['name_tr'],
+        "totalLinks": total_links
     }
+    r.set(f"crawler_running:{category_config['crawler_name']}", json.dumps(job_data))
 
 
-class MevzuatCrawler:
-    def __init__(self, links: dict, doc_type: str = 'all', start_index: int = 0):
+def clear_crawler_running(category_config: dict):
+    """Clear crawler running status"""
+    r.delete(f"crawler_running:{category_config['crawler_name']}")
+
+
+class MevzuatCategoryCrawler:
+    def __init__(self, category: str, links: list, start_index: int = 0,
+                 force_mode: bool = False, update_mode: bool = False):
+        self.category = category
+        self.category_config = MEVZUAT_CATEGORIES[category]
         self.links = links
-        self.doc_type = doc_type  # 'kanunlar', 'tebligler', or 'all'
         self.start_index = start_index
-        self.state = load_state()
+        self.force_mode = force_mode
+        self.update_mode = update_mode
+        self.state = load_state(category)
+        self.redis_prefix = f"crawl4ai:{self.category_config['crawler_name']}"
 
-    async def extract_kanun_content(self, page, url: str) -> dict:
-        """Extract law content from mevzuat.gov.tr iframe page"""
+        # Reset state for force mode
+        if force_mode:
+            self.state = {'completed': [], 'failed': [], 'stats': {'success': 0, 'failed': 0, 'updated': 0, 'unchanged': 0}}
+
+    def _convert_to_iframe_url(self, url: str) -> str:
+        """Convert URL to iframe format for better content extraction"""
+        params = {}
+        if '?' in url:
+            query = url.split('?')[1]
+            for param in query.split('&'):
+                if '=' in param:
+                    key, value = param.split('=', 1)
+                    params[key] = value
+
+        mevzuat_no = params.get('MevzuatNo', '')
+        mevzuat_tur = params.get('MevzuatTur', self.category_config['mevzuat_tur'])
+        mevzuat_tertip = params.get('MevzuatTertip', '5')
+
+        iframe_url = f"https://mevzuat.gov.tr/anasayfa/MevzuatFihristDetayIframe?MevzuatTur={mevzuat_tur}&MevzuatNo={mevzuat_no}&MevzuatTertip={mevzuat_tertip}"
+        return iframe_url
+
+    async def extract_content(self, page, url: str) -> dict:
+        """Extract content from mevzuat.gov.tr page"""
         try:
-            # Wait for page to load
             await page.wait_for_load_state('networkidle', timeout=20000)
             await asyncio.sleep(2)
 
             content_data = {
                 'title': '',
-                'mevzuat_no': '',
-                'mevzuat_tur': '',
-                'kabul_tarihi': '',
-                'resmi_gazete_tarihi': '',
-                'resmi_gazete_sayisi': '',
-                'maddeler': [],
-                'content': ''
+                'content': '',
+                'metadata': {}
             }
 
             # Extract parameters from URL
@@ -264,14 +357,13 @@ class MevzuatCrawler:
                         key, value = param.split('=', 1)
                         params[key] = value
 
-            content_data['mevzuat_no'] = params.get('MevzuatNo', '')
-            content_data['mevzuat_tur'] = params.get('MevzuatTur', '')
+            content_data['metadata']['mevzuat_no'] = params.get('MevzuatNo', '')
+            content_data['metadata']['mevzuat_tur'] = params.get('MevzuatTur', '')
+            content_data['metadata']['mevzuat_tertip'] = params.get('MevzuatTertip', '')
 
-            # This page uses iframe - try to access iframe content
-            # First check if there's an iframe
-            iframe_element = await page.query_selector('iframe')
-
+            # Check for iframe
             target_page = page
+            iframe_element = await page.query_selector('iframe')
             if iframe_element:
                 try:
                     frame = await iframe_element.content_frame()
@@ -281,19 +373,10 @@ class MevzuatCrawler:
                 except:
                     pass
 
-            # Get title - try multiple strategies
+            # Get title
             title_selectors = [
-                'h1',
-                'h2',
-                '.baslik',
-                '.title',
-                '[class*="baslik"]',
-                '.kanun-adi',
-                '#icerik h1',
-                '#icerik h2',
-                '.mevzuat-baslik',
-                'div[class*="kanun"] h1',
-                'div[class*="kanun"] h2'
+                'h1', 'h2', '.baslik', '.title', '[class*="baslik"]',
+                '.kanun-adi', '#icerik h1', '#icerik h2', '.mevzuat-baslik'
             ]
 
             for selector in title_selectors:
@@ -301,150 +384,15 @@ class MevzuatCrawler:
                     element = await target_page.query_selector(selector)
                     if element:
                         title = await element.inner_text()
-                        # Skip generic titles
                         if title and len(title) > 10 and 'Mevzuat Bilgi Sistemi' not in title:
                             content_data['title'] = clean_title(title)
                             break
                 except:
                     continue
 
-            # Extract metadata
-            meta_patterns = {
-                'kabul_tarihi': [r'Kabul\s*Tarihi\s*[:\s]*(\d{1,2}[./]\d{1,2}[./]\d{4})', r'(\d{1,2}[./]\d{1,2}[./]\d{4})'],
-                'resmi_gazete_tarihi': [r'Resmî?\s*Gazete\s*Tarihi\s*[:\s]*(\d{1,2}[./]\d{1,2}[./]\d{4})'],
-                'resmi_gazete_sayisi': [r'Resmî?\s*Gazete\s*Sayısı\s*[:\s]*(\d+)']
-            }
-
-            # Get all text content
+            # Get body content
             body_html = ""
             try:
-                body = await target_page.query_selector('body')
-                if body:
-                    body_html = await body.inner_html()
-            except:
-                pass
-
-            if body_html:
-                from bs4 import BeautifulSoup
-                soup = BeautifulSoup(body_html, 'html.parser')
-
-                # Remove scripts and styles
-                for tag in soup(['script', 'style', 'nav', 'header', 'footer']):
-                    tag.decompose()
-
-                full_text = soup.get_text(' ', strip=True)
-
-                # Extract metadata
-                for field, patterns in meta_patterns.items():
-                    for pattern in patterns:
-                        match = re.search(pattern, full_text, re.IGNORECASE)
-                        if match:
-                            content_data[field] = match.group(1)
-                            break
-
-                # If still no title, extract from content using patterns
-                if not content_data['title'] or content_data['title'] == 'Mevzuat Bilgi Sistemi':
-                    # Common law name patterns
-                    title_patterns = [
-                        # Full law names ending with KANUNU/KANUN
-                        r'([A-ZÇĞİÖŞÜ][A-ZÇĞİÖŞÜa-zçğıöşü\s]+(?:KANUNU|KANUN))',
-                        # Law names with number
-                        r'(\d+\s*(?:SAYILI|Sayılı)\s+[A-ZÇĞİÖŞÜa-zçğıöşü\s]+(?:KANUNU?|Kanunu?))',
-                        # Tebliğ names
-                        r'([A-ZÇĞİÖŞÜ][A-ZÇĞİÖŞÜa-zçğıöşü\s]+(?:TEBLİĞİ?|Tebliği?))',
-                        # Yönetmelik names
-                        r'([A-ZÇĞİÖŞÜ][A-ZÇĞİÖŞÜa-zçğıöşü\s]+(?:YÖNETMELİĞİ?|Yönetmeliği?))',
-                    ]
-
-                    for pattern in title_patterns:
-                        match = re.search(pattern, full_text[:2000])
-                        if match:
-                            extracted_title = clean_title(match.group(1))
-                            # Clean and validate
-                            if len(extracted_title) > 15 and len(extracted_title) < 200:
-                                if 'Mevzuat Bilgi Sistemi' not in extracted_title:
-                                    content_data['title'] = extracted_title
-                                    break
-
-                    # Last resort: use mevzuat_no as title
-                    if not content_data['title'] or content_data['title'] == 'Mevzuat Bilgi Sistemi':
-                        mevzuat_no = content_data.get('mevzuat_no', '')
-                        if mevzuat_no:
-                            content_data['title'] = f"Kanun No: {mevzuat_no}"
-
-                # Extract articles (Madde)
-                madde_pattern = r'(Madde\s*\d+[^M]*?)(?=Madde\s*\d+|$)'
-                maddeler = re.findall(madde_pattern, full_text, re.DOTALL | re.IGNORECASE)
-
-                if maddeler:
-                    content_data['maddeler'] = [m.strip()[:2000] for m in maddeler[:100]]  # Limit articles
-
-                # Full content
-                paragraphs = []
-                for tag in soup.find_all(['p', 'div', 'article', 'section', 'td']):
-                    text = tag.get_text(strip=True)
-                    if text and len(text) > 30:
-                        paragraphs.append(text)
-
-                # Deduplicate
-                seen = set()
-                unique = []
-                for p in paragraphs:
-                    key = p[:80]
-                    if key not in seen:
-                        seen.add(key)
-                        unique.append(p)
-
-                content_data['content'] = '\n\n'.join(unique[:100])
-
-            return content_data
-
-        except Exception as e:
-            print(f"  [ERROR] Kanun extraction failed: {str(e)[:100]}")
-            return None
-
-    async def extract_teblig_content(self, page, url: str) -> dict:
-        """Extract communique content from mevzuat.gov.tr"""
-        try:
-            await page.wait_for_load_state('networkidle', timeout=20000)
-            await asyncio.sleep(2)
-
-            content_data = {
-                'title': '',
-                'mevzuat_no': '',
-                'resmi_gazete_tarihi': '',
-                'resmi_gazete_sayisi': '',
-                'content': ''
-            }
-
-            # Extract parameters from URL
-            params = {}
-            if '?' in url:
-                query = url.split('?')[1]
-                for param in query.split('&'):
-                    if '=' in param:
-                        key, value = param.split('=', 1)
-                        params[key] = value
-
-            content_data['mevzuat_no'] = params.get('MevzuatNo', '')
-
-            # Check if there's an iframe (like kanun pages) and extract content from it
-            target_page = page
-            iframe_element = await page.query_selector('iframe')
-            if iframe_element:
-                try:
-                    frame = await iframe_element.content_frame()
-                    if frame:
-                        await frame.wait_for_load_state('networkidle', timeout=15000)
-                        target_page = frame
-                        print("  [INFO] Found iframe, extracting content from frame")
-                except Exception as e:
-                    print(f"  [WARN] Could not access iframe: {str(e)[:50]}")
-
-            # Get page content from target (either main page or iframe)
-            body_html = ""
-            try:
-                # Try main content selectors
                 for selector in ['main', 'article', '.content', '.mevzuat-icerik', '#icerik', '.icerik', 'body']:
                     element = await target_page.query_selector(selector)
                     if element:
@@ -456,7 +404,6 @@ class MevzuatCrawler:
                 pass
 
             if body_html:
-                from bs4 import BeautifulSoup
                 soup = BeautifulSoup(body_html, 'html.parser')
 
                 # Remove unwanted elements
@@ -465,51 +412,46 @@ class MevzuatCrawler:
 
                 full_text = soup.get_text(' ', strip=True)
 
-                # Extract title - try multiple strategies
-                h1 = soup.find('h1')
-                if h1:
-                    title_text = h1.get_text(strip=True)
-                    if title_text and 'Mevzuat Bilgi Sistemi' not in title_text:
-                        content_data['title'] = clean_title(title_text)
+                # Extract metadata
+                meta_patterns = {
+                    'kabul_tarihi': r'Kabul\s*Tarihi\s*[:\s]*(\d{1,2}[./]\d{1,2}[./]\d{4})',
+                    'resmi_gazete_tarihi': r'Resmî?\s*Gazete\s*Tarihi\s*[:\s]*(\d{1,2}[./]\d{1,2}[./]\d{4})',
+                    'resmi_gazete_sayisi': r'Resmî?\s*Gazete\s*Sayısı\s*[:\s]*(\d+)'
+                }
 
-                # If still no title, extract from content
+                for field, pattern in meta_patterns.items():
+                    match = re.search(pattern, full_text, re.IGNORECASE)
+                    if match:
+                        content_data['metadata'][field] = match.group(1)
+
+                # Extract title if not found
                 if not content_data['title'] or content_data['title'] == 'Mevzuat Bilgi Sistemi':
-                    title_patterns = [
-                        # Tebliğ with full name
-                        r'([A-ZÇĞİÖŞÜ][A-ZÇĞİÖŞÜa-zçğıöşü\s,]+(?:TEBLİĞİ?|Tebliği?)(?:\s*\([^)]+\))?)',
-                        # Genel Tebliğ
-                        r'((?:GENEL\s+)?TEBLİĞ[^.]{10,100})',
-                        # Sirküler
-                        r'([A-ZÇĞİÖŞÜ][A-ZÇĞİÖŞÜa-zçğıöşü\s]+(?:SİRKÜLERİ?|Sirküleri?))',
-                    ]
-
+                    title_patterns = self._get_title_patterns()
                     for pattern in title_patterns:
                         match = re.search(pattern, full_text[:2000])
                         if match:
                             extracted_title = clean_title(match.group(1))
-                            if len(extracted_title) > 15 and len(extracted_title) < 250:
+                            if len(extracted_title) > 15 and len(extracted_title) < 200:
                                 if 'Mevzuat Bilgi Sistemi' not in extracted_title:
                                     content_data['title'] = extracted_title
                                     break
 
-                    # Last resort: use mevzuat_no
-                    if not content_data['title'] or content_data['title'] == 'Mevzuat Bilgi Sistemi':
-                        mevzuat_no = content_data.get('mevzuat_no', '')
+                    # Fallback to mevzuat_no
+                    if not content_data['title']:
+                        mevzuat_no = content_data['metadata'].get('mevzuat_no', '')
                         if mevzuat_no:
-                            content_data['title'] = f"Tebliğ No: {mevzuat_no}"
+                            content_data['title'] = f"{self.category_config['name_tr']} No: {mevzuat_no}"
 
-                # Extract dates
-                rg_tarih = re.search(r'Resmî?\s*Gazete\s*Tarihi\s*[:\s]*(\d{1,2}[./]\d{1,2}[./]\d{4})', full_text)
-                if rg_tarih:
-                    content_data['resmi_gazete_tarihi'] = rg_tarih.group(1)
+                # Extract articles (Madde)
+                madde_pattern = r'(Madde\s*\d+[^M]*?)(?=Madde\s*\d+|$)'
+                maddeler = re.findall(madde_pattern, full_text, re.DOTALL | re.IGNORECASE)
+                if maddeler:
+                    content_data['metadata']['maddeler'] = [m.strip()[:2000] for m in maddeler[:100]]
+                    content_data['metadata']['madde_sayisi'] = len(maddeler)
 
-                rg_sayi = re.search(r'Resmî?\s*Gazete\s*Sayısı\s*[:\s]*(\d+)', full_text)
-                if rg_sayi:
-                    content_data['resmi_gazete_sayisi'] = rg_sayi.group(1)
-
-                # Extract content
+                # Full content
                 paragraphs = []
-                for tag in soup.find_all(['p', 'div', 'article']):
+                for tag in soup.find_all(['p', 'div', 'article', 'section', 'td']):
                     text = tag.get_text(strip=True)
                     if text and len(text) > 30:
                         paragraphs.append(text)
@@ -524,37 +466,63 @@ class MevzuatCrawler:
 
                 content_data['content'] = '\n\n'.join(unique[:100])
 
-            # Fallback: get title from page
-            if not content_data['title']:
-                content_data['title'] = await target_page.title() if target_page else await page.title() or ''
-
-            # Validate content - detect and mark invalid pages
-            content = content_data.get('content', '')
-            if content:
-                # Check for common error page patterns
+                # Validate content - detect error pages
                 error_patterns = [
                     'Kanunlar Fihristindeyapılan aramada',
                     'Kanunlar Fihristi',
                     'aramada çıkan Kanunun',
                     'butonundan arama yapılması gerekmektedir'
                 ]
-                is_error_page = any(pattern in content for pattern in error_patterns)
+                is_error_page = any(pattern in content_data['content'] for pattern in error_patterns)
                 if is_error_page:
-                    print("  [WARN] Detected error/info page content, marking as failed")
+                    print("  [WARN] Detected error/info page")
                     return None
 
             return content_data
 
         except Exception as e:
-            print(f"  [ERROR] Teblig extraction failed: {str(e)[:100]}")
+            print(f"  [ERROR] Content extraction failed: {str(e)[:100]}")
             return None
 
-    async def process_kanun(self, page, url: str, index: int, retry_count: int = 0) -> bool:
-        """Process a single law URL with rate limit handling"""
-        if url in self.state['completed_kanunlar']:
-            print(f"[K-{index}] SKIP (already done)")
-            return True
+    def _get_title_patterns(self) -> list:
+        """Get category-specific title patterns"""
+        category = self.category
 
+        if category == 'kanunlar':
+            return [
+                r'([A-ZÇĞİÖŞÜ][A-ZÇĞİÖŞÜa-zçğıöşü\s]+(?:KANUNU|KANUN))',
+                r'(\d+\s*(?:SAYILI|Sayılı)\s+[A-ZÇĞİÖŞÜa-zçğıöşü\s]+(?:KANUNU?|Kanunu?))',
+            ]
+        elif category == 'tebligler':
+            return [
+                r'([A-ZÇĞİÖŞÜ][A-ZÇĞİÖŞÜa-zçğıöşü\s,]+(?:TEBLİĞİ?|Tebliği?)(?:\s*\([^)]+\))?)',
+                r'((?:GENEL\s+)?TEBLİĞ[^.]{10,100})',
+            ]
+        elif category == 'yonetmelikler':
+            return [
+                r'([A-ZÇĞİÖŞÜ][A-ZÇĞİÖŞÜa-zçğıöşü\s]+(?:YÖNETMELİĞİ?|Yönetmeliği?))',
+            ]
+        elif category == 'cbk':
+            return [
+                r'([A-ZÇĞİÖŞÜ][A-ZÇĞİÖŞÜa-zçğıöşü\s]+(?:KARARNAMESİ?|Kararnamesi?))',
+                r'(CUMHURBAŞKANLIĞI\s+KARARNAMESİ[^.]{10,100})',
+            ]
+        elif category == 'khk':
+            return [
+                r'([A-ZÇĞİÖŞÜ][A-ZÇĞİÖŞÜa-zçğıöşü\s]+(?:HÜKMÜNDE\s+KARARNAME|Hükmünde\s+Kararname))',
+                r'(\d+\s*(?:SAYILI|Sayılı)\s+KANUN\s+HÜKMÜNDE\s+KARARNAME)',
+            ]
+        elif category == 'tuzukler':
+            return [
+                r'([A-ZÇĞİÖŞÜ][A-ZÇĞİÖŞÜa-zçğıöşü\s]+(?:TÜZÜĞÜ?|Tüzüğü?))',
+            ]
+        else:
+            return [
+                r'([A-ZÇĞİÖŞÜ][A-ZÇĞİÖŞÜa-zçğıöşü\s]{15,200})',
+            ]
+
+    async def process_url(self, page, url: str, index: int, retry_count: int = 0) -> bool:
+        """Process a single URL"""
         # Extract mevzuat_no for Redis key
         mevzuat_no = ''
         if 'MevzuatNo=' in url:
@@ -562,134 +530,32 @@ class MevzuatCrawler:
             if match:
                 mevzuat_no = match.group(1)
 
-        redis_key = f"{REDIS_KEY_PREFIX}:kanun_{mevzuat_no}" if mevzuat_no else f"{REDIS_KEY_PREFIX}:kanun_{index}"
+        redis_key = f"{self.redis_prefix}:{mevzuat_no}" if mevzuat_no else f"{self.redis_prefix}:{index}"
 
+        # Check existing data
+        existing_data = None
+        existing_hash = None
         if r.exists(redis_key):
-            print(f"[K-{index}] SKIP (in Redis): kanun_{mevzuat_no}")
-            self.state['completed_kanunlar'].append(url)
-            return True
-
-        print(f"\n[KANUN {index}/{len(self.links['kanunlar'])}] MevzuatNo: {mevzuat_no}")
-
-        try:
-            response = await page.goto(url, wait_until='domcontentloaded', timeout=30000)
-
-            if not response:
-                print(f"  [ERROR] No response")
-                self.state['failed'].append(url)
-                return False
-
-            # Check for HTTP 429 rate limit
-            if response.status == 429:
-                return await self._handle_rate_limit_kanun(page, url, index, retry_count, "HTTP 429")
-
-            if response.status >= 400:
-                print(f"  [ERROR] HTTP {response.status}")
-                self.state['failed'].append(url)
-                return False
-
-            # Check page content for rate limit indicators
-            page_title = await page.title() or ""
-            page_text = ""
             try:
-                body = await page.query_selector('body')
-                if body:
-                    page_text = await body.inner_text()
+                existing_data = json.loads(r.get(redis_key))
+                existing_hash = existing_data.get('content_hash')
             except:
                 pass
 
-            if is_rate_limited(page_text, page_title):
-                return await self._handle_rate_limit_kanun(page, url, index, retry_count, "Rate limit page detected")
+        # Skip logic based on mode
+        if not self.force_mode and not self.update_mode:
+            if url in self.state['completed']:
+                print(f"[{index}] SKIP (already done): MevzuatNo={mevzuat_no}")
+                return True
+            if existing_data:
+                print(f"[{index}] SKIP (in Redis): {redis_key}")
+                self.state['completed'].append(url)
+                return True
 
-            content = await self.extract_kanun_content(page, url)
+        print(f"\n[{index}/{len(self.links)}] {'UPDATE' if self.update_mode else 'FORCE' if self.force_mode else 'NEW'}: MevzuatNo={mevzuat_no}")
 
-            if not content:
-                content = {'content': f"İçerik yüklenemedi. URL: {url}"}
-
-            timestamp = datetime.utcnow().isoformat()
-            data = {
-                'title': content.get('title', f'Kanun No: {mevzuat_no}'),
-                'mevzuat_no': mevzuat_no,
-                'mevzuat_tur': 'Kanun',
-                'kabul_tarihi': content.get('kabul_tarihi', ''),
-                'resmi_gazete_tarihi': content.get('resmi_gazete_tarihi', ''),
-                'resmi_gazete_sayisi': content.get('resmi_gazete_sayisi', ''),
-                'maddeler': content.get('maddeler', []),
-                'content': content.get('content', ''),
-                'url': url,
-                'source': 'mevzuat.gov.tr',
-                'source_type': 'kanun',
-                'crawled_at': timestamp,
-                'crawler': CRAWLER_NAME
-            }
-
-            r.set(redis_key, json.dumps(data, ensure_ascii=False, indent=2))
-
-            print(f"  [OK] Saved: {redis_key}")
-            print(f"  Title: {content.get('title', 'N/A')[:60]}...")
-            print(f"  Maddeler: {len(content.get('maddeler', []))}")
-            print(f"  Content: {len(content.get('content', ''))} chars")
-
-            self.state['completed_kanunlar'].append(url)
-            self.state['stats']['kanunlar'] += 1
-            return True
-
-        except PlaywrightTimeoutError:
-            print(f"  [TIMEOUT] Page load timeout")
-            self.state['failed'].append(url)
-            self.state['stats']['failed'] += 1
-            return False
-        except Exception as e:
-            print(f"  [ERROR] {str(e)[:100]}")
-            self.state['failed'].append(url)
-            self.state['stats']['failed'] += 1
-            return False
-
-    def _convert_to_iframe_url(self, url: str) -> str:
-        """Convert regular mevzuat URL to iframe URL format for better content extraction"""
-        # Extract parameters
-        params = {}
-        if '?' in url:
-            query = url.split('?')[1]
-            for param in query.split('&'):
-                if '=' in param:
-                    key, value = param.split('=', 1)
-                    params[key] = value
-
-        mevzuat_no = params.get('MevzuatNo', '')
-        mevzuat_tur = params.get('MevzuatTur', '9')  # 9 for tebliğ
-        mevzuat_tertip = params.get('MevzuatTertip', '5')
-
-        # Build iframe URL (same format as kanunlar)
-        iframe_url = f"https://mevzuat.gov.tr/anasayfa/MevzuatFihristDetayIframe?MevzuatTur={mevzuat_tur}&MevzuatNo={mevzuat_no}&MevzuatTertip={mevzuat_tertip}"
-        return iframe_url
-
-    async def process_teblig(self, page, url: str, index: int, retry_count: int = 0) -> bool:
-        """Process a single communique URL with rate limit handling"""
-        if url in self.state['completed_tebligler']:
-            print(f"[T-{index}] SKIP (already done)")
-            return True
-
-        # Extract mevzuat_no for Redis key
-        mevzuat_no = ''
-        if 'MevzuatNo=' in url:
-            match = re.search(r'MevzuatNo=(\d+)', url)
-            if match:
-                mevzuat_no = match.group(1)
-
-        redis_key = f"{REDIS_KEY_PREFIX}:teblig_{mevzuat_no}" if mevzuat_no else f"{REDIS_KEY_PREFIX}:teblig_{index}"
-
-        if r.exists(redis_key):
-            print(f"[T-{index}] SKIP (in Redis): teblig_{mevzuat_no}")
-            self.state['completed_tebligler'].append(url)
-            return True
-
-        print(f"\n[TEBLİĞ {index}/{len(self.links['tebligler'])}] MevzuatNo: {mevzuat_no}")
-
-        # Try iframe URL first (better content extraction)
-        iframe_url = self._convert_to_iframe_url(url)
-        actual_url = iframe_url
-        print(f"  Trying iframe URL: {iframe_url}")
+        # Convert to iframe URL for better extraction
+        actual_url = self._convert_to_iframe_url(url)
 
         try:
             response = await page.goto(actual_url, wait_until='domcontentloaded', timeout=30000)
@@ -699,16 +565,16 @@ class MevzuatCrawler:
                 self.state['failed'].append(url)
                 return False
 
-            # Check for HTTP 429 rate limit
+            # Check for rate limiting
             if response.status == 429:
-                return await self._handle_rate_limit_teblig(page, url, index, retry_count, "HTTP 429")
+                return await self._handle_rate_limit(page, url, index, retry_count, "HTTP 429")
 
             if response.status >= 400:
                 print(f"  [ERROR] HTTP {response.status}")
                 self.state['failed'].append(url)
                 return False
 
-            # Check page content for rate limit indicators
+            # Check page content for rate limit
             page_title = await page.title() or ""
             page_text = ""
             try:
@@ -719,37 +585,59 @@ class MevzuatCrawler:
                 pass
 
             if is_rate_limited(page_text, page_title):
-                return await self._handle_rate_limit_teblig(page, url, index, retry_count, "Rate limit page detected")
+                return await self._handle_rate_limit(page, url, index, retry_count, "Rate limit detected")
 
-            content = await self.extract_teblig_content(page, actual_url)
+            # Extract content
+            content = await self.extract_content(page, actual_url)
 
-            if not content:
-                content = {'content': f"İçerik yüklenemedi. URL: {actual_url}"}
+            if not content or not content.get('content'):
+                print(f"  [WARN] No content extracted")
+                content = content or {}
+                content['content'] = f"İçerik yüklenemedi. URL: {actual_url}"
 
-            timestamp = datetime.utcnow().isoformat()
+            # Compute content hash
+            new_content_hash = compute_content_hash(content.get('content', ''))
+
+            # Check for changes in update mode
+            if self.update_mode and existing_hash and existing_hash == new_content_hash:
+                print(f"  [UNCHANGED] Content hash matches")
+                self.state['stats']['unchanged'] = self.state['stats'].get('unchanged', 0) + 1
+                self.state['completed'].append(url)
+                return True
+
+            # Build data object
+            timestamp = datetime.now(timezone.utc).isoformat()
             data = {
-                'title': content.get('title', f'Tebliğ No: {mevzuat_no}'),
-                'mevzuat_no': mevzuat_no,
-                'mevzuat_tur': 'Genel Tebliğ',
-                'resmi_gazete_tarihi': content.get('resmi_gazete_tarihi', ''),
-                'resmi_gazete_sayisi': content.get('resmi_gazete_sayisi', ''),
+                'title': content.get('title', f"{self.category_config['name_tr']} No: {mevzuat_no}"),
                 'content': content.get('content', ''),
-                'url': actual_url,  # Use iframe URL for consistency
-                'original_url': url,  # Keep original URL for reference
+                'content_hash': new_content_hash,
+                'url': actual_url,
+                'original_url': url,
                 'source': 'mevzuat.gov.tr',
-                'source_type': 'teblig',
-                'crawled_at': timestamp,
-                'crawler': CRAWLER_NAME
+                'source_type': self.category_config['source_type'],
+                'category': self.category,
+                'category_tr': self.category_config['name_tr'],
+                'metadata': content.get('metadata', {}),
+                'crawled_at': existing_data.get('crawled_at', timestamp) if existing_data else timestamp,
+                'updated_at': timestamp,
+                'crawler': self.category_config['crawler_name']
             }
 
+            # Save to Redis
             r.set(redis_key, json.dumps(data, ensure_ascii=False, indent=2))
 
-            print(f"  [OK] Saved: {redis_key}")
+            # Track stats
+            if existing_data:
+                print(f"  [UPDATED] {redis_key}")
+                self.state['stats']['updated'] = self.state['stats'].get('updated', 0) + 1
+            else:
+                print(f"  [NEW] Saved: {redis_key}")
+                self.state['stats']['success'] += 1
+
             print(f"  Title: {content.get('title', 'N/A')[:60]}...")
             print(f"  Content: {len(content.get('content', ''))} chars")
 
-            self.state['completed_tebligler'].append(url)
-            self.state['stats']['tebligler'] += 1
+            self.state['completed'].append(url)
             return True
 
         except PlaywrightTimeoutError:
@@ -763,52 +651,46 @@ class MevzuatCrawler:
             self.state['stats']['failed'] += 1
             return False
 
-    async def _handle_rate_limit_kanun(self, page, url: str, index: int, retry_count: int, reason: str) -> bool:
-        """Handle rate limiting with exponential backoff for kanun"""
+    async def _handle_rate_limit(self, page, url: str, index: int, retry_count: int, reason: str) -> bool:
+        """Handle rate limiting with exponential backoff"""
         if retry_count >= RATE_LIMIT_MAX_RETRIES:
-            print(f"  [RATE LIMIT] Max retries ({RATE_LIMIT_MAX_RETRIES}) exceeded for {url}")
+            print(f"  [RATE LIMIT] Max retries exceeded for {url}")
             self.state['failed'].append(url)
             self.state['stats']['failed'] += 1
             return False
 
         wait_time = min(RATE_LIMIT_INITIAL_WAIT * (2 ** retry_count), RATE_LIMIT_MAX_WAIT)
-
         print(f"  [RATE LIMIT] {reason}")
-        print(f"  [RATE LIMIT] Waiting {wait_time} seconds before retry {retry_count + 1}/{RATE_LIMIT_MAX_RETRIES}...")
+        print(f"  [RATE LIMIT] Waiting {wait_time}s before retry {retry_count + 1}/{RATE_LIMIT_MAX_RETRIES}...")
 
-        save_state(self.state)
+        save_state(self.state, self.category)
         await asyncio.sleep(wait_time)
 
-        return await self.process_kanun(page, url, index, retry_count + 1)
-
-    async def _handle_rate_limit_teblig(self, page, url: str, index: int, retry_count: int, reason: str) -> bool:
-        """Handle rate limiting with exponential backoff for teblig"""
-        if retry_count >= RATE_LIMIT_MAX_RETRIES:
-            print(f"  [RATE LIMIT] Max retries ({RATE_LIMIT_MAX_RETRIES}) exceeded for {url}")
-            self.state['failed'].append(url)
-            self.state['stats']['failed'] += 1
-            return False
-
-        wait_time = min(RATE_LIMIT_INITIAL_WAIT * (2 ** retry_count), RATE_LIMIT_MAX_WAIT)
-
-        print(f"  [RATE LIMIT] {reason}")
-        print(f"  [RATE LIMIT] Waiting {wait_time} seconds before retry {retry_count + 1}/{RATE_LIMIT_MAX_RETRIES}...")
-
-        save_state(self.state)
-        await asyncio.sleep(wait_time)
-
-        return await self.process_teblig(page, url, index, retry_count + 1)
+        return await self.process_url(page, url, index, retry_count + 1)
 
     async def run(self):
         """Run the crawler"""
+        mode_str = "FORCE" if self.force_mode else "UPDATE" if self.update_mode else "NORMAL"
+
         print(f"\n{'='*60}")
-        print(f"Mevzuat Crawler - Vergilex")
+        print(f"Mevzuat {self.category_config['name_tr']} Crawler - Vergilex")
         print(f"{'='*60}")
-        print(f"Document type: {self.doc_type}")
-        print(f"Kanunlar: {len(self.links['kanunlar'])}")
-        print(f"Tebliğler: {len(self.links['tebligler'])}")
+        print(f"Category: {self.category} ({self.category_config['name_tr']})")
+        print(f"MevzuatTur: {self.category_config['mevzuat_tur']}")
+        print(f"Mode: {mode_str}")
+        print(f"Total links: {len(self.links)}")
+        print(f"Already completed: {len(self.state['completed'])}")
+        print(f"Starting from index: {self.start_index}")
         print(f"Redis DB: {REDIS_DB}")
+        print(f"Redis prefix: {self.redis_prefix}")
         print(f"{'='*60}\n")
+
+        if not self.links:
+            print("[ERROR] No links to crawl!")
+            return
+
+        # Set crawler running status
+        set_crawler_running(self.category_config, len(self.links))
 
         start_time = datetime.now()
 
@@ -827,7 +709,11 @@ class MevzuatCrawler:
                 viewport={'width': 1920, 'height': 1080},
                 user_agent='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
                 locale='tr-TR',
-                timezone_id='Europe/Istanbul'
+                timezone_id='Europe/Istanbul',
+                extra_http_headers={
+                    'Accept-Language': 'tr-TR,tr;q=0.9,en-US;q=0.8,en;q=0.7',
+                    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8'
+                }
             )
 
             page = await context.new_page()
@@ -837,35 +723,17 @@ class MevzuatCrawler:
             """)
 
             try:
-                # Process Kanunlar
-                if self.doc_type in ['kanunlar', 'all']:
-                    print("\n" + "="*40)
-                    print("Processing KANUNLAR")
-                    print("="*40)
+                for i, url in enumerate(self.links[self.start_index:], start=self.start_index):
+                    await self.process_url(page, url, i + 1)
 
-                    for i, url in enumerate(self.links['kanunlar'][self.start_index:], start=self.start_index):
-                        await self.process_kanun(page, url, i + 1)
+                    # Save state periodically
+                    if (i + 1) % 10 == 0:
+                        save_state(self.state, self.category)
+                        print(f"\n[STATE] Saved progress: {i + 1}/{len(self.links)}\n")
 
-                        if (i + 1) % 10 == 0:
-                            save_state(self.state)
-
-                        await asyncio.sleep(random.uniform(MIN_DELAY, MAX_DELAY))
-
-                # Process Tebligler
-                if self.doc_type in ['tebligler', 'all']:
-                    print("\n" + "="*40)
-                    print("Processing TEBLİĞLER")
-                    print("="*40)
-
-                    start_idx = self.start_index if self.doc_type == 'tebligler' else 0
-
-                    for i, url in enumerate(self.links['tebligler'][start_idx:], start=start_idx):
-                        await self.process_teblig(page, url, i + 1)
-
-                        if (i + 1) % 10 == 0:
-                            save_state(self.state)
-
-                        await asyncio.sleep(random.uniform(MIN_DELAY, MAX_DELAY))
+                    # Rate limiting
+                    delay = random.uniform(MIN_DELAY, MAX_DELAY)
+                    await asyncio.sleep(delay)
 
             except KeyboardInterrupt:
                 print("\n[INTERRUPT] Stopping crawler...")
@@ -875,57 +743,142 @@ class MevzuatCrawler:
                 traceback.print_exc()
             finally:
                 await browser.close()
-                save_state(self.state)
+                save_state(self.state, self.category)
+                clear_crawler_running(self.category_config)
 
-        # Summary
+        # Print summary
         duration = (datetime.now() - start_time).total_seconds()
         print(f"\n{'='*60}")
-        print(f"CRAWL COMPLETE")
+        print(f"CRAWL COMPLETE - {self.category_config['name_tr']} - {mode_str} MODE")
         print(f"{'='*60}")
         print(f"Duration: {duration:.1f} seconds ({duration/60:.1f} minutes)")
-        print(f"Kanunlar: {self.state['stats']['kanunlar']}")
-        print(f"Tebliğler: {self.state['stats']['tebligler']}")
-        print(f"Failed: {self.state['stats']['failed']}")
+        print(f"New: {self.state['stats'].get('success', 0)}")
+        print(f"Updated: {self.state['stats'].get('updated', 0)}")
+        print(f"Unchanged: {self.state['stats'].get('unchanged', 0)}")
+        print(f"Failed: {self.state['stats'].get('failed', 0)}")
+        print(f"Total completed: {len(self.state['completed'])}")
         print(f"{'='*60}\n")
 
 
-async def main():
-    # Parse arguments
-    doc_type = 'all'
-    start_index = 0
+async def crawl_category(category: str, start_index: int = 0,
+                         force_mode: bool = False, update_mode: bool = False):
+    """Crawl a specific category"""
+    if category not in MEVZUAT_CATEGORIES:
+        print(f"[ERROR] Unknown category: {category}")
+        print(f"[INFO] Available categories: {', '.join(MEVZUAT_CATEGORIES.keys())}")
+        return
 
-    if len(sys.argv) > 1:
-        doc_type = sys.argv[1]
-        if doc_type not in ['kanunlar', 'tebligler', 'all']:
-            print("Usage: python vergilex_mevzuat_crawler.py [kanunlar|tebligler|all] [start_index]")
-            sys.exit(1)
+    config = MEVZUAT_CATEGORIES[category]
 
-    if len(sys.argv) > 2:
-        try:
-            start_index = int(sys.argv[2])
-        except:
-            pass
+    # Try to load links from JSON first
+    json_file = os.path.join(DOCS_DIR, config['links_file'])
+    links = load_links_from_json(json_file)
 
-    # Load links
-    links_file = Path(LINKS_FILE).resolve()
-    print(f"Loading links from: {links_file}")
+    # Fallback to HTML file (legacy support)
+    if not links:
+        html_file = os.path.join(DOCS_DIR, config['links_file'].replace('.json', '.html'))
+        # Also try legacy filename format
+        if not os.path.exists(html_file):
+            legacy_name = config['source_type'].upper().replace('_', ' ')
+            html_file = os.path.join(DOCS_DIR, f"MEVZUATGOVTR-{legacy_name} LINKLERI.html")
+        links = load_links_from_html(html_file, config)
 
-    if not links_file.exists():
-        print(f"[ERROR] Links file not found: {links_file}")
-        sys.exit(1)
+    if not links:
+        print(f"[ERROR] No links found for category: {category}")
+        print(f"[INFO] Expected file: {json_file}")
+        print(f"[INFO] Run link extractor first: python mevzuat_link_extractor.py {category}")
+        return
 
-    links = load_links_from_file(str(links_file))
-    print(f"Loaded {len(links['kanunlar'])} kanun links")
-    print(f"Loaded {len(links['tebligler'])} tebliğ links")
-
-    if not links['kanunlar'] and not links['tebligler']:
-        print("[ERROR] No links found in file")
-        sys.exit(1)
-
-    # Run crawler
-    crawler = MevzuatCrawler(links, doc_type, start_index)
+    crawler = MevzuatCategoryCrawler(
+        category,
+        links,
+        start_index=start_index,
+        force_mode=force_mode,
+        update_mode=update_mode
+    )
     await crawler.run()
 
 
+async def crawl_all_categories(force_mode: bool = False, update_mode: bool = False):
+    """Crawl all Mevzuat categories sequentially"""
+    print(f"\n{'='*60}")
+    print("Mevzuat Full Crawl - All Categories")
+    print(f"{'='*60}")
+    print(f"Categories: {len(MEVZUAT_CATEGORIES)}")
+    print(f"Mode: {'FORCE' if force_mode else 'UPDATE' if update_mode else 'NORMAL'}")
+    print(f"{'='*60}\n")
+
+    for category in MEVZUAT_CATEGORIES.keys():
+        print(f"\n[STARTING] Category: {category}")
+        await crawl_category(category, force_mode=force_mode, update_mode=update_mode)
+        # Delay between categories
+        await asyncio.sleep(30)  # Longer delay for mevzuat.gov.tr
+
+    print(f"\n{'='*60}")
+    print("ALL CATEGORIES COMPLETE")
+    print(f"{'='*60}\n")
+
+
+def list_categories():
+    """List available categories"""
+    print(f"\n{'='*60}")
+    print("Available Mevzuat Categories")
+    print(f"{'='*60}")
+    for key, config in MEVZUAT_CATEGORIES.items():
+        json_file = os.path.join(DOCS_DIR, config['links_file'])
+        link_count = 0
+        if os.path.exists(json_file):
+            try:
+                with open(json_file, 'r', encoding='utf-8') as f:
+                    data = json.load(f)
+                    link_count = data.get('count', len(data.get('links', [])))
+            except:
+                pass
+        status = f"({link_count} links)" if link_count > 0 else "(no links - run extractor)"
+        print(f"  {key:20} - MevzuatTur={config['mevzuat_tur']} - {config['name_tr']:35} {status}")
+    print(f"{'='*60}")
+    print("\nUsage:")
+    print("  python vergilex_mevzuat_crawler.py <category>            # Crawl specific category")
+    print("  python vergilex_mevzuat_crawler.py all                   # Crawl all categories")
+    print("  python vergilex_mevzuat_crawler.py <category> --force    # Force recrawl")
+    print("  python vergilex_mevzuat_crawler.py <category> --update   # Update changed only")
+    print("  python vergilex_mevzuat_crawler.py --list                # Show this list")
+    print(f"\n")
+
+
+async def main():
+    parser = argparse.ArgumentParser(description='Vergilex Mevzuat Multi-Category Crawler')
+    parser.add_argument('category', nargs='?', default=None,
+                        help='Category to crawl (kanunlar, tebligler, etc.) or "all"')
+    parser.add_argument('start_index', nargs='?', type=int, default=0,
+                        help='Starting index (default: 0)')
+    parser.add_argument('--update', '-u', action='store_true',
+                        help='Update mode: check for changes')
+    parser.add_argument('--force', '-f', action='store_true',
+                        help='Force mode: recrawl everything')
+    parser.add_argument('--list', '-l', action='store_true',
+                        help='List available categories')
+
+    args = parser.parse_args()
+
+    if args.list:
+        list_categories()
+        return
+
+    if not args.category:
+        print("[ERROR] No category specified")
+        list_categories()
+        return
+
+    if args.category == 'all':
+        await crawl_all_categories(force_mode=args.force, update_mode=args.update)
+    elif args.category in MEVZUAT_CATEGORIES:
+        await crawl_category(args.category, args.start_index, args.force, args.update)
+    else:
+        print(f"[ERROR] Unknown category: {args.category}")
+        list_categories()
+
+
 if __name__ == "__main__":
+    print("Mevzuat crawler started")
     asyncio.run(main())

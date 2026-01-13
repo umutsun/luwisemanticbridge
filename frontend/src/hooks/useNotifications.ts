@@ -20,9 +20,11 @@ export interface Notification {
 const getAuthToken = (): string | null => {
   if (typeof window === 'undefined') return null;
 
-  let token = getAuthToken() || localStorage.getItem('accessToken');
+  // Try direct token keys first
+  const token = localStorage.getItem('token') || localStorage.getItem('accessToken');
   if (token) return token;
 
+  // Try zustand auth-storage
   const authStorage = localStorage.getItem('auth-storage');
   if (authStorage) {
     try {
