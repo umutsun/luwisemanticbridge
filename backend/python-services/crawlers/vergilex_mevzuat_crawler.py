@@ -59,9 +59,9 @@ STATE_FILE = os.path.join(os.path.dirname(__file__), f'{CRAWLER_NAME}_state.json
 # Link file path
 LINKS_FILE = os.path.join(os.path.dirname(__file__), '..', '..', '..', 'docs', 'MEVZUATGOVTR-KANUN LINKLERI.html')
 
-# Rate limiting - increased to avoid mevzuat.gov.tr rate limits
-MIN_DELAY = 8
-MAX_DELAY = 15
+# Rate limiting - significantly increased to avoid mevzuat.gov.tr rate limits
+MIN_DELAY = 30
+MAX_DELAY = 45
 
 # Rate limit detection patterns
 RATE_LIMIT_PATTERNS = [
