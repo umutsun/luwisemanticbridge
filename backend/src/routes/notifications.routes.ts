@@ -173,10 +173,9 @@ router.get('/unread-count', authenticateToken, async (req: AuthenticatedRequest,
  * Called from server.ts after WebSocket server is initialized
  */
 export async function setupNotificationBroadcast(wss: any) {
-  logger.info('[NotificationBroadcast] Starting setup...');
+  console.log('[NotificationBroadcast] Starting setup...');
 
   // For ioredis pub/sub, we need a dedicated subscriber instance
-  // duplicate() creates a new client but we need to handle connection properly
   const Redis = require('ioredis');
 
   const subscriberConfig = {
@@ -191,45 +190,47 @@ export async function setupNotificationBroadcast(wss: any) {
     maxRetriesPerRequest: 3,
   };
 
-  logger.info('[NotificationBroadcast] Creating Redis subscriber with config:', {
+  console.log('[NotificationBroadcast] Redis config:', JSON.stringify({
     host: subscriberConfig.host,
     port: subscriberConfig.port,
     db: subscriberConfig.db,
     hasPassword: !!subscriberConfig.password
-  });
+  }));
 
   let subscriber: any;
   try {
     subscriber = new Redis(subscriberConfig);
-  } catch (createError) {
-    logger.error('[NotificationBroadcast] Failed to create Redis instance:', createError);
+    console.log('[NotificationBroadcast] Redis instance created');
+  } catch (createError: any) {
+    console.error('[NotificationBroadcast] Failed to create Redis:', createError.message);
     return;
   }
 
   subscriber.on('error', (err: any) => {
-    logger.error('[NotificationBroadcast] Redis subscriber error:', err.message);
+    console.error('[NotificationBroadcast] Redis error:', err.message);
   });
 
   subscriber.on('connect', () => {
-    logger.info('✅ [NotificationBroadcast] Redis notification subscriber connected');
+    console.log('✅ [NotificationBroadcast] Redis subscriber connected');
   });
 
   subscriber.on('ready', () => {
-    logger.info('✅ [NotificationBroadcast] Redis notification subscriber ready');
+    console.log('✅ [NotificationBroadcast] Redis subscriber ready');
   });
 
-  // Subscribe to notifications channel using ioredis pattern
+  // Subscribe to notifications channel
   try {
-    logger.info('[NotificationBroadcast] Subscribing to notifications:broadcast...');
+    console.log('[NotificationBroadcast] Subscribing to notifications:broadcast...');
     await subscriber.subscribe('notifications:broadcast');
-    logger.info('✅ [NotificationBroadcast] Subscribed to Redis notifications:broadcast channel');
+    console.log('✅ [NotificationBroadcast] Subscribed successfully');
   } catch (err: any) {
-    logger.error('❌ [NotificationBroadcast] Failed to subscribe:', err.message || err);
+    console.error('❌ [NotificationBroadcast] Subscribe failed:', err.message || err);
     return;
   }
 
   // Handle incoming messages
   subscriber.on('message', (channel: string, message: string) => {
+    console.log(`[NotificationBroadcast] Message received on channel: ${channel}`);
     if (channel === 'notifications:broadcast') {
       try {
         const notification = JSON.parse(message);
@@ -246,9 +247,9 @@ export async function setupNotificationBroadcast(wss: any) {
           }
         });
 
-        logger.info(`📢 Broadcasted notification ${notification.id} to ${clientCount} clients`);
-      } catch (error) {
-        logger.error('Failed to broadcast notification:', error);
+        console.log(`📢 [NotificationBroadcast] Sent ${notification.id} to ${clientCount} clients`);
+      } catch (error: any) {
+        console.error('[NotificationBroadcast] Broadcast error:', error.message);
       }
     }
   });
@@ -256,15 +257,14 @@ export async function setupNotificationBroadcast(wss: any) {
   // Handle WebSocket connections
   wss.on('connection', (ws: WebSocket, req: any) => {
     const clientId = req.headers['sec-websocket-key'] || `client_${Date.now()}`;
-
-    logger.info(`WebSocket client connected: ${clientId}`);
+    console.log(`[NotificationBroadcast] Client connected: ${clientId}`);
 
     ws.on('close', () => {
-      logger.info(`WebSocket client disconnected: ${clientId}`);
+      console.log(`[NotificationBroadcast] Client disconnected: ${clientId}`);
     });
 
-    ws.on('error', (error) => {
-      logger.error(`WebSocket error for ${clientId}:`, error);
+    ws.on('error', (error: any) => {
+      console.error(`[NotificationBroadcast] Client error ${clientId}:`, error.message);
     });
 
     // Send welcome message
@@ -275,7 +275,7 @@ export async function setupNotificationBroadcast(wss: any) {
     }));
   });
 
-  logger.info('✅ WebSocket notification broadcast setup complete');
+  console.log('✅ [NotificationBroadcast] Setup complete');
 }
 
 export default router;
