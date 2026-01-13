@@ -878,15 +878,12 @@ export default function DataSchemaSettings() {
           {editModal.field === 'routingSchema' ? (
             /* RAG Routing Schema Editor */
             <div className="py-2 space-y-3">
-              {/* Quick Guide */}
-              <div className="bg-muted/50 border rounded-lg p-3">
-                <h4 className="text-xs font-medium mb-2">Format Yapısı:</h4>
-                <div className="grid grid-cols-2 gap-2 text-xs text-muted-foreground">
-                  <div><span className="font-medium text-foreground">NEEDS_CLARIFICATION:</span> Belirsiz sorgular - öneri sorular</div>
-                  <div><span className="font-medium text-foreground">OUT_OF_SCOPE:</span> Kapsam dışı - tek satır uyarı</div>
-                  <div><span className="font-medium text-foreground">NOT_FOUND:</span> Kaynak yok - kısa açıklama</div>
-                  <div><span className="font-medium text-foreground">FOUND:</span> Kaynak var - 4 başlıklı mini-makale + dipnotlar</div>
-                </div>
+              {/* Quick Guide - Minimal */}
+              <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
+                <span><strong>NEEDS_CLARIFICATION:</strong> öneri sorular</span>
+                <span><strong>OUT_OF_SCOPE:</strong> tek satır</span>
+                <span><strong>NOT_FOUND:</strong> kısa açıklama</span>
+                <span><strong>FOUND:</strong> 4 bölüm + dipnot</span>
               </div>
 
               {/* JSON Editor */}
