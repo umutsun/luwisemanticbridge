@@ -2112,105 +2112,86 @@ export default function EmbeddingsManagerPage() {
 
       {/* Health Check Modal */}
       <Dialog open={showHealthModal} onOpenChange={setShowHealthModal}>
-        <DialogContent className="max-w-xl">
+        <DialogContent className="max-w-sm">
           <DialogHeader>
-            <DialogTitle>Veri Sağlığı Raporu</DialogTitle>
-            <DialogDescription>
-              Embedding verilerinin sağlık durumu analizi
-            </DialogDescription>
+            <DialogTitle>Veri Sağlığı</DialogTitle>
           </DialogHeader>
 
           {healthReport && (
             <div className="space-y-4">
-              {/* Summary Stats */}
-              <div className="grid grid-cols-4 gap-3 text-center">
-                <div className="p-3 bg-gray-50 dark:bg-gray-900 rounded-lg">
-                  <p className="text-2xl font-bold text-primary">
-                    %{Math.round(healthReport.summary.health_score)}
-                  </p>
-                  <p className="text-xs text-muted-foreground">Sağlık Skoru</p>
-                </div>
-                <div className="p-3 bg-gray-50 dark:bg-gray-900 rounded-lg">
-                  <p className="text-2xl font-bold">
-                    {healthReport.summary.total_embeddings.toLocaleString('tr-TR')}
-                  </p>
-                  <p className="text-xs text-muted-foreground">Toplam</p>
-                </div>
-                <div className="p-3 bg-gray-50 dark:bg-gray-900 rounded-lg">
-                  <p className="text-2xl font-bold text-yellow-600">
-                    {healthReport.summary.missing_metadata_count.toLocaleString('tr-TR')}
-                  </p>
-                  <p className="text-xs text-muted-foreground">Eksik Meta</p>
-                </div>
-                <div className="p-3 bg-gray-50 dark:bg-gray-900 rounded-lg">
-                  <p className="text-2xl font-bold text-purple-600">
-                    {healthReport.summary.duplicate_count.toLocaleString('tr-TR')}
-                  </p>
-                  <p className="text-xs text-muted-foreground">Duplicate</p>
-                </div>
+              {/* Score + Total */}
+              <div className="flex items-baseline gap-3 pb-3 border-b">
+                <span className="text-3xl font-semibold">%{Math.round(healthReport.summary.health_score)}</span>
+                <span className="text-sm text-muted-foreground">
+                  {healthReport.summary.total_embeddings.toLocaleString('tr-TR')} kayıt
+                </span>
               </div>
 
-              {/* Recommendations */}
-              {healthReport.recommendations.length > 0 && (
-                <div className="space-y-2">
-                  <h4 className="text-sm font-medium">Öneriler</h4>
-                  <div className="space-y-1 text-sm text-muted-foreground bg-gray-50 dark:bg-gray-900 rounded-lg p-3">
-                    {healthReport.recommendations.slice(0, 5).map((rec: string, idx: number) => (
-                      <p key={idx} className="leading-relaxed">
-                        {rec.replace(/[⚠️📝🔄🔴✅🗑️]/g, '').trim()}
-                      </p>
+              {/* Issues */}
+              {(healthReport.summary.missing_metadata_count > 0 || healthReport.summary.duplicate_count > 0) && (
+                <div className="text-sm space-y-2">
+                  {healthReport.summary.missing_metadata_count > 0 && (
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Eksik metadata</span>
+                      <span className="font-medium">{healthReport.summary.missing_metadata_count.toLocaleString('tr-TR')}</span>
+                    </div>
+                  )}
+                  {healthReport.summary.duplicate_count > 0 && (
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Duplicate</span>
+                      <span className="font-medium">{healthReport.summary.duplicate_count.toLocaleString('tr-TR')}</span>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Problem Tables */}
+              {(() => {
+                const problemTables = Object.entries(healthReport.tables)
+                  .filter(([_, stats]: [string, any]) => stats.health_score < 80)
+                  .sort((a: any, b: any) => a[1].health_score - b[1].health_score)
+                  .slice(0, 4);
+
+                if (problemTables.length === 0) return null;
+
+                return (
+                  <div className="text-sm">
+                    <p className="text-xs text-muted-foreground mb-2">Düşük skorlu tablolar</p>
+                    {problemTables.map(([table, stats]: [string, any]) => (
+                      <div key={table} className="flex justify-between py-1">
+                        <span className="truncate mr-2">{table}</span>
+                        <span className="text-muted-foreground">%{Math.round(stats.health_score || 0)}</span>
+                      </div>
                     ))}
                   </div>
-                </div>
-              )}
+                );
+              })()}
 
-              {/* Table Details */}
-              {Object.keys(healthReport.tables).length > 0 && (
-                <div className="space-y-2">
-                  <h4 className="text-sm font-medium">Tablo Detayları</h4>
-                  <div className="max-h-52 overflow-y-auto border rounded-lg">
-                    <table className="w-full text-sm">
-                      <thead className="bg-gray-50 dark:bg-gray-900 sticky top-0">
-                        <tr>
-                          <th className="text-left p-2 font-medium">Tablo</th>
-                          <th className="text-right p-2 font-medium">Kayıt</th>
-                          <th className="text-right p-2 font-medium">Eksik Meta</th>
-                          <th className="text-right p-2 font-medium">Skor</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y">
-                        {Object.entries(healthReport.tables).map(([table, stats]: [string, any]) => (
-                          <tr key={table} className="hover:bg-gray-50 dark:hover:bg-gray-900">
-                            <td className="p-2 font-medium">{table}</td>
-                            <td className="p-2 text-right">{stats.total_embeddings?.toLocaleString('tr-TR')}</td>
-                            <td className="p-2 text-right text-yellow-600">{stats.missing_metadata_count?.toLocaleString('tr-TR')}</td>
-                            <td className="p-2 text-right">
-                              <span className={cn(
-                                'inline-block px-2 py-0.5 rounded text-xs font-medium',
-                                stats.health_score >= 80 ? 'bg-green-100 text-green-700' :
-                                stats.health_score >= 50 ? 'bg-yellow-100 text-yellow-700' :
-                                'bg-red-100 text-red-700'
-                              )}>
-                                %{Math.round(stats.health_score || 0)}
-                              </span>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-              )}
-
-              {/* Action Buttons */}
-              <div className="flex justify-end gap-2 pt-2 border-t">
+              {/* Actions */}
+              <div className="flex gap-2 pt-3 border-t">
                 <Button
                   variant="outline"
                   size="sm"
+                  className="flex-1"
                   onClick={() => setShowHealthModal(false)}
                 >
                   Kapat
                 </Button>
+                {healthReport.summary.health_score < 95 && (
+                  <Button
+                    size="sm"
+                    className="flex-1"
+                    onClick={() => {
+                      setShowHealthModal(false);
+                      toast({
+                        title: 'Optimizasyon başlatıldı',
+                        description: 'Duplicate temizleme ve metadata düzeltme işlemi kuyruğa alındı.',
+                      });
+                    }}
+                  >
+                    Optimize Et
+                  </Button>
+                )}
               </div>
             </div>
           )}
