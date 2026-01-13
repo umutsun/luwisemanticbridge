@@ -733,7 +733,22 @@ export default function EmbeddingsManagerPage() {
   useEffect(() => {
     fetchAvailableTables();
     fetchTokenStats();
-    fetchHealthReport(); // Load health report silently for left card
+
+    // Load health report silently for left card (inline to avoid hoisting issues)
+    const loadHealthReport = async () => {
+      try {
+        const response = await fetchWithAuth('/api/data-health/report');
+        if (response.ok) {
+          const data = await response.json();
+          if (!data.error) {
+            setHealthReport(data);
+          }
+        }
+      } catch (error) {
+        console.log('Health report fetch failed:', error);
+      }
+    };
+    loadHealthReport();
 
     // Connect to SSE progress stream for real-time updates
     connectToProgressStream();
@@ -770,7 +785,7 @@ export default function EmbeddingsManagerPage() {
         pollingIntervalRef.current = null;
       }
     };
-  }, [fetchAvailableTables, fetchTokenStats, fetchHealthReport, connectToProgressStream]);
+  }, [fetchAvailableTables, fetchTokenStats, connectToProgressStream]);
 
   // Note: Progress updates now come from polling (SSE doesn't work reliably through Nginx)
 

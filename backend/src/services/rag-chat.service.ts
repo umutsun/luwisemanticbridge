@@ -5493,7 +5493,13 @@ FORMAT:
 
   /**
    * 📝 Generate footnotes from sources metadata (BACKEND-GENERATED)
-   * This ensures footnotes are accurate and not hallucinated by LLM
+   * Follows Dipnot Standardı specification:
+   * - Makale: Yazar, Başlık, Dergi, Tarih, Sayı
+   * - Özelge: Tarih, Sayı (Birim opsiyonel)
+   * - Yargı Kararı: Daire, Tarih, Esas No, Karar No
+   * - PDF/Doküman: Başlık, Kurum, Tarih
+   * - Soru-Cevap: İçerikte kullanılır ama dipnot BASILMAZ
+   *
    * @param sources - Formatted sources array
    * @returns Footnotes string to append to response
    */
@@ -5506,94 +5512,185 @@ FORMAT:
 
     sources.forEach((source, idx) => {
       const num = idx + 1;
-      const parts: string[] = [];
+      const metadata = source.metadata || {};
 
       // Source type detection
       const sourceType = (
         source.category ||
         source.sourceTable ||
-        source.metadata?.source_type ||
-        'Kaynak'
+        metadata.source_type ||
+        'document'
       ).toLowerCase();
 
-      // Type label mapping (Turkish)
-      const typeLabels: Record<string, string> = {
-        'kanun': 'Kanun',
-        'teblig': 'Tebliğ',
-        'tebliğ': 'Tebliğ',
-        'sirkuler': 'Sirküler',
-        'sirkü': 'Sirküler',
-        'ozelge': 'Özelge',
-        'özelge': 'Özelge',
-        'yonetmelik': 'Yönetmelik',
-        'yönetmelik': 'Yönetmelik',
-        'rehber': 'Rehber',
-        'makale': 'Makale',
-        'danistay': 'Danıştay Kararı',
-        'yargi': 'Yargı Kararı',
-        'sorucevap': 'Soru-Cevap',
-        'document': 'Doküman',
-        'documents': 'Doküman'
-      };
+      // 🚫 Soru-Cevap kaynakları dipnot listesine EKLENMEz
+      if (sourceType.includes('sorucevap') || sourceType.includes('soru_cevap') || sourceType.includes('qna')) {
+        console.log(`[FOOTNOTE] Skipping Soru-Cevap source #${num}`);
+        return; // Skip this source
+      }
 
-      // Find matching type label
-      let typeLabel = 'Kaynak';
-      for (const [key, label] of Object.entries(typeLabels)) {
-        if (sourceType.includes(key)) {
-          typeLabel = label;
-          break;
+      let footnoteText = '';
+
+      // ============================================
+      // 1) MAKALE (Dergi/Journal)
+      // Format: Yazar, "Başlık", Dergi Adı, Tarih, Sayı: XX
+      // ============================================
+      if (sourceType.includes('makale') || sourceType.includes('article') || sourceType.includes('journal')) {
+        const parts: string[] = [];
+
+        // Yazar (zorunlu)
+        const yazar = metadata.yazar || metadata.author || metadata.yazaradi;
+        if (yazar) parts.push(yazar);
+
+        // Makale başlığı (zorunlu)
+        const baslik = metadata.baslik || metadata.title || metadata.makale_baslik || source.title;
+        if (baslik && baslik.length < 100) parts.push(`"${baslik}"`);
+
+        // Dergi adı (zorunlu)
+        const dergi = metadata.dergi || metadata.dergi_adi || metadata.journal || metadata.yayin;
+        if (dergi) parts.push(dergi);
+
+        // Tarih (zorunlu - en az yıl)
+        const tarih = metadata.tarih || metadata.yil || metadata.year || metadata.yayin_tarihi;
+        if (tarih) parts.push(tarih);
+
+        // Sayı (varsa)
+        const sayi = metadata.sayi || metadata.sayı || metadata.issue || metadata.cilt;
+        if (sayi) parts.push(`Sayı: ${sayi}`);
+
+        // Minimum zorunlu alanlar: yazar + başlık + dergi + tarih (4 alan)
+        if (parts.length >= 3) {
+          footnoteText = parts.join(', ');
         }
       }
-      parts.push(typeLabel);
 
-      // Add metadata fields if available
-      const metadata = source.metadata || {};
+      // ============================================
+      // 2) ÖZELGE
+      // Format: Özelge, Tarih: GG.AA.YYYY, Sayı: XXXXX (ops: Birim)
+      // ============================================
+      else if (sourceType.includes('ozelge') || sourceType.includes('özelge') || sourceType.includes('ruling')) {
+        const parts: string[] = ['Özelge'];
 
-      // Institution/Authority
-      if (metadata.kurum) {
-        parts.push(metadata.kurum);
-      } else if (metadata.makam) {
-        parts.push(metadata.makam);
+        // Tarih (zorunlu)
+        const tarih = metadata.tarih || metadata.ozelge_tarihi || metadata.karar_tarihi;
+        if (tarih) parts.push(`Tarih: ${tarih}`);
+
+        // Sayı (zorunlu)
+        const sayi = metadata.sayisirano || metadata.sayi || metadata.sayı || metadata.ozelge_no;
+        if (sayi) parts.push(`Sayı: ${sayi}`);
+
+        // Birim/İdare (opsiyonel)
+        const birim = metadata.kurum || metadata.makam || metadata.idare || metadata.daire;
+        if (birim) parts.push(`(${birim})`);
+
+        // Minimum zorunlu: tarih + sayı (en az 3 parça: "Özelge" + tarih + sayı)
+        if (parts.length >= 3) {
+          footnoteText = parts.join(', ').replace(', (', ' (');
+        }
       }
 
-      // Date
-      if (metadata.tarih) {
-        parts.push(metadata.tarih);
-      } else if (metadata.yil) {
-        parts.push(metadata.yil);
-      } else if (metadata.karar_tarihi) {
-        parts.push(metadata.karar_tarihi);
+      // ============================================
+      // 3) YARGI KARARI (Danıştay, vb.)
+      // Format: Danıştay X. Daire, Tarih: GG.AA.YYYY, E. YYYY/XXXX, K. YYYY/XXXX
+      // ============================================
+      else if (sourceType.includes('danistay') || sourceType.includes('yargi') || sourceType.includes('karar') || sourceType.includes('court')) {
+        const parts: string[] = [];
+
+        // Daire (zorunlu)
+        const daire = metadata.daire || metadata.mahkeme || metadata.court;
+        if (daire) {
+          parts.push(daire.includes('Danıştay') ? daire : `Danıştay ${daire}`);
+        } else {
+          parts.push('Danıştay');
+        }
+
+        // Tarih (zorunlu)
+        const tarih = metadata.karar_tarihi || metadata.tarih || metadata.date;
+        if (tarih) parts.push(`Tarih: ${tarih}`);
+
+        // Esas No (zorunlu)
+        const esasNo = metadata.esas_no || metadata.esas || metadata.esasno;
+        if (esasNo) parts.push(`E. ${esasNo}`);
+
+        // Karar No (zorunlu)
+        const kararNo = metadata.karar_no || metadata.karar || metadata.kararno;
+        if (kararNo) parts.push(`K. ${kararNo}`);
+
+        // Minimum zorunlu: daire + tarih + esas no + karar no (4 parça)
+        if (parts.length >= 3) {
+          footnoteText = parts.join(', ');
+        }
       }
 
-      // Number/Reference (check various field names from source DB)
-      if (metadata.sayisirano) {
-        parts.push(`Sayı: ${metadata.sayisirano}`);
-      } else if (metadata.sayi) {
-        parts.push(`Sayı: ${metadata.sayi}`);
-      } else if (metadata.sayı) {
-        parts.push(`Sayı: ${metadata.sayı}`);
-      } else if (metadata.esas_no) {
-        parts.push(`Esas: ${metadata.esas_no}`);
-      } else if (metadata.karar_no) {
-        parts.push(`Karar: ${metadata.karar_no}`);
-      } else if (metadata.sirkuler_no) {
-        parts.push(`No: ${metadata.sirkuler_no}`);
+      // ============================================
+      // 4) PDF / RESMİ DOKÜMAN (Rehber, Tebliğ, Kılavuz, vb.)
+      // Format: "Başlık", Kurum, Tarih: GG.AA.YYYY
+      // ============================================
+      else if (sourceType.includes('document') || sourceType.includes('pdf') || sourceType.includes('rehber') ||
+               sourceType.includes('teblig') || sourceType.includes('kilavuz') || sourceType.includes('duyuru')) {
+        const parts: string[] = [];
+
+        // Doküman başlığı (zorunlu)
+        const baslik = metadata.baslik || metadata.title || metadata.dokuman_adi || source.title;
+        if (baslik && baslik.length < 120) parts.push(`"${baslik}"`);
+
+        // Kurum (zorunlu)
+        const kurum = metadata.kurum || metadata.yayinlayan || metadata.publisher || metadata.institution;
+        if (kurum) parts.push(kurum);
+
+        // Tarih (varsa)
+        const tarih = metadata.tarih || metadata.yayin_tarihi || metadata.date || metadata.yil;
+        if (tarih) parts.push(`Tarih: ${tarih}`);
+
+        // Sayfa/Bölüm (opsiyonel)
+        const sayfa = metadata.sayfa || metadata.page || metadata.bolum;
+        if (sayfa) parts.push(`s. ${sayfa}`);
+
+        // Minimum zorunlu: başlık + kurum (en az 2 parça)
+        if (parts.length >= 2) {
+          footnoteText = parts.join(', ');
+        }
       }
 
-      // Department/Daire (for özelge)
-      if (metadata.daire && !parts.some(p => p.includes(metadata.daire))) {
-        parts.push(metadata.daire);
+      // ============================================
+      // 5) DİĞER KAYNAKLAR (Generic fallback)
+      // ============================================
+      else {
+        const parts: string[] = [];
+
+        // Type label
+        const typeLabels: Record<string, string> = {
+          'kanun': 'Kanun',
+          'teblig': 'Tebliğ',
+          'sirkuler': 'Sirküler',
+          'yonetmelik': 'Yönetmelik'
+        };
+
+        let typeLabel = 'Kaynak';
+        for (const [key, label] of Object.entries(typeLabels)) {
+          if (sourceType.includes(key)) {
+            typeLabel = label;
+            break;
+          }
+        }
+        parts.push(typeLabel);
+
+        // Add any available metadata
+        if (metadata.kurum || metadata.makam) parts.push(metadata.kurum || metadata.makam);
+        if (metadata.tarih || metadata.yil) parts.push(metadata.tarih || metadata.yil);
+        if (metadata.sayi || metadata.sayı) parts.push(`Sayı: ${metadata.sayi || metadata.sayı}`);
+
+        // Only create footnote if we have meaningful content
+        if (parts.length >= 2) {
+          footnoteText = parts.join(', ');
+        }
       }
 
-      // Subject (check various field names: konusu from ozelge, konu from others)
-      const subject = metadata.konusu || metadata.konu;
-      if (subject && subject.length < 60) {
-        parts.push(`"${subject}"`);
+      // Only add footnote if we have valid content
+      if (footnoteText && footnoteText.length > 10) {
+        footnotes.push(`[${num}] ${footnoteText}`);
+      } else {
+        console.log(`[FOOTNOTE] Skipping source #${num} - insufficient metadata for type: ${sourceType}`);
       }
-
-      // Build footnote line
-      const footnoteText = parts.join(' - ');
-      footnotes.push(`[${num}] ${footnoteText}`);
     });
 
     if (footnotes.length === 0) {
