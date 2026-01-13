@@ -4,6 +4,11 @@
 Vergilex Mevzuat Crawler
 Crawls laws (Kanunlar) and general communiques (Genel Tebligler) from mevzuat.gov.tr
 Uses Playwright for dynamic content and iframe handling
+
+Usage:
+  python vergilex_mevzuat_crawler.py [kanunlar|tebligler|all] [start_index]
+  python vergilex_mevzuat_crawler.py --update all          # Update mode
+  python vergilex_mevzuat_crawler.py --force kanunlar      # Force mode
 """
 
 import asyncio
@@ -11,11 +16,18 @@ import json
 import os
 import sys
 import re
-from datetime import datetime
+import hashlib
+import argparse
+from datetime import datetime, timezone
 from pathlib import Path
 import random
 
 import redis
+
+
+def compute_content_hash(content: str) -> str:
+    """Compute MD5 hash of content for change detection"""
+    return hashlib.md5(content.encode('utf-8')).hexdigest()
 
 try:
     from playwright.async_api import async_playwright, TimeoutError as PlaywrightTimeoutError

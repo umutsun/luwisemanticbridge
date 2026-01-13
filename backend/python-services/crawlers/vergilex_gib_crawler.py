@@ -4,6 +4,12 @@
 Vergilex GIB Sirkuler Crawler
 Crawls circulars from gib.gov.tr for Vergilex platform
 Uses Playwright for dynamic Next.js content
+
+Usage:
+  python vergilex_gib_crawler.py [start_index]           # Normal mode (skip existing)
+  python vergilex_gib_crawler.py --update                # Update mode (check for changes)
+  python vergilex_gib_crawler.py --force                 # Force mode (recrawl all)
+  python vergilex_gib_crawler.py --force 50              # Force from index 50
 """
 
 import asyncio
@@ -11,9 +17,11 @@ import json
 import os
 import sys
 import re
-from datetime import datetime
+import hashlib
+from datetime import datetime, timezone
 from pathlib import Path
 import random
+import argparse
 
 import redis
 
@@ -95,14 +103,25 @@ def load_state() -> dict:
                 return json.load(f)
     except:
         pass
-    return {'completed': [], 'failed': [], 'stats': {'success': 0, 'failed': 0}}
+    return {'completed': [], 'failed': [], 'stats': {'success': 0, 'failed': 0, 'updated': 0, 'unchanged': 0}}
+
+
+def compute_content_hash(content: str) -> str:
+    """Compute MD5 hash of content for change detection"""
+    return hashlib.md5(content.encode('utf-8')).hexdigest()
 
 
 class GIBSirkulerCrawler:
-    def __init__(self, links: list, start_index: int = 0):
+    def __init__(self, links: list, start_index: int = 0, force_mode: bool = False, update_mode: bool = False):
         self.links = links
         self.start_index = start_index
+        self.force_mode = force_mode  # Recrawl everything
+        self.update_mode = update_mode  # Check for changes and update if different
         self.state = load_state()
+
+        # Reset state for force mode
+        if force_mode:
+            self.state = {'completed': [], 'failed': [], 'stats': {'success': 0, 'failed': 0, 'updated': 0, 'unchanged': 0}}
 
     async def extract_sirkuler_content(self, page) -> dict:
         """Extract circular content from GIB page"""
@@ -245,11 +264,6 @@ class GIBSirkulerCrawler:
 
     async def process_url(self, page, url: str, index: int) -> bool:
         """Process a single URL"""
-        # Check if already processed
-        if url in self.state['completed']:
-            print(f"[{index}] SKIP (already done): {url[-50:]}")
-            return True
-
         # Generate Redis key
         url_match = re.search(r'/kanun/(\d+)/sirkuler/(\d+)', url)
         if url_match:
@@ -258,13 +272,28 @@ class GIBSirkulerCrawler:
             slug = url.split('/')[-1] or 'unknown'
             redis_key = f"{REDIS_KEY_PREFIX}:{slug}"
 
-        # Check Redis
+        # Check existing data in Redis
+        existing_data = None
+        existing_hash = None
         if r.exists(redis_key):
-            print(f"[{index}] SKIP (in Redis): {redis_key}")
-            self.state['completed'].append(url)
-            return True
+            try:
+                existing_data = json.loads(r.get(redis_key))
+                existing_hash = existing_data.get('content_hash')
+            except:
+                pass
 
-        print(f"\n[{index}/{len(self.links)}] Processing: {url}")
+        # Skip logic based on mode
+        if not self.force_mode and not self.update_mode:
+            # Normal mode: skip if already completed or in Redis
+            if url in self.state['completed']:
+                print(f"[{index}] SKIP (already done): {url[-50:]}")
+                return True
+            if existing_data:
+                print(f"[{index}] SKIP (in Redis): {redis_key}")
+                self.state['completed'].append(url)
+                return True
+
+        print(f"\n[{index}/{len(self.links)}] {'UPDATE' if self.update_mode else 'FORCE' if self.force_mode else 'NEW'}: {url}")
 
         try:
             # Navigate to page
@@ -285,12 +314,21 @@ class GIBSirkulerCrawler:
 
             if not content or not content.get('content'):
                 print(f"  [WARN] No content extracted")
-                # Still save with minimal data
                 content = content or {}
                 content['content'] = f"Sirküler içeriği yüklenemedi. URL: {url}"
 
+            # Compute content hash for change detection
+            new_content_hash = compute_content_hash(content.get('content', ''))
+
+            # In update mode, check if content has changed
+            if self.update_mode and existing_hash and existing_hash == new_content_hash:
+                print(f"  [UNCHANGED] Content hash matches, skipping")
+                self.state['stats']['unchanged'] = self.state['stats'].get('unchanged', 0) + 1
+                self.state['completed'].append(url)
+                return True
+
             # Build data object
-            timestamp = datetime.utcnow().isoformat()
+            timestamp = datetime.now(timezone.utc).isoformat()
             data = {
                 'title': content.get('title', ''),
                 'sirkuler_no': content.get('sirkuler_no', ''),
@@ -298,22 +336,30 @@ class GIBSirkulerCrawler:
                 'kanun_kodu': content.get('kanun_kodu', ''),
                 'tarih': content.get('tarih', ''),
                 'content': content.get('content', ''),
+                'content_hash': new_content_hash,
                 'url': url,
                 'source': 'gib.gov.tr',
                 'source_type': 'sirkuler',
-                'crawled_at': timestamp,
+                'crawled_at': existing_data.get('crawled_at', timestamp) if existing_data else timestamp,
+                'updated_at': timestamp,
                 'crawler': CRAWLER_NAME
             }
 
             # Save to Redis
             r.set(redis_key, json.dumps(data, ensure_ascii=False, indent=2))
 
-            print(f"  [OK] Saved: {redis_key}")
+            # Track if this is an update or new
+            if existing_data:
+                print(f"  [UPDATED] {redis_key}")
+                self.state['stats']['updated'] = self.state['stats'].get('updated', 0) + 1
+            else:
+                print(f"  [NEW] Saved: {redis_key}")
+                self.state['stats']['success'] += 1
+
             print(f"  Title: {content.get('title', 'N/A')[:60]}...")
             print(f"  Content: {len(content.get('content', ''))} chars")
 
             self.state['completed'].append(url)
-            self.state['stats']['success'] += 1
             return True
 
         except PlaywrightTimeoutError:
@@ -329,9 +375,11 @@ class GIBSirkulerCrawler:
 
     async def run(self):
         """Run the crawler"""
+        mode_str = "FORCE" if self.force_mode else "UPDATE" if self.update_mode else "NORMAL"
         print(f"\n{'='*60}")
         print(f"GIB Sirkuler Crawler - Vergilex")
         print(f"{'='*60}")
+        print(f"Mode: {mode_str}")
         print(f"Total links: {len(self.links)}")
         print(f"Already completed: {len(self.state['completed'])}")
         print(f"Starting from index: {self.start_index}")
@@ -397,24 +445,28 @@ class GIBSirkulerCrawler:
         # Print summary
         duration = (datetime.now() - start_time).total_seconds()
         print(f"\n{'='*60}")
-        print(f"CRAWL COMPLETE")
+        print(f"CRAWL COMPLETE - {mode_str} MODE")
         print(f"{'='*60}")
         print(f"Duration: {duration:.1f} seconds ({duration/60:.1f} minutes)")
-        print(f"Success: {self.state['stats']['success']}")
-        print(f"Failed: {self.state['stats']['failed']}")
+        print(f"New: {self.state['stats'].get('success', 0)}")
+        print(f"Updated: {self.state['stats'].get('updated', 0)}")
+        print(f"Unchanged: {self.state['stats'].get('unchanged', 0)}")
+        print(f"Failed: {self.state['stats'].get('failed', 0)}")
         print(f"Total completed: {len(self.state['completed'])}")
         print(f"{'='*60}\n")
 
 
 async def main():
     # Parse arguments
-    start_index = 0
-    if len(sys.argv) > 1:
-        try:
-            start_index = int(sys.argv[1])
-        except:
-            print("Usage: python vergilex_gib_crawler.py [start_index]")
-            sys.exit(1)
+    parser = argparse.ArgumentParser(description='Vergilex GIB Sirkuler Crawler')
+    parser.add_argument('start_index', nargs='?', type=int, default=0,
+                        help='Starting index (default: 0)')
+    parser.add_argument('--update', '-u', action='store_true',
+                        help='Update mode: check for changes and update if content differs')
+    parser.add_argument('--force', '-f', action='store_true',
+                        help='Force mode: recrawl everything regardless of existing data')
+
+    args = parser.parse_args()
 
     # Load links
     links_file = Path(LINKS_FILE).resolve()
@@ -432,7 +484,12 @@ async def main():
         sys.exit(1)
 
     # Run crawler
-    crawler = GIBSirkulerCrawler(links, start_index)
+    crawler = GIBSirkulerCrawler(
+        links,
+        start_index=args.start_index,
+        force_mode=args.force,
+        update_mode=args.update
+    )
     await crawler.run()
 
 
