@@ -63,14 +63,16 @@ LINKS_FILE = os.path.join(os.path.dirname(__file__), '..', '..', '..', 'docs', '
 MIN_DELAY = 30
 MAX_DELAY = 45
 
-# Rate limit detection patterns
+# Rate limit detection patterns - be specific to avoid false positives
 RATE_LIMIT_PATTERNS = [
     'ÇOK FAZLA İSTEK',
     'TOO MANY REQUESTS',
-    'RATE LIMIT',
+    'RATE LIMIT EXCEEDED',
     'ERİŞİM ENGELLENDİ',
-    'BLOCKED',
-    '429',
+    'ACCESS BLOCKED',
+    'ERROR 429',
+    'HTTP 429',
+    '429 TOO MANY',
 ]
 
 # Exponential backoff settings
