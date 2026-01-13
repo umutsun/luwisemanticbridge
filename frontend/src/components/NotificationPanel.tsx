@@ -36,18 +36,18 @@ export function NotificationPanel() {
     clearAll
   } = useNotifications();
 
-  const getNotificationIcon = (type: string) => {
+  const getNotificationBadgeColor = (type: string) => {
     switch (type) {
       case 'success':
-        return '✅';
+        return 'bg-green-500';
       case 'error':
-        return '❌';
+        return 'bg-red-500';
       case 'warning':
-        return '⚠️';
+        return 'bg-yellow-500';
       case 'info':
-        return 'ℹ️';
+        return 'bg-blue-500';
       default:
-        return '🔔';
+        return 'bg-gray-500';
     }
   };
 
@@ -135,9 +135,10 @@ export function NotificationPanel() {
                 <div className="flex items-start justify-between w-full gap-2">
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 mb-1">
-                      <span className="text-lg">
-                        {getNotificationIcon(notification.type)}
-                      </span>
+                      <div className={cn(
+                        "w-2 h-2 rounded-full",
+                        getNotificationBadgeColor(notification.type)
+                      )} />
                       <span className="font-medium text-sm">
                         {notification.title}
                       </span>

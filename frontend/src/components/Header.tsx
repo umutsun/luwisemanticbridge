@@ -553,10 +553,6 @@ export default function Header() {
             {/* Real-time Notification Panel (Redis-based) */}
             <NotificationPanel />
 
-            {/* Notification Center */}
-            <NotificationCenter />
-
-
             {/* Quick Navigation Icons */}
             <div className="hidden sm:flex items-center gap-1">
               {/* Chat Icon - Always visible */}

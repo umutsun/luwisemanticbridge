@@ -9,7 +9,7 @@
  * - Notification history with pagination
  */
 
-import { redis } from '../server';
+import { redis } from '../config/redis';
 import { logger } from '../utils/logger';
 
 export interface Notification {
