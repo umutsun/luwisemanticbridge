@@ -278,8 +278,14 @@ class GIBSirkulerCrawler:
                     tag.decompose()
 
                 # Try to extract structured data
-                # Look for sirkuler number
+                # Look for sirkuler number - more specific patterns for GIB format
                 sirkuler_no_patterns = [
+                    # VUK-191/2025-12/Enflasyon Düzeltmesi Uygulaması-21 format
+                    r'Sirküler\s*No\s*([A-ZÇĞİÖŞÜ]+-\d+/\d+[^S\n]{0,100})',
+                    # VUK-41/2006-6 format
+                    r'Sayısı\s*:\s*([A-ZÇĞİÖŞÜ]+-\d+/\d+-\d+[^İ\n]{0,80})',
+                    # Simpler patterns
+                    r'Sirküler\s*(?:No|Numarası)?\s*[:\s]*([A-ZÇĞİÖŞÜ]+-\d+[/\-]\d+)',
                     r'Sirküler\s*(?:No|Numarası)?\s*[:\s]*(\d+[/\-]?\d*)',
                     r'(\d+)\s*(?:Seri\s*No|nolu)',
                 ]
@@ -303,6 +309,17 @@ class GIBSirkulerCrawler:
                     match = re.search(pattern, text_content)
                     if match:
                         content_data['tarih'] = match.group(1)
+                        break
+
+                # Look for konu/subject
+                konu_patterns = [
+                    r'Konusu\s*:\s*([^\n]{10,100})',
+                    r'Konu\s*:\s*([^\n]{10,100})',
+                ]
+                for pattern in konu_patterns:
+                    match = re.search(pattern, text_content)
+                    if match:
+                        content_data['konu'] = match.group(1).strip()
                         break
 
                 # Extract main content
@@ -354,12 +371,26 @@ class GIBSirkulerCrawler:
                                 content_data['title'] = clean_title(extracted_title)
                                 break
 
-                # Last resort: use sirkuler info
-                if not content_data['title']:
-                    if content_data.get('kanun_kodu') and content_data.get('sirkuler_id'):
-                        content_data['title'] = f"Sirküler - Kanun {content_data['kanun_kodu']} / {content_data['sirkuler_id']}"
-                    elif unique_paragraphs:
-                        content_data['title'] = clean_title(unique_paragraphs[0][:200])
+                # Build best possible title - prefer specific info over generic page title
+                # Priority: sirkuler_no > konu > page_title > fallback
+                best_title = content_data.get('title', '')
+
+                # If we have sirkuler_no (like "VUK-191/2025-12/Enflasyon Düzeltmesi"), use it
+                if content_data.get('sirkuler_no'):
+                    sirkuler_title = clean_title(content_data['sirkuler_no'])
+                    if len(sirkuler_title) > 10:
+                        best_title = sirkuler_title
+                # If we have konu but no good sirkuler_no
+                elif content_data.get('konu') and len(content_data['konu']) > 15:
+                    best_title = clean_title(content_data['konu'])
+                # Fallback to kanun_kodu/sirkuler_id combo
+                elif content_data.get('kanun_kodu') and content_data.get('sirkuler_id'):
+                    best_title = f"Sirküler - Kanun {content_data['kanun_kodu']} / {content_data['sirkuler_id']}"
+                # Use first paragraph as last resort
+                elif not best_title and unique_paragraphs:
+                    best_title = clean_title(unique_paragraphs[0][:200])
+
+                content_data['title'] = best_title
 
             return content_data
 
