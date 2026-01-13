@@ -65,9 +65,9 @@ export function NotificationPanel() {
         </Button>
       </DropdownMenuTrigger>
 
-      <DropdownMenuContent align="end" className="w-80">
+      <DropdownMenuContent align="end" className="w-[340px]">
         {/* Header */}
-        <div className="flex items-center justify-between px-2 py-1.5 border-b">
+        <div className="flex items-center justify-between px-3 py-2 border-b">
           <span className="text-sm font-medium">Bildirimler</span>
           <div className="flex items-center gap-1">
             {unreadCount > 0 && (
@@ -75,9 +75,9 @@ export function NotificationPanel() {
                 variant="ghost"
                 size="sm"
                 onClick={(e) => { e.preventDefault(); markAllAsRead(); }}
-                className="h-7 px-2 text-xs"
+                className="h-6 px-2 text-xs"
               >
-                <CheckCheck className="h-3.5 w-3.5 mr-1" />
+                <CheckCheck className="h-3 w-3 mr-1" />
                 Oku
               </Button>
             )}
@@ -86,9 +86,9 @@ export function NotificationPanel() {
                 variant="ghost"
                 size="sm"
                 onClick={(e) => { e.preventDefault(); clearAll(); }}
-                className="h-7 px-2 text-xs text-muted-foreground hover:text-red-500"
+                className="h-6 px-2 text-xs text-muted-foreground hover:text-red-500"
               >
-                <Trash2 className="h-3.5 w-3.5 mr-1" />
+                <Trash2 className="h-3 w-3 mr-1" />
                 Temizle
               </Button>
             )}
@@ -96,7 +96,7 @@ export function NotificationPanel() {
         </div>
 
         {/* List */}
-        <div className="max-h-[300px] overflow-y-auto">
+        <div className="max-h-[320px] overflow-y-auto">
           {notifications.length === 0 ? (
             <div className="py-8 text-center text-muted-foreground">
               <Bell className="h-8 w-8 mx-auto mb-2 opacity-20" />
@@ -107,7 +107,7 @@ export function NotificationPanel() {
               <DropdownMenuItem
                 key={n.id}
                 className={cn(
-                  "flex items-start gap-3 p-3 cursor-pointer focus:bg-accent",
+                  "flex items-start gap-2.5 px-3 py-2.5 cursor-pointer focus:bg-accent",
                   !n.read && "bg-blue-50/50 dark:bg-blue-950/20"
                 )}
                 onClick={() => !n.read && markAsRead(n.id)}
@@ -117,19 +117,19 @@ export function NotificationPanel() {
                 </div>
                 <div className="flex-1 min-w-0">
                   <p className={cn(
-                    "text-sm truncate",
+                    "text-sm leading-snug line-clamp-2",
                     !n.read && "font-medium"
                   )}>
                     {n.message || n.title}
-                  </p>
-                  <p className="text-xs text-muted-foreground mt-0.5">
-                    {timeAgo(n.timestamp)}
+                    <span className="text-[10px] text-muted-foreground ml-2">
+                      {timeAgo(n.timestamp)}
+                    </span>
                   </p>
                 </div>
                 <Button
                   variant="ghost"
                   size="icon"
-                  className="h-6 w-6 flex-shrink-0 opacity-0 group-hover:opacity-100 hover:text-red-500 hover:bg-red-50"
+                  className="h-5 w-5 flex-shrink-0 opacity-40 hover:opacity-100 hover:text-red-500"
                   onClick={(e) => {
                     e.stopPropagation();
                     e.preventDefault();
