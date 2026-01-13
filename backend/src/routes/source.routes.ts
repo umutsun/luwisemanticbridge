@@ -286,8 +286,19 @@ router.post('/tables/create', async (req: Request, res: Response) => {
 });
 
 /**
+ * Generate MD5 hash of content for change detection
+ */
+function generateContentHash(content: string): string {
+  const crypto = require('crypto');
+  return crypto.createHash('md5').update(content || '').digest('hex');
+}
+
+/**
  * POST /tables/:tableName/insert
- * Insert data into source table
+ * Insert data into source table with smart upsert (content hash based)
+ * - New URL → INSERT
+ * - Existing URL + content changed → UPDATE
+ * - Existing URL + same content → SKIP (no unnecessary writes)
  */
 router.post('/tables/:tableName/insert', async (req: Request, res: Response) => {
   try {
@@ -315,12 +326,23 @@ router.post('/tables/:tableName/insert', async (req: Request, res: Response) => 
     try {
       await client.query('BEGIN');
 
+      // Check if content_hash column exists, if not add it
+      const columnCheck = await client.query(`
+        SELECT column_name FROM information_schema.columns
+        WHERE table_name = $1 AND column_name = 'content_hash'
+      `, [tableName]);
+
+      if (columnCheck.rows.length === 0) {
+        console.log(`[Source DB] Adding content_hash column to ${tableName}`);
+        await client.query(`ALTER TABLE "${tableName}" ADD COLUMN IF NOT EXISTS content_hash TEXT`);
+      }
+
       let insertedCount = 0;
       let updatedCount = 0;
       let skippedCount = 0;
 
       for (const row of data) {
-        const columns = Object.keys(row);
+        let columns = Object.keys(row);
 
         // Skip empty rows - they cause SQL syntax errors
         if (columns.length === 0) {
@@ -328,6 +350,14 @@ router.post('/tables/:tableName/insert', async (req: Request, res: Response) => 
           skippedCount++;
           continue;
         }
+
+        // Generate content hash from content field (or title+content if no content)
+        const contentForHash = row.content || row.title || JSON.stringify(row);
+        const contentHash = generateContentHash(contentForHash);
+
+        // Add content_hash to the row
+        row.content_hash = contentHash;
+        columns = Object.keys(row);
 
         // Convert arrays and objects to JSON strings for PostgreSQL
         const values = Object.values(row).map(value => {
@@ -341,12 +371,12 @@ router.post('/tables/:tableName/insert', async (req: Request, res: Response) => 
 
         // Check if URL column exists for duplicate prevention
         const hasUrlColumn = columns.some(c => c.toLowerCase() === 'url');
-        const updateColumns = columns.filter(c => c.toLowerCase() !== 'url');
+        const updateColumns = columns.filter(c => c.toLowerCase() !== 'url' && c.toLowerCase() !== 'content_hash');
 
         let insertQuery;
         if (hasUrlColumn && updateColumns.length > 0) {
-          // ON CONFLICT UPDATE: Update existing records with new data
-          // Use RETURNING xmax to detect if it was an update or insert
+          // Smart upsert: Only update if content_hash is different
+          // WHERE clause checks if hash changed - if same, no update happens
           const updateSet = updateColumns
             .map(c => `"${c}" = EXCLUDED."${c}"`)
             .join(', ');
@@ -356,8 +386,10 @@ router.post('/tables/:tableName/insert', async (req: Request, res: Response) => 
             VALUES (${placeholders})
             ON CONFLICT ("url") DO UPDATE SET
               ${updateSet},
+              content_hash = EXCLUDED.content_hash,
               updated_at = CURRENT_TIMESTAMP
-            RETURNING (xmax = 0) AS inserted
+            WHERE "${tableName}".content_hash IS DISTINCT FROM EXCLUDED.content_hash
+            RETURNING (xmax = 0) AS inserted, (xmax != 0) AS updated
           `;
         } else {
           // No URL column, just skip duplicates
@@ -372,28 +404,28 @@ router.post('/tables/:tableName/insert', async (req: Request, res: Response) => 
 
         // Determine if it was insert, update, or skip
         if (result.rowCount && result.rowCount > 0) {
-          if (hasUrlColumn && updateColumns.length > 0 && result.rows.length > 0) {
-            // Check xmax to distinguish between insert and update
+          if (hasUrlColumn && result.rows.length > 0) {
             if (result.rows[0].inserted) {
               insertedCount += 1;
-            } else {
+            } else if (result.rows[0].updated) {
               updatedCount += 1;
             }
           } else {
             insertedCount += result.rowCount;
           }
         } else {
+          // No rows affected = content unchanged, skip
           skippedCount += 1;
         }
       }
 
       await client.query('COMMIT');
 
-      console.log(` Insert summary - Inserted: ${insertedCount}, Updated: ${updatedCount}, Skipped: ${skippedCount}`);
+      console.log(`✅ Insert summary - Inserted: ${insertedCount}, Updated: ${updatedCount}, Skipped (unchanged): ${skippedCount}`);
 
       res.json({
         success: true,
-        message: `Inserted ${insertedCount} new records, updated ${updatedCount} existing records, skipped ${skippedCount} duplicates`,
+        message: `Inserted ${insertedCount} new records, updated ${updatedCount} changed records, skipped ${skippedCount} unchanged`,
         insertedCount,
         updatedCount,
         skippedCount,
