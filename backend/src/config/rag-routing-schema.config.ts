@@ -81,31 +81,32 @@ export const DEFAULT_RAG_ROUTING_SCHEMA: RAGRoutingSchema = {
         showSources: true,
 
         // 4 Zorunlu Başlık (Murat'ın istediği format)
+        // Title'lar frontend parser ile uyumlu - basit ve tutarlı
         articleSections: [
           {
             id: 'topic',
-            title: 'Soru hangi konu veya konularla ilgili?',
+            title: 'Konu',
             required: true,
-            description: 'Sorunun ana konusunu ve ilgili alt konuları belirt'
+            description: '1-2 cümlede sorunun kapsadığı vergi konusunu tarif et (kurum/işlem/vergisel olay).'
           },
           {
             id: 'keywords',
-            title: 'Soruyla ilgili anahtar kelimeler neler?',
+            title: 'Anahtar Terimler',
             required: true,
-            description: 'Konuyla ilgili teknik terimler ve anahtar kavramlar'
+            description: '5-10 terim virgülle ayrılmış şekilde yaz. Genel terimlerden (vergi, kanun, madde) KAÇIN.'
           },
           {
             id: 'regulations',
-            title: 'Yasal düzenlemeler neler (Kanun, Tebliğ vb.)?',
+            title: 'Dayanaklar',
             required: true,
-            description: 'İlgili kanun maddeleri, tebliğler, yönetmelikler'
+            description: 'Kaynaklardan türetilen düzenleme türlerini ve referansları listele. "Arama sonucu / X belge bulundu" ifadesi KULLANMA.'
           },
           {
             id: 'assessment',
-            title: 'Vergilex değerlendirmesi',
+            title: 'Değerlendirme',
             required: true,
-            footnoteRequired: true,
-            description: 'Kaynaklara dayalı değerlendirme ve sonuç'
+            footnoteRequired: false,
+            description: 'EN AZ 3-4 paragraf uzunluğunda, MAKALE formatında detaylı değerlendirme yaz. Her paragraf ayrı bir alt konu veya perspektifi ele alsın. Kaynakların içeriğini derinlemesine analiz et, örnekler ver, uygulamadaki sonuçları açıkla. KISA CEVAP VERME - akademik makale gibi kapsamlı ol. Dipnot/kaynak listesi YAZMA (sistem otomatik ekleyecek).'
           }
         ],
 
@@ -144,7 +145,11 @@ export const DEFAULT_RAG_ROUTING_SCHEMA: RAGRoutingSchema = {
           'Arama sonucu',
           'X belge bulundu',
           'ALINTI',
-          'Bulunan belgeler'
+          'Bulunan belgeler',
+          'Dipnotlar',
+          'Dipnot',
+          'Footnotes',
+          'Kaynaklar listesi'
         ],
 
         template: '' // Article format uses articleSections

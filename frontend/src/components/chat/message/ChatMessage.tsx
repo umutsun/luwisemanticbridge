@@ -104,19 +104,32 @@ function parseStructuredResponse(content: string): ParsedResponse {
 
 /**
  * Clean raw markdown artifacts from assessment text
- * Removes: ## headers, **bold markers**, [Kaynak X] references, section labels
+ * Removes: ## headers, **bold markers**, [Kaynak X] references, section labels, CEVAP/ALINTI, Dipnotlar
  */
 function cleanAssessmentText(content: string): string {
   if (!content) return '';
 
   return content
+    // Remove **CEVAP** / **ANSWER** headers (legacy format)
+    .replace(/\*\*CEVAP\*\*\s*\n?/gi, '')
+    .replace(/\*\*ANSWER\*\*\s*\n?/gi, '')
+    // Remove **ALINTI** / **QUOTE** sections entirely
+    .replace(/\*\*ALINTI\*\*[\s\S]*?(?=\*\*[A-ZÇĞİÖŞÜ]|##|\n\n\n|$)/gi, '')
+    .replace(/\*\*QUOTE\*\*[\s\S]*?(?=\*\*[A-Z]|##|\n\n\n|$)/gi, '')
+    // Remove Dipnotlar/Footnotes sections entirely (citations shown in Atıflar component)
+    .replace(/##\s*Dipnotlar:?[\s\S]*?(?=##|\n\n\n|$)/gi, '')
+    .replace(/##\s*Footnotes:?[\s\S]*?(?=##|\n\n\n|$)/gi, '')
+    .replace(/\*\*Dipnotlar:?\*\*[\s\S]*?(?=\*\*[A-ZÇĞİÖŞÜ]|##|\n\n\n|$)/gi, '')
+    .replace(/\*\*Footnotes:?\*\*[\s\S]*?(?=\*\*[A-Z]|##|\n\n\n|$)/gi, '')
+    // Remove standalone reference lists like [1] Sirküler...
+    .replace(/\n\s*\[\d+\]\s+[^\n]+(?:\n\s*\[\d+\]\s+[^\n]+)*\s*$/gi, '')
     // Remove ## headers completely
     .replace(/^##\s*[^\n]+\n?/gm, '')
     // Remove **Section:** style headers
     .replace(/^\*\*(?:Konu|Anahtar\s*Terim|Dayanaklar|Değerlendirme|Dipnot)[^*]*\*\*:?\s*/gim, '')
     // Remove [Kaynak X] references (already shown in sources)
     .replace(/\[Kaynak\s*\d+\]/gi, '')
-    // Remove [1], [2] style references (sources shown separately)
+    // Remove [1], [2] style inline references (sources shown separately)
     .replace(/\[\d+\]/g, '')
     // Remove standalone bold markers around single words/short phrases in middle of text
     .replace(/\*\*([^*]{1,30})\*\*/g, '$1')
@@ -137,17 +150,13 @@ function formatMarkdownContent(content: string): string {
   if (!content) return '';
 
   // Known section headers that need line breaks (case-insensitive)
+  // Note: CEVAP/ALINTI removed - these are cleaned out by cleanAssessmentText
   const sectionHeaders = [
-    // New format headers
+    // New article format headers
     'Konu',
     'Anahtar Terimler',
     'Dayanaklar',
     'Değerlendirme',
-    // Strict RAG mode v3 headers (simplified - current)
-    'CEVAP',
-    'ALINTI',
-    'ANSWER',
-    'QUOTE',
     // Strict RAG mode v2 headers (Turkish)
     'BULGU',
     'KAYNAK BİLGİSİ',
@@ -331,13 +340,14 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
     return parseStructuredResponse(message.content);
   }, [message.content, message.role, message.isTyping, message.isStreaming]);
 
-  // Get display content - either cleaned parsed assessment or full content
+  // Get display content - either cleaned parsed assessment or cleaned full content
   const displayContent = useMemo(() => {
     if (parsedResponse?.hasStructure && parsedResponse.assessment) {
-      // Clean markdown artifacts from assessment text
+      // Clean markdown artifacts from structured assessment text
       return cleanAssessmentText(parsedResponse.assessment);
     }
-    return message.content;
+    // Also clean unstructured content to remove any CEVAP/ALINTI artifacts
+    return cleanAssessmentText(message.content);
   }, [parsedResponse, message.content]);
 
   return (

@@ -1254,74 +1254,87 @@ router.delete('/crawler-directories/:crawlerName/items/:itemKey', async (req: Re
 
 /**
  * GET /built-in
- * Get list of built-in crawlers
+ * Get list of built-in crawlers - dynamically from file system
  */
 router.get('/built-in', async (req: Request, res: Response) => {
   try {
     const crawlersDir = path.join(__dirname, '../../python-services/crawlers');
 
-    // Built-in crawler definitions
-    const builtInCrawlers = [
-      {
-        id: 'wordpress',
-        name: 'WordPress',
-        description: 'Generic WordPress sites via REST API',
-        features: ['REST API support', 'Sitemap fallback', 'Categories & tags', 'Featured images'],
-        type: 'REST API',
-        filename: 'wordpress_crawler.py'
-      },
-      {
-        id: 'drupal',
-        name: 'Drupal',
-        description: 'Drupal 8+ sites via JSON:API',
-        features: ['JSON:API support', 'Multiple endpoints', 'Pagination', 'Sitemap fallback'],
-        type: 'JSON:API',
-        filename: 'drupal_crawler.py'
-      },
-      {
-        id: 'woocommerce',
-        name: 'WooCommerce',
-        description: 'WooCommerce product stores',
-        features: ['Product variations', 'Stock status', 'Categories & tags', 'Image galleries'],
-        type: 'E-commerce API',
-        filename: 'woocommerce_crawler.py'
-      },
-      {
-        id: 'shopify',
-        name: 'Shopify',
-        description: 'Shopify online stores',
-        features: ['Product variants', 'Collections', 'Pagination', 'Vendor & tags'],
-        type: 'Storefront API',
-        filename: 'shopify_crawler.py'
-      },
-      {
-        id: 'wix',
-        name: 'Wix',
-        description: 'Wix websites (requires Playwright)',
-        features: ['JS rendering', 'Dynamic content', 'Page navigation', 'Stealth mode'],
-        type: 'Playwright',
-        filename: 'wix_crawler.py'
-      },
-      {
-        id: 'cloudflare',
-        name: 'Cloudflare Bypass',
-        description: 'Cloudflare-protected sites (requires Playwright)',
-        features: ['Challenge bypass', 'Stealth mode', 'Auto retry', 'Rate limiting'],
-        type: 'Stealth Playwright',
-        filename: 'cloudflare_crawler.py'
-      }
-    ];
+    // Read all .py files from crawlers directory
+    const files = fs.readdirSync(crawlersDir).filter(f =>
+      f.endsWith('.py') &&
+      f !== '__init__.py' &&
+      !f.startsWith('test_')
+    );
 
-    // Check which crawlers actually exist
-    const availableCrawlers = builtInCrawlers.filter(crawler => {
-      const scriptPath = path.join(crawlersDir, crawler.filename);
-      return fs.existsSync(scriptPath);
+    const crawlers = [];
+
+    for (const file of files) {
+      const filePath = path.join(crawlersDir, file);
+      const content = fs.readFileSync(filePath, 'utf-8');
+
+      // Extract metadata from docstring
+      const docstringMatch = content.match(/"""([\s\S]*?)"""/);
+      const docstring = docstringMatch ? docstringMatch[1] : '';
+
+      // Extract crawler name from CRAWLER_NAME variable or filename
+      const crawlerNameMatch = content.match(/CRAWLER_NAME\s*=\s*['"](.*?)['"]/);
+      const crawlerName = crawlerNameMatch
+        ? crawlerNameMatch[1]
+        : file.replace('_crawler.py', '').replace('.py', '');
+
+      // Extract description from docstring (first line)
+      const descLines = docstring.trim().split('\n');
+      const description = descLines[0]?.trim() || crawlerName;
+
+      // Extract default URL if present
+      const defaultUrlMatch = content.match(/DEFAULT_URL\s*=\s*['"](.*?)['"]/);
+      const defaultUrl = defaultUrlMatch ? defaultUrlMatch[1] : null;
+
+      // Determine category from filename or content
+      let category = 'general';
+      if (file.includes('gib') || content.includes('gib.gov.tr')) {
+        category = 'gib';
+      } else if (file.includes('mevzuat') || content.includes('mevzuat.gov.tr')) {
+        category = 'mevzuat';
+      } else if (file.includes('sahibinden')) {
+        category = 'emlak';
+      }
+
+      // Determine type from content
+      let type = 'Custom';
+      if (content.includes('playwright')) {
+        type = 'Playwright';
+      } else if (content.includes('requests') || content.includes('httpx')) {
+        type = 'HTTP';
+      } else if (content.includes('selenium')) {
+        type = 'Selenium';
+      }
+
+      crawlers.push({
+        id: crawlerName,
+        name: crawlerName.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()),
+        description,
+        filename: file,
+        category,
+        type,
+        defaultUrl,
+        features: [], // Could extract from docstring if needed
+        exists: true
+      });
+    }
+
+    // Sort by category then name
+    crawlers.sort((a, b) => {
+      if (a.category !== b.category) return a.category.localeCompare(b.category);
+      return a.name.localeCompare(b.name);
     });
 
     res.json({
       success: true,
-      crawlers: availableCrawlers,
-      total: availableCrawlers.length
+      crawlers,
+      total: crawlers.length,
+      categories: [...new Set(crawlers.map(c => c.category))]
     });
   } catch (error: any) {
     console.error('Failed to get built-in crawlers:', error);

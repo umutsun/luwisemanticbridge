@@ -11,6 +11,36 @@ import type {
 const TOAST_LIMIT = 1
 const TOAST_REMOVE_DELAY = 1000000
 
+// Notification API integration - send toasts to backend for persistence
+const sendToNotificationService = async (
+  title: string,
+  description: string,
+  variant?: string
+) => {
+  try {
+    const token = localStorage.getItem('token');
+    if (!token) return; // Skip if not authenticated
+
+    const type = variant === 'destructive' ? 'error' : 'success';
+
+    await fetch('/api/v2/notifications', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`
+      },
+      body: JSON.stringify({
+        type,
+        title: String(title || 'Bildirim'),
+        message: String(description || title || 'İşlem tamamlandı')
+      })
+    });
+  } catch (error) {
+    // Silently fail - don't break toast functionality
+    console.debug('Failed to send notification:', error);
+  }
+};
+
 type ToasterToast = ToastProps & {
   id: string
   title?: React.ReactNode
@@ -163,6 +193,13 @@ function toast({ ...props }: Toast) {
       },
     },
   })
+
+  // Send to notification service for persistence and real-time broadcast
+  const title = typeof props.title === 'string' ? props.title : '';
+  const description = typeof props.description === 'string' ? props.description : '';
+  if (title || description) {
+    sendToNotificationService(title, description, props.variant);
+  }
 
   return {
     id: id,

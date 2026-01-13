@@ -263,17 +263,17 @@ export default function CrawlerDataPage() {
   const [bulkRecrawling, setBulkRecrawling] = useState(false); // Bulk recrawl in progress
   const [showCrawlerSelect, setShowCrawlerSelect] = useState<string | null>(null); // Directory name for crawler selection
 
-  // Built-in crawlers (without _crawler suffix as per folder structure)
-  const builtInCrawlers = [
-    { name: 'wordpress', label: 'WordPress' },
-    { name: 'drupal', label: 'Drupal' },
-    { name: 'woocommerce', label: 'WooCommerce' },
-    { name: 'shopify', label: 'Shopify' },
-    { name: 'wix', label: 'Wix' },
-    { name: 'cloudflare', label: 'Cloudflare' },
-    { name: 'vergilex_gib', label: 'GIB Sirküler' },
-    { name: 'vergilex_mevzuat', label: 'Mevzuat.gov.tr' }
-  ];
+  // Built-in crawlers - dynamically loaded from backend
+  const [builtInCrawlers, setBuiltInCrawlers] = useState<Array<{
+    id: string;
+    name: string;
+    description?: string;
+    filename: string;
+    category: string;
+    type: string;
+    defaultUrl?: string;
+  }>>([]);
+  const [crawlerCategories, setCrawlerCategories] = useState<string[]>([]);
 
   // Analyze functionality
   const [selectedForAnalyze, setSelectedForAnalyze] = useState<Set<string>>(new Set()); // Selected item IDs for batch analyze
@@ -307,7 +307,25 @@ export default function CrawlerDataPage() {
     fetchSourceTables();
     fetchAnalysisTemplates();
     fetchScheduledCrawlers();
+    fetchBuiltInCrawlers();
   }, []);
+
+  // Fetch built-in crawlers from backend (dynamically from file system)
+  const fetchBuiltInCrawlers = async () => {
+    try {
+      const response = await fetchWithAuth(`${config.api.baseUrl}/api/v2/crawler/built-in`);
+      if (response.ok) {
+        const data = await response.json();
+        if (data.success && data.crawlers) {
+          setBuiltInCrawlers(data.crawlers);
+          setCrawlerCategories(data.categories || []);
+          console.log(`[Crawlers] Loaded ${data.crawlers.length} built-in crawlers`);
+        }
+      }
+    } catch (error) {
+      console.error('[Crawlers] Failed to fetch built-in crawlers:', error);
+    }
+  };
 
   // Poll scheduler for running crawler jobs (adds to runningScripts for animations)
   useEffect(() => {

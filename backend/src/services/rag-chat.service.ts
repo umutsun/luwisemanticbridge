@@ -215,53 +215,59 @@ export class RAGChatService {
    */
   private buildArticleFormatPrompt(schema: RAGRoutingSchema, language: string = 'tr'): string {
     const foundFormat = schema.routes.FOUND.format;
-    const articleSections = foundFormat.articleSections || [];
     const sourcePriority = foundFormat.sourcePriority || [];
     const prohibitedContent = foundFormat.prohibitedContent || [];
 
-    // Build section instructions from schema
-    const sectionInstructions = articleSections.map((section, idx) => {
-      const title = section.title || section.id;
-      const description = section.description || '';
-      return `## ${title}\n${description}`;
-    }).join('\n\n');
-
     if (language === 'tr') {
-      let prompt = `YANITLAMA FORMATI (ZORUNLU):
+      let prompt = `YANITLAMA FORMATI (ZORUNLU - HARFİYEN UYGULANACAK):
 
-Aşağıdaki bölümleri MUTLAKA sırayla kullan. Her bölüm ayrı paragraf olarak yazılmalı:
+Yanıtını MUTLAKA aşağıdaki 2 bölümle yaz. Başka bölüm EKLEME.
 
-${sectionInstructions}
+## Konu
+Sorunun kapsadığı vergi konusunu 1-2 cümlede özetle.
 
-KAYNAK ÖNCELİK SIRASI:
-`;
-      sourcePriority.forEach((sp, idx) => {
-        prompt += `${idx + 1}. ${sp.label}\n`;
-      });
+## Değerlendirme
+Kaynaklara dayalı detaylı analiz yaz. EN AZ 3-4 paragraf olsun.
 
-      // Add prohibited content from schema
-      if (prohibitedContent.length > 0) {
-        prompt += `
+KRİTİK KURALLAR:
+1. Kanun/madde numarası SADECE kaynakta AÇIKÇA geçiyorsa yaz. Kaynak metninde geçmeyen madde numarası UYDURMA.
+2. "zorunda mıyım", "yapabilir miyim" gibi sorularda: Kaynakta AÇIK HÜKÜM yoksa "Kaynaklarda bu konuda açık bir düzenleme bulunamamıştır" de.
+3. "zorunludur", "yasaktır", "mümkündür" gibi KESİN İFADELER sadece kaynakta birebir varsa kullan.
+4. Emin değilsen: "Kaynaklara göre..." veya "...olarak değerlendirilebilir" gibi yumuşak ifadeler kullan.
+
 YASAKLAR:
+- "Anahtar Terimler" bölümü YAZMA (sistem ekleyecek)
+- "Dayanaklar" bölümü YAZMA (sistem ekleyecek)
+- "Dipnotlar" bölümü YAZMA (sistem ekleyecek)
+- Kaynak dışı bilgi verme
+- Kaynakta geçmeyen madde numarası uydurma
 ${prohibitedContent.map(p => `- "${p}"`).join('\n')}
-- Dipnot listesi (sistem ekleyecek)
 `;
-      }
       return prompt;
     } else {
-      // English version - derive from same schema
-      let prompt = `RESPONSE FORMAT (MANDATORY):
+      let prompt = `RESPONSE FORMAT (MANDATORY - FOLLOW EXACTLY):
 
-Use these sections IN ORDER. Each section must be a separate paragraph:
+Write your response with ONLY these 2 sections. Do NOT add other sections.
 
-${sectionInstructions}
+## Topic
+Summarize the tax topic in 1-2 sentences.
 
-SOURCE PRIORITY:
+## Assessment
+Write detailed analysis based on sources. At least 3-4 paragraphs.
+
+CRITICAL RULES:
+1. Only cite law/article numbers if they EXPLICITLY appear in the source text. Do NOT invent references.
+2. For "must I", "can I" questions: If no EXPLICIT ruling in sources, say "No clear regulation found in sources."
+3. Use definitive statements ("required", "prohibited", "possible") ONLY if source explicitly states so.
+4. When uncertain: Use hedged language like "According to sources..." or "...may be considered as"
+
+PROHIBITED:
+- Do NOT write "Key Terms" section (system will add)
+- Do NOT write "Legal Basis" section (system will add)
+- Do NOT write "Footnotes" section (system will add)
+- Do NOT provide information not in sources
+- Do NOT invent article numbers not in sources
 `;
-      sourcePriority.forEach((sp, idx) => {
-        prompt += `${idx + 1}. ${sp.label}\n`;
-      });
-
       return prompt;
     }
   }
@@ -3305,9 +3311,16 @@ FORMAT:
       result = result.replace(/\*\*ANSWER\*\*\s*\n?/gi, '');
       result = result.replace(/\*\*ALINTI\*\*[\s\S]*?(?=##|\*\*[A-ZÇĞİÖŞÜ]|\n\n\n|$)/gi, '');
       result = result.replace(/\*\*QUOTE\*\*[\s\S]*?(?=##|\*\*[A-Z]|\n\n\n|$)/gi, '');
-      // Remove Dipnotlar section - citations shown in UI
-      result = result.replace(/##\s*Dipnotlar[\s\S]*?(?=##|\n\n\n|$)/gi, '');
-      result = result.replace(/##\s*Footnotes[\s\S]*?(?=##|\n\n\n|$)/gi, '');
+
+      // Remove ALL Dipnotlar/Footnotes sections - citations shown in Atıflar UI component
+      // Multiple patterns to catch various formats LLM might use
+      result = result.replace(/##\s*Dipnotlar:?[\s\S]*?(?=##|\n\n\n|$)/gi, '');
+      result = result.replace(/##\s*Footnotes:?[\s\S]*?(?=##|\n\n\n|$)/gi, '');
+      result = result.replace(/\*\*Dipnotlar:?\*\*[\s\S]*?(?=##|\*\*[A-ZÇĞİÖŞÜ]|\n\n\n|$)/gi, '');
+      result = result.replace(/\*\*Footnotes:?\*\*[\s\S]*?(?=##|\*\*[A-Z]|\n\n\n|$)/gi, '');
+      // Also remove any standalone [1] [2] reference lists at the end
+      result = result.replace(/\n\s*\[\d+\]\s+[^\n]+(?:\n\s*\[\d+\]\s+[^\n]+)*\s*$/gi, '');
+
       return result.trim();
     }
 

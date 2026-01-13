@@ -4,12 +4,10 @@
  * Real-time notification consumer via WebSocket
  * - Connects to backend WebSocket notification service
  * - Listens for real-time notifications
- * - Displays toast notifications
  * - Manages notification state
  */
 
 import { useEffect, useState, useCallback, useRef } from 'react';
-import { useToast } from '@/hooks/use-toast';
 
 export interface Notification {
   id: string;
@@ -26,7 +24,6 @@ export function useNotifications() {
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const [connected, setConnected] = useState(false);
-  const { toast } = useToast();
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectTimeoutRef = useRef<NodeJS.Timeout>();
 
@@ -172,16 +169,9 @@ export function useNotifications() {
           if (message.type === 'notification' && message.data) {
             const notification: Notification = message.data;
 
-            // Add to notifications list
+            // Add to notifications list (toast already shown locally, no need to show again)
             setNotifications(prev => [notification, ...prev]);
             setUnreadCount(prev => prev + 1);
-
-            // Show toast
-            toast({
-              title: notification.title,
-              description: notification.message,
-              variant: notification.type === 'error' ? 'destructive' : 'default'
-            });
           }
         } catch (error) {
           console.error('Failed to parse WebSocket message:', error);
@@ -208,7 +198,7 @@ export function useNotifications() {
       console.error('Failed to connect WebSocket:', error);
       setConnected(false);
     }
-  }, [toast]);
+  }, []);
 
   // Initialize
   useEffect(() => {
