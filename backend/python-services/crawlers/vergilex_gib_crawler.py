@@ -281,13 +281,14 @@ class GIBSirkulerCrawler:
                 # Look for sirkuler number - more specific patterns for GIB format
                 sirkuler_no_patterns = [
                     # VUK-191/2025-12/Enflasyon Düzeltmesi Uygulaması-21 format
-                    r'Sirküler\s*No\s*([A-ZÇĞİÖŞÜ]+-\d+/\d+[^S\n]{0,100})',
-                    # VUK-41/2006-6 format
-                    r'Sayısı\s*:\s*([A-ZÇĞİÖŞÜ]+-\d+/\d+-\d+[^İ\n]{0,80})',
-                    # Simpler patterns
+                    # Capture until next "Sirküler Tarihi" or "Konusu" or double space
+                    r'Sirküler\s*No\s*([A-ZÇĞİÖŞÜ]+-\d+/\d+[-/][^\n]+?)(?:Sirküler\s*Tarihi|Konusu|Tarihi\s*:|\s{2,})',
+                    # VUK-41/2006-6 format from Sayısı field
+                    r'Sayısı\s*:\s*([A-ZÇĞİÖŞÜ]+-\d+/\d+[-/][^\n]+?)(?:İlgili|Tarihi|\s{2,})',
+                    # Simple VUK-XXX/YYYY-ZZ pattern
+                    r'Sirküler\s*(?:No|Numarası)?\s*[:\s]*([A-ZÇĞİÖŞÜ]+-\d+/\d+-\d+)',
                     r'Sirküler\s*(?:No|Numarası)?\s*[:\s]*([A-ZÇĞİÖŞÜ]+-\d+[/\-]\d+)',
                     r'Sirküler\s*(?:No|Numarası)?\s*[:\s]*(\d+[/\-]?\d*)',
-                    r'(\d+)\s*(?:Seri\s*No|nolu)',
                 ]
 
                 text_content = soup.get_text(' ', strip=True)
@@ -311,16 +312,18 @@ class GIBSirkulerCrawler:
                         content_data['tarih'] = match.group(1)
                         break
 
-                # Look for konu/subject
+                # Look for konu/subject - handle formats like "Konusu: Enflasyon DüzeltmesiTarihi:"
                 konu_patterns = [
-                    r'Konusu\s*:\s*([^\n]{10,100})',
-                    r'Konu\s*:\s*([^\n]{10,100})',
+                    r'Konusu\s*:\s*(.+?)(?:Tarihi|İlgili|Sayısı|\s{2,})',
+                    r'Konu\s*:\s*(.+?)(?:Tarihi|İlgili|Sayısı|\s{2,})',
                 ]
                 for pattern in konu_patterns:
                     match = re.search(pattern, text_content)
                     if match:
-                        content_data['konu'] = match.group(1).strip()
-                        break
+                        konu = match.group(1).strip()
+                        if len(konu) > 5 and len(konu) < 200:
+                            content_data['konu'] = konu
+                            break
 
                 # Extract main content
                 paragraphs = []
