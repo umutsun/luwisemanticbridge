@@ -199,7 +199,7 @@ export function setupNotificationBroadcast(wss: any) {
           }
         });
 
-        logger.debug(`Broadcasted notification ${notification.id} to ${wss.clients.size} clients`);
+        logger.info(`📢 Broadcasted notification ${notification.id} to ${wss.clients.size} clients`);
       } catch (error) {
         logger.error('Failed to broadcast notification:', error);
       }
