@@ -151,4 +151,84 @@ router.post('/delete-duplicates', async (req: Request, res: Response) => {
   }
 });
 
+/**
+ * GET /api/data-health/pending-embeddings
+ * Henüz embed edilmemiş kayıtları bul
+ */
+router.get('/pending-embeddings', async (req: Request, res: Response) => {
+  try {
+    const response = await axios.get(
+      `${PYTHON_SERVICE_URL}/api/python/data-health/pending-embeddings`,
+      { timeout: 60000 }
+    );
+    res.json(response.data);
+  } catch (error: any) {
+    logger.error('Data health pending-embeddings error:', error.message);
+    res.status(500).json({
+      error: error.message || 'Python service unreachable',
+    });
+  }
+});
+
+/**
+ * GET /api/data-health/queue-status
+ * Embedding kuyruk durumu
+ */
+router.get('/queue-status', async (req: Request, res: Response) => {
+  try {
+    const response = await axios.get(
+      `${PYTHON_SERVICE_URL}/api/python/data-health/queue-status`,
+      { timeout: 30000 }
+    );
+    res.json(response.data);
+  } catch (error: any) {
+    logger.error('Data health queue-status error:', error.message);
+    res.status(500).json({
+      error: error.message || 'Python service unreachable',
+    });
+  }
+});
+
+/**
+ * POST /api/data-health/reset-stuck
+ * Takılmış işleri resetle
+ */
+router.post('/reset-stuck', async (req: Request, res: Response) => {
+  try {
+    const dryRun = req.query.dry_run !== 'false';
+    const response = await axios.post(
+      `${PYTHON_SERVICE_URL}/api/python/data-health/reset-stuck?dry_run=${dryRun}`,
+      {},
+      { timeout: 60000 }
+    );
+    res.json(response.data);
+  } catch (error: any) {
+    logger.error('Data health reset-stuck error:', error.message);
+    res.status(500).json({
+      error: error.message || 'Operation failed',
+    });
+  }
+});
+
+/**
+ * POST /api/data-health/optimize
+ * Tek tıkla veri optimizasyonu
+ */
+router.post('/optimize', async (req: Request, res: Response) => {
+  try {
+    const dryRun = req.query.dry_run !== 'false';
+    const response = await axios.post(
+      `${PYTHON_SERVICE_URL}/api/python/data-health/optimize?dry_run=${dryRun}`,
+      {},
+      { timeout: 300000 } // 5 dakika timeout
+    );
+    res.json(response.data);
+  } catch (error: any) {
+    logger.error('Data health optimize error:', error.message);
+    res.status(500).json({
+      error: error.message || 'Operation failed',
+    });
+  }
+});
+
 export default router;

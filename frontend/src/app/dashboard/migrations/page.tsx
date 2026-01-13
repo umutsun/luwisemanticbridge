@@ -168,6 +168,7 @@ export default function EmbeddingsManagerPage() {
   const [isHealthChecking, setIsHealthChecking] = useState(false);
   const [healthProgress, setHealthProgress] = useState(0);
   const [showHealthModal, setShowHealthModal] = useState(false);
+  const [isOptimizing, setIsOptimizing] = useState(false);
   const [healthReport, setHealthReport] = useState<{
     summary: { total_embeddings: number; orphan_count: number; missing_metadata_count: number; duplicate_count: number; health_score: number };
     tables: Record<string, any>;
@@ -2181,15 +2182,37 @@ export default function EmbeddingsManagerPage() {
                   <Button
                     size="sm"
                     className="flex-1"
-                    onClick={() => {
-                      setShowHealthModal(false);
-                      toast({
-                        title: 'Optimizasyon başlatıldı',
-                        description: 'Duplicate temizleme ve metadata düzeltme işlemi kuyruğa alındı.',
-                      });
+                    disabled={isOptimizing}
+                    onClick={async () => {
+                      setIsOptimizing(true);
+                      try {
+                        const response = await fetchWithAuth('/api/data-health/optimize?dry_run=false', {
+                          method: 'POST',
+                        });
+                        if (response.ok) {
+                          const result = await response.json();
+                          setShowHealthModal(false);
+                          toast({
+                            title: 'Optimizasyon tamamlandı',
+                            description: `${result.orphans_deleted} orphan, ${result.duplicates_deleted} duplicate silindi, ${result.metadata_fixed} metadata düzeltildi.`,
+                          });
+                          // Raporu yenile
+                          fetchHealthReport();
+                        } else {
+                          throw new Error('Optimizasyon başarısız');
+                        }
+                      } catch (error) {
+                        toast({
+                          title: 'Hata',
+                          description: 'Optimizasyon sırasında bir hata oluştu.',
+                          variant: 'destructive',
+                        });
+                      } finally {
+                        setIsOptimizing(false);
+                      }
                     }}
                   >
-                    Optimize Et
+                    {isOptimizing ? 'İşleniyor...' : 'Optimize Et'}
                   </Button>
                 )}
               </div>

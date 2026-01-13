@@ -641,6 +641,237 @@ class DataHealthService:
                 )
 
         if not recommendations:
-            recommendations.append("✅ Veri sağlığı iyi durumda!")
+            recommendations.append("Veri sağlığı iyi durumda.")
 
         return recommendations
+
+    # ==========================================
+    # PENDING/STUCK EMBEDDING OPERATIONS
+    # ==========================================
+
+    async def get_pending_embeddings(self) -> Dict[str, Any]:
+        """
+        Bekleyen (henüz embed edilmemiş) kayıtları bul.
+        Source DB'deki kayıtları unified_embeddings ile karşılaştırır.
+        """
+        result = {
+            "tables": {},
+            "total_pending": 0,
+            "total_embedded": 0,
+            "total_source": 0
+        }
+
+        try:
+            # Embedded tabloları al
+            tables = await self._get_embedded_tables()
+
+            for table_name in tables:
+                source_table = self._get_source_table_name(table_name)
+
+                # Source tablo var mı kontrol et
+                check_query = """
+                    SELECT EXISTS (
+                        SELECT FROM information_schema.tables
+                        WHERE table_schema = 'public' AND table_name = $1
+                    )
+                """
+                exists = await self.source_pool.fetchval(check_query, source_table)
+
+                if not exists:
+                    exists = await self.source_pool.fetchval(check_query, table_name)
+                    if exists:
+                        source_table = table_name
+
+                if not exists:
+                    continue
+
+                pk = self.PRIMARY_KEYS.get(table_name, self.PRIMARY_KEYS['default'])
+
+                # Source'daki toplam kayıt
+                source_count_query = f'SELECT COUNT(*) FROM "{source_table}"'
+                source_count = await self.source_pool.fetchval(source_count_query)
+
+                # Embedded kayıt sayısı
+                embedded_count_query = """
+                    SELECT COUNT(*) FROM unified_embeddings
+                    WHERE source_table = $1 OR metadata->>'table' = $1
+                """
+                embedded_count = await self.system_pool.fetchval(embedded_count_query, table_name)
+
+                pending = max(0, source_count - embedded_count)
+
+                if pending > 0 or source_count > 0:
+                    result["tables"][table_name] = {
+                        "source_count": source_count,
+                        "embedded_count": embedded_count,
+                        "pending_count": pending,
+                        "completion_pct": round((embedded_count / source_count * 100) if source_count > 0 else 100, 1)
+                    }
+
+                result["total_source"] += source_count
+                result["total_embedded"] += embedded_count
+                result["total_pending"] += pending
+
+            return result
+
+        except Exception as e:
+            logger.error(f"Error getting pending embeddings: {e}")
+            raise
+
+    async def find_missing_source_ids(
+        self,
+        table_name: str,
+        limit: int = 100
+    ) -> Dict[str, Any]:
+        """
+        Belirli bir tablo için embed edilmemiş source_id'leri bul.
+        Bu ID'ler embedding kuyruğuna eklenebilir.
+        """
+        result = {
+            "table": table_name,
+            "missing_ids": [],
+            "total_missing": 0
+        }
+
+        try:
+            source_table = self._get_source_table_name(table_name)
+
+            # Source tablo kontrolü
+            check_query = """
+                SELECT EXISTS (
+                    SELECT FROM information_schema.tables
+                    WHERE table_schema = 'public' AND table_name = $1
+                )
+            """
+            exists = await self.source_pool.fetchval(check_query, source_table)
+
+            if not exists:
+                exists = await self.source_pool.fetchval(check_query, table_name)
+                if exists:
+                    source_table = table_name
+
+            if not exists:
+                logger.warning(f"Source table not found: {table_name}")
+                return result
+
+            pk = self.PRIMARY_KEYS.get(table_name, self.PRIMARY_KEYS['default'])
+
+            # Source'da olup unified'da olmayan ID'leri bul
+            missing_query = f"""
+                SELECT src.{pk} as source_id
+                FROM "{source_table}" src
+                WHERE NOT EXISTS (
+                    SELECT 1 FROM unified_embeddings ue
+                    WHERE ue.source_id = src.{pk}
+                    AND (ue.source_table = $1 OR ue.metadata->>'table' = $1)
+                )
+                ORDER BY src.{pk}
+                LIMIT $2
+            """
+            rows = await self.source_pool.fetch(missing_query, table_name, limit)
+            result["missing_ids"] = [r['source_id'] for r in rows]
+
+            # Toplam eksik sayısı
+            count_query = f"""
+                SELECT COUNT(*) FROM "{source_table}" src
+                WHERE NOT EXISTS (
+                    SELECT 1 FROM unified_embeddings ue
+                    WHERE ue.source_id = src.{pk}
+                    AND (ue.source_table = $1 OR ue.metadata->>'table' = $1)
+                )
+            """
+            result["total_missing"] = await self.source_pool.fetchval(count_query, table_name)
+
+            return result
+
+        except Exception as e:
+            logger.error(f"Error finding missing source IDs for {table_name}: {e}")
+            raise
+
+    async def get_embedding_queue_status(self) -> Dict[str, Any]:
+        """
+        import_jobs tablosundan bekleyen/stuck işleri kontrol et.
+        """
+        result = {
+            "pending_jobs": [],
+            "stuck_jobs": [],
+            "total_pending": 0,
+            "total_stuck": 0
+        }
+
+        try:
+            # Pending jobs (son 24 saat)
+            pending_query = """
+                SELECT id, source_type, source_id, table_name, status,
+                       created_at, updated_at, error_message
+                FROM import_jobs
+                WHERE status IN ('pending', 'processing')
+                AND created_at > NOW() - INTERVAL '24 hours'
+                ORDER BY created_at DESC
+                LIMIT 50
+            """
+            pending = await self.system_pool.fetch(pending_query)
+            result["pending_jobs"] = [dict(r) for r in pending]
+            result["total_pending"] = len(pending)
+
+            # Stuck jobs (processing > 10 dakika)
+            stuck_query = """
+                SELECT id, source_type, source_id, table_name, status,
+                       created_at, updated_at, error_message,
+                       EXTRACT(EPOCH FROM (NOW() - updated_at)) / 60 as minutes_stuck
+                FROM import_jobs
+                WHERE status = 'processing'
+                AND updated_at < NOW() - INTERVAL '10 minutes'
+                ORDER BY updated_at ASC
+                LIMIT 20
+            """
+            stuck = await self.system_pool.fetch(stuck_query)
+            result["stuck_jobs"] = [dict(r) for r in stuck]
+            result["total_stuck"] = len(stuck)
+
+            return result
+
+        except Exception as e:
+            logger.error(f"Error getting queue status: {e}")
+            # import_jobs tablosu olmayabilir
+            return result
+
+    async def reset_stuck_jobs(self, dry_run: bool = True) -> Dict[str, Any]:
+        """
+        Takılmış işleri 'pending' durumuna geri al.
+        """
+        result = {
+            "stuck_found": 0,
+            "reset_count": 0,
+            "dry_run": dry_run,
+            "reset_jobs": []
+        }
+
+        try:
+            # Stuck jobs bul
+            stuck_query = """
+                SELECT id, table_name, source_id
+                FROM import_jobs
+                WHERE status = 'processing'
+                AND updated_at < NOW() - INTERVAL '10 minutes'
+            """
+            stuck = await self.system_pool.fetch(stuck_query)
+            result["stuck_found"] = len(stuck)
+            result["reset_jobs"] = [{"id": r['id'], "table": r['table_name']} for r in stuck[:10]]
+
+            if not dry_run and stuck:
+                # Reset to pending
+                reset_query = """
+                    UPDATE import_jobs
+                    SET status = 'pending', updated_at = NOW(), error_message = 'Auto-reset by health check'
+                    WHERE status = 'processing'
+                    AND updated_at < NOW() - INTERVAL '10 minutes'
+                """
+                await self.system_pool.execute(reset_query)
+                result["reset_count"] = len(stuck)
+
+            return result
+
+        except Exception as e:
+            logger.error(f"Error resetting stuck jobs: {e}")
+            return result

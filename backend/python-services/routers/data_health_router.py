@@ -362,3 +362,134 @@ async def get_table_stats(
     except Exception as e:
         logger.error(f"Error getting stats for {table_name}: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+# =====================================================
+# Pending & Stuck Embeddings
+# =====================================================
+
+@router.get("/pending-embeddings")
+async def get_pending_embeddings(
+    service: DataHealthService = Depends(get_data_health_service)
+):
+    """
+    Henuz embed edilmemis kayitlari bul.
+    Source DB'deki toplam kayit sayisi ile embedded sayisini karsilastirir.
+    """
+    try:
+        return await service.get_pending_embeddings()
+    except Exception as e:
+        logger.error(f"Error getting pending embeddings: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/missing-ids/{table_name}")
+async def get_missing_source_ids(
+    table_name: str,
+    limit: int = Query(default=100, ge=1, le=1000),
+    service: DataHealthService = Depends(get_data_health_service)
+):
+    """
+    Belirli bir tablo icin embed edilmemis source_id'leri getir.
+    """
+    try:
+        return await service.find_missing_source_ids(table_name, limit)
+    except Exception as e:
+        logger.error(f"Error finding missing IDs for {table_name}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/queue-status")
+async def get_queue_status(
+    service: DataHealthService = Depends(get_data_health_service)
+):
+    """
+    import_jobs tablosundan embedding kuyrugu durumunu getir.
+    Pending, processing, stuck job sayilarini doner.
+    """
+    try:
+        return await service.get_embedding_queue_status()
+    except Exception as e:
+        logger.error(f"Error getting queue status: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/reset-stuck")
+async def reset_stuck_jobs(
+    dry_run: bool = Query(default=True, description="True ise degisiklik yapmaz"),
+    service: DataHealthService = Depends(get_data_health_service)
+):
+    """
+    10 dakikadan uzun suredir 'processing' durumunda kalan isleri resetle.
+
+    UYARI: dry_run=False yaparak gercek degisiklik yapilir!
+    """
+    try:
+        return await service.reset_stuck_jobs(dry_run)
+    except Exception as e:
+        logger.error(f"Error resetting stuck jobs: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/optimize")
+async def optimize_data(
+    dry_run: bool = Query(default=True, description="True ise degisiklik yapmaz"),
+    service: DataHealthService = Depends(get_data_health_service)
+):
+    """
+    Tek tikla veri optimizasyonu:
+    1. Stuck job'lari resetle
+    2. Orphan kayitlari sil
+    3. Duplicate kayitlari sil
+    4. Eksik metadata'yi doldur
+
+    Tum tablolar icin calisir.
+    """
+    results = {
+        "dry_run": dry_run,
+        "stuck_reset": None,
+        "orphans_deleted": 0,
+        "duplicates_deleted": 0,
+        "metadata_fixed": 0,
+        "tables_processed": [],
+        "errors": []
+    }
+
+    try:
+        # 1. Reset stuck jobs
+        stuck_result = await service.reset_stuck_jobs(dry_run)
+        results["stuck_reset"] = stuck_result.get("reset_count", 0)
+
+        # 2. Get all tables
+        tables = await service._get_embedded_tables()
+
+        for table in tables:
+            table_result = {"table": table, "orphans": 0, "duplicates": 0, "metadata": 0}
+
+            try:
+                # Delete orphans
+                orphan_result = await service.delete_orphans(table, dry_run, limit=5000)
+                table_result["orphans"] = orphan_result.get("deleted_count", 0)
+                results["orphans_deleted"] += table_result["orphans"]
+
+                # Delete duplicates
+                dup_result = await service.delete_duplicates(table, dry_run, keep="newest")
+                table_result["duplicates"] = dup_result.get("deleted_count", 0)
+                results["duplicates_deleted"] += table_result["duplicates"]
+
+                # Fix metadata
+                meta_result = await service.fix_missing_metadata(table, dry_run, batch_size=100, limit=5000)
+                table_result["metadata"] = meta_result.fixed_count
+                results["metadata_fixed"] += table_result["metadata"]
+
+                results["tables_processed"].append(table_result)
+
+            except Exception as e:
+                results["errors"].append({"table": table, "error": str(e)})
+                logger.error(f"Error optimizing {table}: {e}")
+
+        return results
+
+    except Exception as e:
+        logger.error(f"Error in optimize: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
