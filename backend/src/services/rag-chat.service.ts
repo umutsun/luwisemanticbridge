@@ -3556,7 +3556,6 @@ FORMAT:
     }
 
     return result;
-    */
   }
 
   /**
