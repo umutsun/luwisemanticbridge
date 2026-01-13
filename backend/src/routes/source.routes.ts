@@ -287,10 +287,15 @@ router.post('/tables/create', async (req: Request, res: Response) => {
 
 /**
  * Generate MD5 hash of content for change detection
+ * Handles Turkish characters and UTF-8 encoding properly
  */
 function generateContentHash(content: string): string {
   const crypto = require('crypto');
-  return crypto.createHash('md5').update(content || '').digest('hex');
+  // Normalize content: trim whitespace, normalize unicode (NFC form for Turkish chars)
+  const normalizedContent = (content || '')
+    .normalize('NFC')  // Normalize unicode characters (important for Turkish: İ, ı, ş, ğ, ü, ö, ç)
+    .trim();
+  return crypto.createHash('md5').update(normalizedContent, 'utf8').digest('hex');
 }
 
 /**
