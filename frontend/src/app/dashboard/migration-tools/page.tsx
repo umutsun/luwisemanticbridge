@@ -309,9 +309,10 @@ export default function MigrationToolsPage() {
   const loadHealthReport = async () => {
     setHealthLoading(true);
     try {
-      const response = await fetch('http://localhost:8002/api/python/data-health/report');
+      const response = await fetch('/api/python/data-health?endpoint=report');
       if (response.ok) {
         const data = await response.json();
+        if (data.error) throw new Error(data.error);
         setHealthReport(data);
       } else {
         throw new Error('Failed to load health report');
@@ -327,11 +328,12 @@ export default function MigrationToolsPage() {
     setFixLoading(tableName);
     setFixResult(null);
     try {
-      const response = await fetch(`http://localhost:8002/api/python/data-health/quick-fix/${tableName}?dry_run=${dryRun}`, {
+      const response = await fetch(`/api/python/data-health?action=quick-fix&table=${tableName}&dry_run=${dryRun}`, {
         method: 'POST',
       });
       if (response.ok) {
         const data = await response.json();
+        if (data.error) throw new Error(data.error);
         setFixResult(data);
         setMessage({
           type: 'success',
@@ -356,7 +358,7 @@ export default function MigrationToolsPage() {
   const runMetadataFix = async (tableName: string) => {
     setFixLoading(`metadata-${tableName}`);
     try {
-      const response = await fetch('http://localhost:8002/api/python/data-health/fix-metadata', {
+      const response = await fetch('/api/python/data-health?action=fix-metadata', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -368,6 +370,7 @@ export default function MigrationToolsPage() {
       });
       if (response.ok) {
         const data = await response.json();
+        if (data.error) throw new Error(data.error);
         setMessage({
           type: 'success',
           text: dryRun
@@ -388,7 +391,7 @@ export default function MigrationToolsPage() {
   const runOrphanDelete = async (tableName: string) => {
     setFixLoading(`orphan-${tableName}`);
     try {
-      const response = await fetch('http://localhost:8002/api/python/data-health/delete-orphans', {
+      const response = await fetch('/api/python/data-health?action=delete-orphans', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -399,6 +402,7 @@ export default function MigrationToolsPage() {
       });
       if (response.ok) {
         const data = await response.json();
+        if (data.error) throw new Error(data.error);
         setMessage({
           type: 'success',
           text: dryRun
@@ -419,7 +423,7 @@ export default function MigrationToolsPage() {
   const runDuplicateDelete = async (tableName: string) => {
     setFixLoading(`duplicate-${tableName}`);
     try {
-      const response = await fetch('http://localhost:8002/api/python/data-health/delete-duplicates', {
+      const response = await fetch('/api/python/data-health?action=delete-duplicates', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -430,6 +434,7 @@ export default function MigrationToolsPage() {
       });
       if (response.ok) {
         const data = await response.json();
+        if (data.error) throw new Error(data.error);
         setMessage({
           type: 'success',
           text: dryRun
