@@ -1098,7 +1098,7 @@ export default function EmbeddingsManagerPage() {
         });
       }, 300);
 
-      const response = await fetch('/api/python/data-health?endpoint=report');
+      const response = await fetchWithAuth('/api/data-health/report');
       clearInterval(progressInterval);
 
       if (response.ok) {
