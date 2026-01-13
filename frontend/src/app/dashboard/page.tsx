@@ -365,6 +365,17 @@ export default function DashboardPage() {
     crawlerCount: 0
   });
 
+  // Scheduler stats - real-time
+  const [schedulerStats, setSchedulerStats] = useState({
+    totalJobs: 0,
+    enabledJobs: 0,
+    disabledJobs: 0,
+    executionsLast24h: 0,
+    successfulLast24h: 0,
+    failedLast24h: 0,
+    schedulerRunning: false
+  });
+
   // SSE connection status
   const [sseConnected, setSseConnected] = useState(false);
 
@@ -582,6 +593,45 @@ export default function DashboardPage() {
 
     // Poll every 5 seconds
     intervalId = setInterval(fetchCrawlerStats, 5000);
+
+    return () => {
+      isMounted = false;
+      if (intervalId) clearInterval(intervalId);
+    };
+  }, []);
+
+  // Fetch scheduler stats - real-time polling
+  useEffect(() => {
+    let intervalId: NodeJS.Timeout | null = null;
+    let isMounted = true;
+
+    const fetchSchedulerStats = async () => {
+      try {
+        const response = await fetchWithAuth(apiConfig.getApiUrl('/api/v2/scheduler/stats'));
+        if (response.ok && isMounted) {
+          const data = await safeJsonParse(response);
+          if (data) {
+            setSchedulerStats({
+              totalJobs: data.total_jobs || 0,
+              enabledJobs: data.enabled_jobs || 0,
+              disabledJobs: data.disabled_jobs || 0,
+              executionsLast24h: data.executions_last_24h || 0,
+              successfulLast24h: data.successful_last_24h || 0,
+              failedLast24h: data.failed_last_24h || 0,
+              schedulerRunning: data.scheduler_running || false
+            });
+          }
+        }
+      } catch (error) {
+        console.error('Scheduler stats fetch error:', error);
+      }
+    };
+
+    // Initial fetch after short delay
+    setTimeout(fetchSchedulerStats, 2000);
+
+    // Poll every 10 seconds
+    intervalId = setInterval(fetchSchedulerStats, 10000);
 
     return () => {
       isMounted = false;
@@ -1577,7 +1627,7 @@ export default function DashboardPage() {
           />
         </div>
 
-        {/* Scraped Data Stats Row - New Real-time Data */}
+        {/* Scraped Data & Scheduler Stats Row - Real-time Data */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
           {/* Scraped Pages */}
           <GlassCard
@@ -1606,13 +1656,13 @@ export default function DashboardPage() {
             status="online"
           />
 
-          {/* Scraped Embeddings */}
+          {/* Scheduler Jobs */}
           <GlassCard
-            title="Kazınan Veri Embeddings"
-            value={<AnimatedNumber value={crawlerStats.scrapedEmbeddings} />}
-            description="Vektörize edilmiş kazınan veri"
+            title="Zamanlanmış Görevler"
+            value={<AnimatedNumber value={schedulerStats.totalJobs} />}
+            description={schedulerStats.schedulerRunning ? `${schedulerStats.enabledJobs} aktif görev` : 'Scheduler kapalı'}
             live={true}
-            status={crawlerStats.scrapedEmbeddings > 0 ? 'online' : 'warning'}
+            status={schedulerStats.schedulerRunning ? 'online' : 'warning'}
           />
         </div>
 
@@ -1670,20 +1720,20 @@ export default function DashboardPage() {
                 </div>
               </div>
 
-              {/* Scraped - Purple accent */}
+              {/* Scraped - Purple accent - Shows real-time scraped embeddings */}
               <div className="group p-5 bg-gradient-to-br from-purple-50/80 to-violet-50/80 dark:from-purple-950/30 dark:to-violet-950/30 border border-purple-200/60 dark:border-purple-800/50 rounded-xl hover:shadow-lg hover:shadow-purple-500/10 transition-all duration-300">
                 <div className="flex items-center gap-2 mb-3">
-                  <div className="h-2 w-2 rounded-full bg-purple-500" />
+                  <div className="h-2 w-2 rounded-full bg-purple-500 animate-pulse" />
                   <h4 className="text-sm font-medium text-gray-700 dark:text-purple-200">{t('dashboard.embeddings.scraped')}</h4>
                 </div>
                 <div className="space-y-2">
                   <div className="flex justify-between text-sm">
-                    <span className="text-gray-500 dark:text-slate-400">{t('dashboard.embeddings.data')}</span>
-                    <span className="font-semibold text-gray-900 dark:text-purple-100">{embeddingStats?.by_category?.scraped?.data?.toLocaleString() || '0'}</span>
+                    <span className="text-gray-500 dark:text-slate-400">Kazınan Veri</span>
+                    <span className="font-semibold text-gray-900 dark:text-purple-100">{crawlerStats.totalScrapedData?.toLocaleString() || '0'}</span>
                   </div>
                   <div className="flex justify-between text-sm">
                     <span className="text-gray-500 dark:text-slate-400">Embeddings</span>
-                    <span className="font-semibold text-purple-600 dark:text-purple-400">{embeddingStats?.by_category?.scraped?.embeddings?.toLocaleString() || '0'}</span>
+                    <span className="font-semibold text-purple-600 dark:text-purple-400">{crawlerStats.scrapedEmbeddings?.toLocaleString() || '0'}</span>
                   </div>
                 </div>
               </div>
