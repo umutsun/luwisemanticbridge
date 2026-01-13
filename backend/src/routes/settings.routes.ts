@@ -1021,4 +1021,65 @@ router.get('/rag-routing-schema/default', async (_req: Request, res: Response) =
   }
 });
 
+// ═══════════════════════════════════════════════════════════════
+// SMTP / EMAIL ENDPOINTS
+// ═══════════════════════════════════════════════════════════════
+
+/**
+ * GET /settings/smtp/status - Get SMTP configuration status
+ */
+router.get('/smtp/status', async (_req: Request, res: Response) => {
+  try {
+    const { emailService } = await import('../services/email.service');
+    const status = emailService.getStatus();
+    res.json(status);
+  } catch (error: any) {
+    console.error('❌ [SMTP] Status error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * POST /settings/smtp/verify - Verify SMTP connection
+ */
+router.post('/smtp/verify', async (_req: Request, res: Response) => {
+  try {
+    const { emailService } = await import('../services/email.service');
+    emailService.reset(); // Reset to pick up latest config
+    const result = await emailService.verify();
+    res.json(result);
+  } catch (error: any) {
+    console.error('❌ [SMTP] Verify error:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+/**
+ * POST /settings/smtp/test - Send test email
+ */
+router.post('/smtp/test', async (req: Request, res: Response) => {
+  try {
+    const { to } = req.body;
+
+    if (!to) {
+      return res.status(400).json({ success: false, error: 'Email address required' });
+    }
+
+    const { emailService } = await import('../services/email.service');
+    emailService.reset(); // Reset to pick up latest config
+    const result = await emailService.sendTest(to);
+
+    if (result.success) {
+      console.log(`✅ [SMTP] Test email sent to ${to}`);
+    } else {
+      console.error(`❌ [SMTP] Test email failed: ${result.error}`);
+    }
+
+    res.json(result);
+  } catch (error: any) {
+    console.error('❌ [SMTP] Test error:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
 export default router;
