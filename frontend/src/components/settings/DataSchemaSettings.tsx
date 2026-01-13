@@ -8,7 +8,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import {
-  Database, Plus, Check, Save, RefreshCw, Search, Copy, MoreVertical, Download, Upload, Sparkles, Loader2
+  Database, Plus, Check, Save, RefreshCw, Search, Copy, MoreVertical, Download, Upload, Sparkles, Loader2, FileText, Trash2
 } from 'lucide-react';
 import { DataSchema, SchemaField } from '@/types/data-schema';
 import apiClient from '@/lib/api/client';
@@ -345,9 +345,27 @@ export default function DataSchemaSettings() {
   };
 
   // Modal save handler
-  const saveModalValue = () => {
+  const saveModalValue = async () => {
+    const { field, value } = editModal;
+
+    // Handle routingSchema separately (global setting, not schema-specific)
+    if (field === 'routingSchema') {
+      try {
+        // Validate JSON
+        if (value.trim()) {
+          JSON.parse(value);
+        }
+        setRoutingSchema(value);
+        setEditModal({ ...editModal, open: false });
+        toast.success('Güncellendi - Kaydetmeyi unutmayın');
+        return;
+      } catch {
+        toast.error('Geçersiz JSON formatı');
+        return;
+      }
+    }
+
     if (!editedSchema) return;
-    const { field, value, format } = editModal;
 
     if (field === 'keyTerms') {
       const terms = value.split('\n').map(t => t.trim()).filter(t => t);
@@ -615,7 +633,7 @@ export default function DataSchemaSettings() {
             </div>
           </div>
         </CardHeader>
-        <CardContent className="px-4 pb-4 space-y-4 max-h-[600px] overflow-y-auto">
+        <CardContent className="px-4 pb-4 space-y-4">
           {editedSchema ? (
             <>
               {/* Temel Bilgiler */}
@@ -785,6 +803,7 @@ export default function DataSchemaSettings() {
                   </div>
                 </div>
               </div>
+
             </>
           ) : (
             <div className="text-center py-8 text-muted-foreground">
@@ -792,73 +811,59 @@ export default function DataSchemaSettings() {
               <p className="text-sm">Düzenlemek için şema seçin</p>
             </div>
           )}
-        </CardContent>
-      </Card>
 
-      {/* RAG Routing Schema - Response Format Configuration */}
-      <Card className="mt-6">
-        <CardHeader className="flex flex-row items-center justify-between">
-          <div>
-            <CardTitle className="text-lg flex items-center gap-2">
-              <Sparkles className="w-5 h-5 text-violet-500" />
-              RAG Yanıt Format Şeması
-            </CardTitle>
-            <p className="text-xs text-muted-foreground mt-1">
-              4 route tipi: NEEDS_CLARIFICATION, OUT_OF_SCOPE, NOT_FOUND, FOUND (mini-makale formatı)
-            </p>
-          </div>
-          <div className="flex gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={resetRoutingSchema}
-              disabled={routingSchemaLoading}
-            >
-              <RefreshCw className={`w-4 h-4 mr-1 ${routingSchemaLoading ? 'animate-spin' : ''}`} />
-              Varsayılan
-            </Button>
-            <Button
-              size="sm"
-              onClick={saveRoutingSchema}
-              disabled={routingSchemaSaving || !routingSchema.trim()}
-            >
-              {routingSchemaSaving ? (
-                <Loader2 className="w-4 h-4 mr-1 animate-spin" />
-              ) : (
-                <Save className="w-4 h-4 mr-1" />
-              )}
-              Kaydet
-            </Button>
-          </div>
-        </CardHeader>
-        <CardContent>
-          <div className="space-y-4">
-            {/* Quick Guide */}
-            <div className="bg-violet-50 dark:bg-violet-950/20 border border-violet-200 dark:border-violet-900 rounded-lg p-3">
-              <h4 className="text-sm font-medium text-violet-800 dark:text-violet-200 mb-2">Format Yapısı:</h4>
-              <div className="grid grid-cols-2 gap-2 text-xs text-violet-700 dark:text-violet-300">
-                <div><strong>NEEDS_CLARIFICATION:</strong> Belirsiz sorgular → öneri sorular</div>
-                <div><strong>OUT_OF_SCOPE:</strong> Kapsam dışı → tek satır uyarı</div>
-                <div><strong>NOT_FOUND:</strong> Kaynak yok → kısa açıklama</div>
-                <div><strong>FOUND:</strong> Kaynak var → 4 başlıklı mini-makale + dipnotlar</div>
+          {/* RAG Yanıt Format Şeması - Global Setting (Always Visible) */}
+          <div className="border-t pt-4 space-y-2 mt-4">
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-sm font-medium">Yanıt Format Şeması</h3>
+              <div className="flex gap-1">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-6 px-2 text-xs"
+                  onClick={resetRoutingSchema}
+                  disabled={routingSchemaLoading}
+                  title="Varsayılan şemayı yükle"
+                >
+                  <RefreshCw className={`w-3 h-3 ${routingSchemaLoading ? 'animate-spin' : ''}`} />
+                </Button>
               </div>
             </div>
 
-            {/* JSON Editor */}
-            <div>
-              <Label className="text-sm font-medium">Schema JSON</Label>
-              <Textarea
-                value={routingSchema}
-                onChange={(e) => setRoutingSchema(e.target.value)}
-                placeholder='{"version": "1.0", "routes": {...}, "globalSettings": {...}}'
-                rows={15}
-                className="font-mono text-xs mt-2"
-                disabled={routingSchemaLoading}
-              />
-              <p className="text-xs text-muted-foreground mt-2">
-                Boş bırakılırsa backend varsayılan şemayı kullanır. JSON formatı gereklidir.
-              </p>
+            {/* RAG Routing Schema Card */}
+            <div
+              className="p-3 border rounded-lg cursor-pointer hover:bg-muted/50 transition-colors"
+              onClick={() => setEditModal({
+                open: true,
+                field: 'routingSchema',
+                title: 'RAG Yanıt Format Şeması',
+                value: routingSchema || '',
+                placeholder: '{"version": "1.0", "routes": {...}, "globalSettings": {...}}'
+              })}
+            >
+              <div className="flex items-start justify-between">
+                <div className="flex-1">
+                  <div className="text-xs font-medium mb-1 flex items-center gap-1.5">
+                    <FileText className="w-3.5 h-3.5 text-muted-foreground" />
+                    RAG Routing Schema
+                  </div>
+                  <div className="text-xs text-muted-foreground">
+                    4 route: NEEDS_CLARIFICATION, OUT_OF_SCOPE, NOT_FOUND, FOUND
+                  </div>
+                </div>
+                <Badge variant="outline" className="text-xs shrink-0">
+                  {routingSchema ? 'Özel' : 'Varsayılan'}
+                </Badge>
+              </div>
+              {routingSchema && (
+                <div className="mt-2 text-xs text-muted-foreground font-mono bg-muted/30 rounded px-2 py-1 line-clamp-2">
+                  {routingSchema.substring(0, 80)}...
+                </div>
+              )}
             </div>
+            <p className="text-xs text-muted-foreground">
+              Yanıt formatını, kaynak önceliklerini ve dipnot şablonlarını yapılandırır.
+            </p>
           </div>
         </CardContent>
       </Card>
@@ -870,7 +875,57 @@ export default function DataSchemaSettings() {
             <DialogTitle>{editModal.title}</DialogTitle>
           </DialogHeader>
 
-          {editModal.field === 'keyTerms' ? (
+          {editModal.field === 'routingSchema' ? (
+            /* RAG Routing Schema Editor */
+            <div className="py-2 space-y-3">
+              {/* Quick Guide */}
+              <div className="bg-muted/50 border rounded-lg p-3">
+                <h4 className="text-xs font-medium mb-2">Format Yapısı:</h4>
+                <div className="grid grid-cols-2 gap-2 text-xs text-muted-foreground">
+                  <div><span className="font-medium text-foreground">NEEDS_CLARIFICATION:</span> Belirsiz sorgular - öneri sorular</div>
+                  <div><span className="font-medium text-foreground">OUT_OF_SCOPE:</span> Kapsam dışı - tek satır uyarı</div>
+                  <div><span className="font-medium text-foreground">NOT_FOUND:</span> Kaynak yok - kısa açıklama</div>
+                  <div><span className="font-medium text-foreground">FOUND:</span> Kaynak var - 4 başlıklı mini-makale + dipnotlar</div>
+                </div>
+              </div>
+
+              {/* JSON Editor */}
+              <div>
+                <Textarea
+                  value={editModal.value}
+                  onChange={(e) => setEditModal({ ...editModal, value: e.target.value })}
+                  placeholder={editModal.placeholder}
+                  rows={18}
+                  className="font-mono text-xs"
+                />
+                <p className="text-xs text-muted-foreground mt-2">
+                  Boş bırakılırsa backend varsayılan şemayı kullanır. JSON formatı gereklidir.
+                </p>
+              </div>
+
+              {/* Actions */}
+              <div className="flex gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={async () => {
+                    try {
+                      const res = await apiClient.get('/api/v2/settings/rag-routing-schema/default');
+                      if (res?.data?.schema) {
+                        setEditModal({ ...editModal, value: JSON.stringify(res.data.schema, null, 2) });
+                        toast.success('Varsayılan şema yüklendi');
+                      }
+                    } catch {
+                      toast.error('Varsayılan şema yüklenemedi');
+                    }
+                  }}
+                >
+                  <RefreshCw className="w-3 h-3 mr-1" />
+                  Varsayılan Şemayı Yükle
+                </Button>
+              </div>
+            </div>
+          ) : editModal.field === 'keyTerms' ? (
             /* Terimler Sözlüğü - Dictionary Style UI */
             <div className="py-2 space-y-3">
               {/* Suggested Terms by Category - Marker Style */}
@@ -1104,6 +1159,7 @@ export default function DataSchemaSettings() {
                 {editModal.field === 'fields' && 'JSON formatında alan tanımları'}
                 {editModal.field === 'analyzePrompt' && 'Doküman analizi için LLM talimatları'}
                 {editModal.field === 'chatbotContext' && 'Chat yanıtları için domain bağlamı'}
+                {editModal.field === 'routingSchema' && 'RAG yanıt formatı ve routing kuralları'}
               </p>
             </div>
           )}
@@ -1112,10 +1168,44 @@ export default function DataSchemaSettings() {
             <Button variant="outline" onClick={() => setEditModal({ ...editModal, open: false })}>
               İptal
             </Button>
-            <Button onClick={saveModalValue}>
-              <Check className="w-4 h-4 mr-2" />
-              Kaydet
-            </Button>
+            {editModal.field === 'routingSchema' ? (
+              <Button onClick={async () => {
+                try {
+                  if (editModal.value.trim()) {
+                    const parsed = JSON.parse(editModal.value);
+                    await apiClient.put('/api/v2/settings/key/ragRoutingSchema', {
+                      value: parsed,
+                      category: 'rag',
+                      description: 'RAG Response Routing Schema'
+                    });
+                  } else {
+                    // Clear the routing schema
+                    await apiClient.put('/api/v2/settings/key/ragRoutingSchema', {
+                      value: null,
+                      category: 'rag',
+                      description: 'RAG Response Routing Schema'
+                    });
+                  }
+                  setRoutingSchema(editModal.value);
+                  setEditModal({ ...editModal, open: false });
+                  toast.success('Routing şeması kaydedildi');
+                } catch (err) {
+                  if (err instanceof SyntaxError) {
+                    toast.error('Geçersiz JSON formatı');
+                  } else {
+                    toast.error('Kaydetme hatası');
+                  }
+                }
+              }}>
+                <Save className="w-4 h-4 mr-2" />
+                Kaydet
+              </Button>
+            ) : (
+              <Button onClick={saveModalValue}>
+                <Check className="w-4 h-4 mr-2" />
+                Uygula
+              </Button>
+            )}
           </DialogFooter>
         </DialogContent>
       </Dialog>
