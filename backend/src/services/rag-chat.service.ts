@@ -215,32 +215,23 @@ export class RAGChatService {
    */
   private buildArticleFormatPrompt(schema: RAGRoutingSchema, language: string = 'tr'): string {
     const foundFormat = schema.routes.FOUND.format;
+    const articleSections = foundFormat.articleSections || [];
     const sourcePriority = foundFormat.sourcePriority || [];
+    const prohibitedContent = foundFormat.prohibitedContent || [];
+
+    // Build section instructions from schema
+    const sectionInstructions = articleSections.map((section, idx) => {
+      const title = section.title || section.id;
+      const description = section.description || '';
+      return `## ${title}\n${description}`;
+    }).join('\n\n');
 
     if (language === 'tr') {
       let prompt = `YANITLAMA FORMATI (ZORUNLU):
 
-Aşağıdaki 4 bölümü MUTLAKA sırayla kullan. Her bölüm ayrı paragraf olarak yazılmalı:
+Aşağıdaki bölümleri MUTLAKA sırayla kullan. Her bölüm ayrı paragraf olarak yazılmalı:
 
-## Konu
-1-2 cümlede sorunun kapsadığı vergi konusunu tarif et (kurum/işlem/vergisel olay).
-
-## Anahtar Terimler
-5-10 terim virgülle ayrılmış şekilde yaz. Genel terimlerden (vergi, kanun, madde) KAÇIN.
-Örnek format: KDV iadesi, indirimli oran, yüklenilen vergi, iade talebi
-
-## Dayanaklar
-Kaynaklardan türetilen düzenleme türlerini ve referansları listele.
-"Arama sonucu / X belge bulundu" ifadesi KULLANMA.
-Örnek: Kanun No. 3065 Madde 29, KDV Genel Uygulama Tebliği III-B-3
-
-## Değerlendirme
-Kaynaklara dayalı akıcı değerlendirme metni yaz. Her paragraf ayrı olsun.
-- Metin içinde [1], [2] şeklinde atıf yap
-- Çelişki varsa belirt ve daha üst normu/yeni tarihi esas al
-- Kesin hüküm vermeden önce kaynakta açık ifade olduğundan emin ol
-- "ALINTI" etiketi KULLANMA
-- Dipnot listesi YAZMA (sistem otomatik ekleyecek)
+${sectionInstructions}
 
 KAYNAK ÖNCELİK SIRASI:
 `;
@@ -248,35 +239,22 @@ KAYNAK ÖNCELİK SIRASI:
         prompt += `${idx + 1}. ${sp.label}\n`;
       });
 
-      prompt += `
+      // Add prohibited content from schema
+      if (prohibitedContent.length > 0) {
+        prompt += `
 YASAKLAR:
-- "Arama sonucu bulundu" gibi ifadeler
-- "ALINTI" etiketi
-- Kaynak dışı bilgi
+${prohibitedContent.map(p => `- "${p}"`).join('\n')}
 - Dipnot listesi (sistem ekleyecek)
 `;
+      }
       return prompt;
     } else {
-      // English version
+      // English version - derive from same schema
       let prompt = `RESPONSE FORMAT (MANDATORY):
 
-Use these 4 sections IN ORDER. Each section must be a separate paragraph:
+Use these sections IN ORDER. Each section must be a separate paragraph:
 
-## Topic
-1-2 sentences describing the tax topic covered by the question.
-
-## Key Terms
-5-10 terms separated by commas. AVOID generic terms (tax, law, article).
-
-## Legal Basis
-List regulation types and references derived from sources.
-DO NOT use "Search results / X documents found" language.
-
-## Assessment
-Write a flowing assessment based on sources. Separate paragraphs.
-- Use [1], [2] citations in text
-- If conflict exists, note it and prefer higher norm/newer date
-- Do NOT write footnote list (system will add automatically)
+${sectionInstructions}
 
 SOURCE PRIORITY:
 `;
@@ -2449,11 +2427,16 @@ FORMAT:
       } else {
         // D) FOUND: Apply format enforcement ONLY for found responses
         // Pass original message for verdict question detection
+        // Determine format type from schema - 'article' if articleSections configured
+        const formatType = (routingSchema.routes.FOUND.format.articleSections &&
+                          routingSchema.routes.FOUND.format.articleSections.length > 0)
+                          ? 'article' : 'legacy';
         response.content = this.enforceResponseFormat(
           response.content,
           searchResults,
           responseLanguage,
-          message  // Original user query for verdict detection
+          message,  // Original user query for verdict detection
+          formatType
         );
       }
 
@@ -2549,7 +2532,10 @@ FORMAT:
         } else {
           // FOUND: Apply format enforcement only for found responses
           // Pass original message for verdict question detection
-          fastModeResponse = this.enforceResponseFormat(response.content, searchResults, responseLanguage, message);
+          const formatType = (routingSchema.routes.FOUND.format.articleSections &&
+                            routingSchema.routes.FOUND.format.articleSections.length > 0)
+                            ? 'article' : 'legacy';
+          fastModeResponse = this.enforceResponseFormat(response.content, searchResults, responseLanguage, message, formatType);
         }
 
         // 📊 DEBUG INFO for fast mode
@@ -3293,22 +3279,39 @@ FORMAT:
   }
 
   /**
-   * 📋 ENFORCE RESPONSE FORMAT (CEVAP only)
-   * Ensures response always has **CEVAP** section
+   * 📋 ENFORCE RESPONSE FORMAT
+   * Format enforcement based on schema configuration:
+   * - 'article' format: Uses ## section headers (Konu, Anahtar Terimler, etc.)
+   * - 'legacy' format: Uses **CEVAP** header
+   *
    * ALINTI removed - citations are shown separately in UI
    *
-   * Rules:
-   * 1. If **CEVAP** missing, wrap response content in **CEVAP** section
+   * @param formatType - 'article' | 'legacy' - from schema.routes.FOUND.format.type
    */
   private enforceResponseFormat(
     responseText: string,
     searchResults: any[],
     language: string = 'tr',
-    originalQuery: string = ''  // Original user query for verdict detection
+    originalQuery: string = '',  // Original user query for verdict detection
+    formatType: 'article' | 'legacy' = 'legacy'  // From schema config
   ): string {
     let result = responseText;
 
-    // Check for CEVAP section
+    // 📋 ARTICLE FORMAT: Skip CEVAP enforcement - response uses ## section headers
+    if (formatType === 'article') {
+      console.log('[FORMAT] Article format detected - skipping CEVAP enforcement');
+      // Clean up any legacy CEVAP/ALINTI headers if LLM added them
+      result = result.replace(/\*\*CEVAP\*\*\s*\n?/gi, '');
+      result = result.replace(/\*\*ANSWER\*\*\s*\n?/gi, '');
+      result = result.replace(/\*\*ALINTI\*\*[\s\S]*?(?=##|\*\*[A-ZÇĞİÖŞÜ]|\n\n\n|$)/gi, '');
+      result = result.replace(/\*\*QUOTE\*\*[\s\S]*?(?=##|\*\*[A-Z]|\n\n\n|$)/gi, '');
+      // Remove Dipnotlar section - citations shown in UI
+      result = result.replace(/##\s*Dipnotlar[\s\S]*?(?=##|\n\n\n|$)/gi, '');
+      result = result.replace(/##\s*Footnotes[\s\S]*?(?=##|\n\n\n|$)/gi, '');
+      return result.trim();
+    }
+
+    // 📋 LEGACY FORMAT: Enforce **CEVAP** header
     const hasCevap = /\*\*CEVAP\*\*/i.test(result);
 
     // If no CEVAP header, wrap the response

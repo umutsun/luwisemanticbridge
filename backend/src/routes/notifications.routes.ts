@@ -172,15 +172,22 @@ router.get('/unread-count', authenticateToken, async (req: AuthenticatedRequest,
  * Setup WebSocket notification broadcast
  * Called from server.ts after WebSocket server is initialized
  */
-export function setupNotificationBroadcast(wss: any) {
+export async function setupNotificationBroadcast(wss: any) {
   // Subscribe to Redis pub/sub channel
   const subscriber = redis.duplicate();
 
-  subscriber.subscribe('notifications:broadcast').then(() => {
+  try {
+    // Connect the duplicated Redis client
+    await subscriber.connect();
+    logger.info('✅ Redis subscriber connected');
+
+    // Subscribe to notifications channel
+    await subscriber.subscribe('notifications:broadcast');
     logger.info('✅ Subscribed to Redis notifications:broadcast channel');
-  }).catch((err) => {
-    logger.error('Failed to subscribe to notifications channel:', err);
-  });
+  } catch (err) {
+    logger.error('❌ Failed to subscribe to notifications channel:', err);
+    return;
+  }
 
   subscriber.on('message', (channel, message) => {
     if (channel === 'notifications:broadcast') {
