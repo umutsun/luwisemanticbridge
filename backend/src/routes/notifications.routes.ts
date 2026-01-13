@@ -16,7 +16,7 @@ import { Router, Request, Response } from 'express';
 import { WebSocket } from 'ws';
 import { authenticateToken, AuthenticatedRequest } from '../middleware/auth.middleware';
 import NotificationService from '../services/notification.service';
-import { redis } from '../server';
+import { redis } from '../config/redis';
 import { logger } from '../utils/logger';
 
 const router = Router();
