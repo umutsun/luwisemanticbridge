@@ -1054,9 +1054,13 @@ async function startServer() {
     }
 
     // Initialize Notification Broadcast WebSocket
+    console.log(`[DEBUG] WEBSOCKET.ENABLED=${SERVER.WEBSOCKET.ENABLED}, wss=${!!wss}`);
     if (SERVER.WEBSOCKET.ENABLED && wss) {
+      console.log('[DEBUG] Calling setupNotificationBroadcast...');
       setupNotificationBroadcast(wss);
       console.log(" Notification WebSocket: Initialized");
+    } else {
+      console.log(`⚠️ Notification WebSocket NOT initialized: ENABLED=${SERVER.WEBSOCKET.ENABLED}, wss=${!!wss}`);
     }
 
     // Check Redis database info
