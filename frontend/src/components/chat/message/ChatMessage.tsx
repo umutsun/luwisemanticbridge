@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { motion } from 'framer-motion';
 import { Card, CardContent } from '@/components/ui/card';
 import { Bot, User, ExternalLink } from 'lucide-react';
@@ -7,6 +7,100 @@ import { ChatSources } from './ChatSources';
 import { useTranslation } from 'react-i18next';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import { Badge } from '@/components/ui/badge';
+
+/**
+ * Parse structured response from LLM
+ * Extracts: Konu, Anahtar Terimler, Dayanaklar, Değerlendirme
+ */
+interface ParsedResponse {
+  topic: string | null;
+  keywords: string[];
+  legalBasis: string | null;
+  assessment: string;
+  footnotes: string[];
+  hasStructure: boolean;
+}
+
+function parseStructuredResponse(content: string): ParsedResponse {
+  const result: ParsedResponse = {
+    topic: null,
+    keywords: [],
+    legalBasis: null,
+    assessment: content,
+    footnotes: [],
+    hasStructure: false
+  };
+
+  if (!content) return result;
+
+  // Check for section markers (## or **)
+  const hasKonu = /##\s*Konu|^\*\*Konu\*\*|\*\*1\.\s*Konu/im.test(content);
+  const hasKeywords = /##\s*Anahtar\s*Terim|^\*\*Anahtar\s*Terim|\*\*2\.\s*Anahtar/im.test(content);
+  const hasDayanaklar = /##\s*Dayanaklar|^\*\*Dayanaklar|\*\*3\.\s*Yasal/im.test(content);
+  const hasAssessment = /##\s*Değerlendirme|^\*\*Değerlendirme|\*\*4\.\s*Vergilex/im.test(content);
+
+  // Only parse if we have at least 2 section markers
+  if ([hasKonu, hasKeywords, hasDayanaklar, hasAssessment].filter(Boolean).length < 2) {
+    return result;
+  }
+
+  result.hasStructure = true;
+
+  // Extract Konu section
+  const konuMatch = content.match(/(?:##\s*Konu|\*\*(?:1\.\s*)?Konu[^*]*\*\*)[:\s]*\n?([\s\S]*?)(?=##|\*\*(?:2\.|Anahtar)|$)/i);
+  if (konuMatch) {
+    result.topic = konuMatch[1].trim().replace(/^\*\*[^*]+\*\*\s*/gm, '').trim();
+  }
+
+  // Extract Anahtar Terimler section
+  const keywordsMatch = content.match(/(?:##\s*Anahtar\s*Terim|\*\*(?:2\.\s*)?Anahtar\s*Terim[^*]*\*\*)[:\s]*\n?([\s\S]*?)(?=##|\*\*(?:3\.|Dayanaklar|Yasal)|$)/i);
+  if (keywordsMatch) {
+    const keywordsText = keywordsMatch[1].trim();
+    // Parse comma-separated keywords, also handle bullet points
+    const keywords = keywordsText
+      .replace(/^\*\*[^*]+\*\*\s*/gm, '')
+      .replace(/^[-•]\s*/gm, '')
+      .split(/[,،•\n]+/)
+      .map(k => k.trim())
+      .filter(k => k.length > 0 && k.length < 50);
+    result.keywords = keywords;
+  }
+
+  // Extract Dayanaklar section
+  const dayanakMatch = content.match(/(?:##\s*Dayanaklar|##\s*Yasal|##\s*Legal|\*\*(?:3\.\s*)?(?:Dayanaklar|Yasal)[^*]*\*\*)[:\s]*\n?([\s\S]*?)(?=##|\*\*(?:4\.|Değerlendirme|Vergilex|Assessment)|$)/i);
+  if (dayanakMatch) {
+    result.legalBasis = dayanakMatch[1].trim().replace(/^\*\*[^*]+\*\*\s*/gm, '').trim();
+  }
+
+  // Extract Değerlendirme section (main content to display)
+  const assessmentMatch = content.match(/(?:##\s*Değerlendirme|##\s*Assessment|\*\*(?:4\.\s*)?(?:Değerlendirme|Vergilex\s*değerlendirme|Assessment)[^*]*\*\*)[:\s]*\n?([\s\S]*?)(?=##\s*Dipnot|\*\*Dipnot|$)/i);
+  if (assessmentMatch) {
+    result.assessment = assessmentMatch[1].trim();
+  } else {
+    // If no assessment section found, use everything after Dayanaklar
+    const afterDayanak = content.match(/(?:##\s*Dayanaklar|\*\*(?:3\.\s*)?Dayanaklar[^*]*\*\*)[\s\S]*?\n\n([\s\S]*)/i);
+    if (afterDayanak) {
+      result.assessment = afterDayanak[1].trim();
+    }
+  }
+
+  // Extract footnotes if present
+  const footnotesMatch = content.match(/(?:##\s*Dipnot|\*\*Dipnot[^*]*\*\*)[:\s]*\n?([\s\S]*?)$/i);
+  if (footnotesMatch) {
+    const footnotesText = footnotesMatch[1].trim();
+    // Parse footnote references like [1] Kaynak...
+    const footnotes = footnotesText
+      .split(/\n/)
+      .filter(line => /^\s*\[\d+\]/.test(line))
+      .map(line => line.trim());
+    result.footnotes = footnotes;
+    // Remove footnotes from assessment
+    result.assessment = result.assessment.replace(/(?:##\s*Dipnot|\*\*Dipnot[^*]*\*\*)[\s\S]*$/i, '').trim();
+  }
+
+  return result;
+}
 
 /**
  * Format markdown content for better visual presentation
@@ -19,6 +113,11 @@ function formatMarkdownContent(content: string): string {
 
   // Known section headers that need line breaks (case-insensitive)
   const sectionHeaders = [
+    // New format headers
+    'Konu',
+    'Anahtar Terimler',
+    'Dayanaklar',
+    'Değerlendirme',
     // Strict RAG mode v3 headers (simplified - current)
     'CEVAP',
     'ALINTI',
@@ -103,6 +202,43 @@ function formatMarkdownContent(content: string): string {
     .trim();
 }
 
+/**
+ * Keyword Tags Component - Renders keywords as colorful badges
+ */
+const KeywordTags: React.FC<{ keywords: string[] }> = ({ keywords }) => {
+  if (!keywords || keywords.length === 0) return null;
+
+  // Color palette for keyword badges
+  const colors = [
+    'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200',
+    'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200',
+    'bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200',
+    'bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200',
+    'bg-pink-100 text-pink-800 dark:bg-pink-900 dark:text-pink-200',
+    'bg-cyan-100 text-cyan-800 dark:bg-cyan-900 dark:text-cyan-200',
+    'bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200',
+    'bg-teal-100 text-teal-800 dark:bg-teal-900 dark:text-teal-200',
+  ];
+
+  return (
+    <div className="mt-3 mb-3">
+      <div className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-1.5">
+        Anahtar Terimler
+      </div>
+      <div className="flex flex-wrap gap-1.5">
+        {keywords.map((keyword, idx) => (
+          <span
+            key={idx}
+            className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${colors[idx % colors.length]}`}
+          >
+            {keyword}
+          </span>
+        ))}
+      </div>
+    </div>
+  );
+};
+
 interface Source {
   title?: string;
   content?: string;
@@ -162,6 +298,22 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
 }) => {
   const { t } = useTranslation();
 
+  // Parse structured response for assistant messages
+  const parsedResponse = useMemo(() => {
+    if (message.role !== 'assistant' || message.isTyping || message.isStreaming) {
+      return null;
+    }
+    return parseStructuredResponse(message.content);
+  }, [message.content, message.role, message.isTyping, message.isStreaming]);
+
+  // Get display content - either parsed assessment or full content
+  const displayContent = useMemo(() => {
+    if (parsedResponse?.hasStructure && parsedResponse.assessment) {
+      return parsedResponse.assessment;
+    }
+    return message.content;
+  }, [parsedResponse, message.content]);
+
   return (
     <motion.div
       key={message.id}
@@ -206,71 +358,181 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
                         {message.content}
                       </p>
                     ) : (
-                      <div className="flex-1 prose prose-sm max-w-none dark:prose-invert prose-headings:text-foreground prose-strong:text-foreground prose-p:my-1.5 prose-p:leading-relaxed">
-                        <ReactMarkdown
-                          remarkPlugins={[remarkGfm]}
-                          components={{
-                            h1: ({ children }) => (
-                              <h1 className="text-base sm:text-lg font-bold mt-4 mb-2 pb-1 border-b border-border first:mt-0">
-                                {children}
-                              </h1>
-                            ),
-                            h2: ({ children }) => (
-                              <h2 className="text-sm sm:text-base font-semibold mt-4 mb-2 first:mt-0">
-                                {children}
-                              </h2>
-                            ),
-                            h3: ({ children }) => (
-                              <h3 className="text-[13px] sm:text-sm font-semibold mt-3 mb-1 first:mt-0">
-                                {children}
-                              </h3>
-                            ),
-                            p: ({ children }) => (
-                              <p className="text-[13px] sm:text-sm my-2 leading-relaxed first:mt-0 last:mb-0">
-                                {children}
-                              </p>
-                            ),
-                            strong: ({ children }) => (
-                              <strong className="font-bold text-foreground">
-                                {children}
-                              </strong>
-                            ),
-                            ul: ({ children }) => (
-                              <ul className="list-disc list-outside ml-4 my-2 space-y-1 text-[13px] sm:text-sm">
-                                {children}
-                              </ul>
-                            ),
-                            ol: ({ children }) => (
-                              <ol className="list-decimal list-outside ml-4 my-2 space-y-1 text-[13px] sm:text-sm">
-                                {children}
-                              </ol>
-                            ),
-                            li: ({ children }) => (
-                              <li className="pl-0.5 leading-relaxed">
-                                {children}
-                              </li>
-                            ),
-                            blockquote: ({ children }) => (
-                              <blockquote className="border-l-4 border-amber-400 bg-amber-50 dark:bg-amber-900/20 pl-3 py-2 my-3 text-amber-800 dark:text-amber-200 italic text-[13px] sm:text-sm">
-                                {children}
-                              </blockquote>
-                            ),
-                            code: ({ children, className }) => {
-                              const isInline = !className;
-                              return isInline ? (
-                                <code className="bg-muted px-1 py-0.5 rounded text-xs font-mono">
-                                  {children}
-                                </code>
-                              ) : (
-                                <code className="block bg-muted p-2 rounded-lg text-xs font-mono overflow-x-auto my-2">
-                                  {children}
-                                </code>
-                              );
-                            },
-                          }}
-                        >
-                          {formatMarkdownContent(message.content)}
-                        </ReactMarkdown>
+                      <div className="flex-1">
+                        {/* Structured Response Layout */}
+                        {parsedResponse?.hasStructure ? (
+                          <div className="space-y-3">
+                            {/* Topic Section */}
+                            {parsedResponse.topic && (
+                              <div className="text-[13px] sm:text-sm text-muted-foreground italic border-l-2 border-primary/30 pl-2">
+                                {parsedResponse.topic}
+                              </div>
+                            )}
+
+                            {/* Keyword Tags */}
+                            {parsedResponse.keywords.length > 0 && (
+                              <KeywordTags keywords={parsedResponse.keywords} />
+                            )}
+
+                            {/* Legal Basis */}
+                            {parsedResponse.legalBasis && (
+                              <div className="text-[11px] sm:text-xs text-muted-foreground bg-muted/50 rounded px-2 py-1.5">
+                                <span className="font-semibold">Dayanaklar: </span>
+                                {parsedResponse.legalBasis}
+                              </div>
+                            )}
+
+                            {/* Main Assessment */}
+                            <div className="prose prose-sm max-w-none dark:prose-invert prose-headings:text-foreground prose-strong:text-foreground prose-p:my-1.5 prose-p:leading-relaxed">
+                              <ReactMarkdown
+                                remarkPlugins={[remarkGfm]}
+                                components={{
+                                  h1: ({ children }) => (
+                                    <h1 className="text-base sm:text-lg font-bold mt-4 mb-2 pb-1 border-b border-border first:mt-0">
+                                      {children}
+                                    </h1>
+                                  ),
+                                  h2: ({ children }) => (
+                                    <h2 className="text-sm sm:text-base font-semibold mt-4 mb-2 first:mt-0">
+                                      {children}
+                                    </h2>
+                                  ),
+                                  h3: ({ children }) => (
+                                    <h3 className="text-[13px] sm:text-sm font-semibold mt-3 mb-1 first:mt-0">
+                                      {children}
+                                    </h3>
+                                  ),
+                                  p: ({ children }) => (
+                                    <p className="text-[13px] sm:text-sm my-2 leading-relaxed first:mt-0 last:mb-0">
+                                      {children}
+                                    </p>
+                                  ),
+                                  strong: ({ children }) => (
+                                    <strong className="font-bold text-foreground">
+                                      {children}
+                                    </strong>
+                                  ),
+                                  ul: ({ children }) => (
+                                    <ul className="list-disc list-outside ml-4 my-2 space-y-1 text-[13px] sm:text-sm">
+                                      {children}
+                                    </ul>
+                                  ),
+                                  ol: ({ children }) => (
+                                    <ol className="list-decimal list-outside ml-4 my-2 space-y-1 text-[13px] sm:text-sm">
+                                      {children}
+                                    </ol>
+                                  ),
+                                  li: ({ children }) => (
+                                    <li className="pl-0.5 leading-relaxed">
+                                      {children}
+                                    </li>
+                                  ),
+                                  blockquote: ({ children }) => (
+                                    <blockquote className="border-l-4 border-amber-400 bg-amber-50 dark:bg-amber-900/20 pl-3 py-2 my-3 text-amber-800 dark:text-amber-200 italic text-[13px] sm:text-sm">
+                                      {children}
+                                    </blockquote>
+                                  ),
+                                  code: ({ children, className }) => {
+                                    const isInline = !className;
+                                    return isInline ? (
+                                      <code className="bg-muted px-1 py-0.5 rounded text-xs font-mono">
+                                        {children}
+                                      </code>
+                                    ) : (
+                                      <code className="block bg-muted p-2 rounded-lg text-xs font-mono overflow-x-auto my-2">
+                                        {children}
+                                      </code>
+                                    );
+                                  },
+                                }}
+                              >
+                                {formatMarkdownContent(displayContent)}
+                              </ReactMarkdown>
+                            </div>
+
+                            {/* Footnotes Section */}
+                            {parsedResponse.footnotes.length > 0 && (
+                              <div className="mt-3 pt-2 border-t border-border/50">
+                                <div className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-1">
+                                  Dipnotlar
+                                </div>
+                                <div className="text-[11px] sm:text-xs text-muted-foreground space-y-0.5">
+                                  {parsedResponse.footnotes.map((fn, idx) => (
+                                    <div key={idx}>{fn}</div>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        ) : (
+                          /* Fallback: Original unstructured rendering */
+                          <div className="prose prose-sm max-w-none dark:prose-invert prose-headings:text-foreground prose-strong:text-foreground prose-p:my-1.5 prose-p:leading-relaxed">
+                            <ReactMarkdown
+                              remarkPlugins={[remarkGfm]}
+                              components={{
+                                h1: ({ children }) => (
+                                  <h1 className="text-base sm:text-lg font-bold mt-4 mb-2 pb-1 border-b border-border first:mt-0">
+                                    {children}
+                                  </h1>
+                                ),
+                                h2: ({ children }) => (
+                                  <h2 className="text-sm sm:text-base font-semibold mt-4 mb-2 first:mt-0">
+                                    {children}
+                                  </h2>
+                                ),
+                                h3: ({ children }) => (
+                                  <h3 className="text-[13px] sm:text-sm font-semibold mt-3 mb-1 first:mt-0">
+                                    {children}
+                                  </h3>
+                                ),
+                                p: ({ children }) => (
+                                  <p className="text-[13px] sm:text-sm my-2 leading-relaxed first:mt-0 last:mb-0">
+                                    {children}
+                                  </p>
+                                ),
+                                strong: ({ children }) => (
+                                  <strong className="font-bold text-foreground">
+                                    {children}
+                                  </strong>
+                                ),
+                                ul: ({ children }) => (
+                                  <ul className="list-disc list-outside ml-4 my-2 space-y-1 text-[13px] sm:text-sm">
+                                    {children}
+                                  </ul>
+                                ),
+                                ol: ({ children }) => (
+                                  <ol className="list-decimal list-outside ml-4 my-2 space-y-1 text-[13px] sm:text-sm">
+                                    {children}
+                                  </ol>
+                                ),
+                                li: ({ children }) => (
+                                  <li className="pl-0.5 leading-relaxed">
+                                    {children}
+                                  </li>
+                                ),
+                                blockquote: ({ children }) => (
+                                  <blockquote className="border-l-4 border-amber-400 bg-amber-50 dark:bg-amber-900/20 pl-3 py-2 my-3 text-amber-800 dark:text-amber-200 italic text-[13px] sm:text-sm">
+                                    {children}
+                                  </blockquote>
+                                ),
+                                code: ({ children, className }) => {
+                                  const isInline = !className;
+                                  return isInline ? (
+                                    <code className="bg-muted px-1 py-0.5 rounded text-xs font-mono">
+                                      {children}
+                                    </code>
+                                  ) : (
+                                    <code className="block bg-muted p-2 rounded-lg text-xs font-mono overflow-x-auto my-2">
+                                      {children}
+                                    </code>
+                                  );
+                                },
+                              }}
+                            >
+                              {formatMarkdownContent(message.content)}
+                            </ReactMarkdown>
+                          </div>
+                        )}
                       </div>
                     )}
                   </div>

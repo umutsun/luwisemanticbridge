@@ -211,76 +211,79 @@ export class RAGChatService {
   /**
    * 📝 Build article format prompt for FOUND responses
    * Uses mini-makale format with 4 required sections
+   * Format: Konu → Anahtar Terimler → Dayanaklar → Değerlendirme
    */
   private buildArticleFormatPrompt(schema: RAGRoutingSchema, language: string = 'tr'): string {
     const foundFormat = schema.routes.FOUND.format;
-    const sections = foundFormat.articleSections || [];
     const sourcePriority = foundFormat.sourcePriority || [];
-    const footnoteFormat = foundFormat.footnoteFormat || {};
 
     if (language === 'tr') {
-      let prompt = `YANITLAMA FORMAT (ZORUNLU):
+      let prompt = `YANITLAMA FORMATI (ZORUNLU):
 
-Aşağıdaki 4 başlığı MUTLAKA kullan ve sırayla yanıtla:
+Aşağıdaki 4 bölümü MUTLAKA sırayla kullan. Her bölüm ayrı paragraf olarak yazılmalı:
 
-`;
-      sections.forEach((section, idx) => {
-        prompt += `**${idx + 1}. ${section.title}**\n`;
-        if (section.description) {
-          prompt += `   ${section.description}\n`;
-        }
-        prompt += '\n';
-      });
+## Konu
+1-2 cümlede sorunun kapsadığı vergi konusunu tarif et (kurum/işlem/vergisel olay).
 
-      prompt += `KAYNAK ÖNCELİK SIRASI (yüksekten düşüğe):
+## Anahtar Terimler
+5-10 terim virgülle ayrılmış şekilde yaz. Genel terimlerden (vergi, kanun, madde) KAÇIN.
+Örnek format: KDV iadesi, indirimli oran, yüklenilen vergi, iade talebi
+
+## Dayanaklar
+Kaynaklardan türetilen düzenleme türlerini ve referansları listele.
+"Arama sonucu / X belge bulundu" ifadesi KULLANMA.
+Örnek: Kanun No. 3065 Madde 29, KDV Genel Uygulama Tebliği III-B-3
+
+## Değerlendirme
+Kaynaklara dayalı akıcı değerlendirme metni yaz. Her paragraf ayrı olsun.
+- Metin içinde [1], [2] şeklinde atıf yap
+- Çelişki varsa belirt ve daha üst normu/yeni tarihi esas al
+- Kesin hüküm vermeden önce kaynakta açık ifade olduğundan emin ol
+- "ALINTI" etiketi KULLANMA
+- Dipnot listesi YAZMA (sistem otomatik ekleyecek)
+
+KAYNAK ÖNCELİK SIRASI:
 `;
       sourcePriority.forEach((sp, idx) => {
         prompt += `${idx + 1}. ${sp.label}\n`;
       });
 
       prompt += `
-DİPNOT KURALLARI:
-- Metin içinde [1], [2] şeklinde atıf yap (kaynak sırasına göre)
-- DİPNOT LİSTESİ YAZMA - dipnotlar sistem tarafından otomatik eklenecek
-`;
-
-      prompt += `
-ÇELİŞKİ DURUMU:
-- Kaynaklar arasında çelişki varsa açıkça belirt
-- Daha yeni tarihli ve daha üst normu (Kanun > Tebliğ > Özelge) esas al
-
 YASAKLAR:
-- "Arama sonucu / X belge bulundu" gibi ifadeler KULLANMA
-- "ALINTI" etiketi KULLANMA
-- Kaynak dışı bilgi VERME
+- "Arama sonucu bulundu" gibi ifadeler
+- "ALINTI" etiketi
+- Kaynak dışı bilgi
+- Dipnot listesi (sistem ekleyecek)
 `;
       return prompt;
     } else {
       // English version
       let prompt = `RESPONSE FORMAT (MANDATORY):
 
-Use the following 4 headings in order:
+Use these 4 sections IN ORDER. Each section must be a separate paragraph:
 
-`;
-      sections.forEach((section, idx) => {
-        prompt += `**${idx + 1}. ${section.title}**\n`;
-        if (section.description) {
-          prompt += `   ${section.description}\n`;
-        }
-        prompt += '\n';
-      });
+## Topic
+1-2 sentences describing the tax topic covered by the question.
 
-      prompt += `SOURCE PRIORITY (highest to lowest):
+## Key Terms
+5-10 terms separated by commas. AVOID generic terms (tax, law, article).
+
+## Legal Basis
+List regulation types and references derived from sources.
+DO NOT use "Search results / X documents found" language.
+
+## Assessment
+Write a flowing assessment based on sources. Separate paragraphs.
+- Use [1], [2] citations in text
+- If conflict exists, note it and prefer higher norm/newer date
+- Do NOT write footnote list (system will add automatically)
+
+SOURCE PRIORITY:
 `;
       sourcePriority.forEach((sp, idx) => {
         prompt += `${idx + 1}. ${sp.label}\n`;
       });
 
-      prompt += `
-FOOTNOTE RULES:
-- Use [1], [2] citations in text
-- List sources under "**Footnotes:**" at the end
-`;
       return prompt;
     }
   }
