@@ -6,16 +6,26 @@
  *   node scripts/fix-stuck-migrations.js
  */
 
+// Load environment variables from .env file
+require('dotenv').config();
+
 const { Pool } = require('pg');
 const Redis = require('redis');
 
-// Get connection from environment or use defaults
+const dbUrl = process.env.DATABASE_URL;
+const redisHost = process.env.REDIS_HOST || 'localhost';
+const redisPort = process.env.REDIS_PORT || 6379;
+const redisDb = process.env.REDIS_DB || 0;
+
+console.log('Using DATABASE_URL:', dbUrl ? dbUrl.replace(/:[^:@]+@/, ':****@') : 'NOT SET');
+
+// Get connection from environment
 const pool = new Pool({
-  connectionString: process.env.DATABASE_URL || 'postgresql://postgres:umut@localhost:5432/lsemb'
+  connectionString: dbUrl
 });
 
 const redis = Redis.createClient({
-  url: `redis://${process.env.REDIS_HOST || 'localhost'}:${process.env.REDIS_PORT || 6379}/${process.env.REDIS_DB || 0}`
+  url: 'redis://' + redisHost + ':' + redisPort + '/' + redisDb
 });
 
 async function main() {
@@ -25,19 +35,16 @@ async function main() {
 
     // 1. Check for stuck migrations
     console.log('\n=== Checking for stuck migrations ===');
-    const stuckResult = await pool.query(`
-      SELECT migration_id, table_name, status, processed_records, total_records, started_at
-      FROM migration_history
-      WHERE status = 'processing'
-      ORDER BY started_at DESC
-    `);
+    const stuckResult = await pool.query(
+      'SELECT migration_id, table_name, status, processed_records, total_records, started_at FROM migration_history WHERE status = \'processing\' ORDER BY started_at DESC'
+    );
 
-    console.log(`Found ${stuckResult.rows.length} stuck migrations:`);
+    console.log('Found ' + stuckResult.rows.length + ' stuck migrations:');
     stuckResult.rows.forEach(row => {
       const progress = row.total_records > 0
         ? ((row.processed_records / row.total_records) * 100).toFixed(1)
         : '0';
-      console.log(`  - ${row.table_name}: ${row.processed_records}/${row.total_records} (${progress}%)`);
+      console.log('  - ' + row.table_name + ': ' + row.processed_records + '/' + row.total_records + ' (' + progress + '%)');
     });
 
     if (stuckResult.rows.length === 0) {
@@ -47,15 +54,11 @@ async function main() {
 
     // 2. Update stuck migrations to 'paused' status
     console.log('\n=== Updating stuck migrations to paused ===');
-    const updateResult = await pool.query(`
-      UPDATE migration_history
-      SET status = 'paused',
-          completed_at = NOW()
-      WHERE status = 'processing'
-      RETURNING migration_id, table_name
-    `);
+    const updateResult = await pool.query(
+      'UPDATE migration_history SET status = \'paused\', completed_at = NOW() WHERE status = \'processing\' RETURNING migration_id, table_name'
+    );
 
-    console.log(`Updated ${updateResult.rowCount} migrations to 'paused' status`);
+    console.log('Updated ' + updateResult.rowCount + ' migrations to paused status');
 
     // 3. Clear Redis embedding state
     console.log('\n=== Clearing Redis embedding state ===');
@@ -67,7 +70,7 @@ async function main() {
 
     for (const key of keysToDelete) {
       await redis.del(key);
-      console.log(`  Deleted: ${key}`);
+      console.log('  Deleted: ' + key);
     }
 
     // 4. Show summary
@@ -77,7 +80,7 @@ async function main() {
     console.log('\nNext steps:');
     console.log('1. Go to the Migrations > Embeddings page in the UI');
     console.log('2. Select tables with pending embeddings');
-    console.log('3. Click "Migration Başlat" to start embedding');
+    console.log('3. Click "Migration Baslat" to start embedding');
 
   } catch (e) {
     console.error('Error:', e.message);
