@@ -322,9 +322,7 @@ const SectionRenderer: React.FC<SectionRendererProps> = ({ section, content }) =
       ];
       return (
         <div className="mb-4">
-          <h4 className="text-xs font-medium text-cyan-600/70 dark:text-cyan-400/70 mb-2">
-            {section.label}
-          </h4>
+          {/* Hide label for keywords - show tags directly */}
           <div className="flex flex-wrap gap-2">
             {tags.map((tag, idx) => (
               <span
@@ -391,9 +389,7 @@ const SectionRenderer: React.FC<SectionRendererProps> = ({ section, content }) =
     default:
       return (
         <div className="mb-4">
-          <h4 className="text-xs font-medium text-cyan-600/70 dark:text-cyan-400/70 mb-2">
-            {section.label}
-          </h4>
+          {/* Hide section label - show content directly */}
           <div className="prose prose-sm max-w-none dark:prose-invert text-slate-700 dark:text-slate-100
                           prose-headings:text-cyan-700 dark:prose-headings:text-cyan-300
                           prose-h1:text-lg prose-h1:font-bold prose-h1:mt-4 prose-h1:mb-2
