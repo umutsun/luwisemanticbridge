@@ -119,10 +119,12 @@ export default function ChatInterface() {
   const [lastUserQuery, setLastUserQuery] = useState<string>('');
 
   // RAG and LLM Settings
-  const [, setRagSettings] = useState<ZenRagSettings>({
+  const [ragSettings, setRagSettings] = useState<ZenRagSettings>({
     minResults: 7,
     maxResults: 20,
-    similarityThreshold: 0.02
+    similarityThreshold: 0.02,
+    minSourcesToShow: 5,
+    maxSourcesToShow: 15
   });
   const [llmSettings, setLlmSettings] = useState<ZenLlmSettings>({
     temperature: 0.7,
