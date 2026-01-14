@@ -110,17 +110,25 @@ function highlightKeywordsInText(text: string, keywords: string[]): React.ReactN
  * Fixes: "T.C.D A N I Ş T A Y" -> "T.C. DANIŞTAY"
  * Fixes: "DAİREEsas No:" -> "DAİRE Esas No:"
  * Fixes: "2018/280Karar No:" -> "2018/280 Karar No:"
+ * Fixes: "GelirMüdürlüğüILGİ" -> "Gelir Müdürlüğü İLGİ"
+ * Fixes: ".......... gün ve ................" -> "" (removes placeholder dots)
  */
 function cleanCitationTitle(title: string): string {
   if (!title) return '';
 
   return title
+    // Remove long sequences of dots/periods (likely placeholder text)
+    .replace(/\.{4,}/g, '')
+    // Remove common placeholder patterns
+    .replace(/\s+gün\s+ve\s+$/i, '')
     // Fix spaced letters like "D A N I Ş T A Y" -> "DANIŞTAY"
     .replace(/([A-ZÇĞİÖŞÜ])\s+(?=[A-ZÇĞİÖŞÜ]\s*[A-ZÇĞİÖŞÜ])/g, '$1')
     .replace(/([A-ZÇĞİÖŞÜ])\s+([A-ZÇĞİÖŞÜ])\s+([A-ZÇĞİÖŞÜ])\s+([A-ZÇĞİÖŞÜ])\s+([A-ZÇĞİÖŞÜ])\s+([A-ZÇĞİÖŞÜ])\s+([A-ZÇĞİÖŞÜ])\s+([A-ZÇĞİÖŞÜ])/g, '$1$2$3$4$5$6$7$8')
     .replace(/([A-ZÇĞİÖŞÜ])\s+([A-ZÇĞİÖŞÜ])\s+([A-ZÇĞİÖŞÜ])\s+([A-ZÇĞİÖŞÜ])\s+([A-ZÇĞİÖŞÜ])\s+([A-ZÇĞİÖŞÜ])\s+([A-ZÇĞİÖŞÜ])/g, '$1$2$3$4$5$6$7')
     .replace(/([A-ZÇĞİÖŞÜ])\s+([A-ZÇĞİÖŞÜ])\s+([A-ZÇĞİÖŞÜ])\s+([A-ZÇĞİÖŞÜ])\s+([A-ZÇĞİÖŞÜ])\s+([A-ZÇĞİÖŞÜ])/g, '$1$2$3$4$5$6')
     .replace(/([A-ZÇĞİÖŞÜ])\s+([A-ZÇĞİÖŞÜ])\s+([A-ZÇĞİÖŞÜ])\s+([A-ZÇĞİÖŞÜ])\s+([A-ZÇĞİÖŞÜ])/g, '$1$2$3$4$5')
+    // Fix missing space after lowercase letter followed by uppercase (e.g., "MüdürlüğüILGİ" -> "Müdürlüğü İLGİ")
+    .replace(/([a-zçğıöşü])([A-ZÇĞİÖŞÜ]{2,})/g, '$1 $2')
     // Fix "T.C.D" -> "T.C. D" (add space after T.C.)
     .replace(/T\.C\.D/g, 'T.C. D')
     // Fix merged words: "DAİREEsas" -> "DAİRE Esas"
@@ -598,11 +606,11 @@ export const ZenMessage: React.FC<ZenMessageProps> = ({
                             {(source.metadata.kurum || source.metadata.tarih) && (
                               <div className="flex items-center gap-2 text-slate-300/90 dark:text-slate-200/90">
                                 {source.metadata.kurum && (
-                                  <span className="font-medium">{source.metadata.kurum}</span>
+                                  <span className="font-medium">{cleanCitationTitle(source.metadata.kurum)}</span>
                                 )}
                                 {source.metadata.tarih && (
                                   <span className="text-slate-400/80 dark:text-slate-300/70">
-                                    {source.metadata.tarih}
+                                    {cleanCitationTitle(source.metadata.tarih)}
                                   </span>
                                 )}
                               </div>
@@ -610,9 +618,9 @@ export const ZenMessage: React.FC<ZenMessageProps> = ({
                             {/* Sayı/Madde - clean, readable */}
                             {(source.metadata.sayi || source.metadata.madde_no) && (
                               <div className="text-slate-400/90 dark:text-slate-300/80 text-[10.5px]">
-                                {source.metadata.sayi && `Sayı ${source.metadata.sayi}`}
+                                {source.metadata.sayi && `Sayı ${cleanCitationTitle(source.metadata.sayi)}`}
                                 {source.metadata.sayi && source.metadata.madde_no && ' / '}
-                                {source.metadata.madde_no && `Madde ${source.metadata.madde_no}`}
+                                {source.metadata.madde_no && `Madde ${cleanCitationTitle(source.metadata.madde_no)}`}
                               </div>
                             )}
                           </div>
