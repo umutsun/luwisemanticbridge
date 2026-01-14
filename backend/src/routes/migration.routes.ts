@@ -1775,6 +1775,7 @@ router.post('/generate', async (req: Request, res: Response) => {
 
     const total = totalPending;
     let processed = 0;
+    let lastEmittedPercentage = -1; // Track last emitted percentage to prevent spam
 
     if (total === 0) {
       console.log(` No pending records found in tables: ${tables.join(', ')}`);
@@ -1809,14 +1810,21 @@ router.post('/generate', async (req: Request, res: Response) => {
 
     for (const tableInfo of tablePendingInfo) {
       const { table, normalizedName: normalizedTableName, embeddedIds } = tableInfo;
-      let offset = 0;
       let tableProcessed = 0;
 
-      console.log(`📊 Processing table: ${table} (${tableInfo.pendingCount} pending)`);
+      // Calculate starting point: skip already embedded records
+      let startFromId = 0;
+      if (embeddedIds.size > 0) {
+        startFromId = Math.max(...Array.from(embeddedIds));
+        console.log(`📊 Processing table: ${table} (${tableInfo.pendingCount} pending, starting from row_id > ${startFromId})`);
+      } else {
+        console.log(`📊 Processing table: ${table} (${tableInfo.pendingCount} pending, starting from beginning)`);
+      }
 
       while (true) {
         // Fetch a batch of records from source (with pagination)
-        // Note: ORDER BY id::int ensures numeric sorting even if id column is text type
+        // Use WHERE row_id > startFromId to skip already embedded records
+        // ORDER BY row_id for consistent numeric sorting (row_id is auto-increment PK)
         let batchResult;
         let retryCount = 0;
         const maxRetries = 3;
@@ -1824,8 +1832,8 @@ router.post('/generate', async (req: Request, res: Response) => {
         while (retryCount < maxRetries) {
           try {
             batchResult = await pools.sourcePool.query(
-              `SELECT id, * FROM public."${table}" ORDER BY id::int LIMIT $1 OFFSET $2`,
-              [BATCH_FETCH_SIZE, offset]
+              `SELECT * FROM public."${table}" WHERE row_id > $1 ORDER BY row_id LIMIT $2`,
+              [startFromId, BATCH_FETCH_SIZE]
             );
             break; // Success, exit retry loop
           } catch (dbError: any) {
@@ -1851,16 +1859,26 @@ router.post('/generate', async (req: Request, res: Response) => {
 
         if (!batchResult || batchResult.rows.length === 0) break; // No more records
 
+        // Update startFromId to last row in this batch (for next iteration if needed)
+        const lastRowId = Math.max(...batchResult.rows.map((r: any) => parseInt(r.row_id, 10)));
+
         // Filter out already embedded records
         // Note: row.row_id might be string or number depending on source table, so we compare as numbers
         const pendingBatch = unifiedEmbeddingsExists
           ? batchResult.rows.filter(row => !embeddedIds.has(parseInt(row.row_id, 10)))
           : batchResult.rows;
 
-        // If all records in this batch are already embedded, stop
+        // If all records in this batch are already embedded
         if (pendingBatch.length === 0) {
-          console.log(`✅ All records in current batch already embedded for ${table}, moving to next table`);
-          break;
+          // If this was a partial batch (less than BATCH_FETCH_SIZE), we've reached the end
+          if (batchResult.rows.length < BATCH_FETCH_SIZE) {
+            console.log(`✅ Reached end of table ${table} (last batch: ${batchResult.rows.length} rows, all embedded)`);
+            break;
+          }
+          // Otherwise, continue to next batch range (may have gaps in row_id sequence)
+          console.log(`⏭️ Batch fully embedded for ${table} (${batchResult.rows.length} rows), advancing to next batch from row_id > ${lastRowId}...`);
+          startFromId = lastRowId;
+          continue; // Skip to next batch
         }
 
         // Process each record in this batch
@@ -2100,11 +2118,12 @@ router.post('/generate', async (req: Request, res: Response) => {
           console.log(`⚠️ Record ${row.row_id} already exists (conflict detected), skipping count increment`);
         }
 
-        // Send progress (only if client is still connected)
+        // Calculate progress
+        const currentPercentage = Math.round((processed / total) * 100);
         const progress = {
           current: processed,
           total: total,
-          percentage: Math.round((processed / total) * 100),
+          percentage: currentPercentage,
           status: 'processing',
           currentRecord: title,
           currentTable: table,
@@ -2116,9 +2135,13 @@ router.post('/generate', async (req: Request, res: Response) => {
           await migrationProgress.updateProgress(activeMigrationId, progress);
         }
 
-        // Also emit to progress stream listeners for immediate SSE updates
-        migrationProgress.emit('progress', { id: activeMigrationId, ...progress });
-        safeWrite(`data: ${JSON.stringify(progress)}\n\n`);
+        // Emit SSE ONLY when percentage changes (prevents frontend RAM spam)
+        // Always emit on first record and last record
+        if (currentPercentage !== lastEmittedPercentage || processed === 1 || processed === total) {
+          lastEmittedPercentage = currentPercentage;
+          migrationProgress.emit('progress', { id: activeMigrationId, ...progress });
+          safeWrite(`data: ${JSON.stringify(progress)}\n\n`);
+        }
           } catch (error) {
             console.error(`✗ Embedding error for ${table}[${row.row_id}]:`, error);
             // Don't increment processed on error - we'll retry this record on next run
@@ -2131,8 +2154,9 @@ router.post('/generate', async (req: Request, res: Response) => {
           break;
         }
 
-        // Move to next batch
-        offset += BATCH_FETCH_SIZE;
+        // Move to next batch by updating startFromId
+        // This allows us to skip already processed records efficiently
+        startFromId = lastRowId;
 
         // Memory cleanup hint
         if (global.gc) {
