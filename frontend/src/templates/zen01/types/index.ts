@@ -94,6 +94,8 @@ export interface ZenRagSettings {
   minResults: number;
   maxResults: number;
   similarityThreshold: number;
+  minSourcesToShow?: number;
+  maxSourcesToShow?: number;
 }
 
 // LLM Settings Interface
@@ -168,6 +170,8 @@ export interface ZenMessageProps {
   // Backend-generated metadata for schema sections
   keywords?: string[];
   dayanaklar?: string[];
+  // Source display configuration
+  minSourcesToShow?: number;
 }
 
 // Default Settings
@@ -186,7 +190,9 @@ export const DEFAULT_CHATBOT_SETTINGS: ZenChatbotSettings = {
 export const DEFAULT_RAG_SETTINGS: ZenRagSettings = {
   minResults: 7,
   maxResults: 20,
-  similarityThreshold: 0.02
+  similarityThreshold: 0.02,
+  minSourcesToShow: 5,
+  maxSourcesToShow: 15
 };
 
 export const DEFAULT_LLM_SETTINGS: ZenLlmSettings = {

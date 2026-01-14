@@ -276,6 +276,7 @@ export const ZenMessage: React.FC<ZenMessageProps> = ({
   responseSchemaId,  // Response format schema ID
   keywords: backendKeywords = [],  // Backend-extracted keywords for schema sections
   dayanaklar: backendDayanaklar = [],  // Backend-extracted legal references for schema sections
+  minSourcesToShow = 5,  // From RAG settings, default 5
 }) => {
   const isUser = message.role === 'user';
   const [showAllSources, setShowAllSources] = useState(false);
@@ -315,11 +316,10 @@ export const ZenMessage: React.FC<ZenMessageProps> = ({
       play(plainText);
     }
   };
-  // Show min 5 sources initially (from settings), expandable to all
-  const initialSourcesToShow = 5;
+  // Show sources based on settings (dynamic from ragSettings.minSourcesToShow)
   const visibleSources = showAllSources
     ? message.sources
-    : message.sources?.slice(0, initialSourcesToShow);
+    : message.sources?.slice(0, minSourcesToShow);
 
   return (
     <motion.div
@@ -653,12 +653,12 @@ export const ZenMessage: React.FC<ZenMessageProps> = ({
                 );
               })}
             </div>
-            {message.sources.length > 3 && (
+            {message.sources.length > minSourcesToShow && (
               <button
                 onClick={() => setShowAllSources(!showAllSources)}
                 className="mt-2 text-xs text-cyan-600/70 dark:text-cyan-400/70 hover:text-cyan-700 dark:hover:text-cyan-300 transition-colors"
               >
-                {showAllSources ? 'Daha az göster' : `${message.sources.length - 3} kaynak daha göster`}
+                {showAllSources ? 'Daha az göster' : `${message.sources.length - minSourcesToShow} kaynak daha göster`}
               </button>
             )}
           </div>

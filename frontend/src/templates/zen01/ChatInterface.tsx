@@ -281,7 +281,9 @@ export default function ChatInterface() {
         const rag: ZenRagSettings = {
           minResults: settingsData.ragSettings?.minResults || 7,
           maxResults: settingsData.ragSettings?.maxResults || 20,
-          similarityThreshold: settingsData.ragSettings?.similarityThreshold || 0.02
+          similarityThreshold: settingsData.ragSettings?.similarityThreshold || 0.02,
+          minSourcesToShow: settingsData.ragSettings?.minSourcesToShow || 5,
+          maxSourcesToShow: settingsData.ragSettings?.maxSourcesToShow || 15
         };
 
         const llm: ZenLlmSettings = {
@@ -729,6 +731,7 @@ export default function ChatInterface() {
                     enableSourceClick={chatbotSettings.enableSourceClick}
                     enableKeywordHighlighting={chatbotSettings.enableKeywordHighlighting}
                     responseSchemaId={chatbotSettings.responseSchemaId}
+                    minSourcesToShow={ragSettings.minSourcesToShow}
                   />
                 ))}
               </AnimatePresence>
