@@ -2517,7 +2517,8 @@ FORMAT:
           searchResults,
           responseLanguage,
           message,  // Original user query for verdict detection
-          formatType
+          formatType,
+          routingSchema  // Schema for backendLabel lookup (settings-driven)
         );
       }
 
@@ -2616,7 +2617,7 @@ FORMAT:
           const formatType = (routingSchema.routes.FOUND.format.articleSections &&
                             routingSchema.routes.FOUND.format.articleSections.length > 0)
                             ? 'article' : 'legacy';
-          fastModeResponse = this.enforceResponseFormat(response.content, searchResults, responseLanguage, message, formatType);
+          fastModeResponse = this.enforceResponseFormat(response.content, searchResults, responseLanguage, message, formatType, routingSchema);
         }
 
         // 📊 DEBUG INFO for fast mode
@@ -3368,13 +3369,15 @@ FORMAT:
    * ALINTI removed - citations are shown separately in UI
    *
    * @param formatType - 'article' | 'legacy' - from schema.routes.FOUND.format.type
+   * @param routingSchema - RAG routing schema for backendLabel lookup (NOT hardcoded)
    */
   private enforceResponseFormat(
     responseText: string,
     searchResults: any[],
     language: string = 'tr',
     originalQuery: string = '',  // Original user query for verdict detection
-    formatType: 'article' | 'legacy' = 'legacy'  // From schema config
+    formatType: 'article' | 'legacy' = 'legacy',  // From schema config
+    routingSchema?: RAGRoutingSchema  // Schema for section labels (settings-driven)
   ): string {
     let result = responseText;
 
@@ -3517,15 +3520,26 @@ FORMAT:
       }
       assessmentContent = assessmentContent.replace(/\n{3,}/g, '\n\n').trim();
 
-      // Build formatted output
+      // ═══════════════════════════════════════════════════════════════
+      // BUILD FORMATTED OUTPUT - Use backendLabels from routingSchema (NOT hardcoded)
+      // ═══════════════════════════════════════════════════════════════
+
+      // Get section labels from schema
+      const keywordsSection = routingSchema.articleSections?.find(s => s.id === 'keywords');
+      const assessmentSection = routingSchema.articleSections?.find(s => s.id === 'assessment');
+
+      // NOTE: "Konu" section removed in 2-section format (keywords + assessment only)
+      // If you need it back, add to routingSchema.articleSections with id='topic'
       if (konuContent) {
+        // Legacy support: KONU section (not in current schema)
         formattedResponse += `KONU:\n${konuContent}\n\n`;
       }
 
       // Add backend-generated Anahtar Terimler (from sources, not LLM)
       // Only add if not a refusal response
-      if (keywordsFromSources.length > 0) {
-        formattedResponse += `ANAHTAR_TERIMLER:\n${keywordsFromSources.join(', ')}\n\n`;
+      if (keywordsFromSources.length > 0 && keywordsSection) {
+        const label = keywordsSection.backendLabel || 'ANAHTAR_TERIMLER:';
+        formattedResponse += `${label}\n${keywordsFromSources.join(', ')}\n\n`;
       }
 
       // NOTE: Dayanaklar bölümü kaldırıldı - atıflar metin içinde [1], [2] şeklinde gösterilir
@@ -3569,8 +3583,9 @@ FORMAT:
       }
 
       // Add assessment with citation references preserved
-      if (assessmentContent) {
-        formattedResponse += `DEGERLENDIRME:\n${assessmentContent}`;
+      if (assessmentContent && assessmentSection) {
+        const label = assessmentSection.backendLabel || 'DEGERLENDIRME:';
+        formattedResponse += `${label}\n${assessmentContent}`;
       }
 
       console.log('[FORMAT] Parsed sections - Konu: ' + (konuContent ? 'found' : 'missing') +

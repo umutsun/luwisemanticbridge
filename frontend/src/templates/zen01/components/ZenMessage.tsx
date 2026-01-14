@@ -349,7 +349,7 @@ export const ZenMessage: React.FC<ZenMessageProps> = ({
             ) : useSchemaRenderer ? (
               // Schema-based structured response rendering
               <SchemaRenderer
-                content={message.content}
+                content={cleanLLMResponse(message.content)}
                 schemaId={responseSchemaId}
                 keywords={backendKeywords}
                 dayanaklar={backendDayanaklar}

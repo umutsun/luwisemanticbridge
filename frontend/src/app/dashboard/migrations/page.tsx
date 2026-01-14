@@ -231,13 +231,10 @@ export default function EmbeddingsManagerPage() {
       // Use refresh=true on first load to ensure pools are initialized
       const isFirstLoad = retryCount === 0;
       const url = `${config.api.baseUrl}/api/v2/migration/stats?t=${Date.now()}${isFirstLoad ? '&refresh=true' : ''}`;
-      console.log('Fetching tables from:', url);
       const response = await fetchWithAuth(url);
 
       if (response.ok) {
         const data = await response.json();
-        console.log('Tables data received:', data);
-        console.log('Table details:', data.tables);
 
         // Transform API response to match frontend expectations
         const transformedTables = (data.tables || []).map(table => {
@@ -262,7 +259,6 @@ export default function EmbeddingsManagerPage() {
           };
         });
 
-        console.log('All tables with embedding status:', transformedTables);
         setAvailableTables(transformedTables);
 
         // Set token usage from API response
@@ -308,7 +304,6 @@ export default function EmbeddingsManagerPage() {
       if (retryCount < maxRetries) {
         // Longer delays for database startup: 2s, 3s, 4s, 5s
         const delayMs = 2000 + (1000 * retryCount);
-        console.log(`Retrying fetch tables (attempt ${retryCount + 2}/${maxRetries + 1}) in ${delayMs}ms...`);
         setTimeout(() => {
           fetchAvailableTables(retryCount + 1);
         }, delayMs);
@@ -363,7 +358,6 @@ export default function EmbeddingsManagerPage() {
         setPreviewHasMore(false);
       }
     } catch (error) {
-      console.log(`Could not fetch preview for ${tableName}:`, error);
       if (!append) setTablePreviewData([]);
       setPreviewHasMore(false);
     } finally {
@@ -378,11 +372,10 @@ export default function EmbeddingsManagerPage() {
       const response = await fetchWithAuth(`${config.api.baseUrl}/api/v2/migration/stats`);
       if (response.ok) {
         const data = await response.json();
-        console.log('Token stats received:', data);
         setTotalTokensUsed(data.tokenUsage?.total_tokens || 0);
       }
     } catch (error) {
-      console.log('Error fetching token stats:', error);
+      // Silent fail for stats
     }
   }, []);
 
@@ -397,7 +390,6 @@ export default function EmbeddingsManagerPage() {
       if (!response.ok) return;
 
       const data = await response.json();
-      console.log('📡 Progress Poll:', data);
 
       // Treat as idle if: status is idle, OR status is paused but no actual work (total=0, no tables)
       const isEffectivelyIdle = data.status === 'idle' ||
@@ -409,7 +401,6 @@ export default function EmbeddingsManagerPage() {
         if (pollingIntervalRef.current) {
           clearInterval(pollingIntervalRef.current);
           pollingIntervalRef.current = null;
-          console.log('📡 Polling stopped - status is idle/effectively idle');
         }
         return;
       }
@@ -458,8 +449,6 @@ export default function EmbeddingsManagerPage() {
     if (pollingIntervalRef.current) {
       clearInterval(pollingIntervalRef.current);
     }
-
-    console.log('📡 Starting progress polling (every 2s)');
 
     // Fetch immediately
     fetchProgressPolling();
@@ -802,11 +791,6 @@ export default function EmbeddingsManagerPage() {
       ...Array.from(selectedTableRows)
     ]));
 
-    console.log('Starting migration with tables:', tablesToProcess);
-    console.log('From queue:', selectedTables);
-    console.log('From checkboxes:', Array.from(selectedTableRows));
-    console.log('Available tables:', availableTables.map(t => ({name: t.name, total: t.totalRecords, embedded: t.embeddedRecords})));
-
     if (tablesToProcess.length === 0) {
       toast({
         title: "Error",
@@ -891,7 +875,6 @@ export default function EmbeddingsManagerPage() {
           const { done, value } = await reader.read();
 
           if (done) {
-            console.log('SSE stream ended');
             break;
           }
 
@@ -903,7 +886,6 @@ export default function EmbeddingsManagerPage() {
             if (line.startsWith('data: ')) {
               try {
                 const data = JSON.parse(line.slice(6));
-                console.log('📡 SSE Update:', data);
 
                 // Update progress in real-time
                 setProgress({
@@ -971,15 +953,17 @@ export default function EmbeddingsManagerPage() {
       if (response.ok) {
         setProgress(null);
         setSelectedTables([]);
+        // Refresh table list to get updated counts
+        fetchAvailableTables();
         toast({
-          title: "Stopped",
-          description: "Migration stopped successfully.",
+          title: "Durduruldu",
+          description: "Migration durduruldu.",
         });
       }
     } catch (error) {
       toast({
-        title: "Error",
-        description: 'Failed to stop migration.',
+        title: "Hata",
+        description: 'Migration durdurulamadı.',
         variant: "destructive",
       });
     }
@@ -1071,7 +1055,6 @@ export default function EmbeddingsManagerPage() {
 
   const handleBulkDelete = async () => {
     const tablesToDelete = Array.from(selectedTableRows);
-    console.log('Bulk delete for tables:', tablesToDelete);
 
     if (tablesToDelete.length === 0) {
       toast({
@@ -1231,11 +1214,6 @@ export default function EmbeddingsManagerPage() {
   };
 
   const handleDeleteTable = async (table: TableInfo) => {
-    // Confirm deletion
-    if (!confirm(`"${table.displayName}" tablosu için tüm embedding'ler silinecek. Devam etmek istiyor musunuz?`)) {
-      return;
-    }
-
     try {
       const response = await fetchWithAuth(
         `${config.api.baseUrl}/api/v2/embeddings/table/${encodeURIComponent(table.name)}`,
@@ -1260,7 +1238,6 @@ export default function EmbeddingsManagerPage() {
         });
       }
     } catch (error) {
-      console.error('Error deleting embeddings:', error);
       toast({
         title: 'Hata',
         description: 'Silme işlemi sırasında bir hata oluştu',
@@ -1799,6 +1776,7 @@ export default function EmbeddingsManagerPage() {
                         </TableHead>
                         <TableHead className="w-64">Table Name</TableHead>
                         <TableHead className="w-24">Status</TableHead>
+                        <TableHead className="w-16">Actions</TableHead>
                         <TableHead className="w-48">Progress</TableHead>
                       </TableRow>
                     </TableHeader>
@@ -1867,15 +1845,26 @@ export default function EmbeddingsManagerPage() {
                                   <Play className="w-3 h-3 mr-2" />
                                   Start Migration
                                 </DropdownMenuItem>
-                                <DropdownMenuItem
-                                  onClick={() => handleDeleteTable(table)}
-                                  className="text-red-600 focus:text-red-600"
-                                >
-                                  <Trash2 className="w-3 h-3 mr-2" />
-                                  Delete
-                                </DropdownMenuItem>
                               </DropdownMenuContent>
                             </DropdownMenu>
+                          </TableCell>
+
+                          {/* Actions column */}
+                          <TableCell>
+                            <div className="flex items-center justify-center">
+                              <ConfirmTooltip
+                                onConfirm={() => handleDeleteTable(table)}
+                                message={`${table.displayName} silinsin mi?`}
+                                side="left"
+                              >
+                                <button
+                                  className="p-1.5 rounded-md hover:bg-red-50 dark:hover:bg-red-900/20 text-muted-foreground hover:text-red-600 dark:hover:text-red-400 transition-colors"
+                                  aria-label="Delete embeddings"
+                                >
+                                  <Trash2 className="w-4 h-4" />
+                                </button>
+                              </ConfirmTooltip>
+                            </div>
                           </TableCell>
 
                           {/* Combined Progress column: embedded/total + progress bar + skipped */}

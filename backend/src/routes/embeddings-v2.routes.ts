@@ -2951,15 +2951,21 @@ router.get('/api/v2/embeddings/tables', async (req: Request, res: Response) => {
         const totalRecords = parseInt(countResult.rows[0].total);
 
         // Get embedded records count from unified_embeddings
+        // Match all possible source_table variations to ensure accurate count
+        const tableWithoutPrefix = tableName.replace(/^csv_/i, '');
         const embeddedResult = await lsembPool.query(`
-          SELECT COUNT(*) as embedded
+          SELECT COUNT(DISTINCT source_id) as embedded
           FROM unified_embeddings
           WHERE source_type = 'database'
           AND (
-            source_table = $1
-            OR metadata->>'table' = $2
+            LOWER(source_table) = LOWER($1)
+            OR LOWER(source_table) = LOWER($2)
+            OR LOWER(source_table) = LOWER($3)
+            OR LOWER(metadata->>'table') = LOWER($1)
+            OR LOWER(metadata->>'table') = LOWER($2)
+            OR LOWER(metadata->>'table') = LOWER($3)
           )
-        `, [displayName, tableName]);
+        `, [tableName, displayName, tableWithoutPrefix]);
         const embeddedRecords = parseInt(embeddedResult.rows[0].embedded) || 0;
 
         console.log(` ${tableName}: ${embeddedRecords} embedded records found (counting both source_table and metadata)`);
@@ -3556,20 +3562,25 @@ router.delete('/table/:tableName', async (req: Request, res: Response) => {
   }
 
   try {
-    console.log(`[Embeddings] Deleting embeddings for table: ${tableName}`);
+    // Generate display name for matching (e.g., csv_danistaykararlari -> Csv Danistaykararlari)
+    const displayName = getDisplayName(tableName);
+    console.log(`[Embeddings] Deleting embeddings for table: ${tableName} (displayName: ${displayName})`);
 
     // Delete from unified_embeddings with case-insensitive matching
+    // Match all possible variations: raw table name, with csv_ prefix, display name format
     const deleteResult = await lsembPool.query(`
       DELETE FROM unified_embeddings
       WHERE source_type = 'database'
       AND (
         LOWER(source_table) = LOWER($1)
         OR LOWER(source_table) = LOWER('csv_' || $1)
+        OR LOWER(source_table) = LOWER($2)
         OR LOWER(metadata->>'table') = LOWER($1)
         OR LOWER(metadata->>'table') = LOWER('csv_' || $1)
+        OR LOWER(metadata->>'table') = LOWER($2)
       )
       RETURNING id
-    `, [tableName]);
+    `, [tableName, displayName]);
 
     const deletedCount = deleteResult.rowCount || 0;
     console.log(`[Embeddings] Deleted ${deletedCount} embeddings for table: ${tableName}`);
@@ -3581,8 +3592,9 @@ router.delete('/table/:tableName', async (req: Request, res: Response) => {
         DELETE FROM skipped_embeddings
         WHERE LOWER(source_table) = LOWER($1)
         OR LOWER(source_table) = LOWER('csv_' || $1)
+        OR LOWER(source_table) = LOWER($2)
         RETURNING id
-      `, [tableName]);
+      `, [tableName, displayName]);
       skippedDeletedCount = skippedResult.rowCount || 0;
       console.log(`[Embeddings] Deleted ${skippedDeletedCount} skipped records for table: ${tableName}`);
     } catch (err) {

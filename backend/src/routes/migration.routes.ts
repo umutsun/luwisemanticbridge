@@ -529,25 +529,34 @@ class MigrationProgress extends EventEmitter {
   async stopMigration(id: string) {
     this.stoppedMigrations.add(id);
     this.runningMigrations.delete(id); // Mark as no longer running
+    this.stopHeartbeat(id); // Stop heartbeat updates
+
     const current = this.progress.get(id);
     if (current) {
       const stoppedData = { ...current, status: 'stopped', stoppedAt: new Date().toISOString() };
-      await this.updateProgress(id, stoppedData);
+      // Don't update progress - we want to clear it completely
       this.history.push({ id, ...stoppedData });
 
-      // Persist to Redis
+      // Clear all Redis state for this migration
       try {
         const redis = redisClient();
         if (redis && redis.status === 'ready') {
-          await redis.setex(REDIS_KEYS.STOPPED(id), MIGRATION_TTL, 'true');
           await redis.del(REDIS_KEYS.ACTIVE_MIGRATION);
+          await redis.del(REDIS_KEYS.PROGRESS(id));
+          await redis.del(REDIS_KEYS.HEARTBEAT(id));
+          await redis.del(REDIS_KEYS.PAUSED(id));
+          await redis.del(REDIS_KEYS.STOPPED(id));
           await redis.setex(REDIS_KEYS.HISTORY, MIGRATION_TTL * 7, JSON.stringify(this.history));
         }
       } catch (error) {
-        console.error('Error persisting stopped state to Redis:', error);
+        console.error('Error clearing Redis state:', error);
       }
+
+      // Clear from local state
+      this.progress.delete(id);
+      this.pausedMigrations.delete(id);
     }
-    console.log(`⏹️ Migration ${id} stopped by user`);
+    console.log(`⏹️ Migration ${id} stopped by user - all state cleared`);
   }
 
   isPaused(id: string): boolean {
@@ -1722,10 +1731,22 @@ router.post('/generate', async (req: Request, res: Response) => {
 
         if (unifiedEmbeddingsExists) {
           // Only get IDs of already embedded records (not full rows)
-          // Use case-insensitive comparison since table names may be stored with different casing
+          // Match all possible source_table variations:
+          // - Original table name (e.g., csv_danistaykararlari)
+          // - Display name format (e.g., Csv Danistaykararlari)
+          // - Without csv_ prefix (e.g., danistaykararlari)
+          const displayName = table
+            .split('_')
+            .map((word: string) => word.charAt(0).toUpperCase() + word.slice(1))
+            .join(' ');
+
           const embeddedIdsResult = await pools.targetPool.query(
-            `SELECT source_id FROM unified_embeddings WHERE LOWER(source_table) = LOWER($1)`,
-            [table]  // Use original table name, LOWER() handles casing
+            `SELECT DISTINCT source_id FROM unified_embeddings
+             WHERE LOWER(source_table) = LOWER($1)
+                OR LOWER(source_table) = LOWER($2)
+                OR LOWER(source_table) = LOWER($3)
+                OR LOWER(metadata->>'table') = LOWER($1)`,
+            [table, displayName, table.replace(/^csv_/i, '')]
           );
           // IMPORTANT: Convert source_id to number for proper Set comparison
           // PostgreSQL bigint comes as string in some cases, but row.id comparison uses parseInt
@@ -1963,6 +1984,9 @@ router.post('/generate', async (req: Request, res: Response) => {
             console.error(` Failed to insert into skipped_embeddings for ${table}[${row.id}]:`, err);
           }
 
+          // Add to embeddedIds Set (skipped records should not be re-processed)
+          embeddedIds.add(parseInt(row.id, 10));
+
           processed++;
           continue;
         }
@@ -1994,6 +2018,9 @@ router.post('/generate', async (req: Request, res: Response) => {
           } catch (err) {
             console.error(` Failed to insert into skipped_embeddings for ${table}[${row.id}]:`, err);
           }
+
+          // Add to embeddedIds Set (skipped records should not be re-processed)
+          embeddedIds.add(parseInt(row.id, 10));
 
           processed++;
           continue;
@@ -2055,6 +2082,9 @@ router.post('/generate', async (req: Request, res: Response) => {
           metadata.embeddingModel || 'text-embedding-ada-002',
           metadata.embeddingProvider || 'openai'
         ]);
+
+        // Add to embeddedIds Set to prevent re-processing in subsequent batches
+        embeddedIds.add(parseInt(row.id, 10));
 
         processed++;
 
