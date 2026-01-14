@@ -5,16 +5,20 @@ const pool = new Pool({
   connectionString: process.env.DATABASE_URL || 'postgresql://postgres:12Kemal1221@localhost:5432/lsemb'
 });
 
-// Simple, clear formatTemplate that LLM can easily follow
-const simpleFormat = `## Yasal Çerçeve
+// Simple, clear formatTemplate with explicit structure that LLM must follow
+const simpleFormat = `KRİTİK: Cevabınız TAM BU YAPIYI İZLEMELİ:
 
-İlgili kanun ve tebliğleri açıkla [1][2]. Temel kuralları belirt.
+## Yasal Çerçeve
 
-Detaylı düzenlemeleri ve istisnaları açıkla [3][4].
+[İlgili kanun ve tebliğleri açıkla [1][2]. Temel kuralları belirt.]
+
+[Detaylı düzenlemeleri ve istisnaları açıkla [3][4].]
 
 ## Uygulama
 
-Pratikte nasıl uygulandığını örneklerle göster [5].`;
+[Pratikte nasıl uygulandığını örneklerle göster [5].]
+
+NOT: ## başlıklarını aynen kullan, [] içindeki açıklamalar yerine gerçek içeriği yaz.`;
 
 async function updateFormatTemplate() {
   try {
