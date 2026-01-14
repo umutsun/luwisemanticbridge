@@ -3376,18 +3376,24 @@ FORMAT:
       result = result.replace(/\*\*QUOTE\*\*[\s\S]*?(?=##|\*\*[A-Z]|\n\n\n|$)/gi, '');
 
       // Remove LLM-generated Anahtar Terimler section (backend will generate from sources)
+      // Support both markdown (## Anahtar Terimler) and numbered (2) ANAHTAR KELİMELER) formats
       result = result.replace(/##\s*Anahtar\s*Terim[^\n]*[\s\S]*?(?=##|\n\n\n|$)/gi, '');
       result = result.replace(/\*\*Anahtar\s*Terim[^*]*\*\*[\s\S]*?(?=##|\*\*[A-ZÇĞİÖŞÜ]|\n\n\n|$)/gi, '');
+      result = result.replace(/2\)\s*ANAHTAR\s*KELİMELER[:\s]*[\s\S]*?(?=3\)|4\)|##|\n\n\n|$)/gi, '');
 
-      // Remove LLM-generated Dayanaklar section (backend will generate from sources)
+      // Remove LLM-generated Dayanaklar / Yasal Düzenlemeler section (backend will generate from sources)
       result = result.replace(/##\s*Dayanaklar[^\n]*[\s\S]*?(?=##|\n\n\n|$)/gi, '');
       result = result.replace(/\*\*Dayanaklar[^*]*\*\*[\s\S]*?(?=##|\*\*[A-ZÇĞİÖŞÜ]|\n\n\n|$)/gi, '');
+      result = result.replace(/3\)\s*(?:İLGİLİ\s*)?YASAL\s*DÜZENLEMELER[^\n]*[\s\S]*?(?=4\)|##|\n\n\n|$)/gi, '');
 
       // Remove ALL Dipnotlar/Footnotes sections - citations shown in Atıflar UI component
+      // Support both markdown (## Dipnotlar) and numbered (SON BÖLÜM: DİPNOTLAR) formats
       result = result.replace(/##\s*Dipnotlar:?[\s\S]*?(?=##|\n\n\n|$)/gi, '');
       result = result.replace(/##\s*Footnotes:?[\s\S]*?(?=##|\n\n\n|$)/gi, '');
       result = result.replace(/\*\*Dipnotlar:?\*\*[\s\S]*?(?=##|\*\*[A-ZÇĞİÖŞÜ]|\n\n\n|$)/gi, '');
       result = result.replace(/\*\*Footnotes:?\*\*[\s\S]*?(?=##|\*\*[A-Z]|\n\n\n|$)/gi, '');
+      result = result.replace(/SON\s*BÖLÜM[:\s]*DİPNOTLAR[\s\S]*$/gi, '');
+      result = result.replace(/5\)\s*DİPNOTLAR[\s\S]*$/gi, '');
       // Remove any standalone [1] [2] reference lists at the end
       result = result.replace(/\n\s*\[\d+\]\s+[^\n]+(?:\n\s*\[\d+\]\s+[^\n]+)*\s*$/gi, '');
 
@@ -3426,43 +3432,99 @@ FORMAT:
       // Build the final formatted response (NO ## headers - frontend renders them)
       let formattedResponse = '';
 
-      // Find Konu section from LLM response (remove ## header)
-      const konuMatch = result.match(/##\s*Konu\s*\n([\s\S]*?)(?=##|$)/i);
-      if (konuMatch) {
-        formattedResponse += `KONU:\n${konuMatch[1].trim()}\n\n`;
+      // ═══════════════════════════════════════════════════════════════
+      // MULTI-FORMAT PARSER: Support both numbered format and markdown headers
+      // LLM may output:
+      //   - Numbered: 1) SORUNUN KONUSU, 2) ANAHTAR KELİMELER, 4) VERGİLEX DEĞERLENDİRMESİ
+      //   - Markdown: ## Konu, ## Değerlendirme
+      // ═══════════════════════════════════════════════════════════════
+
+      // PATTERN 1: Numbered format (1) SORUNUN KONUSU ... 4) VERGİLEX DEĞERLENDİRMESİ)
+      const numberedKonuMatch = result.match(/1\)\s*SORUNUN\s*KONUSU[:\s]*([\s\S]*?)(?=2\)|##|$)/i);
+      const numberedDegerlendirmeMatch = result.match(/4\)\s*(?:VERGİLEX\s*)?DEĞERLENDİRME[Sİ]?[:\s]*([\s\S]*?)(?=5\)|SON\s*BÖLÜM|DİPNOTLAR|##|$)/i);
+
+      // PATTERN 2: Markdown format (## Konu, ## Değerlendirme)
+      const markdownKonuMatch = result.match(/##\s*Konu\s*\n([\s\S]*?)(?=##|$)/i);
+      const markdownDegerlendirmeMatch = result.match(/##\s*Değerlendirme\s*\n([\s\S]*?)(?=##|$)/i);
+
+      // Use whichever format is found
+      const konuContent = numberedKonuMatch?.[1]?.trim() || markdownKonuMatch?.[1]?.trim() || '';
+      let assessmentContent = numberedDegerlendirmeMatch?.[1]?.trim() || markdownDegerlendirmeMatch?.[1]?.trim() || '';
+
+      // If no specific sections found, use entire response as assessment (fallback)
+      if (!konuContent && !assessmentContent) {
+        console.log('[FORMAT] No structured sections found - using full response as assessment');
+        // Clean up any LLM-generated section headers and use as assessment
+        assessmentContent = result
+          .replace(/1\)\s*SORUNUN\s*KONUSU[:\s]*/gi, '')
+          .replace(/2\)\s*ANAHTAR\s*KELİMELER[:\s]*/gi, '')
+          .replace(/3\)\s*(?:İLGİLİ\s*)?YASAL\s*DÜZENLEMELER[^\n]*/gi, '')
+          .replace(/4\)\s*(?:VERGİLEX\s*)?DEĞERLENDİRME[Sİ]?[:\s]*/gi, '')
+          .replace(/SON\s*BÖLÜM[:\s]*DİPNOTLAR[^\n]*/gi, '')
+          .replace(/##\s*[A-ZÇĞİÖŞÜa-zçğıöşü\s]+\n/g, '')
+          .trim();
       }
 
-      // Add backend-generated Anahtar Terimler (as simple label, not ## header)
+      // Build formatted output
+      if (konuContent) {
+        formattedResponse += `KONU:\n${konuContent}\n\n`;
+      }
+
+      // Add backend-generated Anahtar Terimler (from sources, not LLM)
       // Only add if not a refusal response
       if (keywordsFromSources.length > 0) {
         formattedResponse += `ANAHTAR_TERIMLER:\n${keywordsFromSources.join(', ')}\n\n`;
       }
 
-      // Add backend-generated Dayanaklar
+      // Add backend-generated Dayanaklar (from sources, not LLM)
       // Only add if not a refusal response
       if (dayanaklar.length > 0) {
         formattedResponse += `DAYANAKLAR:\n${dayanaklar.join('\n')}\n\n`;
       }
 
-      // Find ## Değerlendirme section from LLM response
-      // KEEP [1], [2] citation references in the text!
-      const assessmentMatch = result.match(/##\s*Değerlendirme\s*\n([\s\S]*?)(?=##|$)/i);
-      let assessmentText = '';
-      if (assessmentMatch) {
-        assessmentText = assessmentMatch[1].trim();
-      } else {
-        // If no Değerlendirme header, use remaining content after Konu
-        const afterKonu = result.replace(/##\s*Konu[\s\S]*?(?=##|$)/i, '').trim();
-        if (afterKonu) {
-          assessmentText = afterKonu;
+      // ═══════════════════════════════════════════════════════════════
+      // VERDICT HARD GATE: Soften definitive statements if sources don't support
+      // If LLM uses strong verdict words but sources don't contain them,
+      // replace with hedged versions
+      // ═══════════════════════════════════════════════════════════════
+      if (assessmentContent && !isRefusalResponse) {
+        // Definitive verdict patterns that require source backing
+        const definitivePatterns = [
+          { pattern: /\bzorunludur\b/gi, softened: 'zorunlu olabilir', sourceCheck: /zorunlu(?:dur)?/i },
+          { pattern: /\byasaktır\b/gi, softened: 'yasak olabilir', sourceCheck: /yasak(?:tır)?/i },
+          { pattern: /\bmecburidir\b/gi, softened: 'mecburi olabilir', sourceCheck: /mecburi(?:dir)?/i },
+          { pattern: /\bgereklidir\b/gi, softened: 'gerekli olabilir', sourceCheck: /gerekli(?:dir)?/i },
+          { pattern: /\bmümkün\s*değildir\b/gi, softened: 'mümkün olmayabilir', sourceCheck: /mümkün\s*değil/i },
+          { pattern: /\bkabuledilemez\b/gi, softened: 'kabul edilmeyebilir', sourceCheck: /kabul\s*edilemez/i },
+        ];
+
+        // Combine all source content to check for supporting evidence
+        const allSourceContent = searchResults.slice(0, 10)
+          .map(s => (s.content || s.text || s.excerpt || '') + ' ' + (s.title || ''))
+          .join(' ')
+          .toLowerCase();
+
+        for (const { pattern, softened, sourceCheck } of definitivePatterns) {
+          if (pattern.test(assessmentContent)) {
+            // Check if sources contain supporting evidence
+            const hasSourceSupport = sourceCheck.test(allSourceContent);
+            if (!hasSourceSupport) {
+              console.log(`[VERDICT-GATE] Softening unsupported verdict: ${pattern.source} -> ${softened}`);
+              assessmentContent = assessmentContent.replace(pattern, softened);
+            } else {
+              console.log(`[VERDICT-GATE] Keeping verdict (source-backed): ${pattern.source}`);
+            }
+          }
         }
       }
 
-      // Ensure assessment has citation references [1], [2], etc.
-      // If LLM didn't add them, we don't force them - but we preserve any that exist
-      if (assessmentText) {
-        formattedResponse += `DEGERLENDIRME:\n${assessmentText}`;
+      // Add assessment with citation references preserved
+      if (assessmentContent) {
+        formattedResponse += `DEGERLENDIRME:\n${assessmentContent}`;
       }
+
+      console.log('[FORMAT] Parsed sections - Konu: ' + (konuContent ? 'found' : 'missing') +
+                  ', Assessment: ' + (assessmentContent ? 'found' : 'missing'));
 
       return formattedResponse.trim() || result.trim();
     }
