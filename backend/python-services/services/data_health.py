@@ -69,13 +69,13 @@ class DataHealthService:
     # Metadata alanları - tabloya göre hangi alanların metadata olarak alınacağı
     METADATA_FIELDS = {
         'ozelge': ['daire', 'tarih', 'sayisirano', 'konusu'],
-        'danistaykararlari': ['daire', 'tarih', 'esas_no', 'karar_no', 'konu'],
-        'sorucevap': ['kategori', 'soru', 'cevap'],
-        'makale': ['yazar', 'baslik', 'tarih', 'dergi', 'sayi'],
+        'danistaykararlari': ['daire', 'tarih', 'esasno', 'kararno', 'konusu'],
+        'sorucevap': ['donemi', 'soru', 'cevap'],
+        'makale': ['yazar', 'baslik', 'tarih', 'dergi'],
         'gib_sirkuler': ['sirkuler_no', 'tarih', 'konu', 'aciklama'],
         'vergilex_mevzuat': ['kanun_no', 'madde_no', 'tarih', 'baslik', 'tur'],
         'mevzuat': ['kanun_no', 'madde_no', 'tarih', 'baslik', 'tur'],
-        'default': ['tarih', 'konu', 'baslik', 'kategori', 'yil']
+        'default': ['tarih', 'baslik', 'yazar', 'dergi', 'daire']
     }
 
     # Primary key mapping
