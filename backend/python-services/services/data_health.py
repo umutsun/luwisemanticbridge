@@ -141,13 +141,13 @@ class DataHealthService:
         """Unified embeddings'de kayıtlı tabloları listele"""
         query = """
             SELECT DISTINCT
-                COALESCE(source_table, metadata->>'table') as table_name,
+                LOWER(COALESCE(source_table, metadata->>'table')) as table_name,
                 COUNT(*) as cnt
             FROM unified_embeddings
             WHERE source_table IS NOT NULL
               AND source_table != ''
               AND source_table != 'documents'
-            GROUP BY COALESCE(source_table, metadata->>'table')
+            GROUP BY LOWER(COALESCE(source_table, metadata->>'table'))
             ORDER BY cnt DESC
         """
         rows = await self.system_pool.fetch(query)
@@ -157,10 +157,10 @@ class DataHealthService:
         """Tek bir tablo için sağlık analizi"""
         metrics = HealthMetrics()
 
-        # Total embedding count
+        # Total embedding count (case-insensitive)
         count_query = """
             SELECT COUNT(*) as cnt FROM unified_embeddings
-            WHERE source_table = $1 OR metadata->>'table' = $1
+            WHERE LOWER(source_table) = LOWER($1) OR LOWER(metadata->>'table') = LOWER($1)
         """
         result = await self.system_pool.fetchrow(count_query, table_name)
         metrics.total_embeddings = result['cnt']
@@ -235,14 +235,14 @@ class DataHealthService:
                 # Source boşsa tüm embeddings orphan
                 orphan_count_query = """
                     SELECT COUNT(*) FROM unified_embeddings
-                    WHERE source_table = $1 OR metadata->>'table' = $1
+                    WHERE LOWER(source_table) = LOWER($1) OR LOWER(metadata->>'table') = LOWER($1)
                 """
                 return await self.system_pool.fetchval(orphan_count_query, table_name)
 
-            # System DB'deki source_id'leri al
+            # System DB'deki source_id'leri al (case-insensitive)
             embedded_ids_query = """
                 SELECT DISTINCT source_id FROM unified_embeddings
-                WHERE source_table = $1 OR metadata->>'table' = $1
+                WHERE LOWER(source_table) = LOWER($1) OR LOWER(metadata->>'table') = LOWER($1)
             """
             embedded_rows = await self.system_pool.fetch(embedded_ids_query, table_name)
 
@@ -263,7 +263,7 @@ class DataHealthService:
         # Metadata sadece {table, id, content_hash, model} içeriyorsa eksik sayılır
         query = """
             SELECT COUNT(*) FROM unified_embeddings
-            WHERE (source_table = $1 OR metadata->>'table' = $1)
+            WHERE (LOWER(source_table) = LOWER($1) OR LOWER(metadata->>'table') = LOWER($1))
             AND (
                 metadata IS NULL
                 OR metadata = '{}'::jsonb
@@ -285,7 +285,7 @@ class DataHealthService:
             WITH dup_groups AS (
                 SELECT content_hash, COUNT(*) - 1 as extra_copies
                 FROM unified_embeddings
-                WHERE (source_table = $1 OR metadata->>'table' = $1)
+                WHERE (LOWER(source_table) = LOWER($1) OR LOWER(metadata->>'table') = LOWER($1))
                 AND content_hash IS NOT NULL
                 GROUP BY content_hash
                 HAVING COUNT(*) > 1
@@ -300,7 +300,7 @@ class DataHealthService:
         """Eski/güncellenmemiş kayıtları say"""
         query = """
             SELECT COUNT(*) FROM unified_embeddings
-            WHERE (source_table = $1 OR metadata->>'table' = $1)
+            WHERE (LOWER(source_table) = LOWER($1) OR LOWER(metadata->>'table') = LOWER($1))
             AND updated_at < NOW() - INTERVAL '%s days'
             AND updated_at = created_at
         """ % days
@@ -371,7 +371,7 @@ class DataHealthService:
             missing_query = """
                 SELECT id, source_id, metadata
                 FROM unified_embeddings
-                WHERE (source_table = $1 OR metadata->>'table' = $1)
+                WHERE (LOWER(source_table) = LOWER($1) OR LOWER(metadata->>'table') = LOWER($1))
                 AND (
                     metadata IS NULL
                     OR metadata = '{}'::jsonb
@@ -513,11 +513,11 @@ class DataHealthService:
             source_rows = await self.source_pool.fetch(source_ids_query)
             source_ids = set(r[pk] for r in source_rows)
 
-            # System DB'deki kayıtları al
+            # System DB'deki kayıtları al (case-insensitive)
             embedded_query = """
                 SELECT id, source_id, source_name, created_at
                 FROM unified_embeddings
-                WHERE source_table = $1 OR metadata->>'table' = $1
+                WHERE LOWER(source_table) = LOWER($1) OR LOWER(metadata->>'table') = LOWER($1)
             """
             embedded_rows = await self.system_pool.fetch(embedded_query, table_name)
 
@@ -590,7 +590,7 @@ class DataHealthService:
                         array_agg(id ORDER BY created_at {order}) as ids,
                         COUNT(*) as cnt
                     FROM unified_embeddings
-                    WHERE (source_table = $1 OR metadata->>'table' = $1)
+                    WHERE (LOWER(source_table) = LOWER($1) OR LOWER(metadata->>'table') = LOWER($1))
                     AND content_hash IS NOT NULL
                     GROUP BY content_hash
                     HAVING COUNT(*) > 1
@@ -723,10 +723,10 @@ class DataHealthService:
                 source_count_query = f'SELECT COUNT(*) FROM "{source_table}"'
                 source_count = await self.source_pool.fetchval(source_count_query)
 
-                # Embedded kayıt sayısı
+                # Embedded kayıt sayısı (case-insensitive)
                 embedded_count_query = """
                     SELECT COUNT(*) FROM unified_embeddings
-                    WHERE source_table = $1 OR metadata->>'table' = $1
+                    WHERE LOWER(source_table) = LOWER($1) OR LOWER(metadata->>'table') = LOWER($1)
                 """
                 embedded_count = await self.system_pool.fetchval(embedded_count_query, table_name)
 

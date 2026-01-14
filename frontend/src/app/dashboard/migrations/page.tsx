@@ -1377,30 +1377,30 @@ export default function EmbeddingsManagerPage() {
                     </div>
                   )}
 
-                  {/* Optimize Completed */}
+                  {/* Optimize Completed - Compact */}
                   {!isOptimizing && optimizeProgress.status === 'completed' && (
-                    <div className="w-full text-xs bg-violet-50 dark:bg-violet-950/30 rounded-lg p-2 border border-violet-200 dark:border-violet-800">
-                      <div className="flex justify-between items-center mb-1.5">
-                        <span className="text-violet-600 dark:text-violet-400 font-medium">Optimizasyon Tamamlandı</span>
+                    <div className="w-full text-xs bg-violet-50 dark:bg-violet-950/30 rounded p-1.5 border border-violet-200 dark:border-violet-800">
+                      <div className="flex justify-between items-center mb-1">
+                        <span className="text-violet-600 dark:text-violet-400 font-medium text-[10px]">Optimizasyon</span>
                         <button
                           onClick={() => setOptimizeProgress(prev => ({ ...prev, status: 'idle' }))}
-                          className="text-violet-400 hover:text-violet-600 dark:hover:text-violet-300 transition-colors"
+                          className="text-violet-400 hover:text-violet-600 dark:hover:text-violet-300"
                         >
                           <X className="w-3 h-3" />
                         </button>
                       </div>
-                      <div className="grid grid-cols-3 gap-2">
-                        <div className="text-center">
-                          <div className="text-violet-500 dark:text-violet-400 text-[10px] uppercase tracking-wide mb-0.5">Orphan</div>
-                          <div className="font-semibold text-violet-900 dark:text-violet-100">{optimizeProgress.orphansDeleted.toLocaleString()}</div>
+                      <div className="flex gap-3 text-[10px]">
+                        <div className="flex items-center gap-1">
+                          <span className="text-violet-500">O:</span>
+                          <span className="font-semibold text-violet-900 dark:text-violet-100">{optimizeProgress.orphansDeleted.toLocaleString()}</span>
                         </div>
-                        <div className="text-center">
-                          <div className="text-violet-500 dark:text-violet-400 text-[10px] uppercase tracking-wide mb-0.5">Duplicate</div>
-                          <div className="font-semibold text-violet-900 dark:text-violet-100">{optimizeProgress.duplicatesDeleted.toLocaleString()}</div>
+                        <div className="flex items-center gap-1">
+                          <span className="text-violet-500">D:</span>
+                          <span className="font-semibold text-violet-900 dark:text-violet-100">{optimizeProgress.duplicatesDeleted.toLocaleString()}</span>
                         </div>
-                        <div className="text-center">
-                          <div className="text-violet-500 dark:text-violet-400 text-[10px] uppercase tracking-wide mb-0.5">Metadata</div>
-                          <div className="font-semibold text-violet-900 dark:text-violet-100">{optimizeProgress.metadataFixed.toLocaleString()}</div>
+                        <div className="flex items-center gap-1">
+                          <span className="text-violet-500">M:</span>
+                          <span className="font-semibold text-violet-900 dark:text-violet-100">{optimizeProgress.metadataFixed.toLocaleString()}</span>
                         </div>
                       </div>
                     </div>
@@ -1759,7 +1759,6 @@ export default function EmbeddingsManagerPage() {
                         </TableHead>
                         <TableHead className="w-64">Table Name</TableHead>
                         <TableHead className="w-24">Status</TableHead>
-                        <TableHead className="w-16">Actions</TableHead>
                         <TableHead className="w-48">Progress</TableHead>
                       </TableRow>
                     </TableHeader>
@@ -1830,24 +1829,6 @@ export default function EmbeddingsManagerPage() {
                                 </DropdownMenuItem>
                               </DropdownMenuContent>
                             </DropdownMenu>
-                          </TableCell>
-
-                          {/* Actions column */}
-                          <TableCell>
-                            <div className="flex items-center justify-center">
-                              <ConfirmTooltip
-                                onConfirm={() => handleDeleteTable(table)}
-                                message={`${table.displayName} silinsin mi?`}
-                                side="left"
-                              >
-                                <button
-                                  className="p-1.5 rounded-md hover:bg-red-50 dark:hover:bg-red-900/20 text-muted-foreground hover:text-red-600 dark:hover:text-red-400 transition-colors"
-                                  aria-label="Delete embeddings"
-                                >
-                                  <Trash2 className="w-4 h-4" />
-                                </button>
-                              </ConfirmTooltip>
-                            </div>
                           </TableCell>
 
                           {/* Combined Progress column: embedded/total + progress bar + skipped */}
