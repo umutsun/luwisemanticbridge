@@ -581,42 +581,47 @@ export const ZenMessage: React.FC<ZenMessageProps> = ({
                   >
                     <div className="flex items-start gap-2">
                       <div className="flex-1 min-w-0">
-                        {/* Source Type Label with Marker Style */}
-                        <div className="mb-2">
-                          <span className={`zen01-marker ${typeInfo.markerClass} text-[11px] font-semibold px-2 py-0.5`}>
-                            <span className="text-[10px] opacity-80 mr-1">[{idx + 1}]</span> {typeInfo.label}
+                        {/* Citation number - clean, minimal */}
+                        <div className="flex items-baseline gap-2 mb-3">
+                          <span className="text-cyan-500/70 dark:text-cyan-400/70 text-xs font-mono font-bold">
+                            [{idx + 1}]
+                          </span>
+                          <span className={`zen01-marker ${typeInfo.markerClass} text-[10px] font-medium px-2 py-0.5`}>
+                            {typeInfo.label}
                           </span>
                         </div>
 
-                        {/* Kaynak Bilgisi - Metadata first, clean format */}
+                        {/* Kaynak Bilgisi - Clean, readable format */}
                         {source.metadata && Object.keys(source.metadata).length > 0 && (
-                          <div className="text-[11px] text-slate-400/90 dark:text-slate-300/80 space-y-1 mb-2">
-                            {/* Kurum/Makam/Tarih */}
-                            {(source.metadata.kurum || source.metadata.makam || source.metadata.tarih) && (
-                              <p className="line-clamp-1 font-medium">
-                                {source.metadata.kurum && source.metadata.kurum}
-                                {source.metadata.makam && ` - ${source.metadata.makam}`}
-                                {source.metadata.tarih && ` (${source.metadata.tarih})`}
-                              </p>
+                          <div className="text-[11.5px] leading-relaxed space-y-1.5 mb-3">
+                            {/* Kurum/Tarih - single line, clean */}
+                            {(source.metadata.kurum || source.metadata.tarih) && (
+                              <div className="flex items-center gap-2 text-slate-300/90 dark:text-slate-200/90">
+                                {source.metadata.kurum && (
+                                  <span className="font-medium">{source.metadata.kurum}</span>
+                                )}
+                                {source.metadata.tarih && (
+                                  <span className="text-slate-400/80 dark:text-slate-300/70">
+                                    {source.metadata.tarih}
+                                  </span>
+                                )}
+                              </div>
                             )}
-                            {/* Sayı/Madde/Esas/Karar */}
-                            <p className="line-clamp-1 text-[10px] opacity-80">
-                              {source.metadata.sayi && `Sayı: ${source.metadata.sayi}`}
-                              {source.metadata.sayi && (source.metadata.madde_no || source.metadata.esas_no || source.metadata.karar_no) && ' • '}
-                              {source.metadata.madde_no && `Madde: ${source.metadata.madde_no}`}
-                              {source.metadata.madde_no && (source.metadata.esas_no || source.metadata.karar_no) && ' • '}
-                              {source.metadata.esas_no && `Esas: ${source.metadata.esas_no}`}
-                              {source.metadata.esas_no && source.metadata.karar_no && ' • '}
-                              {source.metadata.karar_no && `Karar: ${source.metadata.karar_no}`}
-                            </p>
+                            {/* Sayı/Madde - clean, readable */}
+                            {(source.metadata.sayi || source.metadata.madde_no) && (
+                              <div className="text-slate-400/90 dark:text-slate-300/80 text-[10.5px]">
+                                {source.metadata.sayi && `Sayı ${source.metadata.sayi}`}
+                                {source.metadata.sayi && source.metadata.madde_no && ' / '}
+                                {source.metadata.madde_no && `Madde ${source.metadata.madde_no}`}
+                              </div>
+                            )}
                           </div>
                         )}
 
-                        {/* Excerpt - only show if metadata is missing or content is truly different */}
+                        {/* Excerpt - only show if metadata is missing */}
                         {(() => {
                           const hasMetadata = source.metadata && (
-                            source.metadata.kurum || source.metadata.makam ||
-                            source.metadata.tarih || source.metadata.sayi
+                            source.metadata.kurum || source.metadata.tarih || source.metadata.sayi
                           );
 
                           // If we have metadata, don't show excerpt (to avoid repetition)
@@ -626,7 +631,7 @@ export const ZenMessage: React.FC<ZenMessageProps> = ({
                           const excerpt = source.summary || source.excerpt || source.title || '';
                           if (excerpt && excerpt.length > 20) {
                             return (
-                              <p className="text-xs text-slate-400/80 dark:text-slate-300/70 line-clamp-2 leading-relaxed">
+                              <p className="text-[11px] text-slate-400/90 dark:text-slate-300/80 line-clamp-2 leading-relaxed mb-3">
                                 {cleanCitationTitle(excerpt)}
                               </p>
                             );
@@ -634,13 +639,13 @@ export const ZenMessage: React.FC<ZenMessageProps> = ({
                           return null;
                         })()}
 
-                        {/* Keywords if available - styled as marker chips */}
+                        {/* Keywords - clean, minimal chips */}
                         {source.keywords && source.keywords.length > 0 && (
-                          <div className="flex flex-wrap gap-1.5 mt-2">
-                            {source.keywords.slice(0, 5).map((keyword, kidx) => (
+                          <div className="flex flex-wrap gap-2 mt-3">
+                            {source.keywords.slice(0, 4).map((keyword, kidx) => (
                               <span
                                 key={kidx}
-                                className="zen01-marker zen01-marker-blue text-[10px] font-medium px-2.5 py-1"
+                                className="text-[9.5px] font-medium text-cyan-600/80 dark:text-cyan-400/80 bg-cyan-500/10 dark:bg-cyan-400/10 px-2 py-1 rounded"
                               >
                                 {keyword}
                               </span>
