@@ -252,6 +252,36 @@ export class RAGChatService {
       // Calculate minimum length (80% of target)
       const minLength = Math.floor(articleLength * 0.8);
 
+      // Load format template from settings (or use default)
+      const defaultFormatTemplate = `📚 YAPILANDIRMA (ZORUNLU - MARKDOWN KULLAN):
+**KRİTİK: Her başlık ## ile başlamalı, paragraflar arası boş satır olmalı**
+
+FORMAT ŞABLONU (TAM OLARAK BU ŞEKİLDE):
+\`\`\`
+Giriş paragrafı: Konuyu 2-3 cümlede özetle. Temel tanımı ve kapsamı ver [1].
+
+## Yasal Çerçeve
+
+İlk paragraf: Yasal düzenlemeleri açıkla [2]. Hangi kanun ve tebliğlerin geçerli olduğunu belirt.
+
+İkinci paragraf: Detaylı kuralları ve istisnaları açıkla [3][4].
+
+## Uygulama ve Örnekler
+
+İlk paragraf: Pratikte nasıl uygulandığını açıkla [5].
+
+İkinci paragraf: Somut örnekler ver ve özel durumları açıkla [6].
+\`\`\`
+
+KURALLAR:
+1. **Hiç başlık yazma** - İlk paragraf direkt konuya gir
+2. **## ile alt başlık aç** - Örnek: ## Yasal Çerçeve, ## Uygulama ve İstisnalar
+3. **Paragraflar arası boşluk** - Her paragraftan sonra boş satır bırak
+4. **2-4 paragraf per başlık** - Her başlık altında en az 2 paragraf olmalı
+5. **Atıf her paragrafta** - Her bilgi sonrası [1], [2] gibi atıf ekle`;
+
+      const formatTemplateText = settingsMap?.get('ragSettings.responseFormatTemplateTr') || defaultFormatTemplate;
+
       let prompt = `SEN BİR RAG YANIT ÜRETİCİSİSİN.
 
 🎯 SENİN TEK İŞİN: Aşağıdaki sources'tan metin üret, atıf yap [1], [2], [3].
@@ -269,12 +299,7 @@ ${groundingRulesText}
 📝 ÇIKTI FORMATI (Wikipedia Tarzı Makale):
 ${sectionInstructions.replace(/^.*?:\s*/gm, '')}
 
-📚 YAPILANDIRMA (ZORUNLU):
-1. **Giriş Paragrafı**: İlk paragrafta konuyu özetle (2-3 cümle)
-2. **Alt Başlıklar**: Konuyu bölümlere ayır (## Başlık formatı kullan)
-   Örnek başlıklar: ## Genel Çerçeve, ## Yasal Düzenlemeler, ## Uygulama, ## İstisnalar
-3. **Paragraf Yapısı**: Her bölüm 2-4 paragraf içermeli
-4. **Akıcı Geçişler**: Paragraflar arası bağlantı cümleleri kullan
+${formatTemplateText}
 
 📖 INLINE ATIF KURALLARI (KRİTİK):
 - Her önemli bilgiden HEMEN SONRA kaynak numarası ekle: "...vergi oranı %18'dir [1]."
@@ -1232,6 +1257,10 @@ ${questionLabel}: ${message}`;
         // Level-specific prompts
         'ragSettings.mediumModePromptTr',
         'ragSettings.mediumModePromptEn',
+        // Response format templates
+        'ragSettings.responseFormatTemplateTr',
+        'ragSettings.responseFormatTemplateEn',
+        'ragSettings.showKeywords',
         // JSON configurations
         'ragSettings.sourceTypeNormalizations',
         'ragSettings.preferredSourceTypes',
@@ -3542,8 +3571,9 @@ FORMAT:
       }
 
       // Add backend-generated Anahtar Terimler (from sources, not LLM)
-      // Only add if not a refusal response
-      if (keywordsFromSources.length > 0 && keywordsSection) {
+      // Only add if not a refusal response AND if showKeywords is enabled
+      const showKeywords = settingsMap.get('ragSettings.showKeywords') !== 'false'; // Default true
+      if (keywordsFromSources.length > 0 && keywordsSection && showKeywords) {
         const label = keywordsSection.backendLabel || 'ANAHTAR_TERIMLER:';
         formattedResponse += `${label}\n${keywordsFromSources.join(', ')}\n\n`;
       }
