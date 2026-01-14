@@ -172,7 +172,7 @@ export function SourceCitation({ sources, onLoadMore, hasMore = false, showLoadM
 
                 {/* Metadata - Show all relevant fields */}
                 {source.metadata && Object.keys(source.metadata).length > 0 && (
-                  <div className="text-[11px] text-gray-500 mt-0.5 space-y-0.5">
+                  <div className="text-[11px] text-gray-500 mt-0.5 space-y-1">
                     {/* Priority metadata fields */}
                     {(source.metadata.kurum || source.metadata.makam || source.metadata.tarih) && (
                       <p className="line-clamp-1">
@@ -195,6 +195,50 @@ export function SourceCitation({ sources, onLoadMore, hasMore = false, showLoadM
                         {source.metadata.sayi && `Sayı: ${source.metadata.sayi}`}
                       </p>
                     )}
+                    {/* Keywords from metadata or category */}
+                    {(() => {
+                      const keywords: string[] = [];
+
+                      // Extract keywords from metadata.keywords field
+                      if (source.metadata.keywords) {
+                        if (Array.isArray(source.metadata.keywords)) {
+                          keywords.push(...source.metadata.keywords);
+                        } else if (typeof source.metadata.keywords === 'string') {
+                          keywords.push(...source.metadata.keywords.split(/[,•]/));
+                        }
+                      }
+
+                      // Add category as keyword if exists
+                      if (source.category && !keywords.includes(source.category)) {
+                        keywords.push(source.category);
+                      }
+
+                      // Add source type as keyword
+                      const typeInfo = getSourceTypeInfo(source.sourceTable, source.category);
+                      if (typeInfo.label && !keywords.includes(typeInfo.label)) {
+                        keywords.unshift(typeInfo.label);
+                      }
+
+                      const cleanedKeywords = keywords
+                        .map(k => String(k).trim())
+                        .filter(k => k.length > 0 && k.length < 30)
+                        .slice(0, 5); // Max 5 keywords
+
+                      if (cleanedKeywords.length === 0) return null;
+
+                      return (
+                        <div className="flex flex-wrap gap-1 mt-1">
+                          {cleanedKeywords.map((keyword, idx) => (
+                            <span
+                              key={idx}
+                              className="marker marker-cyan text-[9px] font-medium px-1 py-0.5 inline-block"
+                            >
+                              {keyword}
+                            </span>
+                          ))}
+                        </div>
+                      );
+                    })()}
                   </div>
                 )}
 
