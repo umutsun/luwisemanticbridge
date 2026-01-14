@@ -872,7 +872,7 @@ ${questionLabel}: ${message}`;
       userPrompt,
       {
         temperature: options.temperature,
-        maxTokens: options.maxTokens || 2000,
+        maxTokens: options.maxTokens || 6000, // Increased for Wikipedia-style long articles
         systemPrompt: systemPrompt,
         preferredProvider: providerFromModel
       }
@@ -1831,9 +1831,10 @@ ${questionLabel}: ${message}`;
 
       // 🎯 NON-DETERMINISM FIX: Override temperature for strict mode
       // Lower temperature = more consistent/deterministic responses
-      // Default: 0 for strict mode (fully deterministic)
+      // Default: 0.4 for strict mode (balanced between accuracy and fluency)
+      // NOTE: 0 was too low for Wikipedia-style long articles - increased to 0.4
       if (strictRagMode) {
-        const strictModeTemp = parseFloat(settingsMap.get('ragSettings.strictModeTemperature') || '0');
+        const strictModeTemp = parseFloat(settingsMap.get('ragSettings.strictModeTemperature') || '0.4');
         if (options.temperature === undefined || options.temperature > strictModeTemp) {
           console.log(`🎯 STRICT MODE: Overriding temperature ${options.temperature ?? 'undefined'} → ${strictModeTemp} for deterministic responses`);
           options.temperature = strictModeTemp;
@@ -1901,7 +1902,8 @@ ${questionLabel}: ${message}`;
                                  routingSchema.routes.FOUND.format.articleSections.length > 0;
 
         // Get article length from settings (user-configurable)
-        const articleLength = parseInt(settingsMap.get('ragSettings.summaryMaxLength') || '2000');
+        // Increased default from 2000 to 4000 for Wikipedia-style long articles
+        const articleLength = parseInt(settingsMap.get('ragSettings.summaryMaxLength') || '4000');
 
         // Default medium-mode prompts (better recall, still requires citation)
         // If article format is enabled, use schema-driven academic article format
