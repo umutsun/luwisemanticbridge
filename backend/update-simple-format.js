@@ -45,7 +45,15 @@ async function updateFormatTemplate() {
     console.log('---');
     console.log('Length:', (schema.formatTemplate || '').length);
 
-    // Update formatTemplate
+    // Update formatTemplate in the correct nested location for backend
+    if (!schema.routes) schema.routes = {};
+    if (!schema.routes.FOUND) schema.routes.FOUND = {};
+    if (!schema.routes.FOUND.format) schema.routes.FOUND.format = {};
+
+    schema.routes.FOUND.format.formatTemplate = simpleFormat;
+    schema.routes.FOUND.format.formatTemplateEn = simpleFormat;
+
+    // Also set at root level for consistency
     schema.formatTemplate = simpleFormat;
 
     console.log('');
