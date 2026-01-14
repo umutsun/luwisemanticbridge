@@ -209,11 +209,11 @@ export class RAGChatService {
   }
 
   /**
-   * 📝 Build article format prompt for FOUND responses
-   * SCHEMA-DRIVEN: All sections, rules, and format come from schema config
-   * Settings-driven: Article length comes from ragSettings.summaryMaxLength
+   * Build article format prompt for FOUND responses
+   * SCHEMA-DRIVEN: All format rules come from database (formatTemplate)
+   * NO HARDCODED FORMAT RULES
    *
-   * @param schema - RAG routing schema with articleSections config
+   * @param schema - RAG routing schema with format.formatTemplate
    * @param language - 'tr' or 'en'
    * @param articleLength - Target character count from settings (default 2000)
    */
@@ -223,145 +223,91 @@ export class RAGChatService {
     articleLength: number = 2000
   ): string {
     const foundFormat = schema.routes.FOUND.format;
-    const articleSections = foundFormat.articleSections || [];
-    const prohibitedContent = foundFormat.prohibitedContent || [];
     const groundingRules = foundFormat.groundingRules || {};
-
-    // Build sections that LLM should write (exclude system-generated ones)
-    const llmSections = articleSections.filter(s => !s.systemGenerated);
-    const systemSections = articleSections.filter(s => s.systemGenerated);
+    const minLength = Math.floor(articleLength * 0.8);
 
     if (language === 'tr') {
-      // Build section instructions from schema
-      const sectionInstructions = llmSections.map(section => {
-        return `## ${section.title}\n${section.description}`;
-      }).join('\n\n');
-
-      // Build system-generated section notice
-      const systemSectionNotice = systemSections.length > 0
-        ? systemSections.map(s => `- "${s.title}" bölümü YAZMA (sistem ekleyecek)`).join('\n')
-        : '';
-
-      // Build grounding rules from schema
       const groundingRulesText = groundingRules.tr || `
-1. Kanun/madde numarası SADECE kaynakta AÇIKÇA geçiyorsa yaz. Kaynak metninde geçmeyen madde numarası UYDURMA.
-2. "zorunda mıyım", "yapabilir miyim" gibi sorularda: Kaynakta AÇIK HÜKÜM yoksa "Kaynaklarda bu konuda açık bir düzenleme bulunamamıştır" de.
-3. "zorunludur", "yasaktır", "mümkündür" gibi KESİN İFADELER sadece kaynakta birebir varsa kullan.
-4. Emin değilsen: "Kaynaklara göre..." veya "...olarak değerlendirilebilir" gibi yumuşak ifadeler kullan.`;
+1. Only cite laws/articles explicitly mentioned in sources. Do not fabricate article numbers.
+2. For "am I required", "can I" questions: If no explicit provision in sources, state "No explicit regulation found in sources".
+3. Use definitive statements ("required", "prohibited", "allowed") ONLY if explicitly stated in sources.
+4. When uncertain, use hedged language: "According to sources..." or "may be considered as..."`;
 
-      // Calculate minimum length (80% of target)
-      const minLength = Math.floor(articleLength * 0.8);
+      const formatTemplate = foundFormat.formatTemplate ||
+        foundFormat.formatTemplateEn ||
+        'Write structured response with ## headings, blank lines between paragraphs, and [1][2] citations after each statement.';
 
-      // Get format template from schema (or use default)
-      const defaultFormatTemplate = `📚 MARKDOWN KURALLARI (KRİTİK - TAM BU FORMAT):
-\`\`\`
-Bir cümlede konuyu özetle [1]. İkinci cümlede kapsamı belirt.
-
-## Yasal Çerçeve
-
-Hangi kanun ve tebliğlerin uygulandığını açıkla [2]. Temel kuralları belirt.
-
-Detaylı düzenlemeleri ve istisnaları açıkla [3][4]. Önemli madde numaralarını ver.
-
-## Uygulama
-
-Pratikte nasıl uygulandığını örneklerle açıkla [5]. Somut durumları göster.
-\`\`\`
-
-✅ MUTLAKA:
-- Her başlık ## ile başla
-- Her paragraftan sonra BOŞ SATIR
-- Her bölümde 2-4 paragraf
-- Her paragrafta [1] [2] atıf`;
-
-      const formatTemplate = foundFormat.formatTemplate || defaultFormatTemplate;
-
-      let prompt = `SEN BİR RAG YANIT ÜRETİCİSİSİN.
-
-🎯 SENİN TEK İŞİN: Aşağıdaki sources'tan metin üret, atıf yap [1], [2], [3].
-
-⛔ ASLA YAPMA:
-1. "Bu konu Vergilex kapsamı dışındadır" YAZMA
-2. "Kaynak bulunamadı / yeterli kaynak yok" YAZMA - backend'in işi
-3. "KONU:", "DEĞERLENDİRME:", "ANAHTAR_TERİMLER:" gibi META BAŞLIK YAZMA (içerik başlıkları ## ile kullan)
-4. Scope/kapsam kontrolü yapma - sen RAG yanıt üreticisin
-5. Kaynak dışı bilgi verme - sadece sources'tan yaz
-
-⚖️ GROUNDING KURALLARI:
-${groundingRulesText}
-
-📝 ÇIKTI FORMATI (Wikipedia Tarzı Makale):
-${sectionInstructions.replace(/^.*?:\s*/gm, '')}
+      const prompt = `🚨 CRITICAL: FOLLOW THIS OUTPUT FORMAT EXACTLY
 
 ${formatTemplate}
 
-📖 INLINE ATIF KURALLARI (KRİTİK):
-- Her önemli bilgiden HEMEN SONRA kaynak numarası ekle: "...vergi oranı %18'dir [1]."
-- Birden fazla kaynak aynı bilgiyi destekliyorsa: "...kabul edilmektedir [1][3]."
-- Metin içinde dipnotları [1], [2] şeklinde kullan
-- Dipnot numarası sources sırasına bağlı kalmalı (sources sırasını değiştirme)
+---
 
-📏 UZUNLUK:
-- HEDEF: ${articleLength} karakter
-- MİNİMUM: ${minLength} karakter
-- En az 3-4 paragraf + alt başlıklar kullan
+YOUR ROLE: RAG response generator
+YOUR ONLY JOB: Generate text from sources below, add citations [1], [2], [3]
 
-🚫 YASAKLAR:
-${systemSectionNotice}
-- Kaynak dışı bilgi verme
-- Kaynakta geçmeyen madde/kanun numarası UYDURMA
-- "NEEDS_CLARIFICATION / OUT_OF_SCOPE / NOT_FOUND / FOUND" gibi sınıflandırmalar yazma
-- "Bu soruya yanıt verecek yeterli kaynak bulunamadı" YAZMA (backend'in işi)
-- Kapsam kontrolü yapma
-- BAŞLIK YAZMA ("KONU:", "DEĞERLENDİRME:" vb)
-${prohibitedContent.map(p => `- "${p}"`).join('\n')}
+GROUNDING RULES:
+${groundingRulesText}
+
+INLINE CITATION RULES:
+- Add source number IMMEDIATELY after each statement: "...tax rate is 18% [1]."
+- Multiple sources for same info: "...is accepted [1][3]."
+- Use footnote format [1], [2] in text
+- Keep source order (do not reorder sources)
+
+LENGTH:
+- TARGET: ${articleLength} chars
+- MINIMUM: ${minLength} chars
+
+PROHIBITED:
+- Do NOT write "This is out of scope" or "No sources found" (backend handles this)
+- Do NOT write meta headers like "TOPIC:", "ASSESSMENT:", "KEYWORDS:" (use ## for content headings)
+- Do NOT do scope checking (you are a RAG generator, not a classifier)
+- Do NOT provide information outside sources
+- Do NOT fabricate law/article numbers not in sources
+- Do NOT write classification labels (NEEDS_CLARIFICATION/OUT_OF_SCOPE/NOT_FOUND/FOUND)
 `;
       return prompt;
     } else {
-      // English version
-      const sectionInstructions = llmSections.map(section => {
-        return `## ${section.titleEn || section.title}\n${section.descriptionEn || section.description}`;
-      }).join('\n\n');
-
-      const systemSectionNotice = systemSections.length > 0
-        ? systemSections.map(s => `- Do NOT write "${s.titleEn || s.title}" section (system will add)`).join('\n')
-        : '';
-
       const groundingRulesText = groundingRules.en || `
-1. Only cite law/article numbers if they EXPLICITLY appear in the source text. Do NOT invent references.
-2. For "must I", "can I" questions: If no EXPLICIT ruling in sources, say "No clear regulation found in sources."
-3. Use definitive statements ("required", "prohibited", "possible") ONLY if source explicitly states so.
-4. When uncertain: Use hedged language like "According to sources..." or "...may be considered as"`;
+1. Only cite laws/articles explicitly mentioned in sources. Do not fabricate article numbers.
+2. For "must I", "can I" questions: If no explicit provision in sources, state "No clear regulation found in sources".
+3. Use definitive statements ("required", "prohibited", "allowed") ONLY if explicitly stated in sources.
+4. When uncertain, use hedged language: "According to sources..." or "may be considered as..."`;
 
-      // Calculate minimum length (80% of target)
-      const minLength = Math.floor(articleLength * 0.8);
+      const formatTemplate = foundFormat.formatTemplateEn ||
+        foundFormat.formatTemplate ||
+        'Write structured response with ## headings, blank lines between paragraphs, and [1][2] citations after each statement.';
 
-      let prompt = `ACADEMIC ARTICLE FORMAT (MANDATORY):
+      const prompt = `🚨 CRITICAL: FOLLOW THIS OUTPUT FORMAT EXACTLY
 
-Write your response in academic journal article format.
+${formatTemplate}
 
-📏 LENGTH REQUIREMENTS (CRITICAL):
-- TARGET length: ${articleLength} characters
-- MINIMUM length: ${minLength} characters (responses BELOW this are NOT acceptable)
-- Assessment section must be DETAILED: Analyze, compare, and synthesize sources
-- Write multiple paragraphs, not just one
-- Reference each source with [1], [2], [3]
+---
 
-${sectionInstructions}
+YOUR ROLE: RAG response generator
+YOUR ONLY JOB: Generate text from sources below, add citations [1], [2], [3]
 
-SOURCE REFERENCING (REQUIRED):
-- Use [1], [2], [3] references throughout the text
-- Indicate which source each piece of information comes from
-- Include at least 3-5 different source references
-
-GROUNDING RULES (CRITICAL):
+GROUNDING RULES:
 ${groundingRulesText}
 
+INLINE CITATION RULES:
+- Add source number IMMEDIATELY after each statement: "...tax rate is 18% [1]."
+- Multiple sources for same info: "...is accepted [1][3]."
+- Use footnote format [1], [2] in text
+- Keep source order (do not reorder sources)
+
+LENGTH:
+- TARGET: ${articleLength} chars
+- MINIMUM: ${minLength} chars
+
 PROHIBITED:
-${systemSectionNotice}
-- Do NOT provide information not in sources
-- Do NOT invent article numbers not in sources
-- Do NOT write responses shorter than ${minLength} characters
+- Do NOT write "This is out of scope" or "No sources found" (backend handles this)
+- Do NOT write meta headers like "TOPIC:", "ASSESSMENT:", "KEYWORDS:" (use ## for content headings)
+- Do NOT do scope checking (you are a RAG generator, not a classifier)
+- Do NOT provide information outside sources
+- Do NOT fabricate law/article numbers not in sources
+- Do NOT write classification labels (NEEDS_CLARIFICATION/OUT_OF_SCOPE/NOT_FOUND/FOUND)
 `;
       return prompt;
     }
