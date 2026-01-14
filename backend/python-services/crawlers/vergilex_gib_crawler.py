@@ -582,14 +582,17 @@ class GIBCategoryCrawler:
 
         # Common: Extract subject
         konu_patterns = [
-            r'Konusu?\s*:\s*(.+?)(?:Tarih|İlgili|Sayısı|\s{2,})',
+            r'Konusu?\s*:\s*(.+?)(?:Tarih|İlgili|Sayısı|\n|\.)',
         ]
         for pattern in konu_patterns:
             match = re.search(pattern, text_content)
             if match:
                 konu = match.group(1).strip()
-                if len(konu) > 5 and len(konu) < 200:
+                if len(konu) > 5 and len(konu) < 300:
                     content_data['metadata']['konu'] = konu
+                    # Use konu as title if title is empty
+                    if not content_data['title']:
+                        content_data['title'] = konu[:150]
                     break
 
         return content_data
