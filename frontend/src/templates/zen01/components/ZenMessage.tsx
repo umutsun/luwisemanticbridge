@@ -580,18 +580,18 @@ export const ZenMessage: React.FC<ZenMessageProps> = ({
                     <div className="flex items-start gap-2">
                       <div className="flex-1 min-w-0">
                         {/* Source Type Label with Marker Style */}
-                        <span className={`zen01-marker ${typeInfo.markerClass} text-[10px] font-semibold inline-block mb-1.5`}>
-                          [{idx + 1}] {typeInfo.label}
+                        <span className={`zen01-marker ${typeInfo.markerClass} text-[11px] font-semibold inline-block mb-2`}>
+                          <span className="text-[9px] opacity-70">[{idx + 1}]</span> {typeInfo.label}
                         </span>
 
                         {/* Title - cleaned for proper spacing */}
-                        <p className="text-sm font-medium text-cyan-700/90 dark:text-cyan-300/90 line-clamp-2 leading-snug">
+                        <p className="text-sm font-medium text-cyan-700/90 dark:text-cyan-300/90 line-clamp-2 leading-snug mb-2">
                           {cleanCitationTitle(source.title || source.summary?.slice(0, 60) || 'Belge')}
                         </p>
 
                         {/* Metadata - Show all relevant fields */}
                         {source.metadata && Object.keys(source.metadata).length > 0 && (
-                          <div className="text-[11px] text-slate-500/80 dark:text-slate-400/70 mt-1 space-y-0.5">
+                          <div className="text-[11px] text-slate-500/80 dark:text-slate-400/70 mt-1.5 space-y-1">
                             {/* Priority metadata fields */}
                             {(source.metadata.kurum || source.metadata.makam || source.metadata.tarih) && (
                               <p className="line-clamp-1">
@@ -617,20 +617,28 @@ export const ZenMessage: React.FC<ZenMessageProps> = ({
                           </div>
                         )}
 
-                        {/* Summary or Excerpt */}
-                        {(source.summary || source.excerpt) && (
-                          <p className="text-xs text-slate-500/70 dark:text-slate-400/70 mt-1.5 line-clamp-2 leading-relaxed">
-                            {source.summary || source.excerpt}
-                          </p>
-                        )}
+                        {/* Summary or Excerpt - only if different from title */}
+                        {(() => {
+                          const title = cleanCitationTitle(source.title || '');
+                          const excerpt = source.summary || source.excerpt || '';
+                          // Only show excerpt if it's different from title and meaningful
+                          if (excerpt && excerpt.length > 20 && !title.includes(excerpt.slice(0, 50)) && !excerpt.includes(title.slice(0, 50))) {
+                            return (
+                              <p className="text-xs text-slate-500/70 dark:text-slate-400/70 mt-2 line-clamp-2 leading-relaxed">
+                                {excerpt}
+                              </p>
+                            );
+                          }
+                          return null;
+                        })()}
 
                         {/* Keywords if available - styled as marker chips */}
                         {source.keywords && source.keywords.length > 0 && (
-                          <div className="flex flex-wrap gap-1 mt-1.5">
+                          <div className="flex flex-wrap gap-1.5 mt-2">
                             {source.keywords.slice(0, 5).map((keyword, kidx) => (
                               <span
                                 key={kidx}
-                                className="zen01-marker zen01-marker-blue text-[9px] font-medium px-1.5 py-0.5 inline-block"
+                                className="zen01-marker zen01-marker-blue text-[10px] font-medium px-2 py-1 inline-block"
                               >
                                 {keyword}
                               </span>

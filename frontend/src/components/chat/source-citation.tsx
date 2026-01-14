@@ -159,20 +159,20 @@ export function SourceCitation({ sources, onLoadMore, hasMore = false, showLoadM
                 {(() => {
                   const typeInfo = getSourceTypeInfo(source.sourceTable, source.category);
                   return (
-                    <span className={`marker ${typeInfo.markerClass} text-[10px] font-semibold text-gray-900 dark:text-gray-100 inline-block mb-1`}>
-                      [{index + 1}] {typeInfo.label}
+                    <span className={`marker ${typeInfo.markerClass} text-[11px] font-semibold text-gray-900 dark:text-gray-100 inline-block mb-2`}>
+                      <span className="text-[9px] opacity-70">[{index + 1}]</span> {typeInfo.label}
                     </span>
                   );
                 })()}
 
                 {/* Title - Plain text, no link */}
-                <p className="text-sm text-gray-200 leading-snug line-clamp-2">
+                <p className="text-sm text-gray-200 leading-snug line-clamp-2 mb-2">
                   {displayTitle}
                 </p>
 
                 {/* Metadata - Show all relevant fields */}
                 {source.metadata && Object.keys(source.metadata).length > 0 && (
-                  <div className="text-[11px] text-gray-500 mt-0.5 space-y-1">
+                  <div className="text-[11px] text-gray-500 mt-1.5 space-y-1">
                     {/* Priority metadata fields */}
                     {(source.metadata.kurum || source.metadata.makam || source.metadata.tarih) && (
                       <p className="line-clamp-1">
@@ -195,71 +195,80 @@ export function SourceCitation({ sources, onLoadMore, hasMore = false, showLoadM
                         {source.metadata.sayi && `Sayı: ${source.metadata.sayi}`}
                       </p>
                     )}
-                    {/* Keywords from metadata or category */}
-                    {(() => {
-                      const keywords: string[] = [];
-
-                      // Extract keywords from metadata.keywords field
-                      if (source.metadata.keywords) {
-                        if (Array.isArray(source.metadata.keywords)) {
-                          keywords.push(...source.metadata.keywords);
-                        } else if (typeof source.metadata.keywords === 'string') {
-                          keywords.push(...source.metadata.keywords.split(/[,•]/));
-                        }
-                      }
-
-                      // Add category as keyword if exists
-                      if (source.category && !keywords.includes(source.category)) {
-                        keywords.push(source.category);
-                      }
-
-                      // Add source type as keyword
-                      const typeInfo = getSourceTypeInfo(source.sourceTable, source.category);
-                      if (typeInfo.label && !keywords.includes(typeInfo.label)) {
-                        keywords.unshift(typeInfo.label);
-                      }
-
-                      const cleanedKeywords = keywords
-                        .map(k => String(k).trim())
-                        .filter(k => k.length > 0 && k.length < 30)
-                        .slice(0, 5); // Max 5 keywords
-
-                      if (cleanedKeywords.length === 0) return null;
-
-                      return (
-                        <div className="flex flex-wrap gap-1 mt-1">
-                          {cleanedKeywords.map((keyword, idx) => (
-                            <span
-                              key={idx}
-                              className="marker marker-cyan text-[9px] font-medium px-1 py-0.5 inline-block"
-                            >
-                              {keyword}
-                            </span>
-                          ))}
-                        </div>
-                      );
-                    })()}
                   </div>
                 )}
 
-                {/* Excerpt - clickable for follow-up */}
-                {source.excerpt && (
-                  <p
-                    className="text-xs text-gray-500 mt-1.5 line-clamp-2 leading-relaxed cursor-pointer hover:text-gray-400 transition-colors"
-                    onClick={() => {
-                      if (onExcerptClick) {
-                        const question = generateFollowUpQuestion(
-                          stripHtml(source.excerpt!),
-                          stripHtml(source.citation || source.title || 'Bu kaynak')
-                        );
-                        onExcerptClick(question);
-                      }
-                    }}
-                    title="Bu konuyla ilgili detaylı araştırma yap"
-                  >
-                    {stripHtml(source.excerpt)}
-                  </p>
-                )}
+                {/* Excerpt - only if different from title, clickable for follow-up */}
+                {(() => {
+                  if (!source.excerpt) return null;
+                  const excerpt = stripHtml(source.excerpt);
+                  // Only show if different from title
+                  if (excerpt && excerpt.length > 20 && !displayTitle.includes(excerpt.slice(0, 50)) && !excerpt.includes(displayTitle.slice(0, 50))) {
+                    return (
+                      <p
+                        className="text-xs text-gray-500 mt-2 line-clamp-2 leading-relaxed cursor-pointer hover:text-gray-400 transition-colors"
+                        onClick={() => {
+                          if (onExcerptClick) {
+                            const question = generateFollowUpQuestion(
+                              excerpt,
+                              stripHtml(source.citation || source.title || 'Bu kaynak')
+                            );
+                            onExcerptClick(question);
+                          }
+                        }}
+                        title="Bu konuyla ilgili detaylı araştırma yap"
+                      >
+                        {excerpt}
+                      </p>
+                    );
+                  }
+                  return null;
+                })()}
+
+                {/* Keywords from metadata or category */}
+                {(() => {
+                  const keywords: string[] = [];
+
+                  // Extract keywords from metadata.keywords field
+                  if (source.metadata?.keywords) {
+                    if (Array.isArray(source.metadata.keywords)) {
+                      keywords.push(...source.metadata.keywords);
+                    } else if (typeof source.metadata.keywords === 'string') {
+                      keywords.push(...source.metadata.keywords.split(/[,•]/));
+                    }
+                  }
+
+                  // Add category as keyword if exists
+                  if (source.category && !keywords.includes(source.category)) {
+                    keywords.push(source.category);
+                  }
+
+                  // Add source type as keyword
+                  const typeInfo = getSourceTypeInfo(source.sourceTable, source.category);
+                  if (typeInfo.label && !keywords.includes(typeInfo.label)) {
+                    keywords.unshift(typeInfo.label);
+                  }
+
+                  const cleanedKeywords = keywords
+                    .map(k => String(k).trim())
+                    .filter(k => k.length > 0 && k.length < 30)
+                    .slice(0, 5); // Max 5 keywords
+
+                  if (cleanedKeywords.length === 0) return null;
+
+                  return (
+                    <div className="flex flex-wrap gap-1.5 mt-2">
+                      {cleanedKeywords.map((keyword, idx) => (
+                        <span
+                          key={idx}
+                          className="marker marker-cyan text-[10px] font-medium px-2 py-1 inline-block"
+                        >
+                          {keyword}
+                        </span>
+                      ))}
+                    </div>
+                  );
+                })()}
               </div>
             </div>
           );
