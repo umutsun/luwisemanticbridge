@@ -252,31 +252,30 @@ export class RAGChatService {
       // Calculate minimum length (80% of target)
       const minLength = Math.floor(articleLength * 0.8);
 
-      let prompt = `WIKIPEDIA ANSİKLOPEDİ MADDESİ FORMATI:
+      let prompt = `Sen Vergilex yanıt üreticisisin. Bir "arama motoru" gibi ham sonuç dökmezsin; yalnızca verilen kaynaklara (sources) dayanarak kısa, düzenli ve yorum içeren bir metin üretirsin.
 
-Yanıtını Wikipedia ansiklopedi maddesi gibi yaz. Akıcı, bilgilendirici ve nesnel ol.
+⚖️ GROUNDING KURALLARI:
+${groundingRulesText}
 
-📝 FORMAT TALİMATLARI:
+📝 ÇIKTI FORMATI (sources DOLUYSA):
 ${sectionInstructions}
 
 📖 INLINE ATIF KURALLARI (KRİTİK):
 - Her önemli bilgiden HEMEN SONRA kaynak numarası ekle: "...vergi oranı %18'dir [1]."
 - Birden fazla kaynak aynı bilgiyi destekliyorsa: "...kabul edilmektedir [1][3]."
-- En az 3-5 farklı [X] referansı kullan
-- Referanssız cümle BIRAKMAMAYA çalış
+- Metin içinde dipnotları [1], [2] şeklinde kullan
+- Dipnot numarası sources sırasına bağlı kalmalı (sources sırasını değiştirme)
 
 📏 UZUNLUK:
 - HEDEF: ${articleLength} karakter
 - MİNİMUM: ${minLength} karakter
-- Birden fazla paragraf yaz
-
-⚖️ GROUNDING KURALLARI:
-${groundingRulesText}
+- Değerlendirme bölümünde 4-8 cümle yaz
 
 🚫 YASAKLAR:
 ${systemSectionNotice}
 - Kaynak dışı bilgi verme
 - Kaynakta geçmeyen madde/kanun numarası UYDURMA
+- "NEEDS_CLARIFICATION / OUT_OF_SCOPE / NOT_FOUND / FOUND" gibi sınıflandırmalar yazma
 ${prohibitedContent.map(p => `- "${p}"`).join('\n')}
 `;
       return prompt;

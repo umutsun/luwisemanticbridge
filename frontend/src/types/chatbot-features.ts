@@ -211,8 +211,8 @@ export const defaultResponseSchema: ResponseSchema = {
   sections: [
     {
       id: 'konu',
-      label: 'Konu',
-      backendLabel: 'KONU:',
+      label: 'Sorunun Konusu',
+      backendLabel: 'SORUNUN_KONUSU:',
       source: 'llm',
       required: true,
       order: 1,
@@ -221,8 +221,8 @@ export const defaultResponseSchema: ResponseSchema = {
     },
     {
       id: 'anahtar_terimler',
-      label: 'Anahtar Terimler',
-      backendLabel: 'ANAHTAR_TERIMLER:',
+      label: 'Anahtar Kelimeler',
+      backendLabel: 'ANAHTAR_KELİMELER:',
       source: 'backend',
       required: false,
       order: 2,
@@ -230,15 +230,23 @@ export const defaultResponseSchema: ResponseSchema = {
       backendExtractor: 'extractKeywordsFromSources',
       visible: true
     },
-    // NOTE: Dayanaklar bölümü kaldırıldı - atıflar metin içinde [1], [2] şeklinde gösterilir
-    // Kaynaklar Atıflar bölümünde listelenir (ZenMessage sources)
+    {
+      id: 'legal_framework',
+      label: 'İlgili Yasal Düzenlemeler',
+      backendLabel: 'İLGİLİ_YASAL_DÜZENLEMELER:',
+      source: 'llm',
+      required: false,
+      order: 3,
+      style: 'list',
+      visible: true
+    },
     {
       id: 'degerlendirme',
-      label: 'Değerlendirme',
-      backendLabel: 'DEGERLENDIRME:',
+      label: 'Vergilex Değerlendirmesi',
+      backendLabel: 'VERGİLEX_DEĞERLENDİRMESİ:',
       source: 'llm',
       required: true,
-      order: 3,
+      order: 4,
       style: 'text',
       visible: true
     },
@@ -248,7 +256,7 @@ export const defaultResponseSchema: ResponseSchema = {
       backendLabel: 'SONUC:',
       source: 'llm',
       required: false,
-      order: 4,
+      order: 5,
       style: 'text',
       visible: false  // Optional, hidden by default
     }
