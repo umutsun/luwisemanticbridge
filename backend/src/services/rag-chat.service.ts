@@ -2774,9 +2774,8 @@ FORMAT:
       let finalSources = limitedSources;
       let finalResponse = response.content;
 
-      // FIX: Ensure proper markdown formatting (blank lines before/after headings)
-      // and remove hallucinated citations beyond available sources
-      finalResponse = this.fixMarkdownAndCitations(finalResponse, limitedSources.length);
+      // FIX: Ensure proper markdown formatting and remove hallucinated citations
+      finalResponse = this.fixMarkdownAndCitations(finalResponse, limitedSources);
 
       if (isRefusalResponse) {
         // 🎯 REFUSAL TYPE DETECTION: Gate-based vs Prompt-based
@@ -3338,27 +3337,28 @@ FORMAT:
   /**
    * Fix markdown formatting and remove hallucinated citations
    *
-   * Ensures proper markdown rendering in frontend:
+   * Ensures proper markdown rendering:
    * 1. Add blank lines before/after ## headings (required for markdown)
-   * 2. Remove citation numbers beyond available sources (hallucination fix)
+   * 2. Remove hallucinated citations beyond available sources
+   *
+   * Note: Citations stay simple [1], [2] in text.
+   * Source details displayed in frontend sources section.
    *
    * @param response - LLM response text
-   * @param maxCitations - Maximum valid citation number (source count)
+   * @param sources - Source objects with metadata
    * @returns Fixed response text
    */
-  private fixMarkdownAndCitations(response: string, maxCitations: number): string {
+  private fixMarkdownAndCitations(response: string, sources: any[]): string {
     let fixed = response;
 
     // 1. Ensure blank lines before ## headings
-    // Matches: "text. ##" or "text.##" or "text.\n##"
     fixed = fixed.replace(/([^\n])\n?(##\s)/g, '$1\n\n$2');
 
     // 2. Ensure blank lines after ## headings
-    // Matches: "## Heading\nText" -> "## Heading\n\nText"
     fixed = fixed.replace(/(##[^\n]+)\n([^\n])/g, '$1\n\n$2');
 
     // 3. Remove hallucinated citations (beyond available sources)
-    // Example: If maxCitations=5, remove [6], [7], [8], [9], etc.
+    const maxCitations = sources.length;
     if (maxCitations > 0) {
       for (let i = maxCitations + 1; i <= 20; i++) {
         const pattern = new RegExp(`\\[${i}\\]`, 'g');
@@ -3368,6 +3368,7 @@ FORMAT:
 
     return fixed;
   }
+
 
   /**
    * 📋 ENFORCE RESPONSE FORMAT

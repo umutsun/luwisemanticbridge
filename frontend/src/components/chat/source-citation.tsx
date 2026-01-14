@@ -20,13 +20,46 @@ export function SourceCitation({ sources, onLoadMore, hasMore = false, showLoadM
   const initialSourcesToShow = 7;
   const sourcesToDisplay = showAllSources ? sources : sources.slice(0, initialSourcesToShow);
 
-  // Helper function to get source table display name
-  const getSourceTableName = (sourceTable?: string) => {
-    if (!sourceTable) return 'Kaynak';
-    return sourceTable
-      .split('_')
-      .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
-      .join(' ');
+  // Helper to map source table to display name with icon and hierarchy
+  const getSourceTypeInfo = (sourceTable?: string, category?: string) => {
+    if (!sourceTable && !category) return { icon: '📄', label: 'Kaynak', weight: 0 };
+
+    const sourceStr = (sourceTable || category || '').toLowerCase()
+      .replace(/^csv_/, '')
+      .replace(/_/g, '')
+      .replace(/arsiv.*/, '');  // "makale_arsiv_2021" -> "makale"
+
+    // Source type hierarchy with icons and weights
+    const typeMap: Record<string, { icon: string; label: string; weight: number }> = {
+      'kanun': { icon: '🏛️', label: 'Kanun/Mevzuat', weight: 100 },
+      'teblig': { icon: '📋', label: 'Tebliğ/Yönetmelik', weight: 95 },
+      'tebliğ': { icon: '📋', label: 'Tebliğ/Yönetmelik', weight: 95 },
+      'yonetmelik': { icon: '📋', label: 'Yönetmelik', weight: 95 },
+      'sirkuler': { icon: '🔄', label: 'Sirküler', weight: 90 },
+      'ozelge': { icon: '📜', label: 'GİB Özelgesi', weight: 75 },
+      'danistay': { icon: '⚖️', label: 'Danıştay Kararı', weight: 70 },
+      'danistaykararlari': { icon: '⚖️', label: 'Danıştay Kararı', weight: 70 },
+      'makale': { icon: '📝', label: 'Makale', weight: 50 },
+      'sorucevap': { icon: '💬', label: 'Soru-Cevap', weight: 50 },
+      'hukdkk': { icon: '📘', label: 'Hukuki Değerlendirme', weight: 60 },
+      'genelyazi': { icon: '📄', label: 'Genel Yazı', weight: 65 },
+      'genelyazı': { icon: '📄', label: 'Genel Yazı', weight: 65 }
+    };
+
+    // Try exact match first
+    if (typeMap[sourceStr]) {
+      return typeMap[sourceStr];
+    }
+
+    // Try partial match
+    for (const [key, value] of Object.entries(typeMap)) {
+      if (sourceStr.includes(key) || key.includes(sourceStr)) {
+        return value;
+      }
+    }
+
+    // Fallback
+    return { icon: '📄', label: 'Kaynak', weight: 0 };
   };
 
   // Generate a follow-up question based on the excerpt
@@ -122,23 +155,48 @@ export function SourceCitation({ sources, onLoadMore, hasMore = false, showLoadM
             >
               {/* Content */}
               <div className="flex-1 min-w-0">
-                {/* Source Tag with Number - Always shown */}
-                <span className="inline-block text-[10px] font-medium text-amber-400/90 bg-amber-500/70 px-1.5 py-0.5 rounded mb-1">
-                  [{index + 1}] {getSourceTableName(source.sourceTable)}
-                </span>
+                {/* Source Type with Icon and Number */}
+                {(() => {
+                  const typeInfo = getSourceTypeInfo(source.sourceTable, source.category);
+                  return (
+                    <span className="inline-flex items-center gap-1 text-[10px] font-medium text-amber-400/90 bg-amber-500/10 border border-amber-500/20 px-1.5 py-0.5 rounded mb-1">
+                      <span>{typeInfo.icon}</span>
+                      <span>[{index + 1}] {typeInfo.label}</span>
+                    </span>
+                  );
+                })()}
 
                 {/* Title - Plain text, no link */}
                 <p className="text-sm text-gray-200 leading-snug line-clamp-2">
                   {displayTitle}
                 </p>
 
-                {/* Metadata line */}
-                {source.metadata && (
-                  <p className="text-[11px] text-gray-500 mt-0.5 line-clamp-1">
-                    {source.metadata.status && `Durum: ${source.metadata.status}`}
-                    {source.metadata.status && source.metadata.source && ' | '}
-                    {source.metadata.source && `Kaynak: ${source.metadata.source}`}
-                  </p>
+                {/* Metadata - Show all relevant fields */}
+                {source.metadata && Object.keys(source.metadata).length > 0 && (
+                  <div className="text-[11px] text-gray-500 mt-0.5 space-y-0.5">
+                    {/* Priority metadata fields */}
+                    {(source.metadata.kurum || source.metadata.makam || source.metadata.tarih) && (
+                      <p className="line-clamp-1">
+                        {source.metadata.kurum && `${source.metadata.kurum}`}
+                        {source.metadata.kurum && source.metadata.makam && ' • '}
+                        {source.metadata.makam && `${source.metadata.makam}`}
+                        {(source.metadata.kurum || source.metadata.makam) && source.metadata.tarih && ' • '}
+                        {source.metadata.tarih && `${source.metadata.tarih}`}
+                      </p>
+                    )}
+                    {/* Additional metadata fields */}
+                    {(source.metadata.madde_no || source.metadata.karar_no || source.metadata.esas_no || source.metadata.sayi) && (
+                      <p className="line-clamp-1">
+                        {source.metadata.madde_no && `Madde: ${source.metadata.madde_no}`}
+                        {source.metadata.madde_no && (source.metadata.karar_no || source.metadata.esas_no || source.metadata.sayi) && ' • '}
+                        {source.metadata.karar_no && `Karar: ${source.metadata.karar_no}`}
+                        {source.metadata.karar_no && (source.metadata.esas_no || source.metadata.sayi) && ' • '}
+                        {source.metadata.esas_no && `Esas: ${source.metadata.esas_no}`}
+                        {source.metadata.esas_no && source.metadata.sayi && ' • '}
+                        {source.metadata.sayi && `Sayı: ${source.metadata.sayi}`}
+                      </p>
+                    )}
+                  </div>
                 )}
 
                 {/* Excerpt - clickable for follow-up */}
