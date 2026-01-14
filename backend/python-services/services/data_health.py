@@ -280,12 +280,18 @@ class DataHealthService:
         return await self.system_pool.fetchval(query, table_name)
 
     async def _count_duplicates(self, table_name: str) -> int:
-        """Content hash bazlı duplicate sayısı"""
+        """Content hash bazlı duplicate sayısı (silinmesi gereken kayıt sayısı)"""
         query = """
-            SELECT COUNT(*) - COUNT(DISTINCT content_hash) as dup_count
-            FROM unified_embeddings
-            WHERE (source_table = $1 OR metadata->>'table' = $1)
-            AND content_hash IS NOT NULL
+            WITH dup_groups AS (
+                SELECT content_hash, COUNT(*) - 1 as extra_copies
+                FROM unified_embeddings
+                WHERE (source_table = $1 OR metadata->>'table' = $1)
+                AND content_hash IS NOT NULL
+                GROUP BY content_hash
+                HAVING COUNT(*) > 1
+            )
+            SELECT COALESCE(SUM(extra_copies), 0) as dup_count
+            FROM dup_groups
         """
         result = await self.system_pool.fetchval(query, table_name)
         return max(0, result or 0)
