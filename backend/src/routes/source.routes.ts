@@ -223,7 +223,15 @@ router.post('/tables/create', async (req: Request, res: Response) => {
 
     // Build CREATE TABLE statement
     console.log('[Source DB] Building column definitions...');
-    const columnDefs = columns.map((col: any, idx: number) => {
+
+    // Filter out system columns that are automatically added
+    const systemColumns = ['id', 'created_at', 'updated_at'];
+    const filteredColumns = columns.filter((col: any) =>
+      !systemColumns.includes(col.columnName?.toLowerCase())
+    );
+    console.log(`[Source DB] Filtered ${columns.length - filteredColumns.length} system columns`);
+
+    const columnDefs = filteredColumns.map((col: any, idx: number) => {
       console.log(`[Source DB] Column ${idx}:`, col);
       // Replace VARCHAR(255) with TEXT for crawler data - content can be much longer
       let sqlType = col.sqlType;
