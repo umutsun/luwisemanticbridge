@@ -533,10 +533,43 @@ export const ZenMessage: React.FC<ZenMessageProps> = ({
             </div>
             <div className="space-y-2">
               {visibleSources?.map((source: ZenSource, idx: number) => {
-                // Format source type label
-                const sourceTypeLabel = source.sourceType
-                  ? source.sourceType.replace(/_/g, ' ').replace(/csv /i, '')
-                  : source.sourceTable?.replace(/csv_/i, '').replace(/_/g, ' ') || 'Kaynak';
+                // Get source type info with hierarchy and marker color
+                const getSourceTypeInfo = (sourceTable?: string) => {
+                  if (!sourceTable) return { label: 'Kaynak', weight: 0, markerClass: 'zen01-marker-blue' };
+
+                  const sourceStr = sourceTable.toLowerCase()
+                    .replace(/^csv_/, '')
+                    .replace(/_/g, '')
+                    .replace(/arsiv.*/, '');
+
+                  const typeMap: Record<string, { label: string; weight: number; markerClass: string }> = {
+                    'kanun': { label: 'Kanun/Mevzuat', weight: 100, markerClass: 'zen01-marker-purple' },
+                    'teblig': { label: 'Tebliğ/Yönetmelik', weight: 95, markerClass: 'zen01-marker-blue' },
+                    'tebliğ': { label: 'Tebliğ/Yönetmelik', weight: 95, markerClass: 'zen01-marker-blue' },
+                    'yonetmelik': { label: 'Yönetmelik', weight: 95, markerClass: 'zen01-marker-blue' },
+                    'sirkuler': { label: 'Sirküler', weight: 90, markerClass: 'zen01-marker-pink' },
+                    'ozelge': { label: 'GİB Özelgesi', weight: 75, markerClass: 'zen01-marker-yellow' },
+                    'danistay': { label: 'Danıştay Kararı', weight: 70, markerClass: 'zen01-marker-orange' },
+                    'danistaykararlari': { label: 'Danıştay Kararı', weight: 70, markerClass: 'zen01-marker-orange' },
+                    'makale': { label: 'Makale', weight: 50, markerClass: 'zen01-marker-green' },
+                    'sorucevap': { label: 'Soru-Cevap', weight: 50, markerClass: 'zen01-marker-green' },
+                    'hukdkk': { label: 'Hukuki Değerlendirme', weight: 60, markerClass: 'zen01-marker-blue' },
+                    'genelyazi': { label: 'Genel Yazı', weight: 65, markerClass: 'zen01-marker-yellow' },
+                    'genelyazı': { label: 'Genel Yazı', weight: 65, markerClass: 'zen01-marker-yellow' }
+                  };
+
+                  if (typeMap[sourceStr]) return typeMap[sourceStr];
+
+                  for (const [key, value] of Object.entries(typeMap)) {
+                    if (sourceStr.includes(key) || key.includes(sourceStr)) {
+                      return value;
+                    }
+                  }
+
+                  return { label: 'Kaynak', weight: 0, markerClass: 'zen01-marker-blue' };
+                };
+
+                const typeInfo = getSourceTypeInfo(source.sourceTable);
 
                 return (
                   <div
@@ -545,41 +578,65 @@ export const ZenMessage: React.FC<ZenMessageProps> = ({
                     onClick={enableSourceClick ? () => onSourceClick(source, message.sources || []) : undefined}
                   >
                     <div className="flex items-start gap-2">
-                      <div className="flex-shrink-0 mt-0.5">
-                        <span className="inline-flex items-center justify-center w-5 h-5 rounded bg-cyan-500/20 dark:bg-cyan-500/30 text-[10px] font-bold text-cyan-600 dark:text-cyan-300">
-                          {idx + 1}
-                        </span>
-                      </div>
                       <div className="flex-1 min-w-0">
+                        {/* Source Type Label with Marker Style */}
+                        <span className={`zen01-marker ${typeInfo.markerClass} text-[10px] font-semibold inline-block mb-1.5`}>
+                          [{idx + 1}] {typeInfo.label}
+                        </span>
+
                         {/* Title - cleaned for proper spacing */}
-                        <p className="text-sm font-medium text-cyan-700/90 dark:text-cyan-300/90 line-clamp-1">
+                        <p className="text-sm font-medium text-cyan-700/90 dark:text-cyan-300/90 line-clamp-2 leading-snug">
                           {cleanCitationTitle(source.title || source.summary?.slice(0, 60) || 'Belge')}
                         </p>
+
+                        {/* Metadata - Show all relevant fields */}
+                        {source.metadata && Object.keys(source.metadata).length > 0 && (
+                          <div className="text-[11px] text-slate-500/80 dark:text-slate-400/70 mt-1 space-y-0.5">
+                            {/* Priority metadata fields */}
+                            {(source.metadata.kurum || source.metadata.makam || source.metadata.tarih) && (
+                              <p className="line-clamp-1">
+                                {source.metadata.kurum && `${source.metadata.kurum}`}
+                                {source.metadata.kurum && source.metadata.makam && ' • '}
+                                {source.metadata.makam && `${source.metadata.makam}`}
+                                {(source.metadata.kurum || source.metadata.makam) && source.metadata.tarih && ' • '}
+                                {source.metadata.tarih && `${source.metadata.tarih}`}
+                              </p>
+                            )}
+                            {/* Additional metadata fields */}
+                            {(source.metadata.madde_no || source.metadata.karar_no || source.metadata.esas_no || source.metadata.sayi) && (
+                              <p className="line-clamp-1">
+                                {source.metadata.madde_no && `Madde: ${source.metadata.madde_no}`}
+                                {source.metadata.madde_no && (source.metadata.karar_no || source.metadata.esas_no || source.metadata.sayi) && ' • '}
+                                {source.metadata.karar_no && `Karar: ${source.metadata.karar_no}`}
+                                {source.metadata.karar_no && (source.metadata.esas_no || source.metadata.sayi) && ' • '}
+                                {source.metadata.esas_no && `Esas: ${source.metadata.esas_no}`}
+                                {source.metadata.esas_no && source.metadata.sayi && ' • '}
+                                {source.metadata.sayi && `Sayı: ${source.metadata.sayi}`}
+                              </p>
+                            )}
+                          </div>
+                        )}
+
                         {/* Summary or Excerpt */}
                         {(source.summary || source.excerpt) && (
-                          <p className="text-xs text-slate-500/80 dark:text-slate-400/80 mt-1 line-clamp-2">
+                          <p className="text-xs text-slate-500/70 dark:text-slate-400/70 mt-1.5 line-clamp-2 leading-relaxed">
                             {source.summary || source.excerpt}
                           </p>
                         )}
-                        {/* Keywords if available */}
+
+                        {/* Keywords if available - styled as marker chips */}
                         {source.keywords && source.keywords.length > 0 && (
                           <div className="flex flex-wrap gap-1 mt-1.5">
-                            {source.keywords.slice(0, 3).map((keyword, kidx) => (
+                            {source.keywords.slice(0, 5).map((keyword, kidx) => (
                               <span
                                 key={kidx}
-                                className="text-[10px] px-1.5 py-0.5 bg-cyan-50 dark:bg-cyan-900/30 text-cyan-600 dark:text-cyan-400 rounded"
+                                className="zen01-marker zen01-marker-blue text-[9px] font-medium px-1.5 py-0.5 inline-block"
                               >
                                 {keyword}
                               </span>
                             ))}
                           </div>
                         )}
-                        {/* Source Type Badge - at bottom */}
-                        <div className="mt-1.5">
-                          <span className="zen01-source-badge">
-                            {sourceTypeLabel}
-                          </span>
-                        </div>
                       </div>
                     </div>
                   </div>

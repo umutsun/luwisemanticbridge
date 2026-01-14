@@ -534,6 +534,26 @@
   color: #1e40af;
 }
 
+/* Purple highlighter - Dark mode */
+.zen01-marker.zen01-marker-purple {
+  background: linear-gradient(135deg, rgba(168, 85, 247, 0.30) 0%, rgba(168, 85, 247, 0.20) 100%);
+  color: #e9d5ff;
+}
+.zen01-container.light .zen01-marker.zen01-marker-purple {
+  background: linear-gradient(135deg, rgba(168, 85, 247, 0.35) 0%, rgba(168, 85, 247, 0.22) 100%);
+  color: #6b21a8;
+}
+
+/* Orange highlighter - Dark mode */
+.zen01-marker.zen01-marker-orange {
+  background: linear-gradient(135deg, rgba(249, 115, 22, 0.30) 0%, rgba(249, 115, 22, 0.20) 100%);
+  color: #fdba74;
+}
+.zen01-container.light .zen01-marker.zen01-marker-orange {
+  background: linear-gradient(135deg, rgba(249, 115, 22, 0.35) 0%, rgba(249, 115, 22, 0.22) 100%);
+  color: #9a3412;
+}
+
 /* ============================================
    Source Type Badge (Citation Labels)
    High contrast for readability
