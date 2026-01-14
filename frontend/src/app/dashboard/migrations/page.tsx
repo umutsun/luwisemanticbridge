@@ -1367,31 +1367,30 @@ export default function EmbeddingsManagerPage() {
 
                   {/* Optimize Completed */}
                   {!isOptimizing && optimizeProgress.status === 'completed' && (
-                    <div className="w-full space-y-1.5 text-sm bg-violet-50 dark:bg-violet-950/30 rounded-lg p-3 border border-violet-200 dark:border-violet-800">
-                      <div className="flex justify-between">
-                        <span className="text-violet-600 dark:text-violet-400">Durum:</span>
-                        <span className="font-medium text-violet-900 dark:text-violet-100">Optimizasyon Tamamlandı</span>
+                    <div className="w-full text-xs bg-violet-50 dark:bg-violet-950/30 rounded-lg p-2 border border-violet-200 dark:border-violet-800">
+                      <div className="flex justify-between items-center mb-1.5">
+                        <span className="text-violet-600 dark:text-violet-400 font-medium">Optimizasyon Tamamlandı</span>
+                        <button
+                          onClick={() => setOptimizeProgress(prev => ({ ...prev, status: 'idle' }))}
+                          className="text-violet-400 hover:text-violet-600 dark:hover:text-violet-300 transition-colors"
+                        >
+                          <X className="w-3 h-3" />
+                        </button>
                       </div>
-                      <div className="flex justify-between">
-                        <span className="text-violet-600 dark:text-violet-400">Orphan:</span>
-                        <span className="font-medium text-violet-900 dark:text-violet-100">{optimizeProgress.orphansDeleted} silindi</span>
+                      <div className="grid grid-cols-3 gap-2">
+                        <div className="text-center">
+                          <div className="text-violet-500 dark:text-violet-400 text-[10px] uppercase tracking-wide mb-0.5">Orphan</div>
+                          <div className="font-semibold text-violet-900 dark:text-violet-100">{optimizeProgress.orphansDeleted.toLocaleString()}</div>
+                        </div>
+                        <div className="text-center">
+                          <div className="text-violet-500 dark:text-violet-400 text-[10px] uppercase tracking-wide mb-0.5">Duplicate</div>
+                          <div className="font-semibold text-violet-900 dark:text-violet-100">{optimizeProgress.duplicatesDeleted.toLocaleString()}</div>
+                        </div>
+                        <div className="text-center">
+                          <div className="text-violet-500 dark:text-violet-400 text-[10px] uppercase tracking-wide mb-0.5">Metadata</div>
+                          <div className="font-semibold text-violet-900 dark:text-violet-100">{optimizeProgress.metadataFixed.toLocaleString()}</div>
+                        </div>
                       </div>
-                      <div className="flex justify-between">
-                        <span className="text-violet-600 dark:text-violet-400">Duplicate:</span>
-                        <span className="font-medium text-violet-900 dark:text-violet-100">{optimizeProgress.duplicatesDeleted} silindi</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-violet-600 dark:text-violet-400">Metadata:</span>
-                        <span className="font-medium text-violet-900 dark:text-violet-100">{optimizeProgress.metadataFixed} düzeltildi</span>
-                      </div>
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        className="w-full mt-2 text-violet-600 hover:text-violet-700"
-                        onClick={() => setOptimizeProgress(prev => ({ ...prev, status: 'idle' }))}
-                      >
-                        Kapat
-                      </Button>
                     </div>
                   )}
 
