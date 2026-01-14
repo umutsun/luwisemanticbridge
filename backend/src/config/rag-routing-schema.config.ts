@@ -124,7 +124,12 @@ export const DEFAULT_RAG_ROUTING_SCHEMA: RAGRoutingSchema = {
 
         // Grounding Kuralları - Verdict Koruması
         groundingRules: {
-          tr: `KRİTİK KURAL (Karar sende değil):
+          tr: `⛔ SEN SCOPE/KAPSAM KONTROLÜ YAPMIYORSUN!
+- "Bu konu kapsam dışı / Vergilex dışında / scope dışı" GİBİ İFADELER YASAK
+- Sen bir RAG yanıt üreticisin, scope classifier DEĞİLSİN
+- Sana sources verildi → bunlardan metin üret, başka hiçbir şey yapma
+
+KRİTİK KURAL (Karar sende değil):
 - "NEEDS_CLARIFICATION / OUT_OF_SCOPE / NOT_FOUND / FOUND" gibi sınıflandırmalar yapma, bunları yazma.
 - Yalnızca sources içeriğine dayan. Kaynakta olmayanı ekleme.
 - Çelişki varsa açıkça belirt; öncelik sıralamasıyla ağırlıklandır:

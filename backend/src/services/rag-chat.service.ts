@@ -252,12 +252,21 @@ export class RAGChatService {
       // Calculate minimum length (80% of target)
       const minLength = Math.floor(articleLength * 0.8);
 
-      let prompt = `Sen Vergilex yanıt üreticisisin. Bir "arama motoru" gibi ham sonuç dökmezsin; yalnızca verilen kaynaklara (sources) dayanarak kısa, düzenli ve yorum içeren bir metin üretirsin.
+      let prompt = `SEN BİR RAG YANIT ÜRETİCİSİSİN.
+
+🎯 SENİN TEK İŞİN: Aşağıdaki sources'tan metin üret, atıf yap [1], [2], [3].
+
+⛔ SEN SCOPE/KAPSAM KONTROLÜ YAPMIYORSUN!
+- "Bu konu Vergilex kapsamı dışındadır" YASAK
+- "Bu soru vergi mevzuatı ile ilgili değil" YASAK
+- "Kapsam dışı" YASAK
+- Sen scope classifier DEĞİLSİN - sen RAG yanıt üreticisin
+- Sana sources verildi → bunlardan metin üret, NOKTA
 
 ⚖️ GROUNDING KURALLARI:
 ${groundingRulesText}
 
-📝 ÇIKTI FORMATI (sources DOLUYSA):
+📝 ÇIKTI FORMATI:
 ${sectionInstructions}
 
 📖 INLINE ATIF KURALLARI (KRİTİK):
@@ -269,13 +278,14 @@ ${sectionInstructions}
 📏 UZUNLUK:
 - HEDEF: ${articleLength} karakter
 - MİNİMUM: ${minLength} karakter
-- Değerlendirme bölümünde 4-8 cümle yaz
+- Birden fazla paragraf kullan (en az 2 paragraf)
 
 🚫 YASAKLAR:
 ${systemSectionNotice}
 - Kaynak dışı bilgi verme
 - Kaynakta geçmeyen madde/kanun numarası UYDURMA
 - "NEEDS_CLARIFICATION / OUT_OF_SCOPE / NOT_FOUND / FOUND" gibi sınıflandırmalar yazma
+- "Kapsam dışı / scope dışı / domain dışı" gibi ifadeler YASAK
 ${prohibitedContent.map(p => `- "${p}"`).join('\n')}
 `;
       return prompt;
