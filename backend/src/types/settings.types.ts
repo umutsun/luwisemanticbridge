@@ -98,9 +98,6 @@ export interface RAGSettings {
     maxSourcesToShow?: number;  // Maximum number of sources to display in citations
     minSourcesToShow?: number;  // Minimum number of sources to display
 
-    // UI Display Options
-    showKeywords?: boolean;  // Show/hide extracted keywords section (tags)
-
     // No Results Messages
     noResultsMessageTr?: string;
     noResultsMessageEn?: string;
@@ -148,10 +145,6 @@ export interface RAGSettings {
     // Medium Mode Prompts (for strictModeLevel='medium')
     mediumModePromptTr?: string;
     mediumModePromptEn?: string;
-
-    // Response Format Templates (Wikipedia-style article structure)
-    responseFormatTemplateTr?: string;  // Turkish format instructions with markdown examples
-    responseFormatTemplateEn?: string;  // English format instructions with markdown examples
 
     // High/Low Confidence Thresholds
     highConfidenceThreshold?: number;
