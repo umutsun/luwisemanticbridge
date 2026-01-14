@@ -64,7 +64,11 @@ export default function ChatInterface() {
     activeChatModel: '',
     enableSuggestions: true,
     welcomeMessage: '',
-    greeting: ''
+    greeting: '',
+    // Feature toggles - default to true, will be overridden by schema
+    enableSourceClick: true,
+    enableSourceQuestionGeneration: true,
+    enableKeywordHighlighting: true
   });
   const [settingsLoaded, setSettingsLoaded] = useState(false);
 
@@ -244,7 +248,11 @@ export default function ChatInterface() {
           activeChatModel: settingsData.llmSettings?.activeChatModel || '',
           enableSuggestions: chatbotData.enableSuggestions !== undefined ? chatbotData.enableSuggestions : true,
           welcomeMessage: chatbotData.welcomeMessage || '',
-          greeting: chatbotData.greeting || ''
+          greeting: chatbotData.greeting || '',
+          // Feature toggles from schema
+          enableSourceClick: chatbotData.enableSourceClick !== undefined ? chatbotData.enableSourceClick : true,
+          enableSourceQuestionGeneration: chatbotData.enableSourceQuestionGeneration !== undefined ? chatbotData.enableSourceQuestionGeneration : true,
+          enableKeywordHighlighting: chatbotData.enableKeywordHighlighting !== undefined ? chatbotData.enableKeywordHighlighting : true
         };
 
         const rag: ZenRagSettings = {
@@ -665,6 +673,8 @@ export default function ChatInterface() {
                     onSourceClick={handleSourceClick}
                     lastUserQuery={lastUserQuery}
                     voiceOutputEnabled={voiceSettings.enableVoiceOutput}
+                    enableSourceClick={chatbotSettings.enableSourceClick}
+                    enableKeywordHighlighting={chatbotSettings.enableKeywordHighlighting}
                   />
                 ))}
               </AnimatePresence>

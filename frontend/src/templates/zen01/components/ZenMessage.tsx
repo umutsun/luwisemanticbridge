@@ -231,15 +231,17 @@ export const ZenMessage: React.FC<ZenMessageProps> = ({
   onSourceClick,
   lastUserQuery = '',
   voiceOutputEnabled = false,
+  enableSourceClick = true,  // From schema, default true
+  enableKeywordHighlighting = true,  // From schema, default true
 }) => {
   const isUser = message.role === 'user';
   const [showAllSources, setShowAllSources] = useState(false);
 
-  // Extract keywords from last user query for highlighting
+  // Extract keywords from last user query for highlighting (only if enabled)
   const keywords = React.useMemo(() => {
-    if (!lastUserQuery || isUser) return [];
+    if (!enableKeywordHighlighting || !lastUserQuery || isUser) return [];
     return extractKeywords(lastUserQuery);
-  }, [lastUserQuery, isUser]);
+  }, [lastUserQuery, isUser, enableKeywordHighlighting]);
 
   // Audio player hook for TTS
   const { isPlaying, isLoading: isTTSLoading, play, pause } = useAudioPlayer({
@@ -484,8 +486,8 @@ export const ZenMessage: React.FC<ZenMessageProps> = ({
                 return (
                   <div
                     key={idx}
-                    className="zen01-source-item"
-                    onClick={() => onSourceClick(source, message.sources || [])}
+                    className={`zen01-source-item ${enableSourceClick ? 'cursor-pointer' : 'cursor-default'}`}
+                    onClick={enableSourceClick ? () => onSourceClick(source, message.sources || []) : undefined}
                   >
                     <div className="flex items-start gap-2">
                       <div className="flex-shrink-0 mt-0.5">

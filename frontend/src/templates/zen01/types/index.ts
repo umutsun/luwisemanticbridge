@@ -58,6 +58,11 @@ export interface ZenChatbotSettings {
   enableSuggestions: boolean;
   welcomeMessage?: string;
   greeting?: string;
+  // Source Interaction Features (from schema)
+  enableSourceClick?: boolean;
+  enableSourceQuestionGeneration?: boolean;
+  // Keyword Highlighting
+  enableKeywordHighlighting?: boolean;
 }
 
 // User Info Interface
@@ -148,6 +153,9 @@ export interface ZenMessageProps {
   onSourceClick: (source: ZenSource, allSources: ZenSource[]) => void;
   lastUserQuery?: string;
   voiceOutputEnabled?: boolean;
+  // Feature toggles from schema
+  enableSourceClick?: boolean;
+  enableKeywordHighlighting?: boolean;
 }
 
 // Default Settings
