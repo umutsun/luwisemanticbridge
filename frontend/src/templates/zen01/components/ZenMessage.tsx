@@ -181,6 +181,7 @@ function cleanLLMResponse(content: string): string {
 /**
  * Preprocess markdown content to ensure proper paragraph breaks
  * LLM often outputs **Header:** or **Header** inline instead of on new lines
+ * Also converts single newlines between sentences into proper paragraph breaks
  */
 function preprocessMarkdown(content: string): string {
   // Known section header patterns in Turkish legal/tax documents
@@ -249,6 +250,15 @@ function preprocessMarkdown(content: string): string {
   ];
 
   let result = content;
+
+  // CRITICAL FIX: Convert single newlines between sentences to paragraph breaks
+  // Pattern: sentence ending (. ! ?) + optional citation [1][2] + single newline + capital letter
+  // This fixes LLM output that has single newlines instead of double newlines between paragraphs
+  result = result
+    // Match: period/punctuation + optional citation + single newline + capital letter
+    .replace(/([.!?])(\s*(?:\[\d+\])+)?\n(?!\n)([A-ZÇĞİÖŞÜ])/g, '$1$2\n\n$3')
+    // Also handle Turkish sentences ending with percentage or number
+    .replace(/([0-9%])(\s*(?:\[\d+\])+)?\.\s*\n(?!\n)([A-ZÇĞİÖŞÜ])/g, '$1$2.\n\n$3');
 
   // Add line breaks before each known section header
   sectionHeaders.forEach(header => {
