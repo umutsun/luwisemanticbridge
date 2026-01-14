@@ -588,48 +588,46 @@ export const ZenMessage: React.FC<ZenMessageProps> = ({
                           </span>
                         </div>
 
-                        {/* Title - cleaned for proper spacing */}
-                        <p className="text-sm font-medium text-cyan-700/90 dark:text-cyan-300/90 line-clamp-2 leading-snug mb-2">
-                          {cleanCitationTitle(source.title || source.summary?.slice(0, 60) || 'Belge')}
-                        </p>
-
-                        {/* Metadata - Show all relevant fields */}
+                        {/* Kaynak Bilgisi - Metadata first, clean format */}
                         {source.metadata && Object.keys(source.metadata).length > 0 && (
-                          <div className="text-[11px] text-slate-500/80 dark:text-slate-400/70 mt-1.5 space-y-1">
-                            {/* Priority metadata fields */}
+                          <div className="text-[11px] text-slate-400/90 dark:text-slate-300/80 space-y-1 mb-2">
+                            {/* Kurum/Makam/Tarih */}
                             {(source.metadata.kurum || source.metadata.makam || source.metadata.tarih) && (
-                              <p className="line-clamp-1">
-                                {source.metadata.kurum && `${source.metadata.kurum}`}
-                                {source.metadata.kurum && source.metadata.makam && ' • '}
-                                {source.metadata.makam && `${source.metadata.makam}`}
-                                {(source.metadata.kurum || source.metadata.makam) && source.metadata.tarih && ' • '}
-                                {source.metadata.tarih && `${source.metadata.tarih}`}
+                              <p className="line-clamp-1 font-medium">
+                                {source.metadata.kurum && source.metadata.kurum}
+                                {source.metadata.makam && ` - ${source.metadata.makam}`}
+                                {source.metadata.tarih && ` (${source.metadata.tarih})`}
                               </p>
                             )}
-                            {/* Additional metadata fields */}
-                            {(source.metadata.madde_no || source.metadata.karar_no || source.metadata.esas_no || source.metadata.sayi) && (
-                              <p className="line-clamp-1">
-                                {source.metadata.madde_no && `Madde: ${source.metadata.madde_no}`}
-                                {source.metadata.madde_no && (source.metadata.karar_no || source.metadata.esas_no || source.metadata.sayi) && ' • '}
-                                {source.metadata.karar_no && `Karar: ${source.metadata.karar_no}`}
-                                {source.metadata.karar_no && (source.metadata.esas_no || source.metadata.sayi) && ' • '}
-                                {source.metadata.esas_no && `Esas: ${source.metadata.esas_no}`}
-                                {source.metadata.esas_no && source.metadata.sayi && ' • '}
-                                {source.metadata.sayi && `Sayı: ${source.metadata.sayi}`}
-                              </p>
-                            )}
+                            {/* Sayı/Madde/Esas/Karar */}
+                            <p className="line-clamp-1 text-[10px] opacity-80">
+                              {source.metadata.sayi && `Sayı: ${source.metadata.sayi}`}
+                              {source.metadata.sayi && (source.metadata.madde_no || source.metadata.esas_no || source.metadata.karar_no) && ' • '}
+                              {source.metadata.madde_no && `Madde: ${source.metadata.madde_no}`}
+                              {source.metadata.madde_no && (source.metadata.esas_no || source.metadata.karar_no) && ' • '}
+                              {source.metadata.esas_no && `Esas: ${source.metadata.esas_no}`}
+                              {source.metadata.esas_no && source.metadata.karar_no && ' • '}
+                              {source.metadata.karar_no && `Karar: ${source.metadata.karar_no}`}
+                            </p>
                           </div>
                         )}
 
-                        {/* Summary or Excerpt - only if different from title */}
+                        {/* Excerpt - only show if metadata is missing or content is truly different */}
                         {(() => {
-                          const title = cleanCitationTitle(source.title || '');
-                          const excerpt = source.summary || source.excerpt || '';
-                          // Only show excerpt if it's different from title and meaningful
-                          if (excerpt && excerpt.length > 20 && !title.includes(excerpt.slice(0, 50)) && !excerpt.includes(title.slice(0, 50))) {
+                          const hasMetadata = source.metadata && (
+                            source.metadata.kurum || source.metadata.makam ||
+                            source.metadata.tarih || source.metadata.sayi
+                          );
+
+                          // If we have metadata, don't show excerpt (to avoid repetition)
+                          if (hasMetadata) return null;
+
+                          // Otherwise show excerpt if available
+                          const excerpt = source.summary || source.excerpt || source.title || '';
+                          if (excerpt && excerpt.length > 20) {
                             return (
-                              <p className="text-xs text-slate-500/70 dark:text-slate-400/70 mt-2 line-clamp-3 leading-relaxed">
-                                {excerpt}
+                              <p className="text-xs text-slate-400/80 dark:text-slate-300/70 line-clamp-2 leading-relaxed">
+                                {cleanCitationTitle(excerpt)}
                               </p>
                             );
                           }

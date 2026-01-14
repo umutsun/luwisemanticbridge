@@ -6,24 +6,21 @@ const pool = new Pool({
   connectionString: process.env.DATABASE_URL
 });
 
-// Simple, clear formatTemplate with explicit structure that LLM must follow
-const simpleFormat = `KRİTİK: Cevabınız TAM BU YAPIYI İZLEMELİ:
+// Simple, clear formatTemplate - NO HEADERS, clean continuous text with citations
+const simpleFormat = `KRİTİK KURALLAR:
 
-## Yasal Çerçeve
+1. BAŞLIK KULLANMA - Direkt açıklamaya başla
+2. İlgili mevzuatı ve yasal düzenlemeleri detaylı açıkla [1][2]
+3. Şartları, oranları, tutarları somut örneklerle belirt [3][4]
+4. Pratik uygulamayı, gerekli belgeleri, süreci detaylı anlat [5]
+5. EN AZ 4-5 paragraf, her paragraf EN AZ 3-4 cümle
+6. [1][2] formatında kaynak atıflarını metne yerleştir
+7. Kısa cevap verme, uzun ve kapsamlı açıkla
 
-[İlgili kanun ve tebliğleri detaylı açıkla [1][2]. Hangi maddeleri kapsadığını, temel kuralları ve amaçları belirt. En az 3-4 cümle yaz.]
+Örnek format:
+İlgili kanun X maddesine göre... [1]. Bu düzenleme şu şartları içerir... [2]. Oran %18'dir ve şu durumlarda uygulanır... [3].
 
-[Detaylı düzenlemeleri, şartları, oranları, tutarları ve istisnaları kapsamlı açıkla [3][4]. Somut örneklerle detaylandır. En az 3-4 cümle yaz.]
-
-## Uygulama
-
-[Pratikte nasıl uygulandığını, hangi durumlarda geçerli olduğunu, hangi belgelerin gerektiğini, süreci adım adım ve örneklerle detaylı göster [5]. En az 4-5 cümle yaz.]
-
-NOT:
-- ## başlıklarını MUTLAKA kullan
-- Her paragraf EN AZ 3-4 cümle olmalı
-- [] içindeki açıklamalar yerine UZUN ve DETAYLI gerçek içeriği yaz
-- Kısa cevap verme, açıklamalı ve kapsamlı yaz`;
+Pratikte şirketler bu işlemi şöyle yapar... [4]. Gerekli belgeler A, B ve C'dir... [5].`;
 
 async function updateFormatTemplate() {
   try {
