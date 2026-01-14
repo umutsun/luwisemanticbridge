@@ -1377,19 +1377,19 @@ export default function EmbeddingsManagerPage() {
                     </div>
                   )}
 
-                  {/* Optimize Completed - Balanced */}
+                  {/* Optimize Completed - Card Style */}
                   {!isOptimizing && optimizeProgress.status === 'completed' && (
-                    <div className="w-full text-xs bg-violet-50 dark:bg-violet-950/30 rounded-lg p-2.5 border border-violet-200 dark:border-violet-800">
-                      <div className="flex justify-between items-center mb-2">
+                    <div className="w-full text-xs bg-violet-50 dark:bg-violet-950/30 rounded-lg p-3 border border-violet-200 dark:border-violet-800 shadow-sm">
+                      <div className="flex justify-between items-center mb-2.5">
                         <span className="text-violet-600 dark:text-violet-400 font-medium">Optimizasyon</span>
                         <button
                           onClick={() => setOptimizeProgress(prev => ({ ...prev, status: 'idle' }))}
-                          className="text-violet-400 hover:text-violet-600 dark:hover:text-violet-300"
+                          className="text-violet-400 hover:text-violet-600 dark:hover:text-violet-300 transition-colors"
                         >
                           <X className="w-3.5 h-3.5" />
                         </button>
                       </div>
-                      <div className="flex gap-4">
+                      <div className="flex gap-5">
                         <div className="flex items-center gap-1.5">
                           <span className="text-violet-500 font-medium">Orphan:</span>
                           <span className="font-semibold text-violet-900 dark:text-violet-100">{optimizeProgress.orphansDeleted.toLocaleString()}</span>

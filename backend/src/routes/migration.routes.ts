@@ -858,7 +858,7 @@ async function executeAutoResume(migrationId: string, progress: any, state: any)
 
         // Filter out already embedded
         const pendingBatch = batchResult.rows.filter(
-          (row: any) => !tableEmbeddedIds.has(parseInt(row.id, 10))
+          (row: any) => !tableEmbeddedIds.has(parseInt(row.row_id, 10))
         );
 
         // Process in smaller batches
@@ -1751,7 +1751,7 @@ router.post('/generate', async (req: Request, res: Response) => {
             [normalizedTableName, table, displayName, table.replace(/^csv_/i, '')]
           );
           // IMPORTANT: Convert source_id to number for proper Set comparison
-          // PostgreSQL bigint comes as string in some cases, but row.id comparison uses parseInt
+          // PostgreSQL bigint comes as string in some cases, but row.row_id comparison uses parseInt
           embeddedIds = new Set(embeddedIdsResult.rows.map(row => parseInt(row.source_id, 10)));
           pendingCount = totalCount - embeddedIds.size;
         }
@@ -1852,9 +1852,9 @@ router.post('/generate', async (req: Request, res: Response) => {
         if (!batchResult || batchResult.rows.length === 0) break; // No more records
 
         // Filter out already embedded records
-        // Note: row.id might be string or number depending on source table, so we compare as numbers
+        // Note: row.row_id might be string or number depending on source table, so we compare as numbers
         const pendingBatch = unifiedEmbeddingsExists
-          ? batchResult.rows.filter(row => !embeddedIds.has(parseInt(row.id, 10)))
+          ? batchResult.rows.filter(row => !embeddedIds.has(parseInt(row.row_id, 10)))
           : batchResult.rows;
 
         // If all records in this batch are already embedded, stop
@@ -1931,7 +1931,7 @@ router.post('/generate', async (req: Request, res: Response) => {
             if (rowKeys.length > 0) {
               // Combine all fields as "key: value" pairs
               content = rowKeys.map(key => `${key}: ${row[key]}`).join('\n');
-              console.log(`[Migration] Using combined fields as content for ${table}[${row.id}] (${rowKeys.length} fields)`);
+              console.log(`[Migration] Using combined fields as content for ${table}[${row.row_id}] (${rowKeys.length} fields)`);
             }
           }
 
@@ -1952,7 +1952,7 @@ router.post('/generate', async (req: Request, res: Response) => {
             if (rowKeys.length > 0) {
               title = String(row[rowKeys[0]]).substring(0, 255);
             } else {
-              title = `${table} #${row.id}`;
+              title = `${table} #${row.row_id}`;
             }
           }
 
@@ -1971,7 +1971,7 @@ router.post('/generate', async (req: Request, res: Response) => {
         }
 
         if (!content || content.trim().length === 0) {
-          console.warn(`️ No content found for ${table}[${row.id}] - moving to skipped_embeddings`);
+          console.warn(`️ No content found for ${table}[${row.row_id}] - moving to skipped_embeddings`);
 
           // Insert into skipped_embeddings table
           try {
@@ -1980,7 +1980,7 @@ router.post('/generate', async (req: Request, res: Response) => {
                VALUES ($1, $2, $3, $4, $5, $6, $7)
                ON CONFLICT (source_table, source_id) DO NOTHING
                RETURNING id`,
-              [table, sourceType, row.id, title, '[No content available]', 'no_content', JSON.stringify({
+              [table, sourceType, row.row_id, title, '[No content available]', 'no_content', JSON.stringify({
                 note: 'Skipped - no content in source table',
                 skipped_at: new Date().toISOString()
               })]
@@ -1988,26 +1988,26 @@ router.post('/generate', async (req: Request, res: Response) => {
 
             // Only increment processed if record was actually inserted
             if (skipResult.rows.length > 0) {
-              console.log(`✓ Record moved to skipped_embeddings: ${table}[${row.id}]`);
+              console.log(`✓ Record moved to skipped_embeddings: ${table}[${row.row_id}]`);
               // Add to embeddedIds Set (skipped records should not be re-processed)
-              embeddedIds.add(parseInt(row.id, 10));
+              embeddedIds.add(parseInt(row.row_id, 10));
               processed++;
             } else {
-              console.log(`⚠️ Record ${row.id} already in skipped_embeddings, skipping count increment`);
+              console.log(`⚠️ Record ${row.row_id} already in skipped_embeddings, skipping count increment`);
             }
           } catch (err) {
-            console.error(`✗ Failed to insert into skipped_embeddings for ${table}[${row.id}]:`, err);
+            console.error(`✗ Failed to insert into skipped_embeddings for ${table}[${row.row_id}]:`, err);
           }
 
           continue;
         }
 
         // Generate embedding
-        console.log(` Generating embedding for ${table}[${row.id}]...`);
+        console.log(` Generating embedding for ${table}[${row.row_id}]...`);
         const embedding = await generateEmbedding(content);
 
         if (embedding.length === 0) {
-          console.warn(`️ Empty embedding returned for ${table}[${row.id}] - moving to skipped_embeddings`);
+          console.warn(`️ Empty embedding returned for ${table}[${row.row_id}] - moving to skipped_embeddings`);
 
           // Insert into skipped_embeddings table
           try {
@@ -2019,24 +2019,24 @@ router.post('/generate', async (req: Request, res: Response) => {
                  content = EXCLUDED.content,
                  metadata = EXCLUDED.metadata,
                  updated_at = CURRENT_TIMESTAMP`,
-              [table, sourceType, row.id, title, content.substring(0, 500), 'empty_embedding', JSON.stringify({
+              [table, sourceType, row.row_id, title, content.substring(0, 500), 'empty_embedding', JSON.stringify({
                 note: 'Skipped - embedding API returned empty result',
                 content_length: content.length,
                 skipped_at: new Date().toISOString()
               })]
             );
-            console.log(` Record moved to skipped_embeddings: ${table}[${row.id}]`);
+            console.log(` Record moved to skipped_embeddings: ${table}[${row.row_id}]`);
           } catch (err) {
-            console.error(` Failed to insert into skipped_embeddings for ${table}[${row.id}]:`, err);
+            console.error(` Failed to insert into skipped_embeddings for ${table}[${row.row_id}]:`, err);
           }
 
           // Add to embeddedIds Set (skipped records should not be re-processed)
-          embeddedIds.add(parseInt(row.id, 10));
+          embeddedIds.add(parseInt(row.row_id, 10));
 
           processed++;
           continue;
         }
-        console.log(` Embedding generated for ${table}[${row.id}]: ${embedding.length} dimensions`);
+        console.log(` Embedding generated for ${table}[${row.row_id}]: ${embedding.length} dimensions`);
 
         // Prepare metadata - dynamically include all relevant fields
         const metadata: any = {
@@ -2081,7 +2081,7 @@ router.post('/generate', async (req: Request, res: Response) => {
         `, [
           tableLower, // Use normalized lowercase table name
           sourceType,
-          row.id,
+          row.row_id,
           title,
           content,
           `[${embedding.join(',')}]`,
@@ -2094,10 +2094,10 @@ router.post('/generate', async (req: Request, res: Response) => {
         // Only increment processed if record was actually inserted (not skipped due to conflict)
         if (insertResult.rows.length > 0) {
           // Add to embeddedIds Set to prevent re-processing in subsequent batches
-          embeddedIds.add(parseInt(row.id, 10));
+          embeddedIds.add(parseInt(row.row_id, 10));
           processed++;
         } else {
-          console.log(`⚠️ Record ${row.id} already exists (conflict detected), skipping count increment`);
+          console.log(`⚠️ Record ${row.row_id} already exists (conflict detected), skipping count increment`);
         }
 
         // Send progress (only if client is still connected)
@@ -2120,7 +2120,7 @@ router.post('/generate', async (req: Request, res: Response) => {
         migrationProgress.emit('progress', { id: activeMigrationId, ...progress });
         safeWrite(`data: ${JSON.stringify(progress)}\n\n`);
           } catch (error) {
-            console.error(`✗ Embedding error for ${table}[${row.id}]:`, error);
+            console.error(`✗ Embedding error for ${table}[${row.row_id}]:`, error);
             // Don't increment processed on error - we'll retry this record on next run
           }
         } // end for (row of pendingBatch)
@@ -2487,8 +2487,8 @@ async function performMigration(migrationId: string, config: any) {
             }
 
             // Skip if already exists (using batch-fetched Set)
-            // Convert row.id to number for comparison (may be text type)
-            const rowIdNum = parseInt(row.id, 10);
+            // Convert row.row_id to number for comparison (may be text type)
+            const rowIdNum = parseInt(row.row_id, 10);
             if (existingIds.has(rowIdNum)) {
               continue;
             }
@@ -2505,19 +2505,19 @@ async function performMigration(migrationId: string, config: any) {
               sourceType = 'qa';
             } else if (table === 'csv_danistaykararlari') {
               content = row.icerik || '';
-              title = row.konusu || `Karar ${row.id}`;
+              title = row.konusu || `Karar ${row.row_id}`;
               sourceType = 'court_decision';
             } else if (table.startsWith('csv_makale_arsiv')) {
               content = row.icerik || '';
-              title = row.konusu || `Makale ${row.id}`;
+              title = row.konusu || `Makale ${row.row_id}`;
               sourceType = 'article';
             } else if (table === 'csv_ozelge') {
               content = row.icerik || '';
-              title = row.konusu || `Özelge ${row.id}`;
+              title = row.konusu || `Özelge ${row.row_id}`;
               sourceType = 'official_letter';
             } else if (table === 'csv_hukdkk' || table === 'csv_maliansiklopedi') {
               content = row.icerik || '';
-              title = row.konusu || `${table} ${row.id}`;
+              title = row.konusu || `${table} ${row.row_id}`;
               sourceType = 'legal_document';
             }
             // Legacy uppercase tables (original format)
@@ -2527,27 +2527,27 @@ async function performMigration(migrationId: string, config: any) {
               sourceType = 'qa';
             } else if (table === 'DANISTAYKARARLARI') {
               content = row.metin || '';
-              title = row.karar_no || `Karar ${row.id}`;
+              title = row.karar_no || `Karar ${row.row_id}`;
               sourceType = 'court_decision';
             } else if (table === 'MAKALELER') {
               content = row.icerik || '';
-              title = row.baslik || `Makale ${row.id}`;
+              title = row.baslik || `Makale ${row.row_id}`;
               sourceType = 'article';
             } else if (table === 'OZELGELER') {
               content = row.metin || '';
-              title = row.ozelge_no || `Özelge ${row.id}`;
+              title = row.ozelge_no || `Özelge ${row.row_id}`;
               sourceType = 'official_letter';
             }
             // Generic fallback for any other table with icerik/konusu columns
             else if (row.icerik) {
               content = row.icerik || '';
-              title = row.konusu || row.baslik || `${table} ${row.id}`;
+              title = row.konusu || row.baslik || `${table} ${row.row_id}`;
               sourceType = 'document';
             }
             // Generic fallback for tables with English column names (content/title)
             else if (row.content) {
               content = row.content || '';
-              title = row.title || row.excerpt || `${table} ${row.id}`;
+              title = row.title || row.excerpt || `${table} ${row.row_id}`;
               sourceType = 'document';
             }
 
@@ -2612,7 +2612,7 @@ async function performMigration(migrationId: string, config: any) {
             `, [
               table,
               sourceType,
-              row.id,
+              row.row_id,
               title,
               truncatedContent,
               `[${embedding.join(',')}]`,
@@ -2636,7 +2636,7 @@ async function performMigration(migrationId: string, config: any) {
             });
             
           } catch (error) {
-            console.error(`Error processing record ${row.id}:`, error);
+            console.error(`Error processing record ${row.row_id}:`, error);
           }
         }
         
@@ -2689,15 +2689,15 @@ function getTableConfig(table: string) {
 function getTitle(table: string, row: any): string {
   switch(table) {
     case 'DANISTAYKARARLARI':
-      return row.karar_no || `Karar ${row.id}`;
+      return row.karar_no || `Karar ${row.row_id}`;
     case 'SORUCEVAP':
-      return row.soru || `Soru ${row.id}`;
+      return row.soru || `Soru ${row.row_id}`;
     case 'MAKALELER':
-      return row.baslik || `Makale ${row.id}`;
+      return row.baslik || `Makale ${row.row_id}`;
     case 'OZELGELER':
-      return row.ozelge_no || `Özelge ${row.id}`;
+      return row.ozelge_no || `Özelge ${row.row_id}`;
     default:
-      return `${table} ${row.id}`;
+      return `${table} ${row.row_id}`;
   }
 }
 
