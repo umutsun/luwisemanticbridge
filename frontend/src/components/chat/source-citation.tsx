@@ -20,30 +20,30 @@ export function SourceCitation({ sources, onLoadMore, hasMore = false, showLoadM
   const initialSourcesToShow = 7;
   const sourcesToDisplay = showAllSources ? sources : sources.slice(0, initialSourcesToShow);
 
-  // Helper to map source table to display name with hierarchy
+  // Helper to map source table to display name with hierarchy and marker color
   const getSourceTypeInfo = (sourceTable?: string, category?: string) => {
-    if (!sourceTable && !category) return { label: 'Kaynak', weight: 0 };
+    if (!sourceTable && !category) return { label: 'Kaynak', weight: 0, markerClass: 'marker-cyan' };
 
     const sourceStr = (sourceTable || category || '').toLowerCase()
       .replace(/^csv_/, '')
       .replace(/_/g, '')
       .replace(/arsiv.*/, '');  // "makale_arsiv_2021" -> "makale"
 
-    // Source type hierarchy with weights
-    const typeMap: Record<string, { label: string; weight: number }> = {
-      'kanun': { label: 'Kanun/Mevzuat', weight: 100 },
-      'teblig': { label: 'Tebliğ/Yönetmelik', weight: 95 },
-      'tebliğ': { label: 'Tebliğ/Yönetmelik', weight: 95 },
-      'yonetmelik': { label: 'Yönetmelik', weight: 95 },
-      'sirkuler': { label: 'Sirküler', weight: 90 },
-      'ozelge': { label: 'GİB Özelgesi', weight: 75 },
-      'danistay': { label: 'Danıştay Kararı', weight: 70 },
-      'danistaykararlari': { label: 'Danıştay Kararı', weight: 70 },
-      'makale': { label: 'Makale', weight: 50 },
-      'sorucevap': { label: 'Soru-Cevap', weight: 50 },
-      'hukdkk': { label: 'Hukuki Değerlendirme', weight: 60 },
-      'genelyazi': { label: 'Genel Yazı', weight: 65 },
-      'genelyazı': { label: 'Genel Yazı', weight: 65 }
+    // Source type hierarchy with weights and marker colors
+    const typeMap: Record<string, { label: string; weight: number; markerClass: string }> = {
+      'kanun': { label: 'Kanun/Mevzuat', weight: 100, markerClass: 'marker-purple' },
+      'teblig': { label: 'Tebliğ/Yönetmelik', weight: 95, markerClass: 'marker-cyan' },
+      'tebliğ': { label: 'Tebliğ/Yönetmelik', weight: 95, markerClass: 'marker-cyan' },
+      'yonetmelik': { label: 'Yönetmelik', weight: 95, markerClass: 'marker-cyan' },
+      'sirkuler': { label: 'Sirküler', weight: 90, markerClass: 'marker-pink' },
+      'ozelge': { label: 'GİB Özelgesi', weight: 75, markerClass: 'marker-yellow' },
+      'danistay': { label: 'Danıştay Kararı', weight: 70, markerClass: 'marker-orange' },
+      'danistaykararlari': { label: 'Danıştay Kararı', weight: 70, markerClass: 'marker-orange' },
+      'makale': { label: 'Makale', weight: 50, markerClass: 'marker-green' },
+      'sorucevap': { label: 'Soru-Cevap', weight: 50, markerClass: 'marker-green' },
+      'hukdkk': { label: 'Hukuki Değerlendirme', weight: 60, markerClass: 'marker-cyan' },
+      'genelyazi': { label: 'Genel Yazı', weight: 65, markerClass: 'marker-yellow' },
+      'genelyazı': { label: 'Genel Yazı', weight: 65, markerClass: 'marker-yellow' }
     };
 
     // Try exact match first
@@ -59,7 +59,7 @@ export function SourceCitation({ sources, onLoadMore, hasMore = false, showLoadM
     }
 
     // Fallback
-    return { label: 'Kaynak', weight: 0 };
+    return { label: 'Kaynak', weight: 0, markerClass: 'marker-cyan' };
   };
 
   // Generate a follow-up question based on the excerpt
@@ -155,11 +155,11 @@ export function SourceCitation({ sources, onLoadMore, hasMore = false, showLoadM
             >
               {/* Content */}
               <div className="flex-1 min-w-0">
-                {/* Source Type and Number */}
+                {/* Source Type and Number with Marker Style */}
                 {(() => {
                   const typeInfo = getSourceTypeInfo(source.sourceTable, source.category);
                   return (
-                    <span className="inline-flex items-center gap-1 text-[10px] font-medium text-amber-400/90 bg-amber-500/10 border border-amber-500/20 px-1.5 py-0.5 rounded mb-1">
+                    <span className={`marker ${typeInfo.markerClass} text-[10px] font-semibold text-gray-900 dark:text-gray-100 inline-block mb-1`}>
                       [{index + 1}] {typeInfo.label}
                     </span>
                   );
