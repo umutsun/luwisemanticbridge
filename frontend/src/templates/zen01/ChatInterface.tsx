@@ -278,7 +278,7 @@ export default function ChatInterface() {
           responseSchemaId: chatbotData.responseSchemaId || 'vergilex-article'
         };
 
-        const rag: ZenRagSettings = {
+        const ragSettings: ZenRagSettings = {
           minResults: settingsData.ragSettings?.minResults || 7,
           maxResults: settingsData.ragSettings?.maxResults || 20,
           similarityThreshold: settingsData.ragSettings?.similarityThreshold || 0.02,
@@ -304,7 +304,7 @@ export default function ChatInterface() {
         };
 
         setChatbotSettings(config);
-        setRagSettings(rag);
+        setRagSettings(ragSettings);
         setLlmSettings(llm);
         setActivePrompt(prompt);
         setSettingsLoaded(true);
