@@ -305,7 +305,7 @@ export interface RouteFormat {
         tr?: string;
         en?: string;
     };
-    // Response structure template (Wikipedia-style markdown with examples)
+    // Response structure template (markdown format with examples)
     formatTemplate?: string;
     formatTemplateEn?: string;
 }
