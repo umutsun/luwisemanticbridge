@@ -468,6 +468,10 @@ class GIBCategoryCrawler:
                 for tag in soup(['script', 'style', 'nav', 'header', 'footer', 'noscript', 'iframe']):
                     tag.decompose()
 
+                # Remove UI buttons and links
+                for tag in soup.find_all(['button', 'a']):
+                    tag.decompose()
+
                 text_content = soup.get_text(' ', strip=True)
 
                 # Category-specific extraction
@@ -476,9 +480,11 @@ class GIBCategoryCrawler:
                 # Extract main content paragraphs
                 paragraphs = []
                 for tag in soup.find_all(['p', 'div', 'article', 'section']):
-                    text = tag.get_text(strip=True)
+                    text = tag.get_text(' ', strip=True)  # Added separator for proper spacing
                     if text and len(text) > 50:
-                        if not any(skip in text.lower() for skip in ['anasayfa', 'menü', 'arama', 'giriş']):
+                        # Skip UI elements and navigation text
+                        skip_phrases = ['anasayfa', 'menü', 'arama', 'giriş', 'sayfayı indir', 'yazdır', 'pdf indir']
+                        if not any(skip in text.lower() for skip in skip_phrases):
                             paragraphs.append(text)
 
                 # Remove duplicates
@@ -494,11 +500,19 @@ class GIBCategoryCrawler:
 
                 # Extract title from content if not found
                 if not content_data['title']:
-                    h1 = soup.find('h1')
-                    if h1:
-                        title_text = h1.get_text(strip=True)
-                        if title_text and 'Gelir İdaresi' not in title_text:
-                            content_data['title'] = clean_title(title_text)
+                    # Try h1, h2, or strong tags
+                    for tag_name in ['h1', 'h2', 'strong', 'b']:
+                        title_tag = soup.find(tag_name)
+                        if title_tag:
+                            title_text = title_tag.get_text(' ', strip=True)
+                            if title_text and len(title_text) > 10 and len(title_text) < 200:
+                                if 'Gelir İdaresi' not in title_text and 'Anasayfa' not in title_text:
+                                    content_data['title'] = clean_title(title_text)
+                                    break
+
+                    # If still no title, try to extract from metadata
+                    if not content_data['title'] and 'konu' in content_data['metadata']:
+                        content_data['title'] = content_data['metadata']['konu'][:150]
 
             return content_data
 
