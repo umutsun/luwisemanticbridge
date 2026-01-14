@@ -252,7 +252,8 @@ export class RAGChatService {
       // Calculate minimum length (80% of target)
       const minLength = Math.floor(articleLength * 0.8);
 
-      // Load format template from settings (or use default)
+      // Load format template from active prompt (or use default)
+      // Format template comes from prompts.list active prompt's formatTemplate field
       const defaultFormatTemplate = `📚 YAPILANDIRMA (ZORUNLU - MARKDOWN KULLAN):
 **KRİTİK: Her başlık ## ile başlamalı, paragraflar arası boş satır olmalı**
 
@@ -280,7 +281,29 @@ KURALLAR:
 4. **2-4 paragraf per başlık** - Her başlık altında en az 2 paragraf olmalı
 5. **Atıf her paragrafta** - Her bilgi sonrası [1], [2] gibi atıf ekle`;
 
-      const formatTemplateText = settingsMap?.get('ragSettings.responseFormatTemplateTr') || defaultFormatTemplate;
+      let formatTemplateText = defaultFormatTemplate;
+
+      // Try to get format template from active prompt
+      try {
+        const promptsListResult = await pool.query(
+          "SELECT value FROM settings WHERE key = 'prompts.list'"
+        );
+
+        if (promptsListResult.rows.length > 0) {
+          const rawValue = promptsListResult.rows[0].value;
+          const promptsList = typeof rawValue === 'string' ? JSON.parse(rawValue) : rawValue;
+          const activePrompt = Array.isArray(promptsList)
+            ? promptsList.find((p: any) => p.isActive === true)
+            : null;
+
+          if (activePrompt && activePrompt.formatTemplate) {
+            formatTemplateText = activePrompt.formatTemplate;
+            console.log(`✅ Using formatTemplate from active prompt (${formatTemplateText.length} chars)`);
+          }
+        }
+      } catch (err) {
+        console.warn('Failed to load formatTemplate from active prompt, using default');
+      }
 
       let prompt = `SEN BİR RAG YANIT ÜRETİCİSİSİN.
 
