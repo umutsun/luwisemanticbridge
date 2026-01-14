@@ -6,21 +6,26 @@ const pool = new Pool({
   connectionString: process.env.DATABASE_URL
 });
 
-// Simple, clear formatTemplate - NO HEADERS, clean continuous text with citations
+// Simple, clear formatTemplate - NO HEADERS, well-formatted paragraphs with citations
 const simpleFormat = `KRİTİK KURALLAR:
 
 1. BAŞLIK KULLANMA - Direkt açıklamaya başla
 2. İlgili mevzuatı ve yasal düzenlemeleri detaylı açıkla [1][2]
 3. Şartları, oranları, tutarları somut örneklerle belirt [3][4]
 4. Pratik uygulamayı, gerekli belgeleri, süreci detaylı anlat [5]
-5. EN AZ 4-5 paragraf, her paragraf EN AZ 3-4 cümle
-6. [1][2] formatında kaynak atıflarını metne yerleştir
-7. Kısa cevap verme, uzun ve kapsamlı açıkla
+5. EN AZ 4-5 paragraf yaz, MUTLAKA her paragraf arasında BOŞ SATIR bırak
+6. Her paragraf EN AZ 3-4 cümle olmalı
+7. [1][2] formatında kaynak atıflarını metne yerleştir
+8. Kısa cevap verme, uzun ve kapsamlı açıkla
 
-Örnek format:
-İlgili kanun X maddesine göre... [1]. Bu düzenleme şu şartları içerir... [2]. Oran %18'dir ve şu durumlarda uygulanır... [3].
+ZORUNLU FORMAT:
+İlgili kanun X maddesine göre... [1]. Bu düzenleme şu şartları içerir... [2].
 
-Pratikte şirketler bu işlemi şöyle yapar... [4]. Gerekli belgeler A, B ve C'dir... [5].`;
+Oran %18'dir ve şu durumlarda uygulanır... [3]. Şartlar şunlardır...
+
+Pratikte şirketler bu işlemi şöyle yapar... [4]. Gerekli belgeler A, B ve C'dir... [5].
+
+NOT: Her paragraf arasında MUTLAKA boş satır bırak!`;
 
 async function updateFormatTemplate() {
   try {
