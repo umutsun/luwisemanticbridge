@@ -1973,27 +1973,30 @@ router.post('/generate', async (req: Request, res: Response) => {
 
           // Insert into skipped_embeddings table
           try {
-            await pools.targetPool.query(
+            const skipResult = await pools.targetPool.query(
               `INSERT INTO skipped_embeddings (source_table, source_type, source_id, source_name, content, skip_reason, metadata)
                VALUES ($1, $2, $3, $4, $5, $6, $7)
-               ON CONFLICT (source_table, source_id) DO UPDATE SET
-                 skip_reason = EXCLUDED.skip_reason,
-                 metadata = EXCLUDED.metadata,
-                 updated_at = CURRENT_TIMESTAMP`,
+               ON CONFLICT (source_table, source_id) DO NOTHING
+               RETURNING id`,
               [table, sourceType, row.id, title, '[No content available]', 'no_content', JSON.stringify({
                 note: 'Skipped - no content in source table',
                 skipped_at: new Date().toISOString()
               })]
             );
-            console.log(` Record moved to skipped_embeddings: ${table}[${row.id}]`);
+
+            // Only increment processed if record was actually inserted
+            if (skipResult.rows.length > 0) {
+              console.log(`✓ Record moved to skipped_embeddings: ${table}[${row.id}]`);
+              // Add to embeddedIds Set (skipped records should not be re-processed)
+              embeddedIds.add(parseInt(row.id, 10));
+              processed++;
+            } else {
+              console.log(`⚠️ Record ${row.id} already in skipped_embeddings, skipping count increment`);
+            }
           } catch (err) {
-            console.error(` Failed to insert into skipped_embeddings for ${table}[${row.id}]:`, err);
+            console.error(`✗ Failed to insert into skipped_embeddings for ${table}[${row.id}]:`, err);
           }
 
-          // Add to embeddedIds Set (skipped records should not be re-processed)
-          embeddedIds.add(parseInt(row.id, 10));
-
-          processed++;
           continue;
         }
 
@@ -2067,15 +2070,12 @@ router.post('/generate', async (req: Request, res: Response) => {
         // Calculate token estimate: ~3 chars per token for Turkish text
         const estimatedTokens = Math.ceil(content.length / 3);
 
-        await pools.targetPool.query(`
+        const insertResult = await pools.targetPool.query(`
           INSERT INTO unified_embeddings
           (source_table, source_type, source_id, source_name, content, embedding, metadata, tokens_used, model_used, embedding_provider)
           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-          ON CONFLICT (source_table, source_id) DO UPDATE SET
-            tokens_used = EXCLUDED.tokens_used,
-            model_used = EXCLUDED.model_used,
-            embedding_provider = EXCLUDED.embedding_provider,
-            updated_at = NOW()
+          ON CONFLICT (source_table, source_id) DO NOTHING
+          RETURNING id
         `, [
           tableLower, // Use normalized lowercase table name
           sourceType,
@@ -2089,10 +2089,14 @@ router.post('/generate', async (req: Request, res: Response) => {
           metadata.embeddingProvider || 'openai'
         ]);
 
-        // Add to embeddedIds Set to prevent re-processing in subsequent batches
-        embeddedIds.add(parseInt(row.id, 10));
-
-        processed++;
+        // Only increment processed if record was actually inserted (not skipped due to conflict)
+        if (insertResult.rows.length > 0) {
+          // Add to embeddedIds Set to prevent re-processing in subsequent batches
+          embeddedIds.add(parseInt(row.id, 10));
+          processed++;
+        } else {
+          console.log(`⚠️ Record ${row.id} already exists (conflict detected), skipping count increment`);
+        }
 
         // Send progress (only if client is still connected)
         const progress = {
@@ -2114,10 +2118,16 @@ router.post('/generate', async (req: Request, res: Response) => {
         migrationProgress.emit('progress', { id: activeMigrationId, ...progress });
         safeWrite(`data: ${JSON.stringify(progress)}\n\n`);
           } catch (error) {
-            console.error('Embedding error:', error);
-            processed++;
+            console.error(`✗ Embedding error for ${table}[${row.id}]:`, error);
+            // Don't increment processed on error - we'll retry this record on next run
           }
         } // end for (row of pendingBatch)
+
+        // Check if we've reached the total (prevents over-processing)
+        if (processed >= total) {
+          console.log(`✅ Reached total records (${processed}/${total}) for ${table}, stopping`);
+          break;
+        }
 
         // Move to next batch
         offset += BATCH_FETCH_SIZE;

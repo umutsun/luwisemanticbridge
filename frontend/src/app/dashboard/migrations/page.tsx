@@ -780,6 +780,18 @@ export default function EmbeddingsManagerPage() {
 
     setIsStartingMigration(true);
 
+    // Clear optimization state before starting new migration
+    setOptimizeProgress({
+      status: 'idle',
+      currentTable: '',
+      tablesProcessed: 0,
+      totalTables: 0,
+      orphansDeleted: 0,
+      duplicatesDeleted: 0,
+      metadataFixed: 0,
+      message: ''
+    });
+
     try {
       // Calculate real total from selected tables
       const selectedTotal = availableTables
