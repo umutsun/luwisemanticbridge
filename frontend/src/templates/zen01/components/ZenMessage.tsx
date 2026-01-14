@@ -315,9 +315,11 @@ export const ZenMessage: React.FC<ZenMessageProps> = ({
       play(plainText);
     }
   };
+  // Show min 5 sources initially (from settings), expandable to all
+  const initialSourcesToShow = 5;
   const visibleSources = showAllSources
     ? message.sources
-    : message.sources?.slice(0, 3);
+    : message.sources?.slice(0, initialSourcesToShow);
 
   return (
     <motion.div
@@ -624,7 +626,7 @@ export const ZenMessage: React.FC<ZenMessageProps> = ({
                           // Only show excerpt if it's different from title and meaningful
                           if (excerpt && excerpt.length > 20 && !title.includes(excerpt.slice(0, 50)) && !excerpt.includes(title.slice(0, 50))) {
                             return (
-                              <p className="text-xs text-slate-500/70 dark:text-slate-400/70 mt-2 line-clamp-2 leading-relaxed">
+                              <p className="text-xs text-slate-500/70 dark:text-slate-400/70 mt-2 line-clamp-3 leading-relaxed">
                                 {excerpt}
                               </p>
                             );

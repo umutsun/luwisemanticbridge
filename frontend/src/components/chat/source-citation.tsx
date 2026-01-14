@@ -206,7 +206,7 @@ export function SourceCitation({ sources, onLoadMore, hasMore = false, showLoadM
                   if (excerpt && excerpt.length > 20 && !displayTitle.includes(excerpt.slice(0, 50)) && !excerpt.includes(displayTitle.slice(0, 50))) {
                     return (
                       <p
-                        className="text-xs text-gray-500 mt-2 line-clamp-2 leading-relaxed cursor-pointer hover:text-gray-400 transition-colors"
+                        className="text-xs text-gray-500 mt-2 line-clamp-3 leading-relaxed cursor-pointer hover:text-gray-400 transition-colors"
                         onClick={() => {
                           if (onExcerptClick) {
                             const question = generateFollowUpQuestion(
