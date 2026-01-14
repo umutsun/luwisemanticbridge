@@ -252,6 +252,30 @@ export class RAGChatService {
       // Calculate minimum length (80% of target)
       const minLength = Math.floor(articleLength * 0.8);
 
+      // Get format template from schema (or use default)
+      const defaultFormatTemplate = `📚 MARKDOWN KURALLARI (KRİTİK - TAM BU FORMAT):
+\`\`\`
+Bir cümlede konuyu özetle [1]. İkinci cümlede kapsamı belirt.
+
+## Yasal Çerçeve
+
+Hangi kanun ve tebliğlerin uygulandığını açıkla [2]. Temel kuralları belirt.
+
+Detaylı düzenlemeleri ve istisnaları açıkla [3][4]. Önemli madde numaralarını ver.
+
+## Uygulama
+
+Pratikte nasıl uygulandığını örneklerle açıkla [5]. Somut durumları göster.
+\`\`\`
+
+✅ MUTLAKA:
+- Her başlık ## ile başla
+- Her paragraftan sonra BOŞ SATIR
+- Her bölümde 2-4 paragraf
+- Her paragrafta [1] [2] atıf`;
+
+      const formatTemplate = foundFormat.formatTemplate || defaultFormatTemplate;
+
       let prompt = `SEN BİR RAG YANIT ÜRETİCİSİSİN.
 
 🎯 SENİN TEK İŞİN: Aşağıdaki sources'tan metin üret, atıf yap [1], [2], [3].
@@ -269,23 +293,7 @@ ${groundingRulesText}
 📝 ÇIKTI FORMATI (Wikipedia Tarzı Makale):
 ${sectionInstructions.replace(/^.*?:\s*/gm, '')}
 
-📚 MARKDOWN KURALLARI (KRİTİK - TAM BU FORMATTABİR cümlede konuyu özetle [1]. İkinci cümlede kapsamı belirt.
-
-## Yasal Çerçeve
-
-Hangi kanun ve tebliğlerin uygulandığını açıkla [2]. Temel kuralları belirt.
-
-Detaylı düzenlemeleri ve istisnaları açıkla [3][4]. Önemli madde numaralarını ver.
-
-## Uygulama
-
-Pratikte nasıl uygulandığını örneklerle açıkla [5]. Somut durumları göster.
-
-✅ MUTLAKA:
-- Her başlık ## ile başla
-- Her paragraftan sonra BOŞ SATIR
-- Her bölümde 2-4 paragraf
-- Her paragrafta [1] [2] atıf
+${formatTemplate}
 
 📖 INLINE ATIF KURALLARI (KRİTİK):
 - Her önemli bilgiden HEMEN SONRA kaynak numarası ekle: "...vergi oranı %18'dir [1]."
