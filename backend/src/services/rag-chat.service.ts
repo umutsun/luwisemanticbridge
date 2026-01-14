@@ -252,32 +252,31 @@ export class RAGChatService {
       // Calculate minimum length (80% of target)
       const minLength = Math.floor(articleLength * 0.8);
 
-      let prompt = `AKADEMİK MAKALE FORMATI (ZORUNLU):
+      let prompt = `WIKIPEDIA ANSİKLOPEDİ MADDESİ FORMATI:
 
-Yanıtını akademik dergi makalesi formatında yaz.
+Yanıtını Wikipedia ansiklopedi maddesi gibi yaz. Akıcı, bilgilendirici ve nesnel ol.
 
-📏 UZUNLUK KURALLARI (KRİTİK):
-- HEDEF uzunluk: ${articleLength} karakter
-- MİNİMUM uzunluk: ${minLength} karakter (bu değerin ALTINDA yanıt kabul EDİLMEZ)
-- Değerlendirme bölümü DETAYLI olmalı: Kaynakları analiz et, karşılaştır, sentezle
-- Tek paragraf değil, birden fazla paragraf yaz
-- Her kaynağa [1], [2], [3] şeklinde referans ver
-
+📝 FORMAT TALİMATLARI:
 ${sectionInstructions}
 
-KAYNAK REFERANSLAMA (ZORUNLU):
-- Metin içinde mutlaka [1], [2], [3] gibi referanslar kullan
-- Her önemli bilgi için hangi kaynaktan geldiğini belirt
-- En az 3-5 farklı kaynak referansı olmalı
+📖 INLINE ATIF KURALLARI (KRİTİK):
+- Her önemli bilgiden HEMEN SONRA kaynak numarası ekle: "...vergi oranı %18'dir [1]."
+- Birden fazla kaynak aynı bilgiyi destekliyorsa: "...kabul edilmektedir [1][3]."
+- En az 3-5 farklı [X] referansı kullan
+- Referanssız cümle BIRAKMAMAYA çalış
 
-GROUNDING KURALLARI (KRİTİK):
+📏 UZUNLUK:
+- HEDEF: ${articleLength} karakter
+- MİNİMUM: ${minLength} karakter
+- Birden fazla paragraf yaz
+
+⚖️ GROUNDING KURALLARI:
 ${groundingRulesText}
 
-YASAKLAR:
+🚫 YASAKLAR:
 ${systemSectionNotice}
 - Kaynak dışı bilgi verme
-- Kaynakta geçmeyen madde numarası uydurma
-- ${minLength} karakterden kısa yanıt verme
+- Kaynakta geçmeyen madde/kanun numarası UYDURMA
 ${prohibitedContent.map(p => `- "${p}"`).join('\n')}
 `;
       return prompt;
@@ -3422,11 +3421,10 @@ FORMAT:
       // SKIP if LLM response indicates refusal/insufficient sources
       const keywordsFromSources = isRefusalResponse ? [] : this.extractKeywordsFromSourceContent(searchResults);
 
-      // 2. Extract legal references from source metadata (not LLM)
-      // SKIP if LLM response indicates refusal/insufficient sources
-      const dayanaklar = isRefusalResponse ? [] : this.extractDayanaklarFromSources(searchResults);
+      // NOTE: Dayanaklar extraction removed - citations shown inline [1], [2] in text
+      // Sources displayed in Atıflar section (ZenMessage component)
 
-      // 3. Get min sources count from search results for citation requirement
+      // 2. Get min sources count from search results for citation requirement
       const minSources = Math.min(searchResults.length, 5);
 
       // Build the final formatted response (NO ## headers - frontend renders them)
@@ -3439,17 +3437,44 @@ FORMAT:
       //   - Markdown: ## Konu, ## Değerlendirme
       // ═══════════════════════════════════════════════════════════════
 
+      // ═══════════════════════════════════════════════════════════════
+      // MULTI-PATTERN PARSER: Support various LLM output formats
+      // LLM may output in many different formats, try them all
+      // ═══════════════════════════════════════════════════════════════
+
+      // Log raw result for debugging
+      console.log('[FORMAT] Raw LLM result (first 500 chars):', result.substring(0, 500));
+
       // PATTERN 1: Numbered format (1) SORUNUN KONUSU ... 4) VERGİLEX DEĞERLENDİRMESİ)
-      const numberedKonuMatch = result.match(/1\)\s*SORUNUN\s*KONUSU[:\s]*([\s\S]*?)(?=2\)|##|$)/i);
-      const numberedDegerlendirmeMatch = result.match(/4\)\s*(?:VERGİLEX\s*)?DEĞERLENDİRME[Sİ]?[:\s]*([\s\S]*?)(?=5\)|SON\s*BÖLÜM|DİPNOTLAR|##|$)/i);
+      const numberedKonuMatch = result.match(/1\)\s*(?:SORUNUN\s*)?KONU[SU]?[:\s]*([\s\S]*?)(?=2\)|3\)|4\)|##|\*\*|$)/i);
+      const numberedDegerlendirmeMatch = result.match(/4\)\s*(?:VERGİLEX\s*)?DEĞERLENDİRME[Sİ]?[:\s]*([\s\S]*?)(?=5\)|SON\s*BÖLÜM|DİPNOTLAR|##|\*\*|$)/i);
 
       // PATTERN 2: Markdown format (## Konu, ## Değerlendirme)
-      const markdownKonuMatch = result.match(/##\s*Konu\s*\n([\s\S]*?)(?=##|$)/i);
-      const markdownDegerlendirmeMatch = result.match(/##\s*Değerlendirme\s*\n([\s\S]*?)(?=##|$)/i);
+      const markdownKonuMatch = result.match(/##\s*Konu[:\s]*\n?([\s\S]*?)(?=##|$)/i);
+      const markdownDegerlendirmeMatch = result.match(/##\s*Değerlendirme[:\s]*\n?([\s\S]*?)(?=##|$)/i);
 
-      // Use whichever format is found
-      const konuContent = numberedKonuMatch?.[1]?.trim() || markdownKonuMatch?.[1]?.trim() || '';
-      let assessmentContent = numberedDegerlendirmeMatch?.[1]?.trim() || markdownDegerlendirmeMatch?.[1]?.trim() || '';
+      // PATTERN 3: Bold format (**Konu:** ... **Değerlendirme:**)
+      const boldKonuMatch = result.match(/\*\*Konu[:\*]*\*\*[:\s]*([\s\S]*?)(?=\*\*[A-ZÇĞİÖŞÜa-z]|##|$)/i);
+      const boldDegerlendirmeMatch = result.match(/\*\*Değerlendirme[:\*]*\*\*[:\s]*([\s\S]*?)(?=\*\*[A-ZÇĞİÖŞÜa-z]|##|$)/i);
+
+      // PATTERN 4: Simple colon format (Konu: ... Değerlendirme:)
+      const simpleKonuMatch = result.match(/^Konu[:\s]+([\s\S]*?)(?=\n\s*(?:Değerlendirme|Anahtar|Dayanaklar|$))/im);
+      const simpleDegerlendirmeMatch = result.match(/Değerlendirme[:\s]+([\s\S]*?)(?=\n\s*(?:Konu|Anahtar|Dayanaklar|Dipnotlar|$))/im);
+
+      // Use whichever format is found (prioritize numbered, then markdown, then bold, then simple)
+      const konuContent = numberedKonuMatch?.[1]?.trim()
+        || markdownKonuMatch?.[1]?.trim()
+        || boldKonuMatch?.[1]?.trim()
+        || simpleKonuMatch?.[1]?.trim()
+        || '';
+
+      let assessmentContent = numberedDegerlendirmeMatch?.[1]?.trim()
+        || markdownDegerlendirmeMatch?.[1]?.trim()
+        || boldDegerlendirmeMatch?.[1]?.trim()
+        || simpleDegerlendirmeMatch?.[1]?.trim()
+        || '';
+
+      console.log('[FORMAT] Pattern matches - Konu:', !!konuContent, 'Assessment:', !!assessmentContent);
 
       // ═══════════════════════════════════════════════════════════════
       // ALWAYS CLEAN UP assessmentContent - remove any LLM section headers that leaked through
@@ -3489,11 +3514,9 @@ FORMAT:
         formattedResponse += `ANAHTAR_TERIMLER:\n${keywordsFromSources.join(', ')}\n\n`;
       }
 
-      // Add backend-generated Dayanaklar (from sources, not LLM)
-      // Only add if not a refusal response
-      if (dayanaklar.length > 0) {
-        formattedResponse += `DAYANAKLAR:\n${dayanaklar.join('\n')}\n\n`;
-      }
+      // NOTE: Dayanaklar bölümü kaldırıldı - atıflar metin içinde [1], [2] şeklinde gösterilir
+      // Kaynaklar frontend'de Atıflar bölümünde listelenir (ZenMessage sources)
+      // const dayanaklar = ... - artık kullanılmıyor
 
       // ═══════════════════════════════════════════════════════════════
       // VERDICT HARD GATE: Soften definitive statements if sources don't support
@@ -6914,12 +6937,35 @@ UNUT: ${conversationTone} üslubunda YORUMLA, kopyalama. KENDI KELİMELERİNLE a
             dayanaklar.push(refFromMeta);
           }
         }
-        // If generic type but has a meaningful title, use title excerpt instead
-        else if (title && title.length > 15) {
-          const titleExcerpt = title.length > 80 ? title.substring(0, 80) + '...' : title;
-          if (!seen.has(titleExcerpt.toLowerCase())) {
-            seen.add(titleExcerpt.toLowerCase());
-            dayanaklar.push(titleExcerpt);
+        // If generic type but has a VALID title (not content fragment), use it
+        // Valid titles: contain legal keywords or are short descriptive titles
+        else if (title && title.length > 15 && title.length <= 150) {
+          // Check if title looks like a proper document title (not content)
+          const legalTitleKeywords = [
+            'kanun', 'madde', 'tebliğ', 'sirküler', 'özelge', 'yönetmelik',
+            'karar', 'daire', 'esas', 'hakkında', 'hk.', 'sayılı', 'tarihli'
+          ];
+          const contentIndicators = [
+            // Common sentence starters/fragments that indicate content, not title
+            'için', 'olarak', 'şekilde', 'nedeniyle', 'dolayı', 'göre',
+            'tarafından', 'üzere', 'suretiyle', 'kapsamında', 'çerçevesinde',
+            'ilişkin', 'dair', 'bakımından', 'açısından', 've', 'veya',
+            'ile', 'ise', 'ancak', 'fakat', 'çünkü', 'zira', 'yani'
+          ];
+
+          const titleLower = title.toLowerCase();
+          const hasLegalKeyword = legalTitleKeywords.some(kw => titleLower.includes(kw));
+          const startsWithContentWord = contentIndicators.some(ind =>
+            titleLower.startsWith(ind) || titleLower.startsWith(ind + ' ')
+          );
+
+          // Only use title if it looks like a legal document title, not content
+          if (hasLegalKeyword && !startsWithContentWord) {
+            const titleExcerpt = title.length > 80 ? title.substring(0, 80) + '...' : title;
+            if (!seen.has(titleExcerpt.toLowerCase())) {
+              seen.add(titleExcerpt.toLowerCase());
+              dayanaklar.push(titleExcerpt);
+            }
           }
         }
       }

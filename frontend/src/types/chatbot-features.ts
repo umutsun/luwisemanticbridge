@@ -230,24 +230,15 @@ export const defaultResponseSchema: ResponseSchema = {
       backendExtractor: 'extractKeywordsFromSources',
       visible: true
     },
-    {
-      id: 'dayanaklar',
-      label: 'Yasal Dayanaklar',
-      backendLabel: 'DAYANAKLAR:',
-      source: 'backend',
-      required: false,
-      order: 3,
-      style: 'citation',
-      backendExtractor: 'extractDayanaklarFromSources',
-      visible: true
-    },
+    // NOTE: Dayanaklar bölümü kaldırıldı - atıflar metin içinde [1], [2] şeklinde gösterilir
+    // Kaynaklar Atıflar bölümünde listelenir (ZenMessage sources)
     {
       id: 'degerlendirme',
       label: 'Değerlendirme',
       backendLabel: 'DEGERLENDIRME:',
       source: 'llm',
       required: true,
-      order: 4,
+      order: 3,
       style: 'text',
       visible: true
     },
@@ -257,7 +248,7 @@ export const defaultResponseSchema: ResponseSchema = {
       backendLabel: 'SONUC:',
       source: 'llm',
       required: false,
-      order: 5,
+      order: 4,
       style: 'text',
       visible: false  // Optional, hidden by default
     }

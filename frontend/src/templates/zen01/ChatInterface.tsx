@@ -69,7 +69,10 @@ export default function ChatInterface() {
     enableSourceClick: false,
     enableSourceQuestionGeneration: false,
     enableKeywordHighlighting: false,
-    enablePdfUpload: false
+    enablePdfUpload: false,
+    // Voice features - default to false
+    enableVoiceInput: false,
+    enableVoiceOutput: false
   });
   const [settingsLoaded, setSettingsLoaded] = useState(false);
 
@@ -268,6 +271,9 @@ export default function ChatInterface() {
           enableKeywordHighlighting: chatbotData.enableKeywordHighlighting !== undefined ? chatbotData.enableKeywordHighlighting : true,
           // PDF Upload toggle
           enablePdfUpload: chatbotData.enablePdfUpload !== undefined ? chatbotData.enablePdfUpload : false,
+          // Voice Feature Toggles (master toggles)
+          enableVoiceInput: chatbotData.enableVoiceInput !== undefined ? chatbotData.enableVoiceInput : false,
+          enableVoiceOutput: chatbotData.enableVoiceOutput !== undefined ? chatbotData.enableVoiceOutput : false,
           // Response schema configuration
           responseSchemaId: chatbotData.responseSchemaId || 'vergilex-article'
         };
@@ -337,8 +343,24 @@ export default function ChatInterface() {
   }, [token, settingsLoaded, chatbotSettings.enablePdfUpload]);
 
   // Fetch Voice settings when token is available
+  // Voice settings - respect master toggles from chatbot settings
   useEffect(() => {
-    if (!token) return;
+    if (!token || !settingsLoaded) return;
+
+    // Master toggles from chatbot settings
+    const masterInputToggle = chatbotSettings.enableVoiceInput !== false;
+    const masterOutputToggle = chatbotSettings.enableVoiceOutput !== false;
+
+    // If both master toggles are off, don't even fetch voice settings
+    if (!masterInputToggle && !masterOutputToggle) {
+      setVoiceSettings({
+        enableVoiceInput: false,
+        enableVoiceOutput: false,
+        maxRecordingSeconds: 60
+      });
+      console.log('[Zen01] Voice features disabled by master toggles');
+      return;
+    }
 
     fetch('/api/v2/chat/voice-settings', {
       headers: {
@@ -348,18 +370,24 @@ export default function ChatInterface() {
       .then(res => res.json())
       .then(data => {
         if (!data.error) {
+          // Apply master toggles - if master is OFF, voice feature stays OFF
           setVoiceSettings({
-            enableVoiceInput: data.enableVoiceInput || false,
-            enableVoiceOutput: data.enableVoiceOutput || false,
+            enableVoiceInput: masterInputToggle && (data.enableVoiceInput || false),
+            enableVoiceOutput: masterOutputToggle && (data.enableVoiceOutput || false),
             maxRecordingSeconds: data.maxRecordingSeconds || 60
           });
-          console.log('[Zen01] Voice settings loaded:', data);
+          console.log('[Zen01] Voice settings loaded (with master toggles):', {
+            masterInput: masterInputToggle,
+            masterOutput: masterOutputToggle,
+            endpointInput: data.enableVoiceInput,
+            endpointOutput: data.enableVoiceOutput
+          });
         }
       })
       .catch(err => {
         console.error('[Zen01] Failed to fetch voice settings:', err);
       });
-  }, [token]);
+  }, [token, settingsLoaded, chatbotSettings.enableVoiceInput, chatbotSettings.enableVoiceOutput]);
 
   // Streaming timer
   useEffect(() => {

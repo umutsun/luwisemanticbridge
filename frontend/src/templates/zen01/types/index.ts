@@ -65,6 +65,9 @@ export interface ZenChatbotSettings {
   enableKeywordHighlighting?: boolean;
   // PDF Upload Feature Toggle
   enablePdfUpload?: boolean;
+  // Voice Features Master Toggles
+  enableVoiceInput?: boolean;
+  enableVoiceOutput?: boolean;
   // Response Schema (dynamic format configuration)
   responseSchemaId?: string;
 }
