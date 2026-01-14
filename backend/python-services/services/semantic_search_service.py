@@ -79,6 +79,8 @@ class RAGSettings:
     web_priority: float = 0.4
     unified_embeddings_priority: int = 1
     source_table_weights: Dict[str, float] = None  # Individual table weights
+    max_excerpt_length: int = 1500  # Maximum excerpt length for citations
+    excerpt_max_length: int = 1500  # Alias for compatibility
 
 
 @dataclass
@@ -444,6 +446,8 @@ class SemanticSearchService:
                 web_priority=float(settings_dict.get('ragSettings.webPriority', 4)) / 10,
                 unified_embeddings_priority=int(settings_dict.get('ragSettings.unifiedEmbeddingsPriority', 1)),
                 source_table_weights=source_table_weights,
+                max_excerpt_length=int(settings_dict.get('ragSettings.maxExcerptLength', 1500)),
+                excerpt_max_length=int(settings_dict.get('ragSettings.excerptMaxLength', 1500)),
             )
 
             # Update cache
@@ -811,8 +815,12 @@ class SemanticSearchService:
             results = []
             per_source_limit = max(5, limit // 3)
 
+            # Load settings for dynamic excerpt length
+            settings = await self.get_rag_settings()
+            max_excerpt = settings.max_excerpt_length
+
             # 1. Search unified_embeddings
-            unified_query = """
+            unified_query = f"""
                 SELECT
                     id::text as id,
                     CASE
@@ -824,8 +832,8 @@ class SemanticSearchService:
                     source_id,
                     CASE
                         WHEN content ILIKE '%' || $1 || '%' THEN
-                            LEFT(SUBSTRING(content, POSITION($1 IN content) - 50, 300), 250)
-                        ELSE LEFT(content, 250)
+                            LEFT(SUBSTRING(content, POSITION($1 IN content) - 50, {max_excerpt + 100}), {max_excerpt})
+                        ELSE LEFT(content, {max_excerpt})
                     END as content,
                     metadata,
                     CASE
@@ -870,13 +878,13 @@ class SemanticSearchService:
                 logger.debug(f"unified_embeddings keyword search skipped: {e}")
 
             # 2. Search document_embeddings (PDFs, Word docs)
-            doc_query = """
+            doc_query = f"""
                 SELECT
                     id::text as id,
                     LEFT(chunk_text, 150) as title,
                     'document_embeddings' as source_table,
                     document_id::text as source_id,
-                    LEFT(chunk_text, 500) as content,
+                    LEFT(chunk_text, {max_excerpt}) as content,
                     metadata,
                     0.92 as similarity_score  -- High score for exact keyword match in documents
                 FROM document_embeddings
@@ -931,6 +939,10 @@ class SemanticSearchService:
             pool = await get_db()
             results = []
 
+            # Load settings for dynamic excerpt length
+            settings = await self.get_rag_settings()
+            max_excerpt = settings.max_excerpt_length
+
             # Extract significant keywords (>3 chars, not stopwords)
             turkish_stopwords = {'ve', 'ile', 'bu', 'bir', 'için', 'da', 'de', 'mi', 'ne', 'var', 'yok', 'ise', 'gibi', 'kadar', 'daha', 'olan', 'veya', 'çok', 'sonra', 'önce'}
             keywords = [w for w in query.lower().split() if len(w) > 3 and w not in turkish_stopwords]
@@ -971,7 +983,7 @@ class SemanticSearchService:
                     'document_embeddings' as source_table,
                     'document' as source_type,
                     document_id::text as source_id,
-                    LEFT(chunk_text, 500) as content,
+                    LEFT(chunk_text, {max_excerpt}) as content,
                     metadata,
                     CASE
                         WHEN chunk_text ILIKE '%' || $1 || '%' THEN 0.92  -- Full phrase match

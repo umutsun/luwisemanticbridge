@@ -259,16 +259,22 @@ export class RAGChatService {
 ⛔ ASLA YAPMA:
 1. "Bu konu Vergilex kapsamı dışındadır" YAZMA
 2. "Kaynak bulunamadı / yeterli kaynak yok" YAZMA - backend'in işi
-3. "KONU:", "DEĞERLENDİRME:", "ANAHTAR_TERİMLER:" gibi BAŞLIK YAZMA
+3. "KONU:", "DEĞERLENDİRME:", "ANAHTAR_TERİMLER:" gibi META BAŞLIK YAZMA (içerik başlıkları ## ile kullan)
 4. Scope/kapsam kontrolü yapma - sen RAG yanıt üreticisin
-5. Sana sources verildi → direkt metne geç, başlık yok
+5. Kaynak dışı bilgi verme - sadece sources'tan yaz
 
 ⚖️ GROUNDING KURALLARI:
 ${groundingRulesText}
 
-📝 ÇIKTI FORMATI:
-Direkt metne başla. Hiçbir başlık yazma.
+📝 ÇIKTI FORMATI (Wikipedia Tarzı Makale):
 ${sectionInstructions.replace(/^.*?:\s*/gm, '')}
+
+📚 YAPILANDIRMA (ZORUNLU):
+1. **Giriş Paragrafı**: İlk paragrafta konuyu özetle (2-3 cümle)
+2. **Alt Başlıklar**: Konuyu bölümlere ayır (## Başlık formatı kullan)
+   Örnek başlıklar: ## Genel Çerçeve, ## Yasal Düzenlemeler, ## Uygulama, ## İstisnalar
+3. **Paragraf Yapısı**: Her bölüm 2-4 paragraf içermeli
+4. **Akıcı Geçişler**: Paragraflar arası bağlantı cümleleri kullan
 
 📖 INLINE ATIF KURALLARI (KRİTİK):
 - Her önemli bilgiden HEMEN SONRA kaynak numarası ekle: "...vergi oranı %18'dir [1]."
@@ -279,7 +285,7 @@ ${sectionInstructions.replace(/^.*?:\s*/gm, '')}
 📏 UZUNLUK:
 - HEDEF: ${articleLength} karakter
 - MİNİMUM: ${minLength} karakter
-- Birden fazla paragraf kullan (en az 2 paragraf)
+- En az 3-4 paragraf + alt başlıklar kullan
 
 🚫 YASAKLAR:
 ${systemSectionNotice}

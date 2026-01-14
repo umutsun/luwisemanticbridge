@@ -87,6 +87,10 @@ export class SemanticSearchService {
   private usePythonSemanticSearch: boolean = true; // Enable Python by default for performance
   private pythonSemanticSearchFallback: boolean = true; // Fallback to Node.js if Python unavailable
 
+  // Excerpt length settings (configurable via ragSettings)
+  private maxExcerptLength: number = 1500; // Default: 1500 characters
+  private excerptMaxLength: number = 1500; // Alias for compatibility
+
   // Add refresh method for immediate refresh
   async refreshRAGSettingsNow(): Promise<void> {
     console.log('[SemanticSearch] Force refreshing RAG settings...');
@@ -399,7 +403,7 @@ export class SemanticSearchService {
 
       const result = await this.pool.query(
         `SELECT key, value FROM settings WHERE key IN (
-          $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25
+          $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27
         )`,
         [
           'ragSettings.similarityThreshold',
@@ -427,7 +431,10 @@ export class SemanticSearchService {
           'ragSettings.semanticWeight',
           'ragSettings.hierarchyWeight',
           'ragSettings.usePythonSemanticSearch',
-          'ragSettings.pythonSemanticSearchFallback'
+          'ragSettings.pythonSemanticSearchFallback',
+          // Excerpt length settings
+          'ragSettings.maxExcerptLength',
+          'ragSettings.excerptMaxLength'
         ]
       );
 
@@ -594,6 +601,23 @@ export class SemanticSearchService {
             }
             break;
           }
+          // Excerpt length settings
+          case 'ragSettings.maxExcerptLength': {
+            const length = parseInt(value, 10);
+            if (!isNaN(length) && length > 0) {
+              this.maxExcerptLength = length;
+              console.log(`[SemanticSearch] Set maxExcerptLength to ${length}`);
+            }
+            break;
+          }
+          case 'ragSettings.excerptMaxLength': {
+            const length = parseInt(value, 10);
+            if (!isNaN(length) && length > 0) {
+              this.excerptMaxLength = length;
+              console.log(`[SemanticSearch] Set excerptMaxLength to ${length}`);
+            }
+            break;
+          }
           default:
             break;
         }
@@ -619,7 +643,9 @@ export class SemanticSearchService {
         chatPriority: this.chatPriority,
         webPriority: this.webPriority,
         usePythonSemanticSearch: this.usePythonSemanticSearch,
-        pythonSemanticSearchFallback: this.pythonSemanticSearchFallback
+        pythonSemanticSearchFallback: this.pythonSemanticSearchFallback,
+        maxExcerptLength: this.maxExcerptLength,
+        excerptMaxLength: this.excerptMaxLength
       });
     } catch (error) {
       console.warn('[SemanticSearch] Failed to load RAG settings from database, using defaults:', error);
@@ -1339,7 +1365,7 @@ export class SemanticSearchService {
         SELECT
           rr.id::text as id,
           LEFT(COALESCE(rr.metadata->>'title', rr.content::text), 200) as title,
-          LEFT(COALESCE(rr.content, rr.metadata->>'content', rr.metadata->>'text', ''), 1500) as excerpt,
+          LEFT(COALESCE(rr.content, rr.metadata->>'content', rr.metadata->>'text', ''), ${this.maxExcerptLength}) as excerpt,
           COALESCE(rr.content, rr.metadata->>'content', rr.metadata->>'text', '') as full_content,
           COALESCE(rr.record_type, 'unknown') as source_table,
           rr.source_id,
@@ -1530,7 +1556,7 @@ export class SemanticSearchService {
                 LEFT(question, 150) as title,
                 'sorucevap' as source_table,
                 id::text as source_id,
-                LEFT(answer, 1500) as excerpt
+                LEFT(answer, ${this.maxExcerptLength}) as excerpt
               FROM ${TABLE_NAMES.SORUCEVAP}
               WHERE question ILIKE $1 OR answer ILIKE $1
               ORDER BY id DESC
@@ -1549,7 +1575,7 @@ export class SemanticSearchService {
               LEFT(subject, 150) as title,
               'ozelgeler' as source_table,
               id::text as source_id,
-              LEFT(content, 1500) as excerpt
+              LEFT(content, ${this.maxExcerptLength}) as excerpt
             FROM ${TABLE_NAMES.OZELGELER}
             WHERE subject ILIKE $1 OR content ILIKE $1
             ORDER BY id DESC
@@ -1563,7 +1589,7 @@ export class SemanticSearchService {
               LEFT(baslik, 150) as title,
               'makaleler' as source_table,
               id::text as source_id,
-              LEFT(icerik, 1500) as excerpt
+              LEFT(icerik, ${this.maxExcerptLength}) as excerpt
             FROM ${TABLE_NAMES.MAKALELER}
             WHERE baslik ILIKE $1 OR icerik ILIKE $1
             ORDER BY id DESC
