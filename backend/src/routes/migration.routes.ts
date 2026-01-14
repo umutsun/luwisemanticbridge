@@ -1855,6 +1855,12 @@ router.post('/generate', async (req: Request, res: Response) => {
           ? batchResult.rows.filter(row => !embeddedIds.has(parseInt(row.id, 10)))
           : batchResult.rows;
 
+        // If all records in this batch are already embedded, stop
+        if (pendingBatch.length === 0) {
+          console.log(`✅ All records in current batch already embedded for ${table}, moving to next table`);
+          break;
+        }
+
         // Process each record in this batch
         for (const row of pendingBatch) {
           try {

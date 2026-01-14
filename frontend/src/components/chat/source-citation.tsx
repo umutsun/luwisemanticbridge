@@ -20,30 +20,30 @@ export function SourceCitation({ sources, onLoadMore, hasMore = false, showLoadM
   const initialSourcesToShow = 7;
   const sourcesToDisplay = showAllSources ? sources : sources.slice(0, initialSourcesToShow);
 
-  // Helper to map source table to display name with icon and hierarchy
+  // Helper to map source table to display name with hierarchy
   const getSourceTypeInfo = (sourceTable?: string, category?: string) => {
-    if (!sourceTable && !category) return { icon: '📄', label: 'Kaynak', weight: 0 };
+    if (!sourceTable && !category) return { label: 'Kaynak', weight: 0 };
 
     const sourceStr = (sourceTable || category || '').toLowerCase()
       .replace(/^csv_/, '')
       .replace(/_/g, '')
       .replace(/arsiv.*/, '');  // "makale_arsiv_2021" -> "makale"
 
-    // Source type hierarchy with icons and weights
-    const typeMap: Record<string, { icon: string; label: string; weight: number }> = {
-      'kanun': { icon: '🏛️', label: 'Kanun/Mevzuat', weight: 100 },
-      'teblig': { icon: '📋', label: 'Tebliğ/Yönetmelik', weight: 95 },
-      'tebliğ': { icon: '📋', label: 'Tebliğ/Yönetmelik', weight: 95 },
-      'yonetmelik': { icon: '📋', label: 'Yönetmelik', weight: 95 },
-      'sirkuler': { icon: '🔄', label: 'Sirküler', weight: 90 },
-      'ozelge': { icon: '📜', label: 'GİB Özelgesi', weight: 75 },
-      'danistay': { icon: '⚖️', label: 'Danıştay Kararı', weight: 70 },
-      'danistaykararlari': { icon: '⚖️', label: 'Danıştay Kararı', weight: 70 },
-      'makale': { icon: '📝', label: 'Makale', weight: 50 },
-      'sorucevap': { icon: '💬', label: 'Soru-Cevap', weight: 50 },
-      'hukdkk': { icon: '📘', label: 'Hukuki Değerlendirme', weight: 60 },
-      'genelyazi': { icon: '📄', label: 'Genel Yazı', weight: 65 },
-      'genelyazı': { icon: '📄', label: 'Genel Yazı', weight: 65 }
+    // Source type hierarchy with weights
+    const typeMap: Record<string, { label: string; weight: number }> = {
+      'kanun': { label: 'Kanun/Mevzuat', weight: 100 },
+      'teblig': { label: 'Tebliğ/Yönetmelik', weight: 95 },
+      'tebliğ': { label: 'Tebliğ/Yönetmelik', weight: 95 },
+      'yonetmelik': { label: 'Yönetmelik', weight: 95 },
+      'sirkuler': { label: 'Sirküler', weight: 90 },
+      'ozelge': { label: 'GİB Özelgesi', weight: 75 },
+      'danistay': { label: 'Danıştay Kararı', weight: 70 },
+      'danistaykararlari': { label: 'Danıştay Kararı', weight: 70 },
+      'makale': { label: 'Makale', weight: 50 },
+      'sorucevap': { label: 'Soru-Cevap', weight: 50 },
+      'hukdkk': { label: 'Hukuki Değerlendirme', weight: 60 },
+      'genelyazi': { label: 'Genel Yazı', weight: 65 },
+      'genelyazı': { label: 'Genel Yazı', weight: 65 }
     };
 
     // Try exact match first
@@ -59,7 +59,7 @@ export function SourceCitation({ sources, onLoadMore, hasMore = false, showLoadM
     }
 
     // Fallback
-    return { icon: '📄', label: 'Kaynak', weight: 0 };
+    return { label: 'Kaynak', weight: 0 };
   };
 
   // Generate a follow-up question based on the excerpt
@@ -155,13 +155,12 @@ export function SourceCitation({ sources, onLoadMore, hasMore = false, showLoadM
             >
               {/* Content */}
               <div className="flex-1 min-w-0">
-                {/* Source Type with Icon and Number */}
+                {/* Source Type and Number */}
                 {(() => {
                   const typeInfo = getSourceTypeInfo(source.sourceTable, source.category);
                   return (
                     <span className="inline-flex items-center gap-1 text-[10px] font-medium text-amber-400/90 bg-amber-500/10 border border-amber-500/20 px-1.5 py-0.5 rounded mb-1">
-                      <span>{typeInfo.icon}</span>
-                      <span>[{index + 1}] {typeInfo.label}</span>
+                      [{index + 1}] {typeInfo.label}
                     </span>
                   );
                 })()}
