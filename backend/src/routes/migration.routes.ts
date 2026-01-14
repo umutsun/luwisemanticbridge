@@ -1732,8 +1732,9 @@ router.post('/generate', async (req: Request, res: Response) => {
         if (unifiedEmbeddingsExists) {
           // Only get IDs of already embedded records (not full rows)
           // Match all possible source_table variations:
+          // - Normalized name (e.g., danistaykararlari) - what we insert with
           // - Original table name (e.g., csv_danistaykararlari)
-          // - Display name format (e.g., Csv Danistaykararlari)
+          // - Display name format (e.g., Csv Danistaykararlari, Danistaykararlari)
           // - Without csv_ prefix (e.g., danistaykararlari)
           const displayName = table
             .split('_')
@@ -1745,8 +1746,9 @@ router.post('/generate', async (req: Request, res: Response) => {
              WHERE LOWER(source_table) = LOWER($1)
                 OR LOWER(source_table) = LOWER($2)
                 OR LOWER(source_table) = LOWER($3)
+                OR LOWER(source_table) = LOWER($4)
                 OR LOWER(metadata->>'table') = LOWER($1)`,
-            [table, displayName, table.replace(/^csv_/i, '')]
+            [normalizedTableName, table, displayName, table.replace(/^csv_/i, '')]
           );
           // IMPORTANT: Convert source_id to number for proper Set comparison
           // PostgreSQL bigint comes as string in some cases, but row.id comparison uses parseInt
