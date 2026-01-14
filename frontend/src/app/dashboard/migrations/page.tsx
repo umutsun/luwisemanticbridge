@@ -1377,29 +1377,29 @@ export default function EmbeddingsManagerPage() {
                     </div>
                   )}
 
-                  {/* Optimize Completed - Compact */}
+                  {/* Optimize Completed - Balanced */}
                   {!isOptimizing && optimizeProgress.status === 'completed' && (
-                    <div className="w-full text-xs bg-violet-50 dark:bg-violet-950/30 rounded p-1.5 border border-violet-200 dark:border-violet-800">
-                      <div className="flex justify-between items-center mb-1">
-                        <span className="text-violet-600 dark:text-violet-400 font-medium text-[10px]">Optimizasyon</span>
+                    <div className="w-full text-xs bg-violet-50 dark:bg-violet-950/30 rounded-lg p-2.5 border border-violet-200 dark:border-violet-800">
+                      <div className="flex justify-between items-center mb-2">
+                        <span className="text-violet-600 dark:text-violet-400 font-medium">Optimizasyon</span>
                         <button
                           onClick={() => setOptimizeProgress(prev => ({ ...prev, status: 'idle' }))}
                           className="text-violet-400 hover:text-violet-600 dark:hover:text-violet-300"
                         >
-                          <X className="w-3 h-3" />
+                          <X className="w-3.5 h-3.5" />
                         </button>
                       </div>
-                      <div className="flex gap-3 text-[10px]">
-                        <div className="flex items-center gap-1">
-                          <span className="text-violet-500">O:</span>
+                      <div className="flex gap-4">
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-violet-500 font-medium">Orphan:</span>
                           <span className="font-semibold text-violet-900 dark:text-violet-100">{optimizeProgress.orphansDeleted.toLocaleString()}</span>
                         </div>
-                        <div className="flex items-center gap-1">
-                          <span className="text-violet-500">D:</span>
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-violet-500 font-medium">Dup:</span>
                           <span className="font-semibold text-violet-900 dark:text-violet-100">{optimizeProgress.duplicatesDeleted.toLocaleString()}</span>
                         </div>
-                        <div className="flex items-center gap-1">
-                          <span className="text-violet-500">M:</span>
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-violet-500 font-medium">Meta:</span>
                           <span className="font-semibold text-violet-900 dark:text-violet-100">{optimizeProgress.metadataFixed.toLocaleString()}</span>
                         </div>
                       </div>
