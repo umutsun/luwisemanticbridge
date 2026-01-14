@@ -63,70 +63,133 @@ interface SchemaRendererProps {
 
 /**
  * Parse backend-formatted response content into sections
- * Backend format:
- *   KONU:
- *   content
+ * Uses schema's backendLabel to dynamically parse sections
  *
- *   ANAHTAR_TERIMLER:
- *   term1, term2
- *
- *   DAYANAKLAR:
- *   dayanak1
- *   dayanak2
- *
- *   DEGERLENDIRME:
+ * Backend format (dynamic based on schema):
+ *   SECTION_LABEL:
  *   content
  */
-function parseContentBySections(content: string, _schema: ResponseSchema): ParsedContent {
+function parseContentBySections(content: string, schema: ResponseSchema): ParsedContent {
   const parsed: ParsedContent = {};
 
-  // Backend section headers (simple LABEL: format)
-  const sectionPatterns = {
-    konu: /^KONU:\s*\n([\s\S]*?)(?=^ANAHTAR_TERIMLER:|^DAYANAKLAR:|^DEGERLENDIRME:|$)/m,
-    anahtar_terimler: /^ANAHTAR_TERIMLER:\s*\n([\s\S]*?)(?=^DAYANAKLAR:|^DEGERLENDIRME:|$)/m,
-    dayanaklar: /^DAYANAKLAR:\s*\n([\s\S]*?)(?=^DEGERLENDIRME:|$)/m,
-    degerlendirme: /^DEGERLENDIRME:\s*\n([\s\S]*?)$/m,
-  };
+  // Get sections with backendLabels, sorted by order
+  const sectionsWithLabels = schema.sections
+    .filter(s => s.backendLabel)
+    .sort((a, b) => a.order - b.order);
 
-  // Try to parse each section
-  for (const [sectionId, pattern] of Object.entries(sectionPatterns)) {
-    const match = content.match(pattern);
-    if (match && match[1]) {
-      const sectionContent = match[1].trim();
-      if (sectionContent) {
-        parsed[sectionId] = sectionContent;
-      }
+  if (sectionsWithLabels.length === 0) {
+    // No schema labels defined, return content as-is for first text section
+    const textSection = schema.sections.find(s => s.style === 'text');
+    if (textSection) {
+      parsed[textSection.id] = cleanLLMSectionHeaders(content);
     }
+    return parsed;
   }
 
-  // If no sections were parsed, fallback: use entire content as degerlendirme
-  if (Object.keys(parsed).length === 0) {
-    // Check if content has any legacy format (numbered or markdown headers)
+  // Build list of all backend labels for lookahead pattern
+  const allLabels = sectionsWithLabels
+    .map(s => escapeRegex(s.backendLabel!.replace(':', '')))
+    .join('|');
+
+  // Check if content has any of the schema's backend labels
+  const hasSchemaFormat = sectionsWithLabels.some(s =>
+    new RegExp(`\\n?${escapeRegex(s.backendLabel!)}`, 'm').test(content)
+  );
+
+  if (hasSchemaFormat) {
+    // Parse each section dynamically using schema's backendLabels
+    for (let i = 0; i < sectionsWithLabels.length; i++) {
+      const section = sectionsWithLabels[i];
+      const label = escapeRegex(section.backendLabel!.replace(':', ''));
+
+      // Build lookahead for next sections
+      const nextLabels = sectionsWithLabels
+        .slice(i + 1)
+        .map(s => escapeRegex(s.backendLabel!.replace(':', '')))
+        .join('|');
+
+      // Create pattern: LABEL:\s*\n?(content)(?=\nNEXT_LABEL:|$)
+      const lookahead = nextLabels ? `(?=\\n(?:${nextLabels}):)` : '$';
+      const pattern = new RegExp(`${label}:\\s*\\n?([\\s\\S]*?)${lookahead}`);
+
+      const match = content.match(pattern);
+      if (match?.[1]?.trim()) {
+        let sectionContent = match[1].trim();
+        // Clean LLM headers from assessment/text sections
+        if (section.style === 'text') {
+          sectionContent = cleanLLMSectionHeaders(sectionContent);
+        }
+        parsed[section.id] = sectionContent;
+      }
+    }
+  } else {
+    // Check for legacy formats (numbered or markdown headers)
     const hasLegacyFormat = /\d\)\s*(?:SORUNUN\s*KONUSU|KONU|DEĞERLENDİRME)/i.test(content) ||
                            /##\s*(?:Konu|Değerlendirme)/i.test(content);
 
     if (hasLegacyFormat) {
-      // Try legacy numbered format: 1) SORUNUN KONUSU ... 4) DEĞERLENDİRME
+      // Try legacy numbered format
       const legacyKonu = content.match(/1\)\s*(?:SORUNUN\s*)?KONU[SU]?[:\s]*([\s\S]*?)(?=2\)|3\)|4\)|##|$)/i);
       const legacyDegerlendirme = content.match(/4\)\s*(?:VERGİLEX\s*)?DEĞERLENDİRME[Sİ]?[:\s]*([\s\S]*?)(?=5\)|SON\s*BÖLÜM|DİPNOTLAR|$)/i);
 
       if (legacyKonu?.[1]) parsed['konu'] = legacyKonu[1].trim();
-      if (legacyDegerlendirme?.[1]) parsed['degerlendirme'] = cleanSectionHeaders(legacyDegerlendirme[1].trim());
+      if (legacyDegerlendirme?.[1]) {
+        parsed['degerlendirme'] = cleanLLMSectionHeaders(legacyDegerlendirme[1].trim());
+      }
 
-      // If still no degerlendirme, try markdown format
+      // Try markdown format if no degerlendirme found
       if (!parsed['degerlendirme']) {
         const mdDegerlendirme = content.match(/##\s*Değerlendirme\s*\n([\s\S]*?)(?=##|$)/i);
-        if (mdDegerlendirme?.[1]) parsed['degerlendirme'] = mdDegerlendirme[1].trim();
+        if (mdDegerlendirme?.[1]) {
+          parsed['degerlendirme'] = cleanLLMSectionHeaders(mdDegerlendirme[1].trim());
+        }
       }
     }
 
-    // Final fallback: entire content as degerlendirme
+    // Final fallback: use entire content as main text section (usually degerlendirme)
     if (Object.keys(parsed).length === 0) {
-      parsed['degerlendirme'] = cleanSectionHeaders(content);
+      const mainTextSection = schema.sections.find(s => s.style === 'text' && s.required);
+      const sectionId = mainTextSection?.id || 'degerlendirme';
+      parsed[sectionId] = cleanLLMSectionHeaders(cleanSectionHeaders(content));
     }
   }
 
   return parsed;
+}
+
+/**
+ * Escape special regex characters in a string
+ */
+function escapeRegex(str: string): string {
+  return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+/**
+ * Clean LLM-generated section headers that may have leaked through
+ * Removes numbered headers (1) SORUNUN KONUSU), markdown headers (## Konu), etc.
+ */
+function cleanLLMSectionHeaders(content: string): string {
+  return content
+    // Remove numbered section headers from LLM
+    .replace(/1\)\s*SORUNUN\s*KONUSU[:\s]*/gi, '')
+    .replace(/2\)\s*ANAHTAR\s*KELİMELER[:\s]*[^\n]*\n?/gi, '')
+    .replace(/3\)\s*(?:İLGİLİ\s*)?YASAL\s*DÜZENLEMELER[^\n]*[\s\S]*?(?=4\)|$)/gi, '')
+    .replace(/4\)\s*(?:VERGİLEX\s*)?DEĞERLENDİRME[Sİ]?[:\s]*/gi, '')
+    .replace(/5\)\s*DİPNOTLAR[\s\S]*$/gi, '')
+    // Remove markdown section headers
+    .replace(/##\s*Konu\s*\n/gi, '')
+    .replace(/##\s*Değerlendirme\s*\n/gi, '')
+    .replace(/##\s*Anahtar\s*(?:Terim|Kelime)[^\n]*[\s\S]*?(?=##|\n\n\n|$)/gi, '')
+    .replace(/##\s*Dayanaklar[^\n]*[\s\S]*?(?=##|\n\n\n|$)/gi, '')
+    .replace(/##\s*Dipnotlar[\s\S]*$/gi, '')
+    // Remove SON BÖLÜM: DİPNOTLAR
+    .replace(/SON\s*BÖLÜM[:\s]*DİPNOTLAR[\s\S]*$/gi, '')
+    // Remove **CEVAP** **ALINTI** style headers
+    .replace(/\*\*CEVAP\*\*\s*\n?/gi, '')
+    .replace(/\*\*ALINTI\*\*[\s\S]*?(?=\*\*[A-ZÇĞİÖŞÜ]|\n\n\n|$)/gi, '')
+    // Clean multiple newlines
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
 }
 
 /**
@@ -250,18 +313,25 @@ const SectionRenderer: React.FC<SectionRendererProps> = ({ section, content }) =
 
     case 'tags':
       const tags = Array.isArray(content) ? content : content.split(',').map(s => s.trim());
+      // Marker colors - like different highlighter pens (matching ZenMessage)
+      const MARKER_COLORS = [
+        'zen01-marker-yellow',  // Yellow highlighter
+        'zen01-marker-green',   // Green highlighter
+        'zen01-marker-pink',    // Pink highlighter
+        'zen01-marker-blue',    // Blue highlighter
+      ];
       return (
         <div className="mb-4">
           <h4 className="text-xs font-medium text-cyan-600/70 dark:text-cyan-400/70 mb-2">
             {section.label}
           </h4>
-          <div className="flex flex-wrap gap-1.5">
+          <div className="flex flex-wrap gap-2">
             {tags.map((tag, idx) => (
               <span
                 key={idx}
-                className="text-xs px-2 py-0.5 bg-cyan-50 dark:bg-cyan-900/30 text-cyan-700 dark:text-cyan-300 rounded-full"
+                className={`zen01-marker ${MARKER_COLORS[idx % MARKER_COLORS.length]}`}
               >
-                {tag}
+                <span className="text-xs font-medium">{tag}</span>
               </span>
             ))}
           </div>
@@ -269,7 +339,18 @@ const SectionRenderer: React.FC<SectionRendererProps> = ({ section, content }) =
       );
 
     case 'citation':
-      const citations = Array.isArray(content) ? content : content.split('\n').filter(Boolean);
+      const rawCitations = Array.isArray(content) ? content : content.split('\n').filter(Boolean);
+      // Filter out generic/meaningless citations
+      const GENERIC_TERMS = ['belge', 'kaynak', 'document', 'source', 'dosya', 'file', 'döküman', 'doküman'];
+      const citations = rawCitations.filter(cite => {
+        const cleaned = cite.trim().toLowerCase();
+        // Skip if citation is just a generic term or too short to be meaningful (min 10 chars for legal refs)
+        if (cleaned.length < 10) return false;
+        if (GENERIC_TERMS.some(term => cleaned === term || cleaned.includes(term) && cleaned.length < 15)) return false;
+        return true;
+      });
+      // Don't render section if no meaningful citations
+      if (citations.length === 0) return null;
       return (
         <div className="mb-4">
           <h4 className="text-xs font-medium text-cyan-600/70 dark:text-cyan-400/70 mb-3">

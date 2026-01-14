@@ -179,6 +179,7 @@ export interface ResponseSection {
   id: string;                              // Unique section identifier
   label: string;                           // Display label (Turkish)
   labelKey?: string;                       // i18n key for label translation
+  backendLabel?: string;                   // Label used by backend in response (e.g., "KONU:", "DEGERLENDIRME:")
   source: 'llm' | 'backend' | 'metadata';  // Where content comes from
   required: boolean;                       // Is this section mandatory
   order: number;                           // Display order (1, 2, 3...)
@@ -211,6 +212,7 @@ export const defaultResponseSchema: ResponseSchema = {
     {
       id: 'konu',
       label: 'Konu',
+      backendLabel: 'KONU:',
       source: 'llm',
       required: true,
       order: 1,
@@ -220,6 +222,7 @@ export const defaultResponseSchema: ResponseSchema = {
     {
       id: 'anahtar_terimler',
       label: 'Anahtar Terimler',
+      backendLabel: 'ANAHTAR_TERIMLER:',
       source: 'backend',
       required: false,
       order: 2,
@@ -229,7 +232,8 @@ export const defaultResponseSchema: ResponseSchema = {
     },
     {
       id: 'dayanaklar',
-      label: 'Dayanaklar',
+      label: 'Yasal Dayanaklar',
+      backendLabel: 'DAYANAKLAR:',
       source: 'backend',
       required: false,
       order: 3,
@@ -240,6 +244,7 @@ export const defaultResponseSchema: ResponseSchema = {
     {
       id: 'degerlendirme',
       label: 'Değerlendirme',
+      backendLabel: 'DEGERLENDIRME:',
       source: 'llm',
       required: true,
       order: 4,
@@ -249,6 +254,7 @@ export const defaultResponseSchema: ResponseSchema = {
     {
       id: 'sonuc',
       label: 'Sonuç',
+      backendLabel: 'SONUC:',
       source: 'llm',
       required: false,
       order: 5,

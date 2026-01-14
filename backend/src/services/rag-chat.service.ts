@@ -6899,14 +6899,28 @@ UNUT: ${conversationTone} üslubunda YORUMLA, kopyalama. KENDI KELİMELERİNLE a
         }
       }
 
-      // If no patterns found, create reference from source type + date
+      // If no patterns found, try to use meaningful source metadata
+      // Only add if sourceType is specific (not generic "belge" or "document")
       if (dayanaklar.length === 0 && sourceType) {
-        const typeLabel = this.getSourceTypeLabel(sourceType);
-        const dateStr = sourceDate ? ` (${sourceDate})` : '';
-        const refFromMeta = `${typeLabel}${dateStr}`;
-        if (!seen.has(refFromMeta.toLowerCase())) {
-          seen.add(refFromMeta.toLowerCase());
-          dayanaklar.push(refFromMeta);
+        const genericTypes = ['belge', 'document', 'dosya', 'file', 'kaynak', 'source'];
+        const isGenericType = genericTypes.includes(sourceType.toLowerCase());
+
+        if (!isGenericType) {
+          const typeLabel = this.getSourceTypeLabel(sourceType);
+          const dateStr = sourceDate ? ` (${sourceDate})` : '';
+          const refFromMeta = `${typeLabel}${dateStr}`;
+          if (!seen.has(refFromMeta.toLowerCase()) && refFromMeta.length > 5) {
+            seen.add(refFromMeta.toLowerCase());
+            dayanaklar.push(refFromMeta);
+          }
+        }
+        // If generic type but has a meaningful title, use title excerpt instead
+        else if (title && title.length > 15) {
+          const titleExcerpt = title.length > 80 ? title.substring(0, 80) + '...' : title;
+          if (!seen.has(titleExcerpt.toLowerCase())) {
+            seen.add(titleExcerpt.toLowerCase());
+            dayanaklar.push(titleExcerpt);
+          }
         }
       }
     }

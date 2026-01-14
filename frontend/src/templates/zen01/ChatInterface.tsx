@@ -68,7 +68,8 @@ export default function ChatInterface() {
     // Feature toggles - default to false until settings load
     enableSourceClick: false,
     enableSourceQuestionGeneration: false,
-    enableKeywordHighlighting: false
+    enableKeywordHighlighting: false,
+    enablePdfUpload: false
   });
   const [settingsLoaded, setSettingsLoaded] = useState(false);
 
@@ -265,6 +266,8 @@ export default function ChatInterface() {
           enableSourceClick: chatbotData.enableSourceClick !== undefined ? chatbotData.enableSourceClick : true,
           enableSourceQuestionGeneration: chatbotData.enableSourceQuestionGeneration !== undefined ? chatbotData.enableSourceQuestionGeneration : true,
           enableKeywordHighlighting: chatbotData.enableKeywordHighlighting !== undefined ? chatbotData.enableKeywordHighlighting : true,
+          // PDF Upload toggle
+          enablePdfUpload: chatbotData.enablePdfUpload !== undefined ? chatbotData.enablePdfUpload : false,
           // Response schema configuration
           responseSchemaId: chatbotData.responseSchemaId || 'vergilex-article'
         };
@@ -305,9 +308,9 @@ export default function ChatInterface() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Fetch PDF settings when token is available
+  // Fetch PDF settings when token is available AND chatbot settings are loaded
   useEffect(() => {
-    if (!token) return;
+    if (!token || !settingsLoaded) return;
 
     fetch('/api/v2/chat/pdf-settings', {
       headers: {
@@ -317,18 +320,21 @@ export default function ChatInterface() {
       .then(res => res.json())
       .then(data => {
         if (!data.error) {
+          // PDF is enabled only if BOTH chatbot settings AND pdf-settings say enabled
+          // chatbotSettings.enablePdfUpload is the master toggle
+          const masterToggle = chatbotSettings.enablePdfUpload !== false;
           setPdfSettings({
-            enabled: data.enabled || false,
+            enabled: masterToggle && (data.enabled || false),
             maxSizeMB: data.maxSizeMB || 10,
             maxPages: data.maxPages || 30
           });
-          console.log('[Zen01] PDF settings loaded:', data);
+          console.log('[Zen01] PDF settings loaded:', { masterToggle, endpointEnabled: data.enabled });
         }
       })
       .catch(err => {
         console.error('[Zen01] Failed to fetch PDF settings:', err);
       });
-  }, [token]);
+  }, [token, settingsLoaded, chatbotSettings.enablePdfUpload]);
 
   // Fetch Voice settings when token is available
   useEffect(() => {
@@ -617,16 +623,21 @@ export default function ChatInterface() {
     textareaRef.current?.focus();
   };
 
-  const handleSourceClick = createEnhancedSourceClickHandler(
-    () => inputText,
-    setInputText,
-    () => textareaRef.current?.focus(),
-    {
-      includeCrossSourceContext: true,
-      includeRelevanceContext: true,
-      maxSemanticTerms: 3,
-      queryStyle: 'detailed'
-    }
+  // Create source click handler with dynamic question generation toggle
+  const handleSourceClick = React.useMemo(() =>
+    createEnhancedSourceClickHandler(
+      () => inputText,
+      setInputText,
+      () => textareaRef.current?.focus(),
+      {
+        includeCrossSourceContext: true,
+        includeRelevanceContext: true,
+        maxSemanticTerms: 3,
+        queryStyle: 'detailed',
+        enableQuestionGeneration: chatbotSettings.enableSourceQuestionGeneration
+      }
+    ),
+    [chatbotSettings.enableSourceQuestionGeneration, inputText, setInputText]
   );
 
   const clearChat = () => {

@@ -63,6 +63,8 @@ export interface ZenChatbotSettings {
   enableSourceQuestionGeneration?: boolean;
   // Keyword Highlighting
   enableKeywordHighlighting?: boolean;
+  // PDF Upload Feature Toggle
+  enablePdfUpload?: boolean;
   // Response Schema (dynamic format configuration)
   responseSchemaId?: string;
 }

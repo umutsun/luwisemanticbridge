@@ -282,6 +282,15 @@ export function createEnhancedSourceClickHandler(
   options: EnhancedQueryOptions = {}
 ) {
   return async (source: Record<string, unknown>) => {
+    // Check if question generation is disabled
+    // Default to true for backward compatibility
+    const enableQuestionGeneration = options.enableQuestionGeneration !== false;
+
+    if (!enableQuestionGeneration) {
+      console.log('[SourceClick] Question generation disabled - skipping');
+      return;
+    }
+
     // Check if user is currently editing a question
     const currentText = getInputText();
 
