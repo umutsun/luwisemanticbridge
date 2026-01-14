@@ -210,55 +210,25 @@ export const defaultResponseSchema: ResponseSchema = {
   active: true,
   sections: [
     {
-      id: 'konu',
-      label: 'Sorunun Konusu',
-      backendLabel: 'SORUNUN_KONUSU:',
-      source: 'llm',
-      required: true,
-      order: 1,
-      style: 'heading',
-      visible: true
-    },
-    {
-      id: 'anahtar_terimler',
-      label: 'Anahtar Kelimeler',
-      backendLabel: 'ANAHTAR_KELİMELER:',
+      id: 'keywords',
+      label: 'Anahtar Terimler',
+      backendLabel: 'ANAHTAR_TERİMLER:',
       source: 'backend',
       required: false,
-      order: 2,
+      order: 1,
       style: 'tags',
       backendExtractor: 'extractKeywordsFromSources',
       visible: true
     },
     {
-      id: 'legal_framework',
-      label: 'İlgili Yasal Düzenlemeler',
-      backendLabel: 'İLGİLİ_YASAL_DÜZENLEMELER:',
-      source: 'llm',
-      required: false,
-      order: 3,
-      style: 'list',
-      visible: true
-    },
-    {
-      id: 'degerlendirme',
-      label: 'Vergilex Değerlendirmesi',
-      backendLabel: 'VERGİLEX_DEĞERLENDİRMESİ:',
+      id: 'assessment',
+      label: 'Değerlendirme',
+      backendLabel: 'DEĞERLENDİRME:',
       source: 'llm',
       required: true,
-      order: 4,
+      order: 2,
       style: 'text',
       visible: true
-    },
-    {
-      id: 'sonuc',
-      label: 'Sonuç',
-      backendLabel: 'SONUC:',
-      source: 'llm',
-      required: false,
-      order: 5,
-      style: 'text',
-      visible: false  // Optional, hidden by default
     }
   ]
 };

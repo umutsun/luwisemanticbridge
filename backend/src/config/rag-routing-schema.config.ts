@@ -85,40 +85,22 @@ export const DEFAULT_RAG_ROUTING_SCHEMA: RAGRoutingSchema = {
         // systemGenerated: false/undefined → LLM yazar
         articleSections: [
           {
-            id: 'topic',
-            title: 'Sorunun Konusu',
-            titleEn: 'Topic',
-            required: true,
-            systemGenerated: false,  // LLM yazar
-            description: 'Sorunun ilgili olduğu konu/konuları 1-2 cümlede tanımla (vergi türü/işlem/belge/yükümlülük vb). Bu bölümde yalnızca soru metninden ve kaynak başlıklarından çıkarım yap; kaynak dışı detay ekleme.',
-            descriptionEn: 'Identify the topic(s) related to the question in 1-2 sentences (tax type/transaction/document/obligation etc). Only infer from question text and source titles; do not add details outside sources.'
-          },
-          {
             id: 'keywords',
-            title: 'Anahtar Kelimeler',
+            title: 'Anahtar Terimler',
             titleEn: 'Key Terms',
-            required: true,
-            systemGenerated: true,  // Backend üretir (sources metadata'dan)
-            description: '5-10 madde: soru + kaynaklarda geçen temel terimler. Eğer kaynaklarda farklı terimler kullanılıyorsa, sinonim/alternatif yazımlarını da ekle.',
-            descriptionEn: '5-10 items: key terms from question + sources. If sources use different terms, include synonyms/alternative spellings.'
-          },
-          {
-            id: 'legal_framework',
-            title: 'İlgili Yasal Düzenlemeler',
-            titleEn: 'Legal Framework',
             required: false,
-            systemGenerated: false,  // LLM yazar
-            description: 'Kaynak türlerine göre kısa bir çerçeve kur: Hangi kanun/tebliğ/özelge/karar/referanslar kullanıldı? (1-4 madde). Her maddede en az bir dipnot [x] kullan. Kanun maddesi metni kaynakta yoksa "metin kaynakta görünmüyor; sadece atıf var" diye belirt.',
-            descriptionEn: 'Brief framework by source type: Which law/circular/ruling/decision/references were used? (1-4 items). Use at least one footnote [x] per item. If law article text not in source, note "text not visible in source; reference only".'
+            systemGenerated: true,  // Backend üretir (sources metadata'dan)
+            description: '5-10 terim: soru + kaynaklarda geçen temel terimler.',
+            descriptionEn: '5-10 terms: key terms from question + sources.'
           },
           {
             id: 'assessment',
-            title: 'Vergilex Değerlendirmesi',
+            title: 'Değerlendirme',
             titleEn: 'Assessment',
             required: true,
             systemGenerated: false,  // LLM yazar
-            description: '4-8 cümle: yalnızca sources\'tan hareketle, öncelik sırasına göre değerlendirme yaz. Çelişki varsa: "Kaynaklar arasında şu noktada farklılık var …" de ve öncelik + yenilik kriteriyle hangi kaynağı esas aldığını açıkla. Eğer soruyu doğrudan cevaplayan net hüküm cümlesi yoksa: "Kaynaklar mevcut; ancak soruyu doğrudan karşılayan net bir hüküm cümlesi seçilemedi." cümlesini mutlaka yaz ve kesin hüküm verme.',
-            descriptionEn: '4-8 sentences: evaluate based ONLY on sources, following priority order. If conflict: state "Sources differ on this point…" and explain which source you prioritize by precedence + recency criteria. If no clear ruling directly answers question: MUST write "Sources exist; however no clear ruling directly addressing the question could be identified." and do NOT give definitive ruling.'
+            description: 'SADECE sources\'tan hareketle değerlendirme yaz. Birden fazla paragraf kullan (en az 2 paragraf). Her önemli bilgiden sonra dipnot ekle [1], [2]. Paragraflar şık bir şekilde formatla. VERDICT SORULARINDA (zorunda mıyım/yapabilir miyim/yasak mı/gerekir mi): Eğer kaynaklarda AÇIK ve NET hüküm cümlesi yoksa, "Kaynaklarda bu konuda açık bir düzenleme bulunamamıştır" cümlesini mutlaka yaz ve kesin hüküm verme.',
+            descriptionEn: 'Evaluate based ONLY on sources. Use multiple paragraphs (min 2). Add footnotes [1], [2] after important information. Format paragraphs elegantly. VERDICT QUESTIONS (must I/can I/is it prohibited/is it required): If sources have NO EXPLICIT ruling, MUST write "No clear regulation found in sources on this matter" and do NOT give definitive ruling.'
           }
         ],
 
