@@ -94,6 +94,10 @@ export interface RAGSettings {
     summaryMaxLength?: number;
     excerptMaxLength?: number;
 
+    // Source Display Limits
+    maxSourcesToShow?: number;  // Maximum number of sources to display in citations
+    minSourcesToShow?: number;  // Minimum number of sources to display
+
     // No Results Messages
     noResultsMessageTr?: string;
     noResultsMessageEn?: string;
