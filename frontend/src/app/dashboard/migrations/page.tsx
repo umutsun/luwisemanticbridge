@@ -422,9 +422,9 @@ export default function EmbeddingsManagerPage() {
         setSelectedTables(data.tables);
       }
 
-      // Refresh table stats periodically during processing (every ~30 seconds based on polling interval)
-      // Only refresh when current is divisible by 100 to avoid too frequent updates
-      if (data.status === 'processing' && data.current > 0 && data.current % 100 === 0) {
+      // Refresh table stats periodically during processing
+      // Only refresh every 500 records to avoid performance issues
+      if (data.status === 'processing' && data.current > 0 && data.current % 500 === 0) {
         fetchAvailableTables();
       }
 
@@ -745,40 +745,12 @@ export default function EmbeddingsManagerPage() {
     };
     loadHealthReport();
 
-    // Connect to SSE progress stream for real-time updates
-    connectToProgressStream();
-
-    // Polling fallback - check progress every 3 seconds (SSE backup)
-    const pollingInterval = setInterval(async () => {
-      try {
-        const response = await fetchWithAuth(`${API_MIGRATION}/progress`);
-        if (response.ok) {
-          const data = await response.json();
-          if (data.status && data.status !== 'idle') {
-            setProgress({
-              status: data.status,
-              current: data.current || 0,
-              total: data.total || 0,
-              percentage: data.percentage || 0,
-              currentTable: data.currentTable || null,
-              error: data.error || null,
-              tokensUsed: data.tokenUsage?.total_tokens || data.tokenUsage?.total || 0,
-              message: data.message || null
-            });
-          }
-        }
-      } catch (e) {
-        // Polling failed, SSE should handle it
-      }
-    }, 3000);
+    // Connect to progress polling (already includes cleanup)
+    const cleanup = connectToProgressStream();
 
     // Cleanup on unmount
     return () => {
-      clearInterval(pollingInterval);
-      if (pollingIntervalRef.current) {
-        clearInterval(pollingIntervalRef.current);
-        pollingIntervalRef.current = null;
-      }
+      if (cleanup) cleanup();
     };
   }, [fetchAvailableTables, fetchTokenStats, connectToProgressStream]);
 
