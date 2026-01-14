@@ -2893,7 +2893,7 @@ FORMAT:
 
       // 🏷️ KEYWORDS: Extract and append keywords from sources to response
       if (finalSources.length > 0 && responseType === 'FOUND') {
-        const extractedKeywords = this.extractKeywordsFromSources(finalSources, message);
+        const extractedKeywords = this.extractKeywordsFromSources(message, finalSources);
         if (extractedKeywords.length > 0) {
           const keywordsSection = `\n\n---\n\n**ANAHTAR KELİMELER:** ${extractedKeywords.join(' • ')}`;
           finalResponse = finalResponse + keywordsSection;
@@ -3395,11 +3395,30 @@ FORMAT:
       // BACKEND-GENERATED SECTIONS FROM SOURCES METADATA
       // ═══════════════════════════════════════════════════════════════
 
+      // 🚫 CHECK FOR REFUSAL PATTERNS IN LLM RESPONSE
+      // If LLM indicates insufficient sources, don't add misleading keywords/dayanaklar
+      const refusalPatterns = [
+        /bulunamadı/i,
+        /bulunamadi/i,
+        /yeterli.*kaynak.*yok/i,
+        /kaynak.*bulunamadı/i,
+        /bilgi.*bulunamadı/i,
+        /hüküm.*bulunamadı/i,
+        /no.*(?:relevant|sufficient).*(?:source|information)/i
+      ];
+      const isRefusalResponse = refusalPatterns.some(pattern => pattern.test(result));
+
+      if (isRefusalResponse) {
+        console.log('[FORMAT] 🚫 Refusal pattern detected in LLM response - skipping keywords/dayanaklar');
+      }
+
       // 1. Extract keywords from SOURCES (not query) - important terms from source content
-      const keywordsFromSources = this.extractKeywordsFromSourceContent(searchResults);
+      // SKIP if LLM response indicates refusal/insufficient sources
+      const keywordsFromSources = isRefusalResponse ? [] : this.extractKeywordsFromSourceContent(searchResults);
 
       // 2. Extract legal references from source metadata (not LLM)
-      const dayanaklar = this.extractDayanaklarFromSources(searchResults);
+      // SKIP if LLM response indicates refusal/insufficient sources
+      const dayanaklar = isRefusalResponse ? [] : this.extractDayanaklarFromSources(searchResults);
 
       // 3. Get min sources count from search results for citation requirement
       const minSources = Math.min(searchResults.length, 5);
@@ -3414,11 +3433,13 @@ FORMAT:
       }
 
       // Add backend-generated Anahtar Terimler (as simple label, not ## header)
+      // Only add if not a refusal response
       if (keywordsFromSources.length > 0) {
         formattedResponse += `ANAHTAR_TERIMLER:\n${keywordsFromSources.join(', ')}\n\n`;
       }
 
       // Add backend-generated Dayanaklar
+      // Only add if not a refusal response
       if (dayanaklar.length > 0) {
         formattedResponse += `DAYANAKLAR:\n${dayanaklar.join('\n')}\n\n`;
       }
