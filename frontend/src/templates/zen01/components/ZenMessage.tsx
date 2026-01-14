@@ -289,13 +289,6 @@ export const ZenMessage: React.FC<ZenMessageProps> = ({
   // Use schema-based rendering when schemaId is provided
   const useSchemaRenderer = Boolean(responseSchemaId);
 
-  // Debug log
-  React.useEffect(() => {
-    if (!isUser) {
-      console.log('[ZenMessage] responseSchemaId:', responseSchemaId, 'useSchemaRenderer:', useSchemaRenderer);
-    }
-  }, [responseSchemaId, useSchemaRenderer, isUser]);
-
   // Audio player hook for TTS
   const { isPlaying, isLoading: isTTSLoading, play, pause } = useAudioPlayer({
     onError: (error) => {

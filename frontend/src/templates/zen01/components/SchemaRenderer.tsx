@@ -157,11 +157,10 @@ export const SchemaRenderer: React.FC<SchemaRendererProps> = ({
   const schema = customSchema || getActiveSchema(schemaId);
 
   // Parse content into sections
-  const parsedContent = React.useMemo(() => {
-    const parsed = parseContentBySections(content, schema);
-    console.log('[SchemaRenderer] Parsed sections:', Object.keys(parsed), parsed);
-    return parsed;
-  }, [content, schema]);
+  const parsedContent = React.useMemo(() =>
+    parseContentBySections(content, schema),
+    [content, schema]
+  );
 
   // Get visible sections in order
   const visibleSections = schema.sections
