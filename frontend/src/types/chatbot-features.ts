@@ -166,3 +166,246 @@ export const mergeFeatures = (features?: Partial<ChatbotFeatures>): ChatbotFeatu
     ...features
   };
 };
+
+// ═══════════════════════════════════════════════════════════════════════════
+// DYNAMIC RESPONSE SCHEMA
+// Configurable response format sections - similar to GİB özelge format
+// ═══════════════════════════════════════════════════════════════════════════
+
+/**
+ * Response section definition - each section in the structured response
+ */
+export interface ResponseSection {
+  id: string;                              // Unique section identifier
+  label: string;                           // Display label (Turkish)
+  labelKey?: string;                       // i18n key for label translation
+  source: 'llm' | 'backend' | 'metadata';  // Where content comes from
+  required: boolean;                       // Is this section mandatory
+  order: number;                           // Display order (1, 2, 3...)
+  style: 'heading' | 'text' | 'list' | 'tags' | 'citation' | 'metadata';
+  backendExtractor?: string;               // Backend function name if source='backend'
+  visible: boolean;                        // Show/hide in UI
+}
+
+/**
+ * Response schema configuration - defines the structure of AI responses
+ */
+export interface ResponseSchema {
+  id: string;                              // Schema identifier
+  name: string;                            // Display name
+  description?: string;                    // Schema description
+  sections: ResponseSection[];             // Ordered list of sections
+  promptTemplate?: string;                 // Optional prompt template override
+  active: boolean;                         // Is this schema currently active
+}
+
+/**
+ * Default response schema - GİB özelge-like format
+ */
+export const defaultResponseSchema: ResponseSchema = {
+  id: 'vergilex-article',
+  name: 'Vergilex Makale Formatı',
+  description: 'GİB özelge benzeri yapılandırılmış yanıt formatı',
+  active: true,
+  sections: [
+    {
+      id: 'konu',
+      label: 'Konu',
+      source: 'llm',
+      required: true,
+      order: 1,
+      style: 'heading',
+      visible: true
+    },
+    {
+      id: 'anahtar_terimler',
+      label: 'Anahtar Terimler',
+      source: 'backend',
+      required: false,
+      order: 2,
+      style: 'tags',
+      backendExtractor: 'extractKeywordsFromSources',
+      visible: true
+    },
+    {
+      id: 'dayanaklar',
+      label: 'Dayanaklar',
+      source: 'backend',
+      required: false,
+      order: 3,
+      style: 'citation',
+      backendExtractor: 'extractDayanaklarFromSources',
+      visible: true
+    },
+    {
+      id: 'degerlendirme',
+      label: 'Değerlendirme',
+      source: 'llm',
+      required: true,
+      order: 4,
+      style: 'text',
+      visible: true
+    },
+    {
+      id: 'sonuc',
+      label: 'Sonuç',
+      source: 'llm',
+      required: false,
+      order: 5,
+      style: 'text',
+      visible: false  // Optional, hidden by default
+    }
+  ]
+};
+
+/**
+ * Alternative schema presets
+ */
+export const responseSchemaPresets: Record<string, ResponseSchema> = {
+  // Detailed legal/tax format (Vergilex)
+  'vergilex-article': defaultResponseSchema,
+
+  // Simple Q&A format (Bookie)
+  'simple-qa': {
+    id: 'simple-qa',
+    name: 'Basit Soru-Cevap',
+    description: 'Sadece cevap ve kaynaklar',
+    active: false,
+    sections: [
+      {
+        id: 'cevap',
+        label: 'Cevap',
+        source: 'llm',
+        required: true,
+        order: 1,
+        style: 'text',
+        visible: true
+      },
+      {
+        id: 'kaynaklar',
+        label: 'Kaynaklar',
+        source: 'backend',
+        required: false,
+        order: 2,
+        style: 'citation',
+        backendExtractor: 'extractSourceReferences',
+        visible: true
+      }
+    ]
+  },
+
+  // Detailed analysis format (GeoLex)
+  'detailed-analysis': {
+    id: 'detailed-analysis',
+    name: 'Detaylı Analiz',
+    description: 'Özet, analiz ve öneriler içeren format',
+    active: false,
+    sections: [
+      {
+        id: 'ozet',
+        label: 'Özet',
+        source: 'llm',
+        required: true,
+        order: 1,
+        style: 'heading',
+        visible: true
+      },
+      {
+        id: 'anahtar_terimler',
+        label: 'Anahtar Terimler',
+        source: 'backend',
+        required: false,
+        order: 2,
+        style: 'tags',
+        backendExtractor: 'extractKeywordsFromSources',
+        visible: true
+      },
+      {
+        id: 'analiz',
+        label: 'Analiz',
+        source: 'llm',
+        required: true,
+        order: 3,
+        style: 'text',
+        visible: true
+      },
+      {
+        id: 'oneriler',
+        label: 'Öneriler',
+        source: 'llm',
+        required: false,
+        order: 4,
+        style: 'list',
+        visible: true
+      },
+      {
+        id: 'kaynaklar',
+        label: 'Kaynaklar',
+        source: 'backend',
+        required: false,
+        order: 5,
+        style: 'citation',
+        backendExtractor: 'extractSourceReferences',
+        visible: true
+      }
+    ]
+  }
+};
+
+/**
+ * Helper to get active schema
+ */
+export const getActiveSchema = (schemaId?: string): ResponseSchema => {
+  if (schemaId && responseSchemaPresets[schemaId]) {
+    return responseSchemaPresets[schemaId];
+  }
+  return defaultResponseSchema;
+};
+
+/**
+ * Generate prompt instructions from schema
+ * This tells the LLM what sections to include in its response
+ */
+export const generatePromptFromSchema = (schema: ResponseSchema): string => {
+  const llmSections = schema.sections
+    .filter(s => s.source === 'llm' && s.visible)
+    .sort((a, b) => a.order - b.order);
+
+  if (llmSections.length === 0) return '';
+
+  let prompt = 'Yanıtını aşağıdaki bölümlerle yapılandır:\n\n';
+
+  llmSections.forEach((section, idx) => {
+    prompt += `${idx + 1}) **${section.label.toUpperCase()}**`;
+    if (section.required) {
+      prompt += ' (zorunlu)';
+    }
+    prompt += '\n';
+
+    // Add section-specific instructions
+    switch (section.id) {
+      case 'konu':
+        prompt += '   Sorunun konusunu kısa ve öz şekilde belirt.\n';
+        break;
+      case 'degerlendirme':
+        prompt += '   Kaynaklara dayanarak detaylı değerlendirme yap. Atıf numaralarını [1], [2] şeklinde kullan.\n';
+        break;
+      case 'ozet':
+        prompt += '   Konuyu 2-3 cümleyle özetle.\n';
+        break;
+      case 'analiz':
+        prompt += '   Detaylı analiz ve açıklama yap.\n';
+        break;
+      case 'oneriler':
+        prompt += '   Madde madde öneriler listele.\n';
+        break;
+      case 'sonuc':
+        prompt += '   Kesin sonuç veya tavsiyeyi belirt.\n';
+        break;
+      default:
+        prompt += `   ${section.label} içeriğini yaz.\n`;
+    }
+  });
+
+  return prompt;
+};

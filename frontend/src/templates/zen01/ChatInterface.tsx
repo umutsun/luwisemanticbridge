@@ -252,7 +252,9 @@ export default function ChatInterface() {
           // Feature toggles from schema
           enableSourceClick: chatbotData.enableSourceClick !== undefined ? chatbotData.enableSourceClick : true,
           enableSourceQuestionGeneration: chatbotData.enableSourceQuestionGeneration !== undefined ? chatbotData.enableSourceQuestionGeneration : true,
-          enableKeywordHighlighting: chatbotData.enableKeywordHighlighting !== undefined ? chatbotData.enableKeywordHighlighting : true
+          enableKeywordHighlighting: chatbotData.enableKeywordHighlighting !== undefined ? chatbotData.enableKeywordHighlighting : true,
+          // Response schema configuration
+          responseSchemaId: chatbotData.responseSchemaId || 'vergilex-article'
         };
 
         const rag: ZenRagSettings = {
@@ -675,6 +677,7 @@ export default function ChatInterface() {
                     voiceOutputEnabled={voiceSettings.enableVoiceOutput}
                     enableSourceClick={chatbotSettings.enableSourceClick}
                     enableKeywordHighlighting={chatbotSettings.enableKeywordHighlighting}
+                    responseSchemaId={chatbotSettings.responseSchemaId}
                   />
                 ))}
               </AnimatePresence>

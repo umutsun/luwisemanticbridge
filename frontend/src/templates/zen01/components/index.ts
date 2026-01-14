@@ -7,3 +7,4 @@ export { ZenHeader } from './ZenHeader';
 export { ZenWelcome } from './ZenWelcome';
 export { ZenMessage } from './ZenMessage';
 export { ZenInput } from './ZenInput';
+export { SchemaRenderer } from './SchemaRenderer';

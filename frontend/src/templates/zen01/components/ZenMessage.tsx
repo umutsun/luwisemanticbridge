@@ -6,6 +6,7 @@ import { User, Bot, Clock, Volume2, Pause, Loader2 } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { ZenTypingIndicator } from './ZenTypingIndicator';
+import { SchemaRenderer } from './SchemaRenderer';
 import { useAudioPlayer } from '@/lib/hooks/use-audio-player';
 import type { ZenMessageProps, ZenSource } from '../types';
 
@@ -56,7 +57,7 @@ const MARKER_COLORS = [
   'zen01-marker-blue',    // Blue highlighter
 ];
 
-function highlightKeywords(text: string, keywords: string[]): React.ReactNode[] {
+function highlightKeywordsInText(text: string, keywords: string[]): React.ReactNode[] {
   if (!keywords.length) return [text];
 
   // Sort keywords by length (longest first) to avoid partial matches
@@ -233,15 +234,21 @@ export const ZenMessage: React.FC<ZenMessageProps> = ({
   voiceOutputEnabled = false,
   enableSourceClick = true,  // From schema, default true
   enableKeywordHighlighting = true,  // From schema, default true
+  responseSchemaId,  // Response format schema ID
+  keywords: backendKeywords = [],  // Backend-extracted keywords for schema sections
+  dayanaklar: backendDayanaklar = [],  // Backend-extracted legal references for schema sections
 }) => {
   const isUser = message.role === 'user';
   const [showAllSources, setShowAllSources] = useState(false);
 
   // Extract keywords from last user query for highlighting (only if enabled)
-  const keywords = React.useMemo(() => {
+  const highlightKeywords = React.useMemo(() => {
     if (!enableKeywordHighlighting || !lastUserQuery || isUser) return [];
     return extractKeywords(lastUserQuery);
   }, [lastUserQuery, isUser, enableKeywordHighlighting]);
+
+  // Use schema-based rendering when schemaId is provided
+  const useSchemaRenderer = Boolean(responseSchemaId);
 
   // Audio player hook for TTS
   const { isPlaying, isLoading: isTTSLoading, play, pause } = useAudioPlayer({
@@ -300,6 +307,15 @@ export const ZenMessage: React.FC<ZenMessageProps> = ({
               <div className="text-slate-700 dark:text-slate-200 leading-relaxed whitespace-pre-wrap">
                 {message.content}
               </div>
+            ) : useSchemaRenderer ? (
+              // Schema-based structured response rendering
+              <SchemaRenderer
+                content={message.content}
+                schemaId={responseSchemaId}
+                keywords={backendKeywords}
+                dayanaklar={backendDayanaklar}
+                className="zen01-schema-response"
+              />
             ) : (
               <div className="zen01-markdown prose prose-sm max-w-none dark:prose-invert">
                 <ReactMarkdown
@@ -325,8 +341,8 @@ export const ZenMessage: React.FC<ZenMessageProps> = ({
                     p: ({ children }) => {
                       // Apply keyword highlighting to text nodes
                       const processChildren = (child: React.ReactNode): React.ReactNode => {
-                        if (typeof child === 'string' && keywords.length > 0) {
-                          return highlightKeywords(child, keywords);
+                        if (typeof child === 'string' && highlightKeywords.length > 0) {
+                          return highlightKeywordsInText(child, highlightKeywords);
                         }
                         if (Array.isArray(child)) {
                           return child.map((c, i) => <React.Fragment key={i}>{processChildren(c)}</React.Fragment>);

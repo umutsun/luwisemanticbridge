@@ -82,6 +82,10 @@ router.get('/settings', async (req: Request, res: Response) => {
       enableSourceQuestionGeneration: chatbotData.enableSourceQuestionGeneration !== undefined ? chatbotData.enableSourceQuestionGeneration : true,
       // Keyword Highlighting
       enableKeywordHighlighting: chatbotData.enableKeywordHighlighting !== undefined ? chatbotData.enableKeywordHighlighting : true,
+      // Response Schema (dynamic format configuration)
+      responseSchemaId: chatbotData.responseSchemaId || 'vergilex-article',
+      // Custom response schema (if defined in database)
+      responseSchema: chatbotData.responseSchema || null,
       // Add app settings for login page
       app: {
         name: finalTitle,
