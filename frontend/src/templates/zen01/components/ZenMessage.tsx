@@ -101,6 +101,36 @@ function highlightKeywords(text: string, keywords: string[]): React.ReactNode[] 
 }
 
 /**
+ * Clean LLM response by removing section labels that should be rendered by UI components
+ * Removes: KONU:, ANAHTAR_TERIMLER:, DAYANAKLAR:, DEGERLENDIRME:, numbered format headers, Dipnotlar
+ */
+function cleanLLMResponse(content: string): string {
+  if (!content) return '';
+
+  return content
+    // Remove NEW format section labels (KONU:, ANAHTAR_TERIMLER:, etc.)
+    .replace(/^KONU:\s*\n?/gim, '')
+    .replace(/^ANAHTAR_TERIMLER:\s*\n?[^\n]*\n?/gim, '')
+    .replace(/^DAYANAKLAR:\s*\n?[\s\S]*?(?=^DEGERLENDIRME:|$)/gim, '')
+    .replace(/^DEGERLENDIRME:\s*\n?/gim, '')
+    // Remove numbered format section headers
+    .replace(/1\)\s*SORUNUN\s*KONUSU[:\s]*/gi, '')
+    .replace(/2\)\s*ANAHTAR\s*KELİMELER[:\s]*[^\n]*\n?/gi, '')
+    .replace(/3\)\s*(?:İLGİLİ\s*)?YASAL\s*DÜZENLEMELER[^\n]*[\s\S]*?(?=4\)|$)/gi, '')
+    .replace(/4\)\s*(?:VERGİLEX\s*)?DEĞERLENDİRME[Sİ]?[:\s]*/gi, '')
+    // Remove Dipnotlar sections entirely
+    .replace(/SON\s*BÖLÜM[:\s]*DİPNOTLAR[\s\S]*$/gi, '')
+    .replace(/5\)\s*DİPNOTLAR[\s\S]*$/gi, '')
+    .replace(/##\s*Dipnotlar[\s\S]*$/gi, '')
+    .replace(/\*\*Dipnotlar:?\*\*[\s\S]*$/gi, '')
+    // Remove standalone [1] [2] reference lists at the end
+    .replace(/\n\s*\[\d+\]\s+[^\n]+(?:\n\s*\[\d+\]\s+[^\n]+)*\s*$/gi, '')
+    // Clean up multiple newlines
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+}
+
+/**
  * Preprocess markdown content to ensure proper paragraph breaks
  * LLM often outputs **Header:** or **Header** inline instead of on new lines
  */
@@ -393,7 +423,7 @@ export const ZenMessage: React.FC<ZenMessageProps> = ({
                     ),
                   }}
                 >
-                  {preprocessMarkdown(message.content)}
+                  {preprocessMarkdown(cleanLLMResponse(message.content))}
                 </ReactMarkdown>
               </div>
             )}

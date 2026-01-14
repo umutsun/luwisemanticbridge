@@ -77,6 +77,11 @@ router.get('/settings', async (req: Request, res: Response) => {
       enablePdfUpload: chatbotData.enablePdfUpload || false,
       enableVoiceInput: chatbotData.enableVoiceInput || false,
       enableVoiceOutput: chatbotData.enableVoiceOutput || false,
+      // Source Interaction Features
+      enableSourceClick: chatbotData.enableSourceClick !== undefined ? chatbotData.enableSourceClick : true,
+      enableSourceQuestionGeneration: chatbotData.enableSourceQuestionGeneration !== undefined ? chatbotData.enableSourceQuestionGeneration : true,
+      // Keyword Highlighting
+      enableKeywordHighlighting: chatbotData.enableKeywordHighlighting !== undefined ? chatbotData.enableKeywordHighlighting : true,
       // Add app settings for login page
       app: {
         name: finalTitle,

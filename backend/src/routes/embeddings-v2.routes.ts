@@ -3478,7 +3478,7 @@ router.get('/analytics', async (req: Request, res: Response) => {
 
 // GET /api/v2/embeddings/unified-preview - Preview unified embeddings
 router.get('/unified-preview', async (req: Request, res: Response) => {
-  const { source_table, source_name, limit = 10 } = req.query;
+  const { source_table, source_name, limit = 10, offset = 0 } = req.query;
 
   try {
     let query = `
@@ -3503,7 +3503,13 @@ router.get('/unified-preview', async (req: Request, res: Response) => {
 
     if (source_table) {
       paramCount++;
-      query += ` AND source_table = $${paramCount}`;
+      // Case-insensitive matching for source_table (handles variations like csv_danistaykararlari, danistaykararlari, Danistaykararlari)
+      query += ` AND (
+        LOWER(source_table) = LOWER($${paramCount})
+        OR LOWER(source_table) = LOWER('csv_' || $${paramCount})
+        OR LOWER(metadata->>'table') = LOWER($${paramCount})
+        OR LOWER(metadata->>'table') = LOWER('csv_' || $${paramCount})
+      )`;
       params.push(source_table);
     }
 
@@ -3513,8 +3519,9 @@ router.get('/unified-preview', async (req: Request, res: Response) => {
       params.push(source_name);
     }
 
-    query += ` ORDER BY created_at DESC LIMIT $${paramCount + 1}`;
+    query += ` ORDER BY created_at DESC LIMIT $${paramCount + 1} OFFSET $${paramCount + 2}`;
     params.push(parseInt(limit as string, 10));
+    params.push(parseInt(offset as string, 10));
 
     const result = await lsembPool.query(query, params);
 
@@ -3533,6 +3540,70 @@ router.get('/unified-preview', async (req: Request, res: Response) => {
     res.status(500).json({
       success: false,
       error: 'Failed to fetch embeddings preview'
+    });
+  }
+});
+
+// DELETE /api/v2/embeddings/table/:tableName - Delete all embeddings for a table
+router.delete('/table/:tableName', async (req: Request, res: Response) => {
+  const { tableName } = req.params;
+
+  if (!tableName) {
+    return res.status(400).json({
+      success: false,
+      error: 'Table name is required'
+    });
+  }
+
+  try {
+    console.log(`[Embeddings] Deleting embeddings for table: ${tableName}`);
+
+    // Delete from unified_embeddings with case-insensitive matching
+    const deleteResult = await lsembPool.query(`
+      DELETE FROM unified_embeddings
+      WHERE source_type = 'database'
+      AND (
+        LOWER(source_table) = LOWER($1)
+        OR LOWER(source_table) = LOWER('csv_' || $1)
+        OR LOWER(metadata->>'table') = LOWER($1)
+        OR LOWER(metadata->>'table') = LOWER('csv_' || $1)
+      )
+      RETURNING id
+    `, [tableName]);
+
+    const deletedCount = deleteResult.rowCount || 0;
+    console.log(`[Embeddings] Deleted ${deletedCount} embeddings for table: ${tableName}`);
+
+    // Also delete from skipped_embeddings if exists
+    let skippedDeletedCount = 0;
+    try {
+      const skippedResult = await lsembPool.query(`
+        DELETE FROM skipped_embeddings
+        WHERE LOWER(source_table) = LOWER($1)
+        OR LOWER(source_table) = LOWER('csv_' || $1)
+        RETURNING id
+      `, [tableName]);
+      skippedDeletedCount = skippedResult.rowCount || 0;
+      console.log(`[Embeddings] Deleted ${skippedDeletedCount} skipped records for table: ${tableName}`);
+    } catch (err) {
+      // skipped_embeddings table might not exist
+      console.log('[Embeddings] skipped_embeddings table not found, skipping');
+    }
+
+    res.json({
+      success: true,
+      message: `Deleted ${deletedCount} embeddings and ${skippedDeletedCount} skipped records for table: ${tableName}`,
+      deleted: {
+        embeddings: deletedCount,
+        skipped: skippedDeletedCount,
+        total: deletedCount + skippedDeletedCount
+      }
+    });
+  } catch (error) {
+    console.error('Error deleting embeddings for table:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to delete embeddings'
     });
   }
 });

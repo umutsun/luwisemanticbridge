@@ -3451,19 +3451,32 @@ FORMAT:
       const konuContent = numberedKonuMatch?.[1]?.trim() || markdownKonuMatch?.[1]?.trim() || '';
       let assessmentContent = numberedDegerlendirmeMatch?.[1]?.trim() || markdownDegerlendirmeMatch?.[1]?.trim() || '';
 
+      // ═══════════════════════════════════════════════════════════════
+      // ALWAYS CLEAN UP assessmentContent - remove any LLM section headers that leaked through
+      // ═══════════════════════════════════════════════════════════════
+      const cleanupPatterns = [
+        /1\)\s*SORUNUN\s*KONUSU[:\s]*/gi,
+        /2\)\s*ANAHTAR\s*KELİMELER[:\s]*[^\n]*\n?/gi,
+        /3\)\s*(?:İLGİLİ\s*)?YASAL\s*DÜZENLEMELER[^\n]*[\s\S]*?(?=4\)|$)/gi,
+        /4\)\s*(?:VERGİLEX\s*)?DEĞERLENDİRME[Sİ]?[:\s]*/gi,
+        /SON\s*BÖLÜM[:\s]*DİPNOTLAR[\s\S]*$/gi,
+        /5\)\s*DİPNOTLAR[\s\S]*$/gi,
+        /##\s*Dipnotlar[\s\S]*$/gi,
+        /##\s*Anahtar\s*(?:Terim|Kelime)[^\n]*[\s\S]*?(?=##|\n\n\n|$)/gi,
+        /##\s*Dayanaklar[^\n]*[\s\S]*?(?=##|\n\n\n|$)/gi,
+      ];
+
       // If no specific sections found, use entire response as assessment (fallback)
       if (!konuContent && !assessmentContent) {
         console.log('[FORMAT] No structured sections found - using full response as assessment');
-        // Clean up any LLM-generated section headers and use as assessment
-        assessmentContent = result
-          .replace(/1\)\s*SORUNUN\s*KONUSU[:\s]*/gi, '')
-          .replace(/2\)\s*ANAHTAR\s*KELİMELER[:\s]*/gi, '')
-          .replace(/3\)\s*(?:İLGİLİ\s*)?YASAL\s*DÜZENLEMELER[^\n]*/gi, '')
-          .replace(/4\)\s*(?:VERGİLEX\s*)?DEĞERLENDİRME[Sİ]?[:\s]*/gi, '')
-          .replace(/SON\s*BÖLÜM[:\s]*DİPNOTLAR[^\n]*/gi, '')
-          .replace(/##\s*[A-ZÇĞİÖŞÜa-zçğıöşü\s]+\n/g, '')
-          .trim();
+        assessmentContent = result;
       }
+
+      // Clean assessment content from any leaked section headers
+      for (const pattern of cleanupPatterns) {
+        assessmentContent = assessmentContent.replace(pattern, '');
+      }
+      assessmentContent = assessmentContent.replace(/\n{3,}/g, '\n\n').trim();
 
       // Build formatted output
       if (konuContent) {

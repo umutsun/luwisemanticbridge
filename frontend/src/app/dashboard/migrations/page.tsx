@@ -1224,13 +1224,43 @@ export default function EmbeddingsManagerPage() {
     startMigration();
   };
 
-  const handleDeleteTable = (table: TableInfo) => {
-    console.log('Delete table:', table);
-    toast({
-      title: 'Not Implemented',
-      description: 'Table deletion will be added soon',
-      variant: 'default'
-    });
+  const handleDeleteTable = async (table: TableInfo) => {
+    // Confirm deletion
+    if (!confirm(`"${table.displayName}" tablosu için tüm embedding'ler silinecek. Devam etmek istiyor musunuz?`)) {
+      return;
+    }
+
+    try {
+      const response = await fetchWithAuth(
+        `${config.api.baseUrl}/api/v2/embeddings/table/${encodeURIComponent(table.name)}`,
+        { method: 'DELETE' }
+      );
+
+      if (response.ok) {
+        const data = await response.json();
+        toast({
+          title: 'Başarılı',
+          description: `${data.deleted?.total || 0} kayıt silindi`,
+          variant: 'default'
+        });
+        // Refresh table list
+        fetchAvailableTables();
+      } else {
+        const errorData = await response.json().catch(() => ({}));
+        toast({
+          title: 'Hata',
+          description: errorData.error || 'Embedding\'ler silinemedi',
+          variant: 'destructive'
+        });
+      }
+    } catch (error) {
+      console.error('Error deleting embeddings:', error);
+      toast({
+        title: 'Hata',
+        description: 'Silme işlemi sırasında bir hata oluştu',
+        variant: 'destructive'
+      });
+    }
   };
 
   // Filter tables based on search and status
