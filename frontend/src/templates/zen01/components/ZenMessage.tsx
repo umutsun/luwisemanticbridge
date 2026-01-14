@@ -583,8 +583,8 @@ export const ZenMessage: React.FC<ZenMessageProps> = ({
                       <div className="flex-1 min-w-0">
                         {/* Source Type Label with Marker Style */}
                         <div className="mb-2">
-                          <span className={`zen01-marker ${typeInfo.markerClass} text-[11px] font-semibold`}>
-                            <span className="text-[9px] opacity-70">[{idx + 1}]</span> {typeInfo.label}
+                          <span className={`zen01-marker ${typeInfo.markerClass} text-[11px] font-semibold px-2 py-0.5`}>
+                            <span className="text-[10px] opacity-80 mr-1">[{idx + 1}]</span> {typeInfo.label}
                           </span>
                         </div>
 
@@ -642,7 +642,7 @@ export const ZenMessage: React.FC<ZenMessageProps> = ({
                             {source.keywords.slice(0, 5).map((keyword, kidx) => (
                               <span
                                 key={kidx}
-                                className="zen01-marker zen01-marker-blue text-[10px] font-medium"
+                                className="zen01-marker zen01-marker-blue text-[10px] font-medium px-2.5 py-1"
                               >
                                 {keyword}
                               </span>

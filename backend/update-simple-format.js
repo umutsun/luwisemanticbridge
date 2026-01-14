@@ -11,15 +11,19 @@ const simpleFormat = `KRİTİK: Cevabınız TAM BU YAPIYI İZLEMELİ:
 
 ## Yasal Çerçeve
 
-[İlgili kanun ve tebliğleri açıkla [1][2]. Temel kuralları belirt.]
+[İlgili kanun ve tebliğleri detaylı açıkla [1][2]. Hangi maddeleri kapsadığını, temel kuralları ve amaçları belirt. En az 3-4 cümle yaz.]
 
-[Detaylı düzenlemeleri ve istisnaları açıkla [3][4].]
+[Detaylı düzenlemeleri, şartları, oranları, tutarları ve istisnaları kapsamlı açıkla [3][4]. Somut örneklerle detaylandır. En az 3-4 cümle yaz.]
 
 ## Uygulama
 
-[Pratikte nasıl uygulandığını örneklerle göster [5].]
+[Pratikte nasıl uygulandığını, hangi durumlarda geçerli olduğunu, hangi belgelerin gerektiğini, süreci adım adım ve örneklerle detaylı göster [5]. En az 4-5 cümle yaz.]
 
-NOT: ## başlıklarını aynen kullan, [] içindeki açıklamalar yerine gerçek içeriği yaz.`;
+NOT:
+- ## başlıklarını MUTLAKA kullan
+- Her paragraf EN AZ 3-4 cümle olmalı
+- [] içindeki açıklamalar yerine UZUN ve DETAYLI gerçek içeriği yaz
+- Kısa cevap verme, açıklamalı ve kapsamlı yaz`;
 
 async function updateFormatTemplate() {
   try {
