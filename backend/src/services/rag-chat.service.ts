@@ -269,12 +269,23 @@ ${groundingRulesText}
 📝 ÇIKTI FORMATI (Wikipedia Tarzı Makale):
 ${sectionInstructions.replace(/^.*?:\s*/gm, '')}
 
-📚 YAPILANDIRMA (ZORUNLU):
-1. **Giriş Paragrafı**: İlk paragrafta konuyu özetle (2-3 cümle)
-2. **Alt Başlıklar**: Konuyu bölümlere ayır (## Başlık formatı kullan)
-   Örnek başlıklar: ## Genel Çerçeve, ## Yasal Düzenlemeler, ## Uygulama, ## İstisnalar
-3. **Paragraf Yapısı**: Her bölüm 2-4 paragraf içermeli
-4. **Akıcı Geçişler**: Paragraflar arası bağlantı cümleleri kullan
+📚 MARKDOWN KURALLARI (KRİTİK - TAM BU FORMATTABİR cümlede konuyu özetle [1]. İkinci cümlede kapsamı belirt.
+
+## Yasal Çerçeve
+
+Hangi kanun ve tebliğlerin uygulandığını açıkla [2]. Temel kuralları belirt.
+
+Detaylı düzenlemeleri ve istisnaları açıkla [3][4]. Önemli madde numaralarını ver.
+
+## Uygulama
+
+Pratikte nasıl uygulandığını örneklerle açıkla [5]. Somut durumları göster.
+
+✅ MUTLAKA:
+- Her başlık ## ile başla
+- Her paragraftan sonra BOŞ SATIR
+- Her bölümde 2-4 paragraf
+- Her paragrafta [1] [2] atıf
 
 📖 INLINE ATIF KURALLARI (KRİTİK):
 - Her önemli bilgiden HEMEN SONRA kaynak numarası ekle: "...vergi oranı %18'dir [1]."
