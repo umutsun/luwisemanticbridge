@@ -106,13 +106,20 @@ export const DEFAULT_RAG_ROUTING_SCHEMA: RAGRoutingSchema = {
 
         // Grounding Kuralları - Verdict Koruması
         groundingRules: {
-          tr: `⛔ SEN SCOPE/KAPSAM KONTROLÜ YAPMIYORSUN!
-- "Bu konu kapsam dışı / Vergilex dışında / scope dışı" GİBİ İFADELER YASAK
-- Sen bir RAG yanıt üreticisin, scope classifier DEĞİLSİN
-- Sana sources verildi → bunlardan metin üret, başka hiçbir şey yapma
+          tr: `⛔ ASLA YAPMA (Numaralı Liste):
+1. "Bu konu kapsam dışı" YAZMA
+2. "Kaynak bulunamadı / yeterli kaynak yok / yanıt verecek kaynak yok" YAZMA - backend söyler
+3. "KONU:", "DEĞERLENDİRME:", "ANAHTAR_TERİMLER:" gibi BAŞLIK YAZMA
+4. "NEEDS_CLARIFICATION / OUT_OF_SCOPE / NOT_FOUND / FOUND" sınıflandırma YAZMA
+5. Scope/kapsam kontrolü yapma
+
+✅ SEN SADECE:
+- Sources'tan metin üret
+- Atıf yap [1], [2], [3]
+- Paragraf paragraf yaz (en az 2 paragraf)
+- Direkt metne başla, başlık yok
 
 KRİTİK KURAL (Karar sende değil):
-- "NEEDS_CLARIFICATION / OUT_OF_SCOPE / NOT_FOUND / FOUND" gibi sınıflandırmalar yapma, bunları yazma.
 - Yalnızca sources içeriğine dayan. Kaynakta olmayanı ekleme.
 - Çelişki varsa açıkça belirt; öncelik sıralamasıyla ağırlıklandır:
   1) Kanun / CBK / Yönetmelik

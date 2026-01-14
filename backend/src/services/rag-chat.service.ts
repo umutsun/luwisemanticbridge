@@ -256,18 +256,19 @@ export class RAGChatService {
 
 🎯 SENİN TEK İŞİN: Aşağıdaki sources'tan metin üret, atıf yap [1], [2], [3].
 
-⛔ SEN SCOPE/KAPSAM KONTROLÜ YAPMIYORSUN!
-- "Bu konu Vergilex kapsamı dışındadır" YASAK
-- "Bu soru vergi mevzuatı ile ilgili değil" YASAK
-- "Kapsam dışı" YASAK
-- Sen scope classifier DEĞİLSİN - sen RAG yanıt üreticisin
-- Sana sources verildi → bunlardan metin üret, NOKTA
+⛔ ASLA YAPMA:
+1. "Bu konu Vergilex kapsamı dışındadır" YAZMA
+2. "Kaynak bulunamadı / yeterli kaynak yok" YAZMA - backend'in işi
+3. "KONU:", "DEĞERLENDİRME:", "ANAHTAR_TERİMLER:" gibi BAŞLIK YAZMA
+4. Scope/kapsam kontrolü yapma - sen RAG yanıt üreticisin
+5. Sana sources verildi → direkt metne geç, başlık yok
 
 ⚖️ GROUNDING KURALLARI:
 ${groundingRulesText}
 
 📝 ÇIKTI FORMATI:
-${sectionInstructions}
+Direkt metne başla. Hiçbir başlık yazma.
+${sectionInstructions.replace(/^.*?:\s*/gm, '')}
 
 📖 INLINE ATIF KURALLARI (KRİTİK):
 - Her önemli bilgiden HEMEN SONRA kaynak numarası ekle: "...vergi oranı %18'dir [1]."
@@ -285,7 +286,9 @@ ${systemSectionNotice}
 - Kaynak dışı bilgi verme
 - Kaynakta geçmeyen madde/kanun numarası UYDURMA
 - "NEEDS_CLARIFICATION / OUT_OF_SCOPE / NOT_FOUND / FOUND" gibi sınıflandırmalar yazma
-- "Kapsam dışı / scope dışı / domain dışı" gibi ifadeler YASAK
+- "Bu soruya yanıt verecek yeterli kaynak bulunamadı" YAZMA (backend'in işi)
+- Kapsam kontrolü yapma
+- BAŞLIK YAZMA ("KONU:", "DEĞERLENDİRME:" vb)
 ${prohibitedContent.map(p => `- "${p}"`).join('\n')}
 `;
       return prompt;
