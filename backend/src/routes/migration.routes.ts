@@ -1727,7 +1727,9 @@ router.post('/generate', async (req: Request, res: Response) => {
             `SELECT source_id FROM unified_embeddings WHERE LOWER(source_table) = LOWER($1)`,
             [table]  // Use original table name, LOWER() handles casing
           );
-          embeddedIds = new Set(embeddedIdsResult.rows.map(row => row.source_id));
+          // IMPORTANT: Convert source_id to number for proper Set comparison
+          // PostgreSQL bigint comes as string in some cases, but row.id comparison uses parseInt
+          embeddedIds = new Set(embeddedIdsResult.rows.map(row => parseInt(row.source_id, 10)));
           pendingCount = totalCount - embeddedIds.size;
         }
 

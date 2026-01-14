@@ -62,13 +62,13 @@ export default function ChatInterface() {
     placeholder: '',
     primaryColor: '',
     activeChatModel: '',
-    enableSuggestions: true,
+    enableSuggestions: false, // Default false - will be set by loaded settings
     welcomeMessage: '',
     greeting: '',
-    // Feature toggles - default to true, will be overridden by schema
-    enableSourceClick: true,
-    enableSourceQuestionGeneration: true,
-    enableKeywordHighlighting: true
+    // Feature toggles - default to false until settings load
+    enableSourceClick: false,
+    enableSourceQuestionGeneration: false,
+    enableKeywordHighlighting: false
   });
   const [settingsLoaded, setSettingsLoaded] = useState(false);
 
@@ -170,6 +170,27 @@ export default function ChatInterface() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [settingsLoaded, chatbotSettings.enableSuggestions]);
 
+  // Load suggestions only after settings are loaded AND if enabled
+  useEffect(() => {
+    if (!settingsLoaded) return;
+
+    // Only load suggestions if enabled
+    if (chatbotSettings.enableSuggestions) {
+      const loadSuggestions = async () => {
+        setIsSuggestionsLoading(true);
+        const questions = await fetchSuggestedQuestions();
+        setSuggestedQuestions(questions);
+        setIsSuggestionsLoading(false);
+      };
+      loadSuggestions();
+    } else {
+      // Clear suggestions if disabled
+      setSuggestedQuestions([]);
+      setShuffledSuggestions([]);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [settingsLoaded, chatbotSettings.enableSuggestions]);
+
   const [shuffledSuggestions, setShuffledSuggestions] = useState<string[]>([]);
 
   useEffect(() => {
@@ -193,15 +214,6 @@ export default function ChatInterface() {
   // Initial settings load
   useEffect(() => {
     setIsClient(true);
-
-    const loadSuggestions = async () => {
-      setIsSuggestionsLoading(true);
-      const questions = await fetchSuggestedQuestions();
-      setSuggestedQuestions(questions);
-      setIsSuggestionsLoading(false);
-    };
-
-    loadSuggestions();
 
     Promise.all([
       fetch('/api/v2/chatbot/settings'),
@@ -655,8 +667,8 @@ export default function ChatInterface() {
         <div className="relative z-10 pt-20 pb-32 max-w-5xl mx-auto w-full px-4">
           <ScrollArea className="h-[calc(100vh-13rem)] zen01-scroll">
             <div className="space-y-6 py-4 pr-4">
-              {/* Welcome Screen */}
-              {isClient && messages.length === 0 && (
+              {/* Welcome Screen - only render after settings are loaded */}
+              {isClient && settingsLoaded && messages.length === 0 && (
                 <ZenWelcome
                   chatbotSettings={chatbotSettings}
                   user={user}

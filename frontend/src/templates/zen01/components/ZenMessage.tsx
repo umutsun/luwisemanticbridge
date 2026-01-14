@@ -105,6 +105,45 @@ function highlightKeywordsInText(text: string, keywords: string[]): React.ReactN
  * Clean LLM response by removing section labels that should be rendered by UI components
  * Removes: KONU:, ANAHTAR_TERIMLER:, DAYANAKLAR:, DEGERLENDIRME:, numbered format headers, Dipnotlar
  */
+/**
+ * Clean citation/source title from database formatting issues
+ * Fixes: "T.C.D A N I Ş T A Y" -> "T.C. DANIŞTAY"
+ * Fixes: "DAİREEsas No:" -> "DAİRE Esas No:"
+ * Fixes: "2018/280Karar No:" -> "2018/280 Karar No:"
+ */
+function cleanCitationTitle(title: string): string {
+  if (!title) return '';
+
+  return title
+    // Fix spaced letters like "D A N I Ş T A Y" -> "DANIŞTAY"
+    .replace(/([A-ZÇĞİÖŞÜ])\s+(?=[A-ZÇĞİÖŞÜ]\s*[A-ZÇĞİÖŞÜ])/g, '$1')
+    .replace(/([A-ZÇĞİÖŞÜ])\s+([A-ZÇĞİÖŞÜ])\s+([A-ZÇĞİÖŞÜ])\s+([A-ZÇĞİÖŞÜ])\s+([A-ZÇĞİÖŞÜ])\s+([A-ZÇĞİÖŞÜ])\s+([A-ZÇĞİÖŞÜ])\s+([A-ZÇĞİÖŞÜ])/g, '$1$2$3$4$5$6$7$8')
+    .replace(/([A-ZÇĞİÖŞÜ])\s+([A-ZÇĞİÖŞÜ])\s+([A-ZÇĞİÖŞÜ])\s+([A-ZÇĞİÖŞÜ])\s+([A-ZÇĞİÖŞÜ])\s+([A-ZÇĞİÖŞÜ])\s+([A-ZÇĞİÖŞÜ])/g, '$1$2$3$4$5$6$7')
+    .replace(/([A-ZÇĞİÖŞÜ])\s+([A-ZÇĞİÖŞÜ])\s+([A-ZÇĞİÖŞÜ])\s+([A-ZÇĞİÖŞÜ])\s+([A-ZÇĞİÖŞÜ])\s+([A-ZÇĞİÖŞÜ])/g, '$1$2$3$4$5$6')
+    .replace(/([A-ZÇĞİÖŞÜ])\s+([A-ZÇĞİÖŞÜ])\s+([A-ZÇĞİÖŞÜ])\s+([A-ZÇĞİÖŞÜ])\s+([A-ZÇĞİÖŞÜ])/g, '$1$2$3$4$5')
+    // Fix "T.C.D" -> "T.C. D" (add space after T.C.)
+    .replace(/T\.C\.D/g, 'T.C. D')
+    // Fix merged words: "DAİREEsas" -> "DAİRE Esas"
+    .replace(/DAİRE([A-Z])/g, 'DAİRE $1')
+    .replace(/DAIRE([A-Z])/g, 'DAİRE $1')
+    // Fix "Esas No:2018" -> "Esas No: 2018"
+    .replace(/No:(\d)/g, 'No: $1')
+    // Fix "2018/280Karar" -> "2018/280 Karar"
+    .replace(/(\d{4}\/\d+)([A-ZÇĞİÖŞÜ])/g, '$1 $2')
+    // Fix "TEMYİZ EDEN" spacing
+    .replace(/(\d+)TEMYİZ/g, '$1 TEMYİZ')
+    .replace(/(\d+)TEMYIZ/g, '$1 TEMYİZ')
+    // Fix "(DAVALI):" spacing
+    .replace(/\(DAVALI\):/g, '(DAVALI): ')
+    .replace(/\(DAVACI\):/g, '(DAVACI): ')
+    // Fix "Tarih:" spacing
+    .replace(/DAİRETarih:/g, 'DAİRE Tarih:')
+    .replace(/DAIRETarih:/g, 'DAİRE Tarih:')
+    // Clean multiple spaces
+    .replace(/\s{2,}/g, ' ')
+    .trim();
+}
+
 function cleanLLMResponse(content: string): string {
   if (!content) return '';
 
@@ -249,6 +288,13 @@ export const ZenMessage: React.FC<ZenMessageProps> = ({
 
   // Use schema-based rendering when schemaId is provided
   const useSchemaRenderer = Boolean(responseSchemaId);
+
+  // Debug log
+  React.useEffect(() => {
+    if (!isUser) {
+      console.log('[ZenMessage] responseSchemaId:', responseSchemaId, 'useSchemaRenderer:', useSchemaRenderer);
+    }
+  }, [responseSchemaId, useSchemaRenderer, isUser]);
 
   // Audio player hook for TTS
   const { isPlaying, isLoading: isTTSLoading, play, pause } = useAudioPlayer({
@@ -512,9 +558,9 @@ export const ZenMessage: React.FC<ZenMessageProps> = ({
                         </span>
                       </div>
                       <div className="flex-1 min-w-0">
-                        {/* Title */}
+                        {/* Title - cleaned for proper spacing */}
                         <p className="text-sm font-medium text-cyan-700/90 dark:text-cyan-300/90 line-clamp-1">
-                          {source.title || source.summary?.slice(0, 60) || 'Belge'}
+                          {cleanCitationTitle(source.title || source.summary?.slice(0, 60) || 'Belge')}
                         </p>
                         {/* Summary or Excerpt */}
                         {(source.summary || source.excerpt) && (
