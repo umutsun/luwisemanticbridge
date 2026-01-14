@@ -1,8 +1,9 @@
 // Script to update formatTemplate to simple, LLM-friendly version
 const { Pool } = require('pg');
+require('dotenv').config();
 
 const pool = new Pool({
-  connectionString: process.env.DATABASE_URL || 'postgresql://postgres:12Kemal1221@localhost:5432/lsemb'
+  connectionString: process.env.DATABASE_URL
 });
 
 // Simple, clear formatTemplate with explicit structure that LLM must follow
@@ -24,60 +25,42 @@ async function updateFormatTemplate() {
   try {
     console.log('📖 Reading current ragRoutingSchema...');
     const result = await pool.query(
-      "SELECT value FROM settings WHERE key = 'ragRoutingSchema'"
+      `SELECT value FROM settings WHERE key = 'ragRoutingSchema'`
     );
 
     if (!result.rows[0]) {
-      console.error('❌ ragRoutingSchema not found in database!');
+      console.log('❌ ragRoutingSchema not found in settings');
       process.exit(1);
     }
 
     const schema = JSON.parse(result.rows[0].value);
-    console.log('✅ Current schema loaded');
 
-    // Check current formatTemplate
-    const currentTemplate = schema.routes?.FOUND?.format?.formatTemplate;
-    if (currentTemplate) {
-      console.log('⚠️  Current formatTemplate length:', currentTemplate.length, 'chars');
-      console.log('📝 Updating to simple version...');
-    }
+    console.log('📝 Current formatTemplate:');
+    console.log('---');
+    console.log(schema.formatTemplate || 'EMPTY');
+    console.log('---');
+    console.log('Length:', (schema.formatTemplate || '').length);
 
     // Update formatTemplate
-    if (!schema.routes) schema.routes = {};
-    if (!schema.routes.FOUND) schema.routes.FOUND = {};
-    if (!schema.routes.FOUND.format) schema.routes.FOUND.format = {};
+    schema.formatTemplate = simpleFormat;
 
-    schema.routes.FOUND.format.formatTemplate = simpleFormat;
-    schema.routes.FOUND.format.formatTemplateEn = simpleFormat;
-
-    // Save to database
-    console.log('💾 Updating database...');
-    await pool.query(
-      "UPDATE settings SET value = $1, updated_at = NOW() WHERE key = 'ragRoutingSchema'",
-      [JSON.stringify(schema, null, 2)]
-    );
-
-    console.log('✅ formatTemplate updated successfully!');
-    console.log('📄 New template:');
+    console.log('');
+    console.log('✍️  New formatTemplate:');
+    console.log('---');
     console.log(simpleFormat);
-    console.log('\n✅ Changes:');
-    console.log('   - Removed complex instructions');
-    console.log('   - Simplified to 2 sections: Yasal Çerçeve, Uygulama');
-    console.log('   - Clear ## markdown headers');
-    console.log('   - Easy for LLM to follow');
+    console.log('---');
+    console.log('Length:', simpleFormat.length);
 
-    // Verify
-    const verify = await pool.query(
-      "SELECT value FROM settings WHERE key = 'ragRoutingSchema'"
+    // Save back to database - use double quotes for column name
+    await pool.query(
+      `UPDATE settings SET "value" = $1 WHERE key = 'ragRoutingSchema'`,
+      [JSON.stringify(schema)]
     );
-    const updated = JSON.parse(verify.rows[0].value);
 
-    if (updated.routes?.FOUND?.format?.formatTemplate === simpleFormat) {
-      console.log('\n🎉 SUCCESS! formatTemplate verified in database.');
-    } else {
-      console.error('❌ Verification failed!');
-      process.exit(1);
-    }
+    console.log('');
+    console.log('✅ formatTemplate updated successfully!');
+    console.log('');
+    console.log('🔄 Remember to restart backend: pm2 restart vergilex-backend');
 
   } catch (error) {
     console.error('❌ Error:', error.message);
