@@ -431,6 +431,12 @@ export default function EmbeddingsManagerPage() {
         setSelectedTables(data.tables);
       }
 
+      // Refresh table stats periodically during processing (every ~30 seconds based on polling interval)
+      // Only refresh when current is divisible by 100 to avoid too frequent updates
+      if (data.status === 'processing' && data.current > 0 && data.current % 100 === 0) {
+        fetchAvailableTables();
+      }
+
       // Handle completion
       if (data.status === 'completed') {
         fetchAvailableTables();
