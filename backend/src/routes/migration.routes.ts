@@ -1811,6 +1811,7 @@ router.post('/generate', async (req: Request, res: Response) => {
     for (const tableInfo of tablePendingInfo) {
       const { table, normalizedName: normalizedTableName, embeddedIds } = tableInfo;
       let tableProcessed = 0;
+      let offset = 0;
 
       // Detect primary key column (row_id or id)
       let pkColumn = 'row_id';
@@ -1824,18 +1825,12 @@ router.post('/generate', async (req: Request, res: Response) => {
         }
       }
 
-      // Calculate starting point: skip already embedded records
-      let startFromId = 0;
-      if (embeddedIds.size > 0) {
-        startFromId = Math.max(...Array.from(embeddedIds));
-        console.log(`📊 Processing table: ${table} (${tableInfo.pendingCount} pending, starting from ${pkColumn} > ${startFromId})`);
-      } else {
-        console.log(`📊 Processing table: ${table} (${tableInfo.pendingCount} pending, starting from beginning)`);
-      }
+      console.log(`📊 Processing table: ${table} (${tableInfo.pendingCount} pending records)`);
 
       while (true) {
-        // Fetch a batch of records from source (with pagination)
-        // Use WHERE {pkColumn} > startFromId to skip already embedded records
+        // Fetch a batch of records from source (with OFFSET pagination)
+        // IMPORTANT: Can't use WHERE row_id > X because pending records may be scattered throughout table
+        // Example: total 28373, embedded 28318, but 55 pending are scattered in rows 1-28373
         // ORDER BY {pkColumn} for consistent numeric sorting
         let batchResult;
         let retryCount = 0;
@@ -1844,8 +1839,8 @@ router.post('/generate', async (req: Request, res: Response) => {
         while (retryCount < maxRetries) {
           try {
             batchResult = await pools.sourcePool.query(
-              `SELECT * FROM public."${table}" WHERE ${pkColumn} > $1 ORDER BY ${pkColumn} LIMIT $2`,
-              [startFromId, BATCH_FETCH_SIZE]
+              `SELECT * FROM public."${table}" ORDER BY ${pkColumn} LIMIT $1 OFFSET $2`,
+              [BATCH_FETCH_SIZE, offset]
             );
             break; // Success, exit retry loop
           } catch (dbError: any) {
@@ -1878,25 +1873,22 @@ router.post('/generate', async (req: Request, res: Response) => {
           });
         }
 
-        // Update startFromId to last row in this batch (for next iteration if needed)
-        const lastRowId = Math.max(...batchResult.rows.map((r: any) => parseInt(r.row_id, 10)));
-
         // Filter out already embedded records
         // Note: PK value might be string or number depending on source table, so we compare as numbers
         const pendingBatch = unifiedEmbeddingsExists
           ? batchResult.rows.filter(row => !embeddedIds.has(parseInt(row.row_id, 10)))
           : batchResult.rows;
 
-        // If all records in this batch are already embedded
+        // If all records in this batch are already embedded, advance to next batch
         if (pendingBatch.length === 0) {
           // If this was a partial batch (less than BATCH_FETCH_SIZE), we've reached the end
           if (batchResult.rows.length < BATCH_FETCH_SIZE) {
             console.log(`✅ Reached end of table ${table} (last batch: ${batchResult.rows.length} rows, all embedded)`);
             break;
           }
-          // Otherwise, continue to next batch range (may have gaps in sequence)
-          console.log(`⏭️ Batch fully embedded for ${table} (${batchResult.rows.length} rows), advancing to next batch from ${pkColumn} > ${lastRowId}...`);
-          startFromId = lastRowId;
+          // Otherwise, continue to next batch offset (may have more pending records ahead)
+          offset += BATCH_FETCH_SIZE;
+          console.log(`⏭️ Batch fully embedded for ${table} (${batchResult.rows.length} rows), advancing to offset ${offset}...`);
           continue; // Skip to next batch
         }
 
@@ -2173,9 +2165,8 @@ router.post('/generate', async (req: Request, res: Response) => {
           break;
         }
 
-        // Move to next batch by updating startFromId
-        // This allows us to skip already processed records efficiently
-        startFromId = lastRowId;
+        // Move to next batch by advancing offset
+        offset += BATCH_FETCH_SIZE;
 
         // Memory cleanup hint
         if (global.gc) {
