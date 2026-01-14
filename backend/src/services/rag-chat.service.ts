@@ -2774,6 +2774,10 @@ FORMAT:
       let finalSources = limitedSources;
       let finalResponse = response.content;
 
+      // FIX: Ensure proper markdown formatting (blank lines before/after headings)
+      // and remove hallucinated citations beyond available sources
+      finalResponse = this.fixMarkdownAndCitations(finalResponse, limitedSources.length);
+
       if (isRefusalResponse) {
         // 🎯 REFUSAL TYPE DETECTION: Gate-based vs Prompt-based
         // Gate-based: Evidence Gate blocked due to low scores (correct behavior)
@@ -3329,6 +3333,40 @@ FORMAT:
 
     // Default: return full content if no specific section or verdict patterns found
     return content;
+  }
+
+  /**
+   * Fix markdown formatting and remove hallucinated citations
+   *
+   * Ensures proper markdown rendering in frontend:
+   * 1. Add blank lines before/after ## headings (required for markdown)
+   * 2. Remove citation numbers beyond available sources (hallucination fix)
+   *
+   * @param response - LLM response text
+   * @param maxCitations - Maximum valid citation number (source count)
+   * @returns Fixed response text
+   */
+  private fixMarkdownAndCitations(response: string, maxCitations: number): string {
+    let fixed = response;
+
+    // 1. Ensure blank lines before ## headings
+    // Matches: "text. ##" or "text.##" or "text.\n##"
+    fixed = fixed.replace(/([^\n])\n?(##\s)/g, '$1\n\n$2');
+
+    // 2. Ensure blank lines after ## headings
+    // Matches: "## Heading\nText" -> "## Heading\n\nText"
+    fixed = fixed.replace(/(##[^\n]+)\n([^\n])/g, '$1\n\n$2');
+
+    // 3. Remove hallucinated citations (beyond available sources)
+    // Example: If maxCitations=5, remove [6], [7], [8], [9], etc.
+    if (maxCitations > 0) {
+      for (let i = maxCitations + 1; i <= 20; i++) {
+        const pattern = new RegExp(`\\[${i}\\]`, 'g');
+        fixed = fixed.replace(pattern, '');
+      }
+    }
+
+    return fixed;
   }
 
   /**
