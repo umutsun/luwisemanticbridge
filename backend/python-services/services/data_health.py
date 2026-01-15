@@ -18,6 +18,7 @@ Kullanım:
 
 import asyncio
 import hashlib
+import json
 import logging
 from datetime import datetime, timedelta
 from typing import Dict, List, Optional, Any, Tuple
@@ -477,12 +478,12 @@ class DataHealthService:
                             # Güncelle
                             update_query = """
                                 UPDATE unified_embeddings
-                                SET metadata = $1, updated_at = NOW()
+                                SET metadata = $1::jsonb, updated_at = NOW()
                                 WHERE id = $2
                             """
                             await self.system_pool.execute(
                                 update_query,
-                                new_meta,
+                                json.dumps(new_meta),
                                 record['id']
                             )
 
