@@ -124,29 +124,44 @@ export function SourceCitation({ sources, onLoadMore, hasMore = false, showLoadM
     <div className="mt-4 pt-3 border-t border-white/5">
       <div className="space-y-1">
         {sourcesToDisplay.map((source, index) => {
-          // Get display title
+          // Get display title - prioritize metadata fields
           const isUrl = (str: string) => str?.startsWith('http://') || str?.startsWith('https://');
           let displayTitle = '';
-          const rawTitle = stripHtml(source.citation || source.title || '');
 
-          if (isUrl(rawTitle)) {
-            if (source.excerpt) {
-              const cleanExcerpt = stripHtml(source.excerpt);
-              const firstSentence = cleanExcerpt.split(/[.!?]/)[0]?.trim();
-              displayTitle = firstSentence?.length > 10 ? firstSentence : cleanExcerpt.slice(0, 100);
-            } else {
-              displayTitle = getSourceTableName(source.sourceTable) + ' Kaynağı';
-            }
+          // First try metadata fields (baslik, konusu)
+          if (source.metadata?.baslik) {
+            displayTitle = stripHtml(source.metadata.baslik);
+          } else if (source.metadata?.konusu) {
+            displayTitle = stripHtml(source.metadata.konusu);
           } else {
-            displayTitle = rawTitle
-              .replace(/ - ID: \d+/g, '')
-              .replace(/^sorucevap -\s*/i, '')
-              .replace(/^ozelgeler -\s*/i, '')
-              .replace(/^danıştay kararları -\s*/i, '')
-              .replace(/^makaleler -\s*/i, '')
-              .replace(/\s*\([^)]*\)$/, '')
-              .trim();
+            // Fall back to citation/title
+            const rawTitle = stripHtml(source.citation || source.title || '');
+
+            if (isUrl(rawTitle)) {
+              if (source.excerpt) {
+                const cleanExcerpt = stripHtml(source.excerpt);
+                const firstSentence = cleanExcerpt.split(/[.!?]/)[0]?.trim();
+                displayTitle = firstSentence?.length > 10 ? firstSentence : cleanExcerpt.slice(0, 100);
+              } else {
+                displayTitle = getSourceTableName(source.sourceTable) + ' Kaynağı';
+              }
+            } else {
+              displayTitle = rawTitle
+                .replace(/ - ID: \d+/g, '')
+                .replace(/^sorucevap -\s*/i, '')
+                .replace(/^ozelgeler -\s*/i, '')
+                .replace(/^danıştay kararları -\s*/i, '')
+                .replace(/^makaleler -\s*/i, '')
+                .replace(/\s*\([^)]*\)$/, '')
+                .trim();
+            }
           }
+
+          // Clean up title
+          displayTitle = displayTitle
+            .replace(/Danıştay Kararları$/i, '')
+            .replace(/^\s*[-•]\s*/, '')
+            .trim() || 'Kaynak';
 
           return (
             <div
@@ -173,26 +188,34 @@ export function SourceCitation({ sources, onLoadMore, hasMore = false, showLoadM
                 {/* Metadata - Show all relevant fields */}
                 {source.metadata && Object.keys(source.metadata).length > 0 && (
                   <div className="text-[11px] text-gray-500 mt-1.5 space-y-1">
-                    {/* Priority metadata fields */}
-                    {(source.metadata.kurum || source.metadata.makam || source.metadata.tarih) && (
+                    {/* Danıştay / Özelge metadata */}
+                    {(source.metadata.daire || source.metadata.tarih || source.metadata.kurum || source.metadata.makam) && (
                       <p className="line-clamp-1">
-                        {source.metadata.kurum && `${source.metadata.kurum}`}
-                        {source.metadata.kurum && source.metadata.makam && ' • '}
-                        {source.metadata.makam && `${source.metadata.makam}`}
-                        {(source.metadata.kurum || source.metadata.makam) && source.metadata.tarih && ' • '}
+                        {source.metadata.daire && <span className="font-medium text-gray-400">{source.metadata.daire}</span>}
+                        {source.metadata.daire && source.metadata.tarih && ' • '}
+                        {source.metadata.kurum && !source.metadata.daire && <span className="font-medium text-gray-400">{source.metadata.kurum}</span>}
+                        {source.metadata.kurum && !source.metadata.daire && source.metadata.tarih && ' • '}
+                        {source.metadata.makam && ` ${source.metadata.makam}`}
                         {source.metadata.tarih && `${source.metadata.tarih}`}
                       </p>
                     )}
-                    {/* Additional metadata fields */}
-                    {(source.metadata.madde_no || source.metadata.karar_no || source.metadata.esas_no || source.metadata.sayi) && (
+                    {/* Esas/Karar numaraları - hem underscore'lu hem underscore'suz */}
+                    {(source.metadata.esasno || source.metadata.esas_no || source.metadata.kararno || source.metadata.karar_no || source.metadata.sayisirano || source.metadata.sayi) && (
                       <p className="line-clamp-1">
-                        {source.metadata.madde_no && `Madde: ${source.metadata.madde_no}`}
-                        {source.metadata.madde_no && (source.metadata.karar_no || source.metadata.esas_no || source.metadata.sayi) && ' • '}
-                        {source.metadata.karar_no && `Karar: ${source.metadata.karar_no}`}
-                        {source.metadata.karar_no && (source.metadata.esas_no || source.metadata.sayi) && ' • '}
-                        {source.metadata.esas_no && `Esas: ${source.metadata.esas_no}`}
-                        {source.metadata.esas_no && source.metadata.sayi && ' • '}
-                        {source.metadata.sayi && `Sayı: ${source.metadata.sayi}`}
+                        {(source.metadata.esasno || source.metadata.esas_no) && `E: ${source.metadata.esasno || source.metadata.esas_no}`}
+                        {(source.metadata.esasno || source.metadata.esas_no) && (source.metadata.kararno || source.metadata.karar_no) && ' • '}
+                        {(source.metadata.kararno || source.metadata.karar_no) && `K: ${source.metadata.kararno || source.metadata.karar_no}`}
+                        {(source.metadata.kararno || source.metadata.karar_no || source.metadata.esasno || source.metadata.esas_no) && (source.metadata.sayisirano || source.metadata.sayi) && ' • '}
+                        {(source.metadata.sayisirano || source.metadata.sayi) && `Sayı: ${source.metadata.sayisirano || source.metadata.sayi}`}
+                      </p>
+                    )}
+                    {/* Makale metadata */}
+                    {(source.metadata.yazar || source.metadata.dergi) && (
+                      <p className="line-clamp-1">
+                        {source.metadata.dergi && <span className="uppercase text-[10px]">{source.metadata.dergi}</span>}
+                        {source.metadata.dergi && source.metadata.yazar && ' • '}
+                        {source.metadata.yazar && `Yazar: ${source.metadata.yazar}`}
+                        {(source.metadata.yazar || source.metadata.dergi) && source.metadata.tarih && !source.metadata.daire && ` • ${source.metadata.tarih}`}
                       </p>
                     )}
                   </div>
