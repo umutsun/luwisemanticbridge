@@ -462,27 +462,33 @@ async def optimize_data(
 
         # 2. Get all tables
         tables = await service._get_embedded_tables()
+        logger.info(f"[OPTIMIZE] Processing {len(tables)} tables: {tables}")
 
         for table in tables:
+            logger.info(f"[OPTIMIZE] Starting table: {table}")
             table_result = {"table": table, "orphans": 0, "duplicates": 0, "metadata": 0}
 
             # Delete orphans (independent operation)
             try:
+                logger.info(f"[OPTIMIZE] Calling delete_orphans for {table}")
                 orphan_result = await service.delete_orphans(table, dry_run, limit=5000)
                 table_result["orphans"] = orphan_result.get("deleted_count", 0)
                 results["orphans_deleted"] += table_result["orphans"]
+                logger.info(f"[OPTIMIZE] Orphans for {table}: {table_result['orphans']}")
             except Exception as e:
                 results["errors"].append({"table": table, "operation": "orphan_delete", "error": str(e)})
-                logger.error(f"Error deleting orphans for {table}: {e}")
+                logger.error(f"[OPTIMIZE] Error deleting orphans for {table}: {e}")
 
             # Delete duplicates (independent operation)
             try:
+                logger.info(f"[OPTIMIZE] Calling delete_duplicates for {table}")
                 dup_result = await service.delete_duplicates(table, dry_run, keep="oldest")
                 table_result["duplicates"] = dup_result.get("deleted_count", 0)
                 results["duplicates_deleted"] += table_result["duplicates"]
+                logger.info(f"[OPTIMIZE] Duplicates for {table}: {table_result['duplicates']}, found: {dup_result.get('duplicates_found', 0)}")
             except Exception as e:
                 results["errors"].append({"table": table, "operation": "duplicate_delete", "error": str(e)})
-                logger.error(f"Error deleting duplicates for {table}: {e}")
+                logger.error(f"[OPTIMIZE] Error deleting duplicates for {table}: {e}")
 
             # Fix metadata (can fail without blocking other operations)
             try:
