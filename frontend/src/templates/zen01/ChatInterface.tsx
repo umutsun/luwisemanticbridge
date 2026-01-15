@@ -766,6 +766,13 @@ export default function ChatInterface() {
           onPdfSelect={setPdfFile}
           voiceSettings={voiceSettings}
         />
+
+        {/* Version Badge - Fixed bottom left */}
+        <div className="fixed bottom-3 left-3 z-50">
+          <span className="text-[9px] font-medium text-slate-700 dark:text-slate-400 opacity-70">
+            zen01 • v2026.01.15.D
+          </span>
+        </div>
       </div>
     </ProtectedRoute>
   );

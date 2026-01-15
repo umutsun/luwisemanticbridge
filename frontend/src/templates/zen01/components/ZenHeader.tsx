@@ -40,12 +40,6 @@ export const ZenHeader: React.FC<ZenHeaderProps> = ({
             {chatbotSettings.subtitle && (
               <p className="text-xs text-slate-500 dark:text-slate-400">{chatbotSettings.subtitle}</p>
             )}
-            {/* Version & Theme - more readable colors */}
-            <p className="text-[10px] text-slate-500 dark:text-slate-400">
-              <span className="font-medium text-slate-600 dark:text-slate-300">v2026.01.15.C</span>
-              <span className="mx-1 text-slate-400 dark:text-slate-500">•</span>
-              <span className="text-slate-500 dark:text-slate-400">(zen01)</span>
-            </p>
           </div>
         </div>
 
