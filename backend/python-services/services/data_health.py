@@ -470,13 +470,30 @@ class DataHealthService:
                         continue
 
                     try:
-                        # Yeni metadata oluştur
-                        current_meta = record['metadata'] or {}
-                        new_meta = {**current_meta}
+                        # Yeni metadata oluştur - handle various types
+                        raw_meta = record['metadata']
+                        if raw_meta is None:
+                            current_meta = {}
+                        elif isinstance(raw_meta, str):
+                            try:
+                                current_meta = json.loads(raw_meta) if raw_meta else {}
+                            except:
+                                current_meta = {}
+                        elif isinstance(raw_meta, dict):
+                            current_meta = raw_meta
+                        else:
+                            # asyncpg Record or other type - convert to dict
+                            current_meta = dict(raw_meta) if raw_meta else {}
+
+                        new_meta = dict(current_meta)  # Safe copy
 
                         for field in meta_fields:
-                            if field in source_row and source_row[field]:
-                                new_meta[field] = source_row[field]
+                            if field in source_row and source_row[field] is not None:
+                                # Convert datetime to string for JSON serialization
+                                value = source_row[field]
+                                if hasattr(value, 'isoformat'):
+                                    value = value.isoformat()
+                                new_meta[field] = value
 
                         if not dry_run:
                             # Güncelle
