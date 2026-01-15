@@ -1028,16 +1028,17 @@ class DataHealthService:
             # Get index details
             index_query = """
                 SELECT
-                    schemaname,
-                    tablename,
-                    indexname,
-                    pg_size_pretty(pg_relation_size(indexrelid)) AS index_size,
-                    pg_relation_size(indexrelid) AS index_bytes
-                FROM pg_indexes
-                JOIN pg_class ON pg_class.relname = indexname
-                WHERE schemaname = 'public'
-                AND tablename IN ('unified_embeddings', 'document_embeddings')
-                ORDER BY pg_relation_size(indexrelid) DESC
+                    i.schemaname,
+                    i.tablename,
+                    i.indexname,
+                    pg_size_pretty(pg_relation_size(c.oid)) AS index_size,
+                    pg_relation_size(c.oid) AS index_bytes
+                FROM pg_indexes i
+                JOIN pg_class c ON c.relname = i.indexname
+                JOIN pg_namespace n ON n.oid = c.relnamespace AND n.nspname = i.schemaname
+                WHERE i.schemaname = 'public'
+                AND i.tablename IN ('unified_embeddings', 'document_embeddings')
+                ORDER BY pg_relation_size(c.oid) DESC
             """
             indexes = await self.system_pool.fetch(index_query)
 
