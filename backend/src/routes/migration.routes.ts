@@ -2032,7 +2032,29 @@ router.post('/generate', async (req: Request, res: Response) => {
           continue;
         }
 
-        // Generate embedding
+        // Calculate content_hash FIRST (before embedding) for duplicate check
+        const contentHash = createHash('sha256').update(content).digest('hex');
+
+        // Check if this exact content already exists (skip embedding if duplicate)
+        const existingRecord = await pools.targetPool.query(`
+          SELECT id, source_id, content_hash
+          FROM unified_embeddings
+          WHERE LOWER(source_table) = LOWER($1)
+          AND content_hash = $2
+          LIMIT 1
+        `, [table, contentHash]);
+
+        if (existingRecord.rows.length > 0) {
+          const existing = existingRecord.rows[0];
+          console.log(`⏭️  Skipping ${table}[${row.row_id}] - identical content already exists (source_id: ${existing.source_id})`);
+
+          // Add to embeddedIds to prevent re-processing
+          embeddedIds.add(parseInt(row.row_id, 10));
+          // Don't increment processed (not a new embedding)
+          continue;
+        }
+
+        // Generate embedding (only if content is unique)
         console.log(` Generating embedding for ${table}[${row.row_id}]...`);
         const embedding = await generateEmbedding(content);
 
@@ -2101,9 +2123,6 @@ router.post('/generate', async (req: Request, res: Response) => {
         // Insert into unified_embeddings with token tracking
         // Calculate token estimate: ~3 chars per token for Turkish text
         const estimatedTokens = Math.ceil(content.length / 3);
-
-        // Calculate content_hash for duplicate prevention
-        const contentHash = createHash('sha256').update(content).digest('hex');
 
         const insertResult = await pools.targetPool.query(`
           INSERT INTO unified_embeddings
