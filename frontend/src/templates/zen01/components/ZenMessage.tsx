@@ -417,15 +417,24 @@ export const ZenMessage: React.FC<ZenMessageProps> = ({
                     ),
                     // Paragraphs with keyword highlighting and citation anchors
                     p: ({ children }) => {
-                      // Apply keyword highlighting and convert [1] to clickable anchors
+                      // Apply keyword highlighting and convert citations to clickable anchors
+                      // Supports: [1], [Kaynak 1], [Source 1] formats
                       const processChildren = (child: React.ReactNode): React.ReactNode => {
                         if (typeof child === 'string') {
-                          // First handle citation numbers [1], [2], etc.
-                          const parts = child.split(/(\[\d+\])/g);
+                          // Handle multiple citation formats:
+                          // - [1], [2], [3] - simple format
+                          // - [Kaynak 1], [Kaynak 2] - Turkish format from backend
+                          // - [Source 1], [Source 2] - English format from backend
+                          const citationRegex = /(\[\d+\]|\[Kaynak\s*\d+\]|\[Source\s*\d+\])/gi;
+                          const parts = child.split(citationRegex);
                           const processed = parts.map((part, idx) => {
-                            const match = part.match(/^\[(\d+)\]$/);
-                            if (match) {
-                              const citationNum = match[1];
+                            // Extract citation number from any format
+                            const simpleMatch = part.match(/^\[(\d+)\]$/);
+                            const kaynakMatch = part.match(/^\[Kaynak\s*(\d+)\]$/i);
+                            const sourceMatch = part.match(/^\[Source\s*(\d+)\]$/i);
+                            const citationNum = simpleMatch?.[1] || kaynakMatch?.[1] || sourceMatch?.[1];
+
+                            if (citationNum) {
                               // Only make clickable if enableSourceClick is true
                               if (enableSourceClick) {
                                 return (
