@@ -604,7 +604,7 @@ export const ZenMessage: React.FC<ZenMessageProps> = ({
                         {/* Citation number - clean, minimal */}
                         <div className="flex items-baseline gap-2 mb-3">
                           <span
-                            className="text-cyan-500/70 dark:text-cyan-400/70 text-xs font-mono font-bold cursor-help"
+                            className="text-cyan-500/70 dark:text-cyan-400/70 text-[9px] font-mono font-semibold cursor-help align-super"
                             title={(() => {
                               // Generate tooltip: "Özelge: T.C. Maliye Bakanlığı • Tarih: 01.01.2024 • Sayı: 123"
                               const parts: string[] = [];
