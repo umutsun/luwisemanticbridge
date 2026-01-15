@@ -785,10 +785,15 @@ class SemanticSearchService:
                 source_table = row['source_table']
                 source_id = row['source_id']
 
-                if source_table and source_id and source_table.startswith('csv_'):
+                # Check if source_table is a data table (not documents, not scraped_pages)
+                is_data_table = source_table and source_table not in ['documents', 'scraped_pages', 'messages']
+
+                if source_table and source_id and is_data_table:
                     try:
+                        # Construct CSV table name (add csv_ prefix if not exists)
+                        csv_table_name = f"csv_{source_table}" if not source_table.startswith('csv_') else source_table
+
                         # Fetch source row from CSV table
-                        csv_table_name = source_table
                         source_query = f"""
                             SELECT *
                             FROM {csv_table_name}
@@ -801,7 +806,7 @@ class SemanticSearchService:
                             # Merge CSV columns into metadata
                             # Common fields: tarih, madde_no, sayi, kararno, daire, dergi, yazar
                             for key, value in dict(source_row).items():
-                                if key not in ['id', 'icerik', 'content'] and value is not None:
+                                if key not in ['id', 'icerik', 'content', 'baslik'] and value is not None:
                                     metadata[key] = str(value)
 
                             logger.debug(f"[MetadataPopulate] Merged {len(dict(source_row))} fields from {csv_table_name} (id={source_id})")
