@@ -779,6 +779,35 @@ class SemanticSearchService:
                     except (json.JSONDecodeError, TypeError):
                         metadata = {}
 
+                # 🔧 CRITICAL FIX: Populate metadata from source CSV tables
+                # unified_embeddings.metadata only contains {table, originalId}
+                # We need to merge actual CSV columns (madde_no, sayi, tarih, etc.)
+                source_table = row['source_table']
+                source_id = row['source_id']
+
+                if source_table and source_id and source_table.startswith('csv_'):
+                    try:
+                        # Fetch source row from CSV table
+                        csv_table_name = source_table
+                        source_query = f"""
+                            SELECT *
+                            FROM {csv_table_name}
+                            WHERE id = $1
+                            LIMIT 1
+                        """
+                        source_row = await pool.fetchrow(source_query, int(source_id))
+
+                        if source_row:
+                            # Merge CSV columns into metadata
+                            # Common fields: tarih, madde_no, sayi, kararno, daire, dergi, yazar
+                            for key, value in dict(source_row).items():
+                                if key not in ['id', 'icerik', 'content'] and value is not None:
+                                    metadata[key] = str(value)
+
+                            logger.debug(f"[MetadataPopulate] Merged {len(dict(source_row))} fields from {csv_table_name} (id={source_id})")
+                    except Exception as e:
+                        logger.warning(f"[MetadataPopulate] Failed to fetch source metadata from {source_table} (id={source_id}): {e}")
+
                 result = {
                     "id": str(row['id']),
                     "content": row['content'],

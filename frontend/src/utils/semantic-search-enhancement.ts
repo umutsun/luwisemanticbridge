@@ -283,8 +283,8 @@ export function createEnhancedSourceClickHandler(
 ) {
   return async (source: Record<string, unknown>) => {
     // Check if question generation is disabled
-    // Default to true for backward compatibility
-    const enableQuestionGeneration = options.enableQuestionGeneration !== false;
+    // Only enable if explicitly set to true
+    const enableQuestionGeneration = options.enableQuestionGeneration === true;
 
     if (!enableQuestionGeneration) {
       console.log('[SourceClick] Question generation disabled - skipping');

@@ -432,16 +432,25 @@ export const ZenMessage: React.FC<ZenMessageProps> = ({
                                   <a
                                     key={`cite-${idx}`}
                                     href={`#citation-${message.id}-${citationNum}`}
-                                    className="text-cyan-600 dark:text-cyan-400 hover:text-cyan-700 dark:hover:text-cyan-300 no-underline font-mono text-[10px] font-semibold align-super transition-colors cursor-pointer"
+                                    className="text-cyan-600 dark:text-cyan-400 hover:text-cyan-700 dark:hover:text-cyan-300 no-underline font-mono font-semibold transition-colors cursor-pointer"
+                                    style={{
+                                      fontSize: '10px',
+                                      verticalAlign: 'super',
+                                      lineHeight: '0'
+                                    }}
                                     onClick={(e) => {
                                       e.preventDefault();
+                                      console.log('[Citation] Looking for ID:', `citation-${message.id}-${citationNum}`);
                                       const el = document.getElementById(`citation-${message.id}-${citationNum}`);
+                                      console.log('[Citation] Found element:', el);
                                       if (el) {
                                         el.scrollIntoView({ behavior: 'smooth', block: 'center' });
                                         el.classList.add('ring-2', 'ring-cyan-400', 'ring-opacity-50');
                                         setTimeout(() => {
                                           el.classList.remove('ring-2', 'ring-cyan-400', 'ring-opacity-50');
                                         }, 2000);
+                                      } else {
+                                        console.error('[Citation] Element not found!');
                                       }
                                     }}
                                   >
@@ -453,7 +462,12 @@ export const ZenMessage: React.FC<ZenMessageProps> = ({
                                 return (
                                   <span
                                     key={`cite-${idx}`}
-                                    className="text-cyan-600 dark:text-cyan-400 font-mono text-[10px] font-semibold align-super"
+                                    className="text-cyan-600 dark:text-cyan-400 font-mono font-semibold"
+                                    style={{
+                                      fontSize: '10px',
+                                      verticalAlign: 'super',
+                                      lineHeight: '0'
+                                    }}
                                   >
                                     [{citationNum}]
                                   </span>
@@ -670,7 +684,12 @@ export const ZenMessage: React.FC<ZenMessageProps> = ({
                         {/* Citation number - clean, minimal, no tooltip */}
                         <div className="flex items-baseline gap-2 mb-3">
                           <span
-                            className="text-cyan-500/70 dark:text-cyan-400/70 text-[9px] font-mono font-semibold align-super"
+                            className="text-cyan-500/70 dark:text-cyan-400/70 font-mono font-semibold"
+                            style={{
+                              fontSize: '9px',
+                              verticalAlign: 'super',
+                              lineHeight: '0'
+                            }}
                           >
                             [{idx + 1}]
                           </span>
