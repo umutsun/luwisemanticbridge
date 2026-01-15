@@ -417,26 +417,39 @@ export const ZenMessage: React.FC<ZenMessageProps> = ({
                             const match = part.match(/^\[(\d+)\]$/);
                             if (match) {
                               const citationNum = match[1];
-                              return (
-                                <a
-                                  key={`cite-${idx}`}
-                                  href={`#citation-${message.id}-${citationNum}`}
-                                  className="text-cyan-600 dark:text-cyan-400 hover:text-cyan-700 dark:hover:text-cyan-300 no-underline font-mono text-[10px] font-semibold align-super transition-colors"
-                                  onClick={(e) => {
-                                    e.preventDefault();
-                                    const el = document.getElementById(`citation-${message.id}-${citationNum}`);
-                                    if (el) {
-                                      el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                                      el.classList.add('ring-2', 'ring-cyan-400', 'ring-opacity-50');
-                                      setTimeout(() => {
-                                        el.classList.remove('ring-2', 'ring-cyan-400', 'ring-opacity-50');
-                                      }, 2000);
-                                    }
-                                  }}
-                                >
-                                  [{citationNum}]
-                                </a>
-                              );
+                              // Only make clickable if enableSourceClick is true
+                              if (enableSourceClick) {
+                                return (
+                                  <a
+                                    key={`cite-${idx}`}
+                                    href={`#citation-${message.id}-${citationNum}`}
+                                    className="text-cyan-600 dark:text-cyan-400 hover:text-cyan-700 dark:hover:text-cyan-300 no-underline font-mono text-[10px] font-semibold align-super transition-colors cursor-pointer"
+                                    onClick={(e) => {
+                                      e.preventDefault();
+                                      const el = document.getElementById(`citation-${message.id}-${citationNum}`);
+                                      if (el) {
+                                        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                                        el.classList.add('ring-2', 'ring-cyan-400', 'ring-opacity-50');
+                                        setTimeout(() => {
+                                          el.classList.remove('ring-2', 'ring-cyan-400', 'ring-opacity-50');
+                                        }, 2000);
+                                      }
+                                    }}
+                                  >
+                                    [{citationNum}]
+                                  </a>
+                                );
+                              } else {
+                                // Not clickable - just display as text
+                                return (
+                                  <span
+                                    key={`cite-${idx}`}
+                                    className="text-cyan-600 dark:text-cyan-400 font-mono text-[10px] font-semibold align-super"
+                                  >
+                                    [{citationNum}]
+                                  </span>
+                                );
+                              }
                             }
                             // Apply keyword highlighting to non-citation text
                             if (highlightKeywords.length > 0) {
@@ -705,9 +718,9 @@ export const ZenMessage: React.FC<ZenMessageProps> = ({
                           return null;
                         })()}
 
-                        {/* Keywords - clean, minimal chips */}
+                        {/* Keywords - clean, minimal chips with top spacing */}
                         {source.keywords && source.keywords.length > 0 && (
-                          <div className="flex flex-wrap gap-2 mt-3">
+                          <div className="flex flex-wrap gap-2 mt-4 pt-3 border-t border-slate-700/20 dark:border-slate-600/20">
                             {source.keywords.slice(0, 4).map((keyword, kidx) => (
                               <span
                                 key={kidx}
