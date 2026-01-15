@@ -260,21 +260,21 @@ function preprocessMarkdown(content: string): string {
     // Also handle Turkish sentences ending with percentage or number
     .replace(/([0-9%])(\s*(?:\[\d+\]|\[Kaynak\s*\d+\]|\[Source\s*\d+\])+)?\.\s*\n(?!\n)([A-ZÇĞİÖŞÜ])/gi, '$1$2.\n\n$3');
 
-  // PARAGRAPH SPLITTING: If content is one long block without paragraph breaks,
-  // try to split at sentence boundaries every ~3-4 sentences
+  // PARAGRAPH SPLITTING: If content has few paragraph breaks, add more
   const paragraphCount = (result.match(/\n\n/g) || []).length;
-  const sentenceCount = (result.match(/[.!?](?:\s*(?:\[\d+\]|\[Kaynak\s*\d+\]|\[Source\s*\d+\]))*\s/gi) || []).length;
+  const sentenceCount = (result.match(/[.!?]\s/g) || []).length;
 
-  // If we have many sentences but few paragraphs, add more breaks
-  if (sentenceCount > 6 && paragraphCount < 2) {
-    console.log('[ZenMessage] 📝 Adding paragraph breaks:', { sentenceCount, paragraphCount });
-    // Split long text into paragraphs every 3-4 sentences
+  // Debug paragraph analysis
+  console.log('[ZenMessage] 📝 Paragraph analysis:', { sentenceCount, paragraphCount, contentLength: result.length });
+
+  // If we have sentences but few paragraphs, add breaks every 2 sentences
+  if (sentenceCount >= 3 && paragraphCount < Math.floor(sentenceCount / 2)) {
     let sentenceCounter = 0;
-    result = result.replace(/([.!?])(\s*(?:\[\d+\]|\[Kaynak\s*\d+\]|\[Source\s*\d+\])*)\s+/gi, (match, punct, cite) => {
+    result = result.replace(/([.!?])(\s*)(?=[A-ZÇĞİÖŞÜa-zçğıöşü])/g, (match, punct, _space) => {
       sentenceCounter++;
-      // Add paragraph break every 3-4 sentences
-      if (sentenceCounter % 3 === 0 && sentenceCounter < sentenceCount - 1) {
-        return `${punct}${cite || ''}\n\n`;
+      // Add paragraph break every 2 sentences
+      if (sentenceCounter % 2 === 0) {
+        return `${punct}\n\n`;
       }
       return match;
     });
@@ -324,7 +324,7 @@ export const ZenMessage: React.FC<ZenMessageProps> = ({
 
   // Debug: Log component version on mount
   React.useEffect(() => {
-    console.log('[ZenMessage] 🔄 Component Version: 2026-01-15T12:30 UTC - Features: Citation Superscript + Smooth Scroll + Metadata Tags + Paragraph Formatting', {
+    console.log('[ZenMessage] 🔄 v2026.01.15.B - Citation cleanup + Toggle fix', {
       enableSourceClick,
       enableKeywordHighlighting,
       messageId: message.id
@@ -458,66 +458,39 @@ export const ZenMessage: React.FC<ZenMessageProps> = ({
                             const citationNum = simpleMatch?.[1] || kaynakMatch?.[1] || sourceMatch?.[1];
 
                             if (citationNum) {
-                              // Only make clickable if enableSourceClick is true
+                              // Clean, simple citation format - no fancy styling
+                              // Just a small superscript number that scrolls to source
                               if (enableSourceClick) {
                                 return (
-                                  <a
+                                  <sup
                                     key={`cite-${idx}`}
-                                    href={`#citation-${message.id}-${citationNum}`}
-                                    className="zen01-citation-anchor no-underline"
-                                    style={{
-                                      verticalAlign: 'super',
-                                      fontSize: '10px',
-                                      lineHeight: '0',
-                                      fontWeight: 600,
-                                      fontFamily: "'Monaco', 'Menlo', 'Courier New', monospace",
-                                      color: '#06b6d4',
-                                      textDecoration: 'none',
-                                      cursor: 'pointer',
-                                      marginLeft: '1px',
-                                      marginRight: '1px',
-                                    }}
+                                    className="cursor-pointer text-cyan-600 dark:text-cyan-400 hover:text-cyan-500 dark:hover:text-cyan-300"
+                                    style={{ fontSize: '0.7em', fontWeight: 500 }}
                                     onClick={(e) => {
                                       e.preventDefault();
-                                      console.log('[Citation] 🔍 Looking for ID:', `citation-${message.id}-${citationNum}`);
+                                      e.stopPropagation();
                                       const el = document.getElementById(`citation-${message.id}-${citationNum}`);
-                                      console.log('[Citation] Found element:', el ? '✅' : '❌');
                                       if (el) {
-                                        // Smooth scroll to element
                                         el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                                        // Add highlight animation with inline style (more reliable than classes)
                                         el.style.boxShadow = '0 0 0 2px rgba(34, 211, 238, 0.5)';
                                         el.style.transition = 'box-shadow 0.3s ease';
-                                        setTimeout(() => {
-                                          el.style.boxShadow = 'none';
-                                        }, 2000);
-                                      } else {
-                                        console.error('[Citation] ❌ Element not found!');
+                                        setTimeout(() => { el.style.boxShadow = 'none'; }, 2000);
                                       }
                                     }}
                                   >
                                     [{citationNum}]
-                                  </a>
+                                  </sup>
                                 );
                               } else {
-                                // Not clickable - just display as superscript text
+                                // Not clickable - just display as superscript
                                 return (
-                                  <span
+                                  <sup
                                     key={`cite-${idx}`}
-                                    className="zen01-citation-number"
-                                    style={{
-                                      verticalAlign: 'super',
-                                      fontSize: '10px',
-                                      lineHeight: '0',
-                                      fontWeight: 600,
-                                      fontFamily: "'Monaco', 'Menlo', 'Courier New', monospace",
-                                      color: '#06b6d4',
-                                      marginLeft: '1px',
-                                      marginRight: '1px',
-                                    }}
+                                    className="text-cyan-600 dark:text-cyan-400"
+                                    style={{ fontSize: '0.7em', fontWeight: 500 }}
                                   >
                                     [{citationNum}]
-                                  </span>
+                                  </sup>
                                 );
                               }
                             }
@@ -728,17 +701,9 @@ export const ZenMessage: React.FC<ZenMessageProps> = ({
                   >
                     <div className="flex items-start gap-2">
                       <div className="flex-1 min-w-0">
-                        {/* Citation number - clean, minimal, no tooltip */}
-                        <div className="flex items-baseline gap-2 mb-3">
-                          <span
-                            className="zen01-citation-number"
-                            style={{
-                              fontSize: '11px',
-                              fontWeight: 700,
-                              fontFamily: "'Monaco', 'Menlo', 'Courier New', monospace",
-                              color: '#22d3ee',
-                            }}
-                          >
+                        {/* Citation number - clean, simple format */}
+                        <div className="flex items-center gap-2 mb-2">
+                          <span className="text-xs font-semibold text-cyan-500 dark:text-cyan-400">
                             [{idx + 1}]
                           </span>
                           <span className={`zen01-marker ${typeInfo.markerClass} text-[10px] font-medium px-2 py-0.5`}>

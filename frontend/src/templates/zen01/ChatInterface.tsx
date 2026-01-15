@@ -267,10 +267,10 @@ export default function ChatInterface() {
           enableSuggestions: chatbotData.enableSuggestions !== undefined ? chatbotData.enableSuggestions : true,
           welcomeMessage: chatbotData.welcomeMessage || '',
           greeting: chatbotData.greeting || '',
-          // Feature toggles from schema
-          enableSourceClick: chatbotData.enableSourceClick !== undefined ? chatbotData.enableSourceClick : true,
-          enableSourceQuestionGeneration: chatbotData.enableSourceQuestionGeneration !== undefined ? chatbotData.enableSourceQuestionGeneration : true,
-          enableKeywordHighlighting: chatbotData.enableKeywordHighlighting !== undefined ? chatbotData.enableKeywordHighlighting : true,
+          // Feature toggles from schema - default to false for safety
+          enableSourceClick: chatbotData.enableSourceClick === true,
+          enableSourceQuestionGeneration: chatbotData.enableSourceQuestionGeneration === true,
+          enableKeywordHighlighting: chatbotData.enableKeywordHighlighting !== false, // Only this defaults to true
           // PDF Upload toggle
           enablePdfUpload: chatbotData.enablePdfUpload !== undefined ? chatbotData.enablePdfUpload : false,
           // Voice Feature Toggles (master toggles)
@@ -304,6 +304,17 @@ export default function ChatInterface() {
           maxTokens: llm.maxTokens,
           tone: 'professional'
         };
+
+        // Debug: Log feature toggles from settings
+        console.log('[ChatInterface] 🔧 Feature Toggles:', {
+          enableSourceClick: config.enableSourceClick,
+          enableSourceQuestionGeneration: config.enableSourceQuestionGeneration,
+          enableKeywordHighlighting: config.enableKeywordHighlighting,
+          rawData: {
+            sourceClick: chatbotData.enableSourceClick,
+            questionGen: chatbotData.enableSourceQuestionGeneration
+          }
+        });
 
         setChatbotSettings(config);
         setRagSettings(ragSettings);

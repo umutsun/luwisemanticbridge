@@ -35,7 +35,10 @@ export const ZenHeader: React.FC<ZenHeaderProps> = ({
           </div>
           <div>
             <h1 className="text-lg font-semibold text-slate-800 dark:text-slate-100">
-              🔥 TEST BUILD {new Date().getTime()} - {chatbotSettings.title || 'Zen Assistant'}
+              {chatbotSettings.title || 'Zen Assistant'}
+              <span className="ml-2 text-[10px] font-normal text-cyan-500 dark:text-cyan-400 opacity-60">
+                v2026.01.15.B
+              </span>
             </h1>
             {chatbotSettings.subtitle && (
               <p className="text-xs text-slate-500 dark:text-slate-400">{chatbotSettings.subtitle}</p>
