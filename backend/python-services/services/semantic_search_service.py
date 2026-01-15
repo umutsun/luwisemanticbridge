@@ -1286,6 +1286,202 @@ class SemanticSearchService:
         re.compile(r'bulunmaktadır', re.IGNORECASE),
     ]
 
+    # ========================================================================
+    # METADATA QUALITY SCORING
+    # Smart algorithm to boost results with complete, high-quality metadata
+    # Helps citation display show meaningful information
+    # ========================================================================
+
+    # Required metadata fields by source table type (for quality scoring)
+    METADATA_QUALITY_FIELDS = {
+        'ozelge': {
+            'required': ['daire', 'tarih', 'sayisirano'],
+            'optional': ['konusu', 'makam', 'kurum'],
+            'title_fields': ['konusu', 'baslik']
+        },
+        'danistaykararlari': {
+            'required': ['daire', 'tarih', 'esasno', 'kararno'],
+            'optional': ['konusu'],
+            'title_fields': ['konusu', 'baslik']
+        },
+        'sorucevap': {
+            'required': ['soru'],
+            'optional': ['cevap', 'donemi'],
+            'title_fields': ['soru']
+        },
+        'makale': {
+            'required': ['baslik', 'yazar'],
+            'optional': ['tarih', 'dergi'],
+            'title_fields': ['baslik']
+        },
+        'hukdkk': {
+            'required': ['tarih'],
+            'optional': ['genelsirano', 'yayinsirano', 'ozeti', 'gecerlilik'],
+            'title_fields': ['ozeti', 'baslik']
+        },
+        'gib_sirkuler': {
+            'required': ['title'],
+            'optional': ['category', 'category_tr', 'crawled_at'],
+            'title_fields': ['title']
+        },
+        'default': {
+            'required': ['tarih'],
+            'optional': ['baslik', 'yazar', 'dergi', 'daire', 'konusu'],
+            'title_fields': ['baslik', 'konusu', 'title']
+        }
+    }
+
+    # Metadata boost weights
+    METADATA_BOOST_CONFIG = {
+        'max_boost': 0.15,           # Maximum metadata quality boost
+        'required_field_weight': 0.6, # Weight for required fields
+        'optional_field_weight': 0.3, # Weight for optional fields
+        'title_quality_weight': 0.1,  # Weight for title quality
+        'min_title_length': 10,       # Minimum meaningful title length
+        'ideal_title_length': 50,     # Ideal title length
+    }
+
+    def _get_metadata_quality_config(self, source_table: str) -> Dict[str, Any]:
+        """Get metadata quality configuration for a source table"""
+        table_lower = (source_table or '').lower()
+
+        # Remove csv_ prefix if present
+        if table_lower.startswith('csv_'):
+            table_lower = table_lower[4:]
+
+        # Remove year suffixes (e.g., makale_arsiv_2021 -> makale)
+        for suffix in ['_arsiv_2021', '_arsiv_2022', '_arsiv_2023', '_arsiv_2024', '_arsiv_2025']:
+            if table_lower.endswith(suffix.replace('_', '')):
+                table_lower = table_lower.replace(suffix.replace('_', ''), '')
+
+        # Try exact match first
+        if table_lower in self.METADATA_QUALITY_FIELDS:
+            return self.METADATA_QUALITY_FIELDS[table_lower]
+
+        # Try partial match
+        for key in self.METADATA_QUALITY_FIELDS:
+            if key in table_lower or table_lower in key:
+                return self.METADATA_QUALITY_FIELDS[key]
+
+        # Default config
+        return self.METADATA_QUALITY_FIELDS['default']
+
+    def _calculate_metadata_quality_score(
+        self,
+        metadata: Optional[Dict[str, Any]],
+        source_table: str,
+        title: Optional[str] = None
+    ) -> Tuple[float, Dict[str, Any]]:
+        """
+        Calculate metadata quality score for ranking boost.
+
+        Higher quality metadata = better citation display = higher ranking
+
+        Args:
+            metadata: Chunk metadata dictionary
+            source_table: Source table name
+            title: Extracted title (if available)
+
+        Returns:
+            (boost_score, quality_details)
+            - boost_score: 0.0 to max_boost (positive = increase score)
+            - quality_details: Dict with breakdown for debugging
+        """
+        config = self._get_metadata_quality_config(source_table)
+        boost_config = self.METADATA_BOOST_CONFIG
+
+        details = {
+            'required_score': 0.0,
+            'optional_score': 0.0,
+            'title_score': 0.0,
+            'total_boost': 0.0,
+            'missing_required': [],
+            'present_optional': [],
+            'title_quality': 'none'
+        }
+
+        if not metadata:
+            return 0.0, details
+
+        # 1. Score required fields (0.0 to 1.0)
+        required_fields = config.get('required', [])
+        if required_fields:
+            present_required = 0
+            for field in required_fields:
+                # Check both snake_case and camelCase versions
+                field_variants = [field, field.replace('_', '')]
+                for variant in field_variants:
+                    if variant in metadata and metadata[variant]:
+                        value = str(metadata[variant]).strip()
+                        if value and len(value) > 1:  # Non-empty value
+                            present_required += 1
+                            break
+                else:
+                    details['missing_required'].append(field)
+
+            details['required_score'] = present_required / len(required_fields)
+
+        # 2. Score optional fields (0.0 to 1.0)
+        optional_fields = config.get('optional', [])
+        if optional_fields:
+            present_optional = 0
+            for field in optional_fields:
+                field_variants = [field, field.replace('_', '')]
+                for variant in field_variants:
+                    if variant in metadata and metadata[variant]:
+                        value = str(metadata[variant]).strip()
+                        if value and len(value) > 1:
+                            present_optional += 1
+                            details['present_optional'].append(field)
+                            break
+
+            details['optional_score'] = present_optional / len(optional_fields)
+
+        # 3. Score title quality (0.0 to 1.0)
+        title_fields = config.get('title_fields', [])
+        best_title = title or ''
+
+        # Try to find best title from metadata
+        for field in title_fields:
+            field_variants = [field, field.replace('_', '')]
+            for variant in field_variants:
+                if variant in metadata and metadata[variant]:
+                    candidate = str(metadata[variant]).strip()
+                    if len(candidate) > len(best_title):
+                        best_title = candidate
+
+        if best_title:
+            title_len = len(best_title)
+            min_len = boost_config['min_title_length']
+            ideal_len = boost_config['ideal_title_length']
+
+            if title_len < min_len:
+                details['title_score'] = 0.2
+                details['title_quality'] = 'too_short'
+            elif title_len >= ideal_len:
+                details['title_score'] = 1.0
+                details['title_quality'] = 'excellent'
+            else:
+                # Linear interpolation between min and ideal
+                details['title_score'] = 0.3 + 0.7 * (title_len - min_len) / (ideal_len - min_len)
+                details['title_quality'] = 'good' if details['title_score'] > 0.7 else 'moderate'
+
+        # 4. Calculate weighted total boost
+        max_boost = boost_config['max_boost']
+        required_weight = boost_config['required_field_weight']
+        optional_weight = boost_config['optional_field_weight']
+        title_weight = boost_config['title_quality_weight']
+
+        weighted_score = (
+            details['required_score'] * required_weight +
+            details['optional_score'] * optional_weight +
+            details['title_score'] * title_weight
+        )
+
+        details['total_boost'] = min(weighted_score * max_boost, max_boost)
+
+        return details['total_boost'], details
+
     def _calculate_retrieval_penalties(
         self,
         query: str,
@@ -1926,9 +2122,25 @@ class SemanticSearchService:
                 if penalty_details["toc_penalty"] < 0:
                     penalty_stats["toc_count"] += 1
 
-                # Calculate final score (includes keyword boost and penalties)
-                # Penalty is negative, so adding it reduces the score
-                final_score = max(0, weighted_similarity + keyword_boost + retrieval_penalty)
+                # === METADATA QUALITY BOOST ===
+                # Better metadata = better citation display = higher ranking
+                metadata_boost, metadata_details = self._calculate_metadata_quality_score(
+                    result.get("metadata"),
+                    result["source_table"],
+                    title
+                )
+
+                # Track metadata quality statistics
+                if "metadata_quality_count" not in penalty_stats:
+                    penalty_stats["metadata_quality_count"] = 0
+                    penalty_stats["metadata_boost_total"] = 0.0
+                if metadata_boost > 0:
+                    penalty_stats["metadata_quality_count"] += 1
+                    penalty_stats["metadata_boost_total"] += metadata_boost
+
+                # Calculate final score (includes keyword boost, penalties, AND metadata quality boost)
+                # Penalty is negative, metadata_boost is positive
+                final_score = max(0, weighted_similarity + keyword_boost + retrieval_penalty + metadata_boost)
 
                 scored_results.append({
                     "id": result["id"],
@@ -1941,6 +2153,7 @@ class SemanticSearchService:
                     "source_id": result["source_id"],
                     "similarity_score": round(weighted_similarity * 100, 2),
                     "keyword_boost": round(keyword_boost * 100, 2),
+                    "metadata_boost": round(metadata_boost * 100, 2),
                     "source_priority": round(source_priority, 2),
                     "table_weight": round(table_weight, 2),
                     "final_score": round(final_score * 100, 2),
@@ -1952,6 +2165,8 @@ class SemanticSearchService:
                         "source_priority": round(source_priority, 2),
                         "table_weight": round(table_weight, 2),
                         "keyword_boost": round(keyword_boost * 100, 2),
+                        "metadata_boost": round(metadata_boost * 100, 2),
+                        "metadata_quality": metadata_details,
                         "retrieval_penalty": round(retrieval_penalty * 100, 2),
                         "temporal_penalty": round(penalty_details["temporal_penalty"] * 100, 2),
                         "toc_penalty": round(penalty_details["toc_penalty"] * 100, 2),
@@ -1962,9 +2177,12 @@ class SemanticSearchService:
                     }
                 })
 
-            # Log penalty statistics
+            # Log penalty and metadata quality statistics
             if penalty_stats["temporal_count"] > 0 or penalty_stats["toc_count"] > 0:
                 logger.info(f"Retrieval penalties applied: temporal={penalty_stats['temporal_count']}, toc={penalty_stats['toc_count']}")
+            if penalty_stats.get("metadata_quality_count", 0) > 0:
+                avg_boost = penalty_stats["metadata_boost_total"] / penalty_stats["metadata_quality_count"]
+                logger.info(f"Metadata quality boost: {penalty_stats['metadata_quality_count']} results boosted, avg={avg_boost*100:.1f}%")
 
             # Sort by final score and limit
             scored_results.sort(key=lambda x: x["final_score"], reverse=True)
@@ -2036,15 +2254,32 @@ class SemanticSearchService:
                 # Sort by penalty (most penalized first)
                 penalized_results.sort(key=lambda x: x["retrieval_penalty"])
 
+                # Get top metadata quality results
+                top_metadata_quality = [
+                    {
+                        "id": r["id"],
+                        "title": r.get("title", "")[:50],
+                        "source_table": r.get("source_table"),
+                        "metadata_boost": r.get("metadata_boost", 0),
+                        "metadata_quality": r.get("_debug", {}).get("metadata_quality", {}),
+                    }
+                    for r in scored_results
+                    if r.get("metadata_boost", 0) > 0
+                ]
+                # Sort by metadata boost (highest first)
+                top_metadata_quality.sort(key=lambda x: x["metadata_boost"], reverse=True)
+
                 response["_debug"] = {
                     "penalty_config": penalty_config,
                     "penalty_stats": penalty_stats,
+                    "metadata_quality_config": self.METADATA_BOOST_CONFIG,
                     "embedding_provider": self._embedding_config.provider if self._embedding_config else "unknown",
                     "query_embedding_dims": len(query_embedding) if not use_keyword_fallback else 0,
                     "raw_results_count": len(raw_results),
                     "scored_results_count": len(scored_results),
                     "filtered_count": len(final_results),
                     "top_penalized": penalized_results[:5],
+                    "top_metadata_quality": top_metadata_quality[:5],
                     "search_mode": "keyword_fallback" if use_keyword_fallback else "vector",
                     "source_table_weights": settings.source_table_weights or {}
                 }
