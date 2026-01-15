@@ -417,24 +417,22 @@ class DataHealthService:
 
             logger.info(f"Using metadata fields for {table_name}: {meta_fields}")
 
-            # Eksik metadata olan kayıtları bul
-            missing_query = """
+            # Eksik metadata olan kayıtları bul - dinamik olarak gerekli alanları kontrol et
+            # Her tablo için tanımlı alanlardan HERHANGİ BİRİ eksikse seç
+            missing_conditions = " OR ".join([f"NOT metadata ? '{field}'" for field in meta_fields])
+
+            missing_query = f"""
                 SELECT id, source_id, metadata
                 FROM unified_embeddings
                 WHERE (LOWER(source_table) = LOWER($1) OR LOWER(metadata->>'table') = LOWER($1))
                 AND (
                     metadata IS NULL
-                    OR metadata = '{}'::jsonb
-                    OR (
-                        NOT metadata ? 'tarih'
-                        AND NOT metadata ? 'daire'
-                        AND NOT metadata ? 'sayisirano'
-                        AND NOT metadata ? 'konu'
-                        AND NOT metadata ? 'konusu'
-                    )
+                    OR metadata = '{{}}'::jsonb
+                    OR ({missing_conditions})
                 )
                 LIMIT $2
             """
+            logger.info(f"Missing query conditions: {missing_conditions}")
             records = await self.system_pool.fetch(missing_query, table_name, limit)
             result.total_records = len(records)
 
