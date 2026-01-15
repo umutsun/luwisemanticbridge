@@ -4214,6 +4214,68 @@ function SecuritySettings() {
                   />
                 </div>
               </div>
+
+              {/* Proxy Settings */}
+              <div className="border-t pt-4 space-y-4">
+                <Label className="text-base font-semibold">Proxy Ayarları</Label>
+
+                <div>
+                  <Label>Proxy Server (opsiyonel)</Label>
+                  <Input
+                    placeholder="http://proxy.example.com:8080"
+                    value={tempConfig?.crawler?.proxyUrl ?? securityConfig?.crawler?.proxyUrl ?? ''}
+                    onChange={(e) => setTempConfig({
+                      ...tempConfig,
+                      crawler: {
+                        ...tempConfig.crawler,
+                        proxyUrl: e.target.value
+                      }
+                    })}
+                  />
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Format: http://host:port veya https://host:port
+                  </p>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <Label>Proxy Username (opsiyonel)</Label>
+                    <Input
+                      placeholder="username"
+                      value={tempConfig?.crawler?.proxyUsername ?? securityConfig?.crawler?.proxyUsername ?? ''}
+                      onChange={(e) => setTempConfig({
+                        ...tempConfig,
+                        crawler: {
+                          ...tempConfig.crawler,
+                          proxyUsername: e.target.value
+                        }
+                      })}
+                    />
+                  </div>
+                  <div>
+                    <Label>Proxy Password (opsiyonel)</Label>
+                    <Input
+                      type="password"
+                      placeholder="password"
+                      value={tempConfig?.crawler?.proxyPassword ?? securityConfig?.crawler?.proxyPassword ?? ''}
+                      onChange={(e) => setTempConfig({
+                        ...tempConfig,
+                        crawler: {
+                          ...tempConfig.crawler,
+                          proxyPassword: e.target.value
+                        }
+                      })}
+                    />
+                  </div>
+                </div>
+
+                <div className="bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-800 rounded p-3">
+                  <p className="text-xs text-blue-800 dark:text-blue-200">
+                    💡 <strong>Not:</strong> Proxy ayarları crawler'lar tarafından kullanılır.
+                    Boş bırakırsanız direkt bağlantı kullanılır.
+                  </p>
+                </div>
+              </div>
             </CardContent>
           </Card>
 
