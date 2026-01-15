@@ -2,6 +2,7 @@ import { Router, Request, Response } from 'express';
 import { Pool } from 'pg';
 import OpenAI from 'openai';
 import { EventEmitter } from 'events';
+import { createHash } from 'crypto';
 import { lsembPool } from '../config/database.config';
 import { initializeRedis, redisClient } from '../config/redis';
 
@@ -2101,18 +2102,29 @@ router.post('/generate', async (req: Request, res: Response) => {
         // Calculate token estimate: ~3 chars per token for Turkish text
         const estimatedTokens = Math.ceil(content.length / 3);
 
+        // Calculate content_hash for duplicate prevention
+        const contentHash = createHash('sha256').update(content).digest('hex');
+
         const insertResult = await pools.targetPool.query(`
           INSERT INTO unified_embeddings
-          (source_table, source_type, source_id, source_name, content, embedding, metadata, tokens_used, model_used, embedding_provider)
-          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-          ON CONFLICT (source_table, source_id) DO NOTHING
-          RETURNING id
+          (source_table, source_type, source_id, source_name, content, content_hash, embedding, metadata, tokens_used, model_used, embedding_provider)
+          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+          ON CONFLICT (source_table, source_id) DO UPDATE SET
+            content = EXCLUDED.content,
+            content_hash = EXCLUDED.content_hash,
+            embedding = EXCLUDED.embedding,
+            metadata = EXCLUDED.metadata,
+            tokens_used = EXCLUDED.tokens_used,
+            model_used = EXCLUDED.model_used,
+            updated_at = NOW()
+          RETURNING id, (xmax = 0) AS inserted
         `, [
           tableLower, // Use normalized lowercase table name
           sourceType,
           row.row_id,
           title,
           content,
+          contentHash,
           `[${embedding.join(',')}]`,
           JSON.stringify(metadata),
           estimatedTokens,
@@ -2120,13 +2132,17 @@ router.post('/generate', async (req: Request, res: Response) => {
           metadata.embeddingProvider || 'openai'
         ]);
 
-        // Only increment processed if record was actually inserted (not skipped due to conflict)
+        // Check if record was inserted or updated
         if (insertResult.rows.length > 0) {
-          // Add to embeddedIds Set to prevent re-processing in subsequent batches
+          const wasInserted = insertResult.rows[0].inserted;
           embeddedIds.add(parseInt(row.row_id, 10));
-          processed++;
-        } else {
-          console.log(`⚠️ Record ${row.row_id} already exists (conflict detected), skipping count increment`);
+
+          if (wasInserted) {
+            processed++;
+            console.log(`✅ Embedded ${table}[${row.row_id}]`);
+          } else {
+            console.log(`🔄 Updated existing ${table}[${row.row_id}] (content changed)`);
+          }
         }
 
         // Calculate progress
