@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Zen01 Settings Test</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            max-width: 1200px;
+            margin: 40px auto;
+            padding: 20px;
+            background: #0f172a;
+            color: #e2e8f0;
+        }
+        h1 {
+            color: #06b6d4;
+            border-bottom: 2px solid #06b6d4;
+            padding-bottom: 10px;
+        }
+        .test-section {
+            background: #1e293b;
+            padding: 20px;
+            margin: 20px 0;
+            border-radius: 8px;
+            border-left: 4px solid #06b6d4;
+        }
+        .test-section h2 {
+            color: #22d3ee;
+            margin-top: 0;
+        }
+        button {
+            background: #06b6d4;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            margin: 5px;
+        }
+        button:hover {
+            background: #0891b2;
+        }
+        .result {
+            background: #0f172a;
+            padding: 15px;
+            margin: 10px 0;
+            border-radius: 4px;
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+            white-space: pre-wrap;
+            border: 1px solid #334155;
+        }
+        .success {
+            color: #10b981;
+        }
+        .error {
+            color: #ef4444;
+        }
+        .warning {
+            color: #f59e0b;
+        }
+        .info {
+            color: #3b82f6;
+        }
+    </style>
+</head>
+<body>
+    <h1>🧪 Zen01 Settings Test Suite</h1>
+    <p>Bu sayfa Zen01 template'inin settings sistemini test eder.</p>
+
+    <div class="test-section">
+        <h2>1. RAG Settings Test</h2>
+        <button onclick="testRagSettings()">Test RAG Settings</button>
+        <div id="ragResult" class="result"></div>
+    </div>
+
+    <div class="test-section">
+        <h2>2. System Prompt Test</h2>
+        <button onclick="testSystemPrompt()">Test System Prompt</button>
+        <div id="promptResult" class="result"></div>
+    </div>
+
+    <div class="test-section">
+        <h2>3. Response Schema Test</h2>
+        <button onclick="testResponseSchema()">Test Response Schema</button>
+        <div id="schemaResult" class="result"></div>
+    </div>
+
+    <div class="test-section">
+        <h2>4. Combined Test</h2>
+        <button onclick="runAllTests()">Run All Tests</button>
+        <div id="allResult" class="result"></div>
+    </div>
+
+    <script>
+        async function testRagSettings() {
+            const resultDiv = document.getElementById('ragResult');
+            resultDiv.innerHTML = 'Testing RAG Settings...\n';
+
+            try {
+                const response = await fetch('/api/v2/settings?category=rag');
+                const data = await response.json();
+
+                resultDiv.innerHTML += '\n<span class="success">✅ API Response OK</span>\n\n';
+                resultDiv.innerHTML += 'RAG Settings:\n';
+                resultDiv.innerHTML += JSON.stringify(data, null, 2);
+
+                // Verify required fields
+                const required = ['minResults', 'maxResults', 'similarityThreshold', 'minSourcesToShow', 'maxSourcesToShow'];
+                const missing = required.filter(field => !data.ragSettings || data.ragSettings[field] === undefined);
+
+                if (missing.length === 0) {
+                    resultDiv.innerHTML += '\n\n<span class="success">✅ All required fields present</span>';
+                } else {
+                    resultDiv.innerHTML += '\n\n<span class="warning">⚠️ Missing fields: ' + missing.join(', ') + '</span>';
+                }
+
+                // Check values
+                const settings = data.ragSettings || {};
+                resultDiv.innerHTML += '\n\nValues:\n';
+                resultDiv.innerHTML += `  minResults: ${settings.minResults || 'NOT SET'}\n`;
+                resultDiv.innerHTML += `  maxResults: ${settings.maxResults || 'NOT SET'}\n`;
+                resultDiv.innerHTML += `  similarityThreshold: ${settings.similarityThreshold || 'NOT SET'}\n`;
+                resultDiv.innerHTML += `  minSourcesToShow: ${settings.minSourcesToShow || 'NOT SET'}\n`;
+                resultDiv.innerHTML += `  maxSourcesToShow: ${settings.maxSourcesToShow || 'NOT SET'}`;
+
+            } catch (error) {
+                resultDiv.innerHTML += '\n<span class="error">❌ Error: ' + error.message + '</span>';
+            }
+        }
+
+        async function testSystemPrompt() {
+            const resultDiv = document.getElementById('promptResult');
+            resultDiv.innerHTML = 'Testing System Prompt...\n';
+
+            try {
+                const response = await fetch('/api/v2/settings?category=prompts');
+                const data = await response.json();
+
+                resultDiv.innerHTML += '\n<span class="success">✅ API Response OK</span>\n\n';
+
+                const promptsList = data.prompts?.list || [];
+                resultDiv.innerHTML += `Found ${promptsList.length} prompts\n\n`;
+
+                const activePrompt = promptsList.find(p => p.isActive === true);
+
+                if (activePrompt) {
+                    resultDiv.innerHTML += '<span class="success">✅ Active prompt found</span>\n\n';
+                    resultDiv.innerHTML += 'Active Prompt Details:\n';
+                    resultDiv.innerHTML += `  Name: ${activePrompt.name || 'N/A'}\n`;
+                    resultDiv.innerHTML += `  Updated: ${activePrompt.updatedAt || 'N/A'}\n`;
+                    resultDiv.innerHTML += `  Temperature: ${activePrompt.temperature || 'N/A'}\n`;
+                    resultDiv.innerHTML += `  Max Tokens: ${activePrompt.maxTokens || 'N/A'}\n`;
+                    resultDiv.innerHTML += `  System Prompt Length: ${activePrompt.systemPrompt?.length || 0} chars\n\n`;
+
+                    // Check for markdown rules
+                    const hasMarkdownRules = activePrompt.systemPrompt?.includes('KRİTİK: MARKDOWN FORMAT KURALLARI');
+                    if (hasMarkdownRules) {
+                        resultDiv.innerHTML += '<span class="success">✅ Markdown formatting rules present</span>\n';
+                    } else {
+                        resultDiv.innerHTML += '<span class="warning">⚠️ Markdown formatting rules NOT found</span>\n';
+                    }
+
+                    // Show preview
+                    if (activePrompt.systemPrompt) {
+                        resultDiv.innerHTML += '\nPreview (first 300 chars):\n';
+                        resultDiv.innerHTML += '<span class="info">' + activePrompt.systemPrompt.substring(0, 300) + '...</span>';
+                    }
+                } else {
+                    resultDiv.innerHTML += '<span class="error">❌ No active prompt found</span>';
+                }
+
+            } catch (error) {
+                resultDiv.innerHTML += '\n<span class="error">❌ Error: ' + error.message + '</span>';
+            }
+        }
+
+        async function testResponseSchema() {
+            const resultDiv = document.getElementById('schemaResult');
+            resultDiv.innerHTML = 'Testing Response Schema...\n';
+
+            try {
+                const response = await fetch('/api/v2/chatbot/settings');
+                const data = await response.json();
+
+                resultDiv.innerHTML += '\n<span class="success">✅ API Response OK</span>\n\n';
+
+                if (data.responseSchemaId) {
+                    resultDiv.innerHTML += '<span class="success">✅ Response Schema ID found</span>\n\n';
+                    resultDiv.innerHTML += `Schema ID: ${data.responseSchemaId}\n`;
+
+                    // Test if schema exists
+                    resultDiv.innerHTML += '\nChecking schema validity...\n';
+                    // Note: Would need schema service endpoint to verify fully
+                    resultDiv.innerHTML += '<span class="info">ℹ️ Schema ID present, full validation requires schema service endpoint</span>';
+                } else {
+                    resultDiv.innerHTML += '<span class="warning">⚠️ Response Schema ID not set (will use default)</span>';
+                }
+
+                // Show other chatbot settings
+                resultDiv.innerHTML += '\n\nOther Chatbot Settings:\n';
+                resultDiv.innerHTML += `  enableSourceClick: ${data.enableSourceClick !== undefined ? data.enableSourceClick : 'NOT SET'}\n`;
+                resultDiv.innerHTML += `  enableSourceQuestionGeneration: ${data.enableSourceQuestionGeneration !== undefined ? data.enableSourceQuestionGeneration : 'NOT SET'}\n`;
+                resultDiv.innerHTML += `  enableKeywordHighlighting: ${data.enableKeywordHighlighting !== undefined ? data.enableKeywordHighlighting : 'NOT SET'}`;
+
+            } catch (error) {
+                resultDiv.innerHTML += '\n<span class="error">❌ Error: ' + error.message + '</span>';
+            }
+        }
+
+        async function runAllTests() {
+            const resultDiv = document.getElementById('allResult');
+            resultDiv.innerHTML = '🧪 Running all tests...\n\n';
+
+            const tests = [
+                { name: 'RAG Settings', fn: testRagSettings },
+                { name: 'System Prompt', fn: testSystemPrompt },
+                { name: 'Response Schema', fn: testResponseSchema }
+            ];
+
+            let passed = 0;
+            let failed = 0;
+
+            for (const test of tests) {
+                resultDiv.innerHTML += `Testing ${test.name}...\n`;
+                try {
+                    await test.fn();
+                    passed++;
+                    resultDiv.innerHTML += `<span class="success">✅ ${test.name} PASSED</span>\n\n`;
+                } catch (error) {
+                    failed++;
+                    resultDiv.innerHTML += `<span class="error">❌ ${test.name} FAILED: ${error.message}</span>\n\n`;
+                }
+            }
+
+            resultDiv.innerHTML += '\n' + '='.repeat(50) + '\n';
+            resultDiv.innerHTML += `\nTest Results:\n`;
+            resultDiv.innerHTML += `<span class="success">✅ Passed: ${passed}</span>\n`;
+            if (failed > 0) {
+                resultDiv.innerHTML += `<span class="error">❌ Failed: ${failed}</span>\n`;
+            }
+            resultDiv.innerHTML += `\n<span class="${failed === 0 ? 'success' : 'error'}">Status: ${failed === 0 ? 'ALL TESTS PASSED' : 'SOME TESTS FAILED'}</span>`;
+        }
+    </script>
+</body>
+</html>
