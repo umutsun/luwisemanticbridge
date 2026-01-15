@@ -466,27 +466,34 @@ async def optimize_data(
         for table in tables:
             table_result = {"table": table, "orphans": 0, "duplicates": 0, "metadata": 0}
 
+            # Delete orphans (independent operation)
             try:
-                # Delete orphans
                 orphan_result = await service.delete_orphans(table, dry_run, limit=5000)
                 table_result["orphans"] = orphan_result.get("deleted_count", 0)
                 results["orphans_deleted"] += table_result["orphans"]
+            except Exception as e:
+                results["errors"].append({"table": table, "operation": "orphan_delete", "error": str(e)})
+                logger.error(f"Error deleting orphans for {table}: {e}")
 
-                # Delete duplicates - keep oldest (first embedded record is more valuable)
+            # Delete duplicates (independent operation)
+            try:
                 dup_result = await service.delete_duplicates(table, dry_run, keep="oldest")
                 table_result["duplicates"] = dup_result.get("deleted_count", 0)
                 results["duplicates_deleted"] += table_result["duplicates"]
+            except Exception as e:
+                results["errors"].append({"table": table, "operation": "duplicate_delete", "error": str(e)})
+                logger.error(f"Error deleting duplicates for {table}: {e}")
 
-                # Fix metadata
+            # Fix metadata (can fail without blocking other operations)
+            try:
                 meta_result = await service.fix_missing_metadata(table, dry_run, batch_size=100, limit=5000)
                 table_result["metadata"] = meta_result.fixed_count
                 results["metadata_fixed"] += table_result["metadata"]
-
-                results["tables_processed"].append(table_result)
-
             except Exception as e:
-                results["errors"].append({"table": table, "error": str(e)})
-                logger.error(f"Error optimizing {table}: {e}")
+                results["errors"].append({"table": table, "operation": "metadata_fix", "error": str(e)})
+                logger.error(f"Error fixing metadata for {table}: {e}")
+
+            results["tables_processed"].append(table_result)
 
         return results
 
