@@ -555,6 +555,35 @@
 }
 
 /* ============================================
+   Citation Superscript - CRITICAL FIX
+   ============================================ */
+.zen01-citation-anchor,
+.zen01-citation-number {
+  font-family: 'Monaco', 'Menlo', 'Courier New', monospace;
+  font-size: 10px !important;
+  font-weight: 600;
+  vertical-align: super !important;
+  line-height: 0 !important;
+  color: var(--zen-cyan);
+  transition: color 0.2s ease;
+}
+
+.zen01-citation-anchor:hover {
+  color: #22d3ee;
+}
+
+/* Dark mode */
+[data-theme="zen01"] .zen01-citation-anchor {
+  color: #06b6d4;
+}
+
+/* Light mode */
+[data-theme="zen01"][data-mode="light"] .zen01-citation-anchor,
+.zen01-container.light .zen01-citation-anchor {
+  color: #0891b2;
+}
+
+/* ============================================
    Source Type Badge (Citation Labels)
    High contrast for readability
    ============================================ */

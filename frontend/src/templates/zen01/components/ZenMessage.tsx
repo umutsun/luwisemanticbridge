@@ -432,12 +432,7 @@ export const ZenMessage: React.FC<ZenMessageProps> = ({
                                   <a
                                     key={`cite-${idx}`}
                                     href={`#citation-${message.id}-${citationNum}`}
-                                    className="text-cyan-600 dark:text-cyan-400 hover:text-cyan-700 dark:hover:text-cyan-300 no-underline font-mono font-semibold transition-colors cursor-pointer"
-                                    style={{
-                                      fontSize: '10px',
-                                      verticalAlign: 'super',
-                                      lineHeight: '0'
-                                    }}
+                                    className="zen01-citation-anchor no-underline"
                                     onClick={(e) => {
                                       e.preventDefault();
                                       console.log('[Citation] Looking for ID:', `citation-${message.id}-${citationNum}`);
@@ -462,12 +457,7 @@ export const ZenMessage: React.FC<ZenMessageProps> = ({
                                 return (
                                   <span
                                     key={`cite-${idx}`}
-                                    className="text-cyan-600 dark:text-cyan-400 font-mono font-semibold"
-                                    style={{
-                                      fontSize: '10px',
-                                      verticalAlign: 'super',
-                                      lineHeight: '0'
-                                    }}
+                                    className="zen01-citation-number"
                                   >
                                     [{citationNum}]
                                   </span>
@@ -683,14 +673,7 @@ export const ZenMessage: React.FC<ZenMessageProps> = ({
                       <div className="flex-1 min-w-0">
                         {/* Citation number - clean, minimal, no tooltip */}
                         <div className="flex items-baseline gap-2 mb-3">
-                          <span
-                            className="text-cyan-500/70 dark:text-cyan-400/70 font-mono font-semibold"
-                            style={{
-                              fontSize: '9px',
-                              verticalAlign: 'super',
-                              lineHeight: '0'
-                            }}
-                          >
+                          <span className="zen01-citation-number" style={{ fontSize: '9px' }}>
                             [{idx + 1}]
                           </span>
                           <span className={`zen01-marker ${typeInfo.markerClass} text-[10px] font-medium px-2 py-0.5`}>
