@@ -355,7 +355,7 @@
   border-radius: 0.75rem;
   padding: 0.75rem 1rem;
   margin-bottom: 0.5rem;
-  cursor: pointer;
+  /* cursor moved to React inline class for conditional control */
   transition: all 0.2s ease;
 }
 

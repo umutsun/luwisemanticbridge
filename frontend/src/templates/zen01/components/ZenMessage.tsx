@@ -301,8 +301,18 @@ export const ZenMessage: React.FC<ZenMessageProps> = ({
 
   // Extract keywords from last user query for highlighting (only if enabled)
   const highlightKeywords = React.useMemo(() => {
-    if (!enableKeywordHighlighting || !lastUserQuery || isUser) return [];
-    return extractKeywords(lastUserQuery);
+    if (!enableKeywordHighlighting || !lastUserQuery || isUser) {
+      console.log('[ZenMessage] Keyword highlighting:', {
+        enabled: enableKeywordHighlighting,
+        hasQuery: !!lastUserQuery,
+        isUser,
+        reason: !enableKeywordHighlighting ? 'disabled' : !lastUserQuery ? 'no query' : 'user message'
+      });
+      return [];
+    }
+    const keywords = extractKeywords(lastUserQuery);
+    console.log('[ZenMessage] Extracted keywords:', { query: lastUserQuery, keywords });
+    return keywords;
   }, [lastUserQuery, isUser, enableKeywordHighlighting]);
 
   // Use schema-based rendering when schemaId is provided
