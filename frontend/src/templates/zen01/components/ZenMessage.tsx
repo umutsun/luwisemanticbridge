@@ -256,9 +256,29 @@ function preprocessMarkdown(content: string): string {
   // This fixes LLM output that has single newlines instead of double newlines between paragraphs
   result = result
     // Match: period/punctuation + optional citation + single newline + capital letter
-    .replace(/([.!?])(\s*(?:\[\d+\])+)?\n(?!\n)([A-ZÇĞİÖŞÜ])/g, '$1$2\n\n$3')
+    .replace(/([.!?])(\s*(?:\[\d+\]|\[Kaynak\s*\d+\]|\[Source\s*\d+\])+)?\n(?!\n)([A-ZÇĞİÖŞÜ])/gi, '$1$2\n\n$3')
     // Also handle Turkish sentences ending with percentage or number
-    .replace(/([0-9%])(\s*(?:\[\d+\])+)?\.\s*\n(?!\n)([A-ZÇĞİÖŞÜ])/g, '$1$2.\n\n$3');
+    .replace(/([0-9%])(\s*(?:\[\d+\]|\[Kaynak\s*\d+\]|\[Source\s*\d+\])+)?\.\s*\n(?!\n)([A-ZÇĞİÖŞÜ])/gi, '$1$2.\n\n$3');
+
+  // PARAGRAPH SPLITTING: If content is one long block without paragraph breaks,
+  // try to split at sentence boundaries every ~3-4 sentences
+  const paragraphCount = (result.match(/\n\n/g) || []).length;
+  const sentenceCount = (result.match(/[.!?](?:\s*(?:\[\d+\]|\[Kaynak\s*\d+\]|\[Source\s*\d+\]))*\s/gi) || []).length;
+
+  // If we have many sentences but few paragraphs, add more breaks
+  if (sentenceCount > 6 && paragraphCount < 2) {
+    console.log('[ZenMessage] 📝 Adding paragraph breaks:', { sentenceCount, paragraphCount });
+    // Split long text into paragraphs every 3-4 sentences
+    let sentenceCounter = 0;
+    result = result.replace(/([.!?])(\s*(?:\[\d+\]|\[Kaynak\s*\d+\]|\[Source\s*\d+\])*)\s+/gi, (match, punct, cite) => {
+      sentenceCounter++;
+      // Add paragraph break every 3-4 sentences
+      if (sentenceCounter % 3 === 0 && sentenceCounter < sentenceCount - 1) {
+        return `${punct}${cite || ''}\n\n`;
+      }
+      return match;
+    });
+  }
 
   // Add line breaks before each known section header
   sectionHeaders.forEach(header => {
@@ -276,6 +296,9 @@ function preprocessMarkdown(content: string): string {
 
   // Handle --- section dividers
   result = result.replace(/([^\n])(---)/g, '$1\n\n$2');
+
+  // Clean up excessive newlines (more than 2)
+  result = result.replace(/\n{3,}/g, '\n\n');
 
   return result;
 }
@@ -301,7 +324,7 @@ export const ZenMessage: React.FC<ZenMessageProps> = ({
 
   // Debug: Log component version on mount
   React.useEffect(() => {
-    console.log('[ZenMessage] 🔄 Component Version: 2026-01-15T07:45 UTC - Features: Citation Anchors + Metadata Tags + Conditional Click', {
+    console.log('[ZenMessage] 🔄 Component Version: 2026-01-15T12:30 UTC - Features: Citation Superscript + Smooth Scroll + Metadata Tags + Paragraph Formatting', {
       enableSourceClick,
       enableKeywordHighlighting,
       messageId: message.id
@@ -442,19 +465,34 @@ export const ZenMessage: React.FC<ZenMessageProps> = ({
                                     key={`cite-${idx}`}
                                     href={`#citation-${message.id}-${citationNum}`}
                                     className="zen01-citation-anchor no-underline"
+                                    style={{
+                                      verticalAlign: 'super',
+                                      fontSize: '10px',
+                                      lineHeight: '0',
+                                      fontWeight: 600,
+                                      fontFamily: "'Monaco', 'Menlo', 'Courier New', monospace",
+                                      color: '#06b6d4',
+                                      textDecoration: 'none',
+                                      cursor: 'pointer',
+                                      marginLeft: '1px',
+                                      marginRight: '1px',
+                                    }}
                                     onClick={(e) => {
                                       e.preventDefault();
-                                      console.log('[Citation] Looking for ID:', `citation-${message.id}-${citationNum}`);
+                                      console.log('[Citation] 🔍 Looking for ID:', `citation-${message.id}-${citationNum}`);
                                       const el = document.getElementById(`citation-${message.id}-${citationNum}`);
-                                      console.log('[Citation] Found element:', el);
+                                      console.log('[Citation] Found element:', el ? '✅' : '❌');
                                       if (el) {
+                                        // Smooth scroll to element
                                         el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                                        el.classList.add('ring-2', 'ring-cyan-400', 'ring-opacity-50');
+                                        // Add highlight animation with inline style (more reliable than classes)
+                                        el.style.boxShadow = '0 0 0 2px rgba(34, 211, 238, 0.5)';
+                                        el.style.transition = 'box-shadow 0.3s ease';
                                         setTimeout(() => {
-                                          el.classList.remove('ring-2', 'ring-cyan-400', 'ring-opacity-50');
+                                          el.style.boxShadow = 'none';
                                         }, 2000);
                                       } else {
-                                        console.error('[Citation] Element not found!');
+                                        console.error('[Citation] ❌ Element not found!');
                                       }
                                     }}
                                   >
@@ -462,11 +500,21 @@ export const ZenMessage: React.FC<ZenMessageProps> = ({
                                   </a>
                                 );
                               } else {
-                                // Not clickable - just display as text
+                                // Not clickable - just display as superscript text
                                 return (
                                   <span
                                     key={`cite-${idx}`}
                                     className="zen01-citation-number"
+                                    style={{
+                                      verticalAlign: 'super',
+                                      fontSize: '10px',
+                                      lineHeight: '0',
+                                      fontWeight: 600,
+                                      fontFamily: "'Monaco', 'Menlo', 'Courier New', monospace",
+                                      color: '#06b6d4',
+                                      marginLeft: '1px',
+                                      marginRight: '1px',
+                                    }}
                                   >
                                     [{citationNum}]
                                   </span>
@@ -682,7 +730,15 @@ export const ZenMessage: React.FC<ZenMessageProps> = ({
                       <div className="flex-1 min-w-0">
                         {/* Citation number - clean, minimal, no tooltip */}
                         <div className="flex items-baseline gap-2 mb-3">
-                          <span className="zen01-citation-number" style={{ fontSize: '9px' }}>
+                          <span
+                            className="zen01-citation-number"
+                            style={{
+                              fontSize: '11px',
+                              fontWeight: 700,
+                              fontFamily: "'Monaco', 'Menlo', 'Courier New', monospace",
+                              color: '#22d3ee',
+                            }}
+                          >
                             [{idx + 1}]
                           </span>
                           <span className={`zen01-marker ${typeInfo.markerClass} text-[10px] font-medium px-2 py-0.5`}>
@@ -740,72 +796,105 @@ export const ZenMessage: React.FC<ZenMessageProps> = ({
 
                         {/* Metadata Tags - Extract meaningful info from metadata */}
                         {(() => {
-                          const metadataTags: string[] = [];
+                          const metadataTags: { label: string; value: string; color: string }[] = [];
                           const meta = source.metadata as any;
+
+                          // Debug: Log raw metadata
+                          if (meta && Object.keys(meta).length > 0) {
+                            console.log('[ZenMessage] Source metadata:', { idx: idx + 1, meta });
+                          }
 
                           // Extract meaningful metadata fields from various CSV column names
                           if (meta) {
                             // Karar/Esas numarası - Danıştay kararları için
-                            const kararNo = meta.kararno || meta.karar_no || meta.esas_no || meta.esasno;
+                            const kararNo = meta.kararno || meta.karar_no || meta.esas_no || meta.esasno || meta.karar;
                             if (kararNo) {
                               const karar = cleanCitationTitle(String(kararNo));
-                              if (karar && karar.length < 30) {
-                                metadataTags.push(`Karar: ${karar}`);
+                              if (karar && karar.length < 40 && karar.length > 1) {
+                                metadataTags.push({ label: 'Karar', value: karar, color: 'cyan' });
+                              }
+                            }
+
+                            // Esas numarası (ayrı field olarak)
+                            if (meta.esas && !meta.esasno) {
+                              const esas = cleanCitationTitle(String(meta.esas));
+                              if (esas && esas.length < 30 && esas.length > 1) {
+                                metadataTags.push({ label: 'Esas', value: esas, color: 'cyan' });
                               }
                             }
 
                             // Daire bilgisi - Danıştay için
                             if (meta.daire) {
                               const daire = cleanCitationTitle(String(meta.daire));
-                              if (daire && daire.length < 30) {
-                                metadataTags.push(daire);
+                              if (daire && daire.length < 40 && daire.length > 1) {
+                                metadataTags.push({ label: '', value: daire, color: 'amber' });
                               }
                             }
 
                             // Dergi bilgisi - Makaleler için
                             if (meta.dergi) {
                               const dergi = cleanCitationTitle(String(meta.dergi));
-                              if (dergi && dergi.length < 40) {
-                                metadataTags.push(dergi);
+                              if (dergi && dergi.length < 50 && dergi.length > 1) {
+                                metadataTags.push({ label: '', value: dergi, color: 'purple' });
+                              }
+                            }
+
+                            // Yazar bilgisi - Makaleler için
+                            if (meta.yazar || meta.author) {
+                              const yazar = cleanCitationTitle(String(meta.yazar || meta.author));
+                              if (yazar && yazar.length < 40 && yazar.length > 1) {
+                                metadataTags.push({ label: 'Yazar', value: yazar, color: 'green' });
                               }
                             }
 
                             // Madde numarası
                             if (meta.madde_no || meta.madde) {
                               const madde = cleanCitationTitle(String(meta.madde_no || meta.madde));
-                              if (madde && madde.length < 30) {
-                                metadataTags.push(`Madde ${madde}`);
+                              if (madde && madde.length < 30 && madde.length > 0) {
+                                metadataTags.push({ label: 'Madde', value: madde, color: 'rose' });
                               }
                             }
 
                             // Sayı numarası
                             if (meta.sayi) {
                               const sayi = cleanCitationTitle(String(meta.sayi));
-                              if (sayi && sayi.length < 20) {
-                                metadataTags.push(`Sayı: ${sayi}`);
+                              if (sayi && sayi.length < 25 && sayi.length > 0) {
+                                metadataTags.push({ label: 'Sayı', value: sayi, color: 'blue' });
                               }
                             }
 
                             // Yıl/Tarih - en son ekle
-                            if (meta.tarih) {
-                              const tarih = cleanCitationTitle(String(meta.tarih));
+                            const tarihField = meta.tarih || meta.date || meta.yil || meta.year;
+                            if (tarihField) {
+                              const tarih = cleanCitationTitle(String(tarihField));
                               const yearMatch = tarih.match(/\d{4}/);
                               if (yearMatch) {
-                                metadataTags.push(yearMatch[0]);
+                                metadataTags.push({ label: '', value: yearMatch[0], color: 'slate' });
                               }
                             }
                           }
 
+                          // Color mapping for tags
+                          const colorMap: Record<string, string> = {
+                            cyan: 'text-cyan-600/90 dark:text-cyan-400/90 bg-cyan-500/15 dark:bg-cyan-400/15',
+                            amber: 'text-amber-600/90 dark:text-amber-400/90 bg-amber-500/15 dark:bg-amber-400/15',
+                            purple: 'text-purple-600/90 dark:text-purple-400/90 bg-purple-500/15 dark:bg-purple-400/15',
+                            green: 'text-emerald-600/90 dark:text-emerald-400/90 bg-emerald-500/15 dark:bg-emerald-400/15',
+                            rose: 'text-rose-600/90 dark:text-rose-400/90 bg-rose-500/15 dark:bg-rose-400/15',
+                            blue: 'text-blue-600/90 dark:text-blue-400/90 bg-blue-500/15 dark:bg-blue-400/15',
+                            slate: 'text-slate-500/90 dark:text-slate-400/90 bg-slate-500/15 dark:bg-slate-400/15',
+                          };
+
                           // If we have metadata tags, show them
                           if (metadataTags.length > 0) {
                             return (
-                              <div className="flex flex-wrap gap-2 mt-4 pt-3 border-t border-slate-700/20 dark:border-slate-600/20">
+                              <div className="flex flex-wrap gap-1.5 mt-3 pt-2.5 border-t border-slate-700/15 dark:border-slate-600/15">
                                 {metadataTags.map((tag, tidx) => (
                                   <span
                                     key={tidx}
-                                    className="text-[9.5px] font-medium text-cyan-600/80 dark:text-cyan-400/80 bg-cyan-500/10 dark:bg-cyan-400/10 px-2 py-1 rounded"
+                                    className={`text-[10px] font-medium px-2 py-0.5 rounded ${colorMap[tag.color] || colorMap.cyan}`}
                                   >
-                                    {tag}
+                                    {tag.label ? `${tag.label}: ${tag.value}` : tag.value}
                                   </span>
                                 ))}
                               </div>

@@ -13,6 +13,33 @@ export interface ZenSource {
   summary?: string;
   keywords?: string[];
   category?: string;
+  // Metadata from CSV source tables (dynamic fields)
+  metadata?: {
+    // Common fields
+    kurum?: string;
+    tarih?: string;
+    sayi?: string;
+    madde_no?: string;
+    madde?: string;
+    // Danıştay kararları
+    kararno?: string;
+    karar_no?: string;
+    esas_no?: string;
+    esasno?: string;
+    karar?: string;
+    esas?: string;
+    daire?: string;
+    // Makaleler
+    dergi?: string;
+    yazar?: string;
+    author?: string;
+    // Generic fields
+    date?: string;
+    yil?: string;
+    year?: string;
+    // Allow any other dynamic fields from CSV
+    [key: string]: string | number | boolean | undefined;
+  };
 }
 
 // Related Topic Interface
