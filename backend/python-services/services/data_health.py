@@ -72,9 +72,14 @@ class DataHealthService:
         'danistaykararlari': ['daire', 'tarih', 'esasno', 'kararno', 'konusu'],
         'sorucevap': ['donemi', 'soru', 'cevap'],
         'makale': ['yazar', 'baslik', 'tarih', 'dergi'],
-        'gib_sirkuler': ['sirkuler_no', 'tarih', 'konu', 'aciklama'],
-        'vergilex_mevzuat': ['kanun_no', 'madde_no', 'tarih', 'baslik', 'tur'],
-        'mevzuat': ['kanun_no', 'madde_no', 'tarih', 'baslik', 'tur'],
+        # New: Crawler tables with jsonb metadata
+        'gib_sirkuler': ['title', 'category', 'category_tr', 'crawled_at'],
+        'vergilex_gib_sirkuler': ['title', 'category', 'category_tr', 'crawled_at'],
+        'vergilex_mevzuat': ['title', 'category', 'category_tr', 'crawled_at'],
+        'vergilex_mevzuat_kanunlar': ['title', 'category', 'category_tr', 'crawled_at'],
+        # New: Special tables with limited fields
+        'maliansiklopedi': ['kavram'],  # Only kavram field (no tarih, baslik)
+        'hukdkk': ['tarih', 'genelsirano', 'yayinsirano', 'gecerlilik', 'ozeti'],
         'default': ['tarih', 'baslik', 'yazar', 'dergi', 'daire']
     }
 
@@ -84,9 +89,13 @@ class DataHealthService:
         'danistaykararlari': 'row_id',
         'sorucevap': 'row_id',
         'makale': 'row_id',
-        'gib_sirkuler': 'row_id',
-        'vergilex_mevzuat': 'row_id',
-        'mevzuat': 'row_id',
+        'hukdkk': 'row_id',
+        # Crawler tables use 'id' as PK
+        'gib_sirkuler': 'id',
+        'vergilex_gib_sirkuler': 'id',
+        'vergilex_mevzuat': 'id',
+        'vergilex_mevzuat_kanunlar': 'id',
+        'maliansiklopedi': 'id',
         'default': 'row_id'
     }
 
@@ -155,10 +164,14 @@ class DataHealthService:
                 total_metrics.healthy_count / total_metrics.total_embeddings
             ) * 100
 
+        # Get table and index sizes
+        size_info = await self._get_table_sizes()
+
         return {
             "generated_at": datetime.utcnow().isoformat(),
             "summary": asdict(total_metrics),
             "tables": table_metrics,
+            "size_info": size_info,
             "recommendations": self._generate_recommendations(total_metrics, table_metrics)
         }
 
@@ -248,18 +261,17 @@ class DataHealthService:
                 logger.warning(f"Source table not found: {table_name} or {source_table}")
                 return 0
 
-            # Dynamically detect PK column
-            pk = await self._detect_pk_column(source_table)
-
             # Cross-database: Önce source'daki ID'leri al
-            if pk == 'id':
-                source_ids_query = f'SELECT id FROM "{source_table}"'
-                source_rows = await self.source_pool.fetch(source_ids_query)
-                source_ids = set(r['id'] for r in source_rows)
-            else:
+            # CRITICAL: Migration ALWAYS uses row_id (or id as INTEGER) for source_id
+            try:
                 source_ids_query = f'SELECT row_id FROM "{source_table}"'
                 source_rows = await self.source_pool.fetch(source_ids_query)
-                source_ids = set(r['row_id'] for r in source_rows)
+                source_ids = set(int(r['row_id']) for r in source_rows)
+            except Exception:
+                # Fallback to id column (as INTEGER)
+                source_ids_query = f'SELECT id FROM "{source_table}"'
+                source_rows = await self.source_pool.fetch(source_ids_query)
+                source_ids = set(int(r['id']) for r in source_rows)
 
             if not source_ids:
                 # Source boşsa tüm embeddings orphan
@@ -548,18 +560,21 @@ class DataHealthService:
             logger.info(f"Detected PK column for {source_table}: {pk}")
 
             # Cross-database: Önce source'daki ID'leri al
-            # IMPORTANT: If pk='id', we need to normalize to row_id for matching
-            # because migration saves row.row_id (normalized from row.id)
-            if pk == 'id':
-                # Source uses 'id' column, but unified_embeddings has row_id normalized
-                source_ids_query = f'SELECT id FROM "{source_table}"'
-                source_rows = await self.source_pool.fetch(source_ids_query)
-                source_ids = set(r['id'] for r in source_rows)
-            else:
-                # Source uses 'row_id' column directly
+            # CRITICAL: Migration ALWAYS uses row_id (or id as INTEGER) for source_id
+            # Check if table has row_id column, if not use id (as INTEGER)
+            try:
+                # Try row_id first (most common)
                 source_ids_query = f'SELECT row_id FROM "{source_table}"'
                 source_rows = await self.source_pool.fetch(source_ids_query)
-                source_ids = set(r['row_id'] for r in source_rows)
+                source_ids = set(int(r['row_id']) for r in source_rows)
+                logger.info(f"[ORPHAN] Using row_id for {source_table}")
+            except Exception:
+                # Fallback to id column (as INTEGER, not TEXT!)
+                source_ids_query = f'SELECT id FROM "{source_table}"'
+                source_rows = await self.source_pool.fetch(source_ids_query)
+                # id might be TEXT or INTEGER, normalize to INTEGER
+                source_ids = set(int(r['id']) for r in source_rows)
+                logger.info(f"[ORPHAN] Using id (as INTEGER) for {source_table}")
 
             # System DB'deki kayıtları al (case-insensitive)
             embedded_query = """
@@ -986,3 +1001,59 @@ class DataHealthService:
         except Exception as e:
             logger.error(f"Error resetting stuck jobs: {e}")
             return result
+
+    async def _get_table_sizes(self) -> Dict[str, Any]:
+        """
+        Get table and index sizes for unified_embeddings and document_embeddings
+        """
+        try:
+            # Get table sizes
+            table_size_query = """
+                SELECT
+                    schemaname,
+                    tablename,
+                    pg_size_pretty(pg_total_relation_size(schemaname||'.'||tablename)) AS total_size,
+                    pg_size_pretty(pg_relation_size(schemaname||'.'||tablename)) AS table_size,
+                    pg_size_pretty(pg_total_relation_size(schemaname||'.'||tablename) - pg_relation_size(schemaname||'.'||tablename)) AS index_size,
+                    pg_total_relation_size(schemaname||'.'||tablename) AS total_bytes,
+                    pg_relation_size(schemaname||'.'||tablename) AS table_bytes,
+                    pg_total_relation_size(schemaname||'.'||tablename) - pg_relation_size(schemaname||'.'||tablename) AS index_bytes
+                FROM pg_tables
+                WHERE schemaname = 'public'
+                AND tablename IN ('unified_embeddings', 'document_embeddings')
+                ORDER BY total_bytes DESC
+            """
+            table_sizes = await self.system_pool.fetch(table_size_query)
+
+            # Get index details
+            index_query = """
+                SELECT
+                    schemaname,
+                    tablename,
+                    indexname,
+                    pg_size_pretty(pg_relation_size(indexrelid)) AS index_size,
+                    pg_relation_size(indexrelid) AS index_bytes
+                FROM pg_indexes
+                JOIN pg_class ON pg_class.relname = indexname
+                WHERE schemaname = 'public'
+                AND tablename IN ('unified_embeddings', 'document_embeddings')
+                ORDER BY pg_relation_size(indexrelid) DESC
+            """
+            indexes = await self.system_pool.fetch(index_query)
+
+            return {
+                "tables": [dict(row) for row in table_sizes],
+                "indexes": [dict(row) for row in indexes],
+                "total_size": table_sizes[0]['total_size'] if table_sizes else "0 bytes",
+                "total_bytes": sum(row['total_bytes'] for row in table_sizes)
+            }
+
+        except Exception as e:
+            logger.error(f"Error getting table sizes: {e}")
+            return {
+                "tables": [],
+                "indexes": [],
+                "total_size": "Unknown",
+                "total_bytes": 0,
+                "error": str(e)
+            }
