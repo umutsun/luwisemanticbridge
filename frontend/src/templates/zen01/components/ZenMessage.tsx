@@ -299,6 +299,15 @@ export const ZenMessage: React.FC<ZenMessageProps> = ({
   const isUser = message.role === 'user';
   const [showAllSources, setShowAllSources] = useState(false);
 
+  // Debug: Log component version on mount
+  React.useEffect(() => {
+    console.log('[ZenMessage] 🔄 Component Version: 2026-01-15T07:45 UTC - Features: Citation Anchors + Metadata Tags + Conditional Click', {
+      enableSourceClick,
+      enableKeywordHighlighting,
+      messageId: message.id
+    });
+  }, []);
+
   // Extract keywords from last user query for highlighting (only if enabled)
   const highlightKeywords = React.useMemo(() => {
     if (!enableKeywordHighlighting || !lastUserQuery || isUser) {
