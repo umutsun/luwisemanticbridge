@@ -718,19 +718,57 @@ export const ZenMessage: React.FC<ZenMessageProps> = ({
                           return null;
                         })()}
 
-                        {/* Keywords - clean, minimal chips with top spacing */}
-                        {source.keywords && source.keywords.length > 0 && (
-                          <div className="flex flex-wrap gap-2 mt-4 pt-3 border-t border-slate-700/20 dark:border-slate-600/20">
-                            {source.keywords.slice(0, 4).map((keyword, kidx) => (
-                              <span
-                                key={kidx}
-                                className="text-[9.5px] font-medium text-cyan-600/80 dark:text-cyan-400/80 bg-cyan-500/10 dark:bg-cyan-400/10 px-2 py-1 rounded"
-                              >
-                                {keyword}
-                              </span>
-                            ))}
-                          </div>
-                        )}
+                        {/* Metadata Tags - Extract meaningful info from metadata */}
+                        {(() => {
+                          const metadataTags: string[] = [];
+                          const meta = source.metadata as any;
+
+                          // Extract meaningful metadata fields
+                          if (meta) {
+                            // Add madde_no if exists (most important)
+                            if (meta.madde_no) {
+                              const madde = cleanCitationTitle(meta.madde_no);
+                              if (madde && madde.length < 30) {
+                                metadataTags.push(`Madde ${madde}`);
+                              }
+                            }
+
+                            // Add sayi/karar_no if exists
+                            if (meta.sayi) {
+                              const sayi = cleanCitationTitle(meta.sayi);
+                              if (sayi && sayi.length < 20) {
+                                metadataTags.push(`Sayı: ${sayi}`);
+                              }
+                            }
+
+                            // Add year from tarih if exists
+                            if (meta.tarih) {
+                              const tarih = cleanCitationTitle(meta.tarih);
+                              const yearMatch = tarih.match(/\d{4}/);
+                              if (yearMatch) {
+                                metadataTags.push(yearMatch[0]);
+                              }
+                            }
+                          }
+
+                          // If we have metadata tags, show them
+                          if (metadataTags.length > 0) {
+                            return (
+                              <div className="flex flex-wrap gap-2 mt-4 pt-3 border-t border-slate-700/20 dark:border-slate-600/20">
+                                {metadataTags.map((tag, tidx) => (
+                                  <span
+                                    key={tidx}
+                                    className="text-[9.5px] font-medium text-cyan-600/80 dark:text-cyan-400/80 bg-cyan-500/10 dark:bg-cyan-400/10 px-2 py-1 rounded"
+                                  >
+                                    {tag}
+                                  </span>
+                                ))}
+                              </div>
+                            );
+                          }
+
+                          return null;
+                        })()}
                       </div>
                     </div>
                   </div>
