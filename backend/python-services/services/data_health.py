@@ -430,6 +430,7 @@ class DataHealthService:
                     OR metadata = '{{}}'::jsonb
                     OR ({missing_conditions})
                 )
+                ORDER BY id ASC
                 LIMIT $2
             """
             logger.info(f"Missing query conditions: {missing_conditions}")
