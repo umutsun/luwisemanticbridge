@@ -98,6 +98,31 @@ class DataHealthService:
         """
         self.system_pool = system_pool
         self.source_pool = source_pool
+        self._pk_cache = {}  # Cache for detected PKs
+
+    async def _detect_pk_column(self, source_table: str) -> str:
+        """
+        Dynamically detect primary key column (row_id or id)
+
+        Args:
+            source_table: Source table name
+
+        Returns:
+            'row_id' or 'id'
+        """
+        # Check cache first
+        if source_table in self._pk_cache:
+            return self._pk_cache[source_table]
+
+        try:
+            # Test if row_id exists
+            await self.source_pool.fetchval(f'SELECT row_id FROM "{source_table}" LIMIT 1')
+            self._pk_cache[source_table] = 'row_id'
+            return 'row_id'
+        except Exception:
+            # Fallback to id
+            self._pk_cache[source_table] = 'id'
+            return 'id'
 
     async def generate_health_report(self) -> Dict[str, Any]:
         """
@@ -223,13 +248,18 @@ class DataHealthService:
                 logger.warning(f"Source table not found: {table_name} or {source_table}")
                 return 0
 
-            # Primary key bul
-            pk = self.PRIMARY_KEYS.get(table_name, self.PRIMARY_KEYS['default'])
+            # Dynamically detect PK column
+            pk = await self._detect_pk_column(source_table)
 
             # Cross-database: Önce source'daki ID'leri al
-            source_ids_query = f'SELECT {pk} FROM "{source_table}"'
-            source_rows = await self.source_pool.fetch(source_ids_query)
-            source_ids = set(r[pk] for r in source_rows)
+            if pk == 'id':
+                source_ids_query = f'SELECT id FROM "{source_table}"'
+                source_rows = await self.source_pool.fetch(source_ids_query)
+                source_ids = set(r['id'] for r in source_rows)
+            else:
+                source_ids_query = f'SELECT row_id FROM "{source_table}"'
+                source_rows = await self.source_pool.fetch(source_ids_query)
+                source_ids = set(r['row_id'] for r in source_rows)
 
             if not source_ids:
                 # Source boşsa tüm embeddings orphan
@@ -360,12 +390,19 @@ class DataHealthService:
                 logger.warning(f"Source table {table_name} or {source_table} does not exist")
                 return result
 
-            # Metadata alanlarını al
-            meta_fields = self.METADATA_FIELDS.get(
-                table_name,
-                self.METADATA_FIELDS['default']
-            )
-            pk = self.PRIMARY_KEYS.get(table_name, self.PRIMARY_KEYS['default'])
+            # Dynamically detect PK column
+            pk = await self._detect_pk_column(source_table)
+
+            # Metadata alanlarını al - table pattern matching
+            meta_fields = None
+            for pattern, fields in self.METADATA_FIELDS.items():
+                if pattern in table_name.lower():
+                    meta_fields = fields
+                    break
+            if not meta_fields:
+                meta_fields = self.METADATA_FIELDS['default']
+
+            logger.info(f"Using metadata fields for {table_name}: {meta_fields}")
 
             # Eksik metadata olan kayıtları bul
             missing_query = """
@@ -484,8 +521,6 @@ class DataHealthService:
         }
 
         try:
-            pk = self.PRIMARY_KEYS.get(table_name, self.PRIMARY_KEYS['default'])
-
             # Source tablo adını belirle
             source_table = self._get_source_table_name(table_name)
 
@@ -508,10 +543,23 @@ class DataHealthService:
                 logger.warning(f"Source table not found for orphan check: {table_name}")
                 return result
 
+            # Dynamically detect PK column
+            pk = await self._detect_pk_column(source_table)
+            logger.info(f"Detected PK column for {source_table}: {pk}")
+
             # Cross-database: Önce source'daki ID'leri al
-            source_ids_query = f'SELECT {pk} FROM "{source_table}"'
-            source_rows = await self.source_pool.fetch(source_ids_query)
-            source_ids = set(r[pk] for r in source_rows)
+            # IMPORTANT: If pk='id', we need to normalize to row_id for matching
+            # because migration saves row.row_id (normalized from row.id)
+            if pk == 'id':
+                # Source uses 'id' column, but unified_embeddings has row_id normalized
+                source_ids_query = f'SELECT id FROM "{source_table}"'
+                source_rows = await self.source_pool.fetch(source_ids_query)
+                source_ids = set(r['id'] for r in source_rows)
+            else:
+                # Source uses 'row_id' column directly
+                source_ids_query = f'SELECT row_id FROM "{source_table}"'
+                source_rows = await self.source_pool.fetch(source_ids_query)
+                source_ids = set(r['row_id'] for r in source_rows)
 
             # System DB'deki kayıtları al (case-insensitive)
             embedded_query = """

@@ -472,8 +472,8 @@ async def optimize_data(
                 table_result["orphans"] = orphan_result.get("deleted_count", 0)
                 results["orphans_deleted"] += table_result["orphans"]
 
-                # Delete duplicates
-                dup_result = await service.delete_duplicates(table, dry_run, keep="newest")
+                # Delete duplicates - keep oldest (first embedded record is more valuable)
+                dup_result = await service.delete_duplicates(table, dry_run, keep="oldest")
                 table_result["duplicates"] = dup_result.get("deleted_count", 0)
                 results["duplicates_deleted"] += table_result["duplicates"]
 
