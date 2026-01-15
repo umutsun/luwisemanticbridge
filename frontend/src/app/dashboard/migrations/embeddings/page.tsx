@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { apiConfig } from '@/lib/api/config';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -93,19 +93,36 @@ export default function EmbeddingsPage() {
     avgTokensPerRecord: 0
   });
 
+  // ✅ Ref to store interval ID for cleanup
+  const pollingIntervalRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Initial fetch on mount
   useEffect(() => {
     fetchTables();
     fetchMigrationHistory();
     fetchMigrationProgress();
-    
-    const interval = setInterval(() => {
-      if (migrationProgress?.status === 'processing') {
-        fetchMigrationProgress();
+
+    // ✅ Cleanup on unmount
+    return () => {
+      if (pollingIntervalRef.current) {
+        clearInterval(pollingIntervalRef.current);
+        pollingIntervalRef.current = null;
       }
-    }, 2000);
-    
+    };
+  }, []); // ✅ Run once on mount
+
+  // Polling only when processing
+  useEffect(() => {
+    if (migrationProgress?.status !== 'processing') {
+      return; // Don't poll if not processing
+    }
+
+    const interval = setInterval(() => {
+      fetchMigrationProgress();
+    }, 5000); // ✅ Increased to 5 seconds (less aggressive)
+
     return () => clearInterval(interval);
-  }, [migrationProgress?.status]);
+  }, [migrationProgress?.status]); // ✅ Only re-run when status changes
 
   useEffect(() => {
     // Calculate total stats
@@ -185,10 +202,12 @@ export default function EmbeddingsPage() {
         if (data.migrationId) {
           setMigrationProgress({ ...migrationProgress, id: data.migrationId, status: 'starting' });
         }
-        // Start polling for progress
-        const interval = setInterval(fetchMigrationProgress, 2000);
-        // Clear interval after 30 minutes
-        setTimeout(() => clearInterval(interval), 30 * 60 * 1000);
+        // ✅ Clear any existing polling interval first
+        if (pollingIntervalRef.current) {
+          clearInterval(pollingIntervalRef.current);
+        }
+        // ✅ Start polling with ref for cleanup
+        pollingIntervalRef.current = setInterval(fetchMigrationProgress, 5000);
       }
     } catch (error) {
       console.error('Failed to start migration:', error);

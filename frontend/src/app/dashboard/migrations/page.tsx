@@ -453,8 +453,8 @@ export default function EmbeddingsManagerPage() {
     // Fetch immediately
     fetchProgressPolling();
 
-    // Then poll every 2 seconds
-    pollingIntervalRef.current = setInterval(fetchProgressPolling, 2000);
+    // Then poll every 5 seconds (reduced frequency to save resources)
+    pollingIntervalRef.current = setInterval(fetchProgressPolling, 5000);
 
     return () => {
       if (pollingIntervalRef.current) {
