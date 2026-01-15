@@ -568,6 +568,7 @@ class DataHealthService:
                 WHERE LOWER(source_table) = LOWER($1) OR LOWER(metadata->>'table') = LOWER($1)
             """
             embedded_rows = await self.system_pool.fetch(embedded_query, table_name)
+            logger.info(f"[ORPHAN] {table_name}: {len(source_ids)} source IDs, {len(embedded_rows)} embedded rows")
 
             # Orphan = embedded'da var ama source'da yok
             orphans = []
@@ -578,6 +579,7 @@ class DataHealthService:
                         break
 
             result["orphans_found"] = len(orphans)
+            logger.info(f"[ORPHAN] Found {len(orphans)} orphans for {table_name}")
 
             # Sample kaydet
             for orphan in orphans[:10]:
@@ -651,6 +653,7 @@ class DataHealthService:
                 FROM duplicates
             """
             duplicates = await self.system_pool.fetch(dup_query, table_name)
+            logger.info(f"[DUPLICATE] Found {len(duplicates)} duplicate groups for {table_name}")
 
             all_delete_ids = []
             for dup in duplicates:
@@ -664,6 +667,8 @@ class DataHealthService:
                         "delete_ids": dup['delete_ids'][:3],
                         "total_copies": dup['cnt']
                     })
+
+            logger.info(f"[DUPLICATE] Total IDs to delete for {table_name}: {len(all_delete_ids)}")
 
             if not dry_run and all_delete_ids:
                 delete_query = """
