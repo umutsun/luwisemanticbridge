@@ -767,10 +767,10 @@ export default function ChatInterface() {
           voiceSettings={voiceSettings}
         />
 
-        {/* Version Badge - Fixed bottom left */}
+        {/* Version Badge - Fixed bottom left, chip style */}
         <div className="fixed bottom-3 left-3 z-50">
-          <span className="text-[9px] font-medium text-slate-700 dark:text-slate-400 opacity-70">
-            zen01 • v2026.01.15.D
+          <span className="text-[8px] font-medium px-2 py-0.5 rounded bg-slate-200/60 dark:bg-slate-800/60 text-slate-600 dark:text-slate-400">
+            zen01 · v2026.01.15.E
           </span>
         </div>
       </div>
