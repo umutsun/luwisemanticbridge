@@ -23,14 +23,9 @@ import {
   CheckCircle,
   XCircle,
   Loader2,
-  Calendar,
-  Activity,
-  AlertCircle,
   Plus,
-  Globe,
-  Database,
-  Sparkles,
-  Trash2
+  Trash2,
+  Pencil
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -49,6 +44,7 @@ interface ScheduledJob {
   total_runs: number;
   successful_runs: number;
   failed_runs: number;
+  job_config?: Record<string, unknown>;
 }
 
 interface SchedulerStats {
@@ -62,35 +58,74 @@ interface SchedulerStats {
 }
 
 interface CrawlerOption {
-  name: string;
+  id: string;
   label: string;
   description: string;
+  script: string;
+  category: string;
 }
 
-interface TableOption {
-  name: string;
-  label: string;
-}
+// GİB kategorileri ve Mevzuat türleri - gerçek crawler scriptlerine uygun
+const AVAILABLE_CRAWLERS: CrawlerOption[] = [
+  // GİB Crawlers
+  { id: 'gib_sirkuler', label: 'GİB Sirküler', description: 'Sirküler listesi', script: 'vergilex_gib_crawler.py', category: 'GİB' },
+  { id: 'gib_kanunlar', label: 'GİB Kanunlar', description: 'Vergi kanunları', script: 'vergilex_gib_crawler.py', category: 'GİB' },
+  { id: 'gib_gerekceler', label: 'GİB Gerekçeler', description: 'Kanun gerekçeleri', script: 'vergilex_gib_crawler.py', category: 'GİB' },
+  { id: 'gib_tebligler', label: 'GİB Tebliğler', description: 'Vergi tebliğleri', script: 'vergilex_gib_crawler.py', category: 'GİB' },
+  { id: 'gib_yonetmelikler', label: 'GİB Yönetmelikler', description: 'Yönetmelikler', script: 'vergilex_gib_crawler.py', category: 'GİB' },
+  { id: 'gib_ic_genelgeler', label: 'GİB İç Genelgeler', description: 'İç genelgeler', script: 'vergilex_gib_crawler.py', category: 'GİB' },
+  { id: 'gib_genel_yazilar', label: 'GİB Genel Yazılar', description: 'Genel yazılar', script: 'vergilex_gib_crawler.py', category: 'GİB' },
+  { id: 'gib_ozelgeler', label: 'GİB Özelgeler', description: 'Özelgeler', script: 'vergilex_gib_crawler.py', category: 'GİB' },
+  { id: 'gib_cbk', label: 'GİB CBK', description: 'Cumhurbaşkanlığı kararları', script: 'vergilex_gib_crawler.py', category: 'GİB' },
+  { id: 'gib_bkk', label: 'GİB BKK', description: 'Bakanlar kurulu kararları', script: 'vergilex_gib_crawler.py', category: 'GİB' },
+  // Mevzuat Crawlers
+  { id: 'mevzuat_kanun', label: 'Mevzuat Kanunlar', description: 'mevzuat.gov.tr kanunları', script: 'vergilex_mevzuat_crawler.py', category: 'Mevzuat' },
+  { id: 'mevzuat_tuzuk', label: 'Mevzuat Tüzükler', description: 'mevzuat.gov.tr tüzükleri', script: 'vergilex_mevzuat_crawler.py', category: 'Mevzuat' },
+  { id: 'mevzuat_yonetmelik', label: 'Mevzuat Yönetmelikler', description: 'mevzuat.gov.tr yönetmelikleri', script: 'vergilex_mevzuat_crawler.py', category: 'Mevzuat' },
+  { id: 'mevzuat_khk', label: 'Mevzuat KHK', description: 'Kanun hükmünde kararnameler', script: 'vergilex_mevzuat_crawler.py', category: 'Mevzuat' },
+  { id: 'mevzuat_cbk', label: 'Mevzuat CBK', description: 'Cumhurbaşkanlığı kararnameleri', script: 'vergilex_mevzuat_crawler.py', category: 'Mevzuat' },
+  { id: 'mevzuat_teblig', label: 'Mevzuat Tebliğler', description: 'mevzuat.gov.tr tebliğleri', script: 'vergilex_mevzuat_crawler.py', category: 'Mevzuat' },
+];
 
-interface NewCrawlerJob {
+// Crawler ID → script args mapping
+const CRAWLER_ARGS: Record<string, string[]> = {
+  // GİB
+  'gib_sirkuler': ['sirkuler', '--update'],
+  'gib_kanunlar': ['kanunlar', '--update'],
+  'gib_gerekceler': ['gerekceler', '--update'],
+  'gib_tebligler': ['tebligler', '--update'],
+  'gib_yonetmelikler': ['yonetmelikler', '--update'],
+  'gib_ic_genelgeler': ['ic_genelgeler', '--update'],
+  'gib_genel_yazilar': ['genel_yazilar', '--update'],
+  'gib_ozelgeler': ['ozelgeler', '--update'],
+  'gib_cbk': ['cbk', '--update'],
+  'gib_bkk': ['bkk', '--update'],
+  // Mevzuat (MevzuatTur values)
+  'mevzuat_kanun': ['--tur', '1', '--update'],
+  'mevzuat_tuzuk': ['--tur', '2', '--update'],
+  'mevzuat_yonetmelik': ['--tur', '3', '--update'],
+  'mevzuat_khk': ['--tur', '4', '--update'],
+  'mevzuat_cbk': ['--tur', '6', '--update'],
+  'mevzuat_teblig': ['--tur', '9', '--update'],
+};
+
+interface JobFormData {
   name: string;
   crawler: string;
-  targetTable: string;
-  enableEmbed: boolean;
-  enableUpsert: boolean;
   scheduleType: 'cron' | 'interval';
   cronExpression: string;
-  intervalMinutes: number;
+  intervalHours: number;
+  enabled: boolean;
 }
 
-const AVAILABLE_CRAWLERS: CrawlerOption[] = [
-  { name: 'gib_sirkuler', label: 'GİB Sirküleri', description: 'Gelir İdaresi Başkanlığı sirkülerleri' },
-  { name: 'mevzuat_kanun', label: 'Mevzuat Kanunlar', description: 'mevzuat.gov.tr kanunları' },
-  { name: 'mevzuat_teblig', label: 'Mevzuat Tebliğler', description: 'mevzuat.gov.tr tebliğleri' },
-  { name: 'mevzuat_yonetmelik', label: 'Mevzuat Yönetmelikler', description: 'mevzuat.gov.tr yönetmelikleri' },
-  { name: 'sahibinden', label: 'Sahibinden', description: 'Sahibinden.com gayrimenkul ilanları' },
-  { name: 'generic', label: 'Genel Crawler', description: 'Özel URL için genel web scraper' },
-];
+const DEFAULT_FORM: JobFormData = {
+  name: '',
+  crawler: '',
+  scheduleType: 'cron',
+  cronExpression: '0 3 * * 0', // Her Pazar saat 03:00
+  intervalHours: 168, // 1 hafta
+  enabled: true
+};
 
 export default function SchedulerSection() {
   const [jobs, setJobs] = useState<ScheduledJob[]>([]);
@@ -99,19 +134,10 @@ export default function SchedulerSection() {
   const [actionLoading, setActionLoading] = useState<string | null>(null);
 
   // Modal states
-  const [showAddModal, setShowAddModal] = useState(false);
-  const [availableTables, setAvailableTables] = useState<TableOption[]>([]);
-  const [newJob, setNewJob] = useState<NewCrawlerJob>({
-    name: '',
-    crawler: '',
-    targetTable: '',
-    enableEmbed: false,
-    enableUpsert: true,
-    scheduleType: 'cron',
-    cronExpression: '0 6 * * *', // Daily at 6 AM
-    intervalMinutes: 60
-  });
-  const [creating, setCreating] = useState(false);
+  const [showModal, setShowModal] = useState(false);
+  const [editingJob, setEditingJob] = useState<ScheduledJob | null>(null);
+  const [formData, setFormData] = useState<JobFormData>(DEFAULT_FORM);
+  const [saving, setSaving] = useState(false);
 
   const fetchData = useCallback(async () => {
     try {
@@ -138,93 +164,115 @@ export default function SchedulerSection() {
 
   useEffect(() => {
     fetchData();
-    // Refresh every 30 seconds
     const interval = setInterval(fetchData, 30000);
     return () => clearInterval(interval);
   }, [fetchData]);
 
-  // Fetch available tables when modal opens
-  useEffect(() => {
-    if (showAddModal) {
-      fetchAvailableTables();
-    }
-  }, [showAddModal]);
-
-  const fetchAvailableTables = async () => {
-    try {
-      const res = await fetch('/api/v2/source/tables');
-      if (res.ok) {
-        const data = await res.json();
-        const tables = (data.tables || []).map((t: string) => ({
-          name: t,
-          label: t.replace(/_/g, ' ').replace(/^csv /, '')
-        }));
-        setAvailableTables(tables);
-      }
-    } catch (error) {
-      console.error('Failed to fetch tables:', error);
-    }
+  const openAddModal = () => {
+    setEditingJob(null);
+    setFormData(DEFAULT_FORM);
+    setShowModal(true);
   };
 
-  const handleCreateJob = async () => {
-    if (!newJob.name || !newJob.crawler) {
-      toast.error('İsim ve crawler seçimi zorunludur');
+  const openEditModal = (job: ScheduledJob) => {
+    setEditingJob(job);
+
+    // Parse job config to extract crawler ID
+    let crawlerId = '';
+    if (job.job_config) {
+      const config = job.job_config as Record<string, unknown>;
+      const scriptPath = config.script_path as string || '';
+      const args = config.args as string[] || [];
+
+      // Try to determine crawler from script and args
+      if (scriptPath.includes('gib_crawler')) {
+        const category = args[0];
+        if (category) crawlerId = `gib_${category}`;
+      } else if (scriptPath.includes('mevzuat_crawler')) {
+        const turIndex = args.indexOf('--tur');
+        if (turIndex !== -1) {
+          const tur = args[turIndex + 1];
+          const turMap: Record<string, string> = {
+            '1': 'mevzuat_kanun',
+            '2': 'mevzuat_tuzuk',
+            '3': 'mevzuat_yonetmelik',
+            '4': 'mevzuat_khk',
+            '6': 'mevzuat_cbk',
+            '9': 'mevzuat_teblig'
+          };
+          crawlerId = turMap[tur] || '';
+        }
+      }
+    }
+
+    setFormData({
+      name: job.name,
+      crawler: crawlerId,
+      scheduleType: job.schedule_type as 'cron' | 'interval',
+      cronExpression: job.cron_expression || '0 3 * * 0',
+      intervalHours: job.interval_seconds ? Math.round(job.interval_seconds / 3600) : 168,
+      enabled: job.enabled
+    });
+    setShowModal(true);
+  };
+
+  const handleSave = async () => {
+    if (!formData.name.trim()) {
+      toast.error('İş adı zorunludur');
+      return;
+    }
+    if (!formData.crawler) {
+      toast.error('Crawler seçimi zorunludur');
       return;
     }
 
-    setCreating(true);
+    setSaving(true);
     try {
-      // Use scrape_and_embed job type which supports full pipeline
-      const crawlerInfo = AVAILABLE_CRAWLERS.find(c => c.name === newJob.crawler);
+      const crawler = AVAILABLE_CRAWLERS.find(c => c.id === formData.crawler);
+      const args = CRAWLER_ARGS[formData.crawler] || [];
 
-      const res = await fetch('/api/v2/scheduler/jobs', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          name: newJob.name,
-          job_type: 'scrape_and_embed',
-          description: `${crawlerInfo?.label || newJob.crawler} → ${newJob.targetTable || 'Redis'}`,
-          schedule_type: newJob.scheduleType,
-          cron_expression: newJob.scheduleType === 'cron' ? newJob.cronExpression : undefined,
-          interval_seconds: newJob.scheduleType === 'interval' ? newJob.intervalMinutes * 60 : undefined,
-          job_config: {
-            scraper_type: newJob.crawler.includes('mevzuat') || newJob.crawler === 'gib_sirkuler' ? 'custom' : newJob.crawler,
-            scraper_url: '', // Will be filled by crawler's default URL
-            scraper_name: newJob.crawler,
-            max_pages: 100,
-            redis_db: 2, // Vergilex uses DB 2
-            export_to_table: newJob.targetTable === '__none__' ? '' : (newJob.targetTable || ''),
-            export_mode: 'upsert',
-            generate_embeddings: newJob.enableEmbed,
-            embedding_content_column: 'content',
-            skip_scrape_if_recent: false,
-          },
-          enabled: true
-        })
-      });
+      const payload = {
+        name: formData.name,
+        job_type: 'custom_script',
+        description: crawler?.description || '',
+        schedule_type: formData.scheduleType,
+        cron_expression: formData.scheduleType === 'cron' ? formData.cronExpression : undefined,
+        interval_seconds: formData.scheduleType === 'interval' ? formData.intervalHours * 3600 : undefined,
+        job_config: {
+          script_path: `crawlers/${crawler?.script}`,
+          args: args,
+          timeout_seconds: 7200 // 2 saat
+        },
+        enabled: formData.enabled
+      };
+
+      let res: Response;
+      if (editingJob) {
+        res = await fetch(`/api/v2/scheduler/jobs/${editingJob.id}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+      } else {
+        res = await fetch('/api/v2/scheduler/jobs', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+      }
 
       if (res.ok) {
-        toast.success('İş başarıyla oluşturuldu');
-        setShowAddModal(false);
-        setNewJob({
-          name: '',
-          crawler: '',
-          targetTable: '',
-          enableEmbed: false,
-          enableUpsert: true,
-          scheduleType: 'cron',
-          cronExpression: '0 6 * * *',
-          intervalMinutes: 60
-        });
+        toast.success(editingJob ? 'İş güncellendi' : 'İş oluşturuldu');
+        setShowModal(false);
         fetchData();
       } else {
         const error = await res.json();
-        toast.error(error.message || 'İş oluşturulamadı');
+        toast.error(error.message || 'İşlem başarısız');
       }
     } catch (error) {
-      toast.error('İş oluşturulurken hata oluştu');
+      toast.error('Bir hata oluştu');
     } finally {
-      setCreating(false);
+      setSaving(false);
     }
   };
 
@@ -260,12 +308,12 @@ export default function SchedulerSection() {
       if (res.ok) {
         const updatedJob = await res.json();
         setJobs(prev => prev.map(j => j.id === jobId ? updatedJob : j));
-        toast.success(updatedJob.enabled ? 'Job enabled' : 'Job disabled');
+        toast.success(updatedJob.enabled ? 'İş etkinleştirildi' : 'İş devre dışı bırakıldı');
       } else {
-        toast.error('Failed to toggle job');
+        toast.error('İşlem başarısız');
       }
     } catch (error) {
-      toast.error('Failed to toggle job');
+      toast.error('İşlem başarısız');
     } finally {
       setActionLoading(null);
     }
@@ -279,40 +327,28 @@ export default function SchedulerSection() {
       });
 
       if (res.ok) {
-        toast.success('Job started');
-        // Refresh after a short delay to show updated status
+        toast.success('İş başlatıldı');
         setTimeout(fetchData, 2000);
       } else {
-        toast.error('Failed to run job');
+        toast.error('İş başlatılamadı');
       }
     } catch (error) {
-      toast.error('Failed to run job');
+      toast.error('İş başlatılamadı');
     } finally {
       setActionLoading(null);
     }
   };
 
-  const getJobTypeColor = (type: string) => {
-    const colors: Record<string, string> = {
-      'rag_query': 'bg-purple-500/20 text-purple-400',
-      'crawler': 'bg-blue-500/20 text-blue-400',
-      'embedding_sync': 'bg-green-500/20 text-green-400',
-      'cleanup': 'bg-orange-500/20 text-orange-400',
-      'custom_script': 'bg-gray-500/20 text-gray-400'
-    };
-    return colors[type] || 'bg-gray-500/20 text-gray-400';
-  };
-
-  const getStatusIcon = (status?: string) => {
+  const getStatusBadge = (status?: string) => {
     switch (status) {
       case 'completed':
-        return <CheckCircle className="h-4 w-4 text-green-500" />;
+        return <Badge variant="outline" className="bg-green-500/10 text-green-600 border-green-500/30">Başarılı</Badge>;
       case 'failed':
-        return <XCircle className="h-4 w-4 text-red-500" />;
+        return <Badge variant="outline" className="bg-red-500/10 text-red-600 border-red-500/30">Hatalı</Badge>;
       case 'running':
-        return <Loader2 className="h-4 w-4 text-blue-500 animate-spin" />;
+        return <Badge variant="outline" className="bg-blue-500/10 text-blue-600 border-blue-500/30">Çalışıyor</Badge>;
       default:
-        return <Clock className="h-4 w-4 text-gray-400" />;
+        return <Badge variant="outline" className="bg-gray-500/10 text-gray-500 border-gray-500/30">Bekliyor</Badge>;
     }
   };
 
@@ -322,12 +358,32 @@ export default function SchedulerSection() {
       return new Date(dateStr).toLocaleString('tr-TR', {
         day: '2-digit',
         month: '2-digit',
+        year: 'numeric',
         hour: '2-digit',
         minute: '2-digit'
       });
     } catch {
       return '-';
     }
+  };
+
+  const formatSchedule = (job: ScheduledJob) => {
+    if (job.schedule_type === 'cron' && job.cron_expression) {
+      // Simple cron description
+      const parts = job.cron_expression.split(' ');
+      if (parts.length >= 5) {
+        const [min, hour, , , dayOfWeek] = parts;
+        if (dayOfWeek === '0') return `Her Pazar ${hour}:${min.padStart(2, '0')}`;
+        if (dayOfWeek === '*' && hour !== '*') return `Her gün ${hour}:${min.padStart(2, '0')}`;
+      }
+      return job.cron_expression;
+    }
+    if (job.schedule_type === 'interval' && job.interval_seconds) {
+      const hours = Math.round(job.interval_seconds / 3600);
+      if (hours >= 24) return `${Math.round(hours / 24)} günde bir`;
+      return `${hours} saatte bir`;
+    }
+    return '-';
   };
 
   if (loading) {
@@ -345,67 +401,51 @@ export default function SchedulerSection() {
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           <Card className="bg-card/50">
             <CardContent className="pt-4">
-              <div className="flex items-center gap-2">
-                <Calendar className="h-4 w-4 text-primary" />
-                <span className="text-sm text-muted-foreground">Total Jobs</span>
-              </div>
+              <div className="text-sm text-muted-foreground">Toplam İş</div>
               <p className="text-2xl font-bold mt-1">{stats.total_jobs}</p>
             </CardContent>
           </Card>
 
           <Card className="bg-card/50">
             <CardContent className="pt-4">
-              <div className="flex items-center gap-2">
-                <Activity className="h-4 w-4 text-green-500" />
-                <span className="text-sm text-muted-foreground">Active</span>
-              </div>
-              <p className="text-2xl font-bold mt-1">{stats.enabled_jobs}</p>
+              <div className="text-sm text-muted-foreground">Aktif</div>
+              <p className="text-2xl font-bold mt-1 text-green-600">{stats.enabled_jobs}</p>
             </CardContent>
           </Card>
 
           <Card className="bg-card/50">
             <CardContent className="pt-4">
-              <div className="flex items-center gap-2">
-                <CheckCircle className="h-4 w-4 text-green-500" />
-                <span className="text-sm text-muted-foreground">Success (24h)</span>
-              </div>
-              <p className="text-2xl font-bold mt-1">{stats.successful_last_24h}</p>
+              <div className="text-sm text-muted-foreground">Başarılı (24s)</div>
+              <p className="text-2xl font-bold mt-1 text-green-600">{stats.successful_last_24h}</p>
             </CardContent>
           </Card>
 
           <Card className="bg-card/50">
             <CardContent className="pt-4">
-              <div className="flex items-center gap-2">
-                <XCircle className="h-4 w-4 text-red-500" />
-                <span className="text-sm text-muted-foreground">Failed (24h)</span>
-              </div>
-              <p className="text-2xl font-bold mt-1">{stats.failed_last_24h}</p>
+              <div className="text-sm text-muted-foreground">Hatalı (24s)</div>
+              <p className="text-2xl font-bold mt-1 text-red-600">{stats.failed_last_24h}</p>
             </CardContent>
           </Card>
         </div>
       )}
 
-      {/* Scheduler Status */}
+      {/* Jobs List */}
       <Card>
         <CardHeader className="pb-3">
           <div className="flex items-center justify-between">
             <div>
-              <CardTitle className="text-lg flex items-center gap-2">
-                <Clock className="h-5 w-5" />
-                Scheduled Jobs
-              </CardTitle>
+              <CardTitle className="text-lg">Zamanlanmış İşler</CardTitle>
               <CardDescription>
-                APScheduler-based job scheduling system
+                Crawler ve veri işleme görevleri
               </CardDescription>
             </div>
             <div className="flex items-center gap-2">
-              <Button variant="outline" size="sm" onClick={() => setShowAddModal(true)}>
+              <Button variant="outline" size="sm" onClick={openAddModal}>
                 <Plus className="h-4 w-4 mr-1" />
-                İş Ekle
+                Yeni İş
               </Button>
               <Button variant="outline" size="sm" onClick={fetchData}>
-                <RefreshCw className="h-4 w-4 mr-1" />
-                Yenile
+                <RefreshCw className="h-4 w-4" />
               </Button>
             </div>
           </div>
@@ -413,56 +453,56 @@ export default function SchedulerSection() {
         <CardContent>
           {jobs.length === 0 ? (
             <div className="text-center py-8 text-muted-foreground">
-              <AlertCircle className="h-8 w-8 mx-auto mb-2 opacity-50" />
-              <p>No scheduled jobs found</p>
-              <p className="text-sm">Create jobs via API or run database migration first</p>
+              <Clock className="h-8 w-8 mx-auto mb-2 opacity-50" />
+              <p>Henüz zamanlanmış iş yok</p>
+              <p className="text-sm mt-1">Yeni İş butonuna tıklayarak crawler ekleyin</p>
             </div>
           ) : (
-            <div className="space-y-3">
+            <div className="space-y-2">
               {jobs.map((job) => (
                 <div
                   key={job.id}
                   className="flex items-center justify-between p-3 rounded-lg border bg-card/30 hover:bg-card/50 transition-colors"
                 >
-                  <div className="flex items-center gap-3 flex-1">
-                    {/* Status Icon */}
-                    {getStatusIcon(job.last_run_status)}
-
-                    {/* Job Info */}
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2">
-                        <span className="font-medium truncate">{job.name}</span>
-                        <Badge variant="secondary" className={getJobTypeColor(job.job_type)}>
-                          {job.job_type.replace('_', ' ')}
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className="font-medium">{job.name}</span>
+                      {getStatusBadge(job.last_run_status)}
+                      {!job.enabled && (
+                        <Badge variant="outline" className="bg-yellow-500/10 text-yellow-600 border-yellow-500/30">
+                          Devre Dışı
                         </Badge>
-                      </div>
-                      <div className="flex items-center gap-4 text-xs text-muted-foreground mt-1">
-                        <span>
-                          {job.schedule_type === 'cron' && job.cron_expression}
-                          {job.schedule_type === 'interval' && `Every ${job.interval_seconds}s`}
-                        </span>
-                        <span>Last: {formatDateTime(job.last_run_at)}</span>
-                        <span>
-                          {job.successful_runs}/{job.total_runs} success
-                        </span>
-                      </div>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-4 text-xs text-muted-foreground">
+                      <span>{formatSchedule(job)}</span>
+                      <span>Son: {formatDateTime(job.last_run_at)}</span>
+                      <span>{job.successful_runs}/{job.total_runs} başarılı</span>
                     </div>
                   </div>
 
-                  {/* Actions */}
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-1">
                     <Button
                       variant="ghost"
                       size="sm"
                       onClick={() => handleRunNow(job.id)}
                       disabled={actionLoading === job.id || !job.enabled}
-                      title="Run now"
+                      title="Şimdi Çalıştır"
                     >
                       {actionLoading === job.id ? (
                         <Loader2 className="h-4 w-4 animate-spin" />
                       ) : (
                         <Play className="h-4 w-4" />
                       )}
+                    </Button>
+
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => openEditModal(job)}
+                      title="Düzenle"
+                    >
+                      <Pencil className="h-4 w-4" />
                     </Button>
 
                     <Switch
@@ -489,16 +529,15 @@ export default function SchedulerSection() {
         </CardContent>
       </Card>
 
-      {/* Add Crawler Job Modal */}
-      <Dialog open={showAddModal} onOpenChange={setShowAddModal}>
-        <DialogContent className="sm:max-w-md">
+      {/* Add/Edit Modal */}
+      <Dialog open={showModal} onOpenChange={setShowModal}>
+        <DialogContent className="sm:max-w-lg">
           <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <Globe className="h-5 w-5" />
-              Crawler İşi Ekle
+            <DialogTitle>
+              {editingJob ? 'İşi Düzenle' : 'Yeni Crawler İşi'}
             </DialogTitle>
             <DialogDescription>
-              Zamanlanmış crawler pipeline oluşturun
+              {editingJob ? 'İş ayarlarını güncelleyin' : 'Zamanlanmış crawler görevi oluşturun'}
             </DialogDescription>
           </DialogHeader>
 
@@ -508,9 +547,9 @@ export default function SchedulerSection() {
               <Label htmlFor="jobName">İş Adı</Label>
               <Input
                 id="jobName"
-                placeholder="Örn: GİB Sirküler Günlük"
-                value={newJob.name}
-                onChange={(e) => setNewJob({ ...newJob, name: e.target.value })}
+                placeholder="Örn: GİB Sirküler Haftalık"
+                value={formData.name}
+                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
               />
             </div>
 
@@ -518,137 +557,100 @@ export default function SchedulerSection() {
             <div className="space-y-2">
               <Label>Crawler</Label>
               <Select
-                value={newJob.crawler}
-                onValueChange={(value) => setNewJob({ ...newJob, crawler: value })}
+                value={formData.crawler}
+                onValueChange={(value) => setFormData({ ...formData, crawler: value })}
               >
                 <SelectTrigger>
                   <SelectValue placeholder="Crawler seçin" />
                 </SelectTrigger>
                 <SelectContent>
-                  {AVAILABLE_CRAWLERS.map((crawler) => (
-                    <SelectItem key={crawler.name} value={crawler.name}>
-                      <div className="flex items-center gap-2">
-                        <Globe className="h-4 w-4" />
-                        {crawler.label}
-                      </div>
+                  <div className="px-2 py-1 text-xs font-semibold text-muted-foreground">GİB</div>
+                  {AVAILABLE_CRAWLERS.filter(c => c.category === 'GİB').map((crawler) => (
+                    <SelectItem key={crawler.id} value={crawler.id}>
+                      {crawler.label}
+                    </SelectItem>
+                  ))}
+                  <div className="px-2 py-1 text-xs font-semibold text-muted-foreground mt-2">Mevzuat</div>
+                  {AVAILABLE_CRAWLERS.filter(c => c.category === 'Mevzuat').map((crawler) => (
+                    <SelectItem key={crawler.id} value={crawler.id}>
+                      {crawler.label}
                     </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
-            </div>
-
-            {/* Target Table */}
-            <div className="space-y-2">
-              <Label>Hedef Tablo (Upsert)</Label>
-              <Select
-                value={newJob.targetTable}
-                onValueChange={(value) => setNewJob({ ...newJob, targetTable: value })}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Tablo seçin (opsiyonel)" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="__none__">Yok</SelectItem>
-                  {availableTables.map((table) => (
-                    <SelectItem key={table.name} value={table.name}>
-                      <div className="flex items-center gap-2">
-                        <Database className="h-4 w-4" />
-                        {table.name}
-                      </div>
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            {/* Toggles */}
-            <div className="flex items-center gap-6">
-              <div className="flex items-center gap-2">
-                <Switch
-                  id="enableEmbed"
-                  checked={newJob.enableEmbed}
-                  onCheckedChange={(checked) => setNewJob({ ...newJob, enableEmbed: checked })}
-                />
-                <Label htmlFor="enableEmbed" className="flex items-center gap-1 cursor-pointer">
-                  <Sparkles className="h-4 w-4" />
-                  Embed
-                </Label>
-              </div>
-
-              <div className="flex items-center gap-2">
-                <Switch
-                  id="enableUpsert"
-                  checked={newJob.enableUpsert}
-                  onCheckedChange={(checked) => setNewJob({ ...newJob, enableUpsert: checked })}
-                />
-                <Label htmlFor="enableUpsert" className="flex items-center gap-1 cursor-pointer">
-                  <Database className="h-4 w-4" />
-                  Upsert
-                </Label>
-              </div>
             </div>
 
             {/* Schedule Type */}
             <div className="space-y-2">
-              <Label>Zamanlama Tipi</Label>
+              <Label>Zamanlama</Label>
               <Select
-                value={newJob.scheduleType}
-                onValueChange={(value: 'cron' | 'interval') => setNewJob({ ...newJob, scheduleType: value })}
+                value={formData.scheduleType}
+                onValueChange={(value: 'cron' | 'interval') => setFormData({ ...formData, scheduleType: value })}
               >
                 <SelectTrigger>
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="cron">Cron (Belirli zamanda)</SelectItem>
-                  <SelectItem value="interval">Interval (Periyodik)</SelectItem>
+                  <SelectItem value="cron">Cron (Belirli Zaman)</SelectItem>
+                  <SelectItem value="interval">Periyodik</SelectItem>
                 </SelectContent>
               </Select>
             </div>
 
             {/* Cron / Interval Input */}
-            {newJob.scheduleType === 'cron' ? (
+            {formData.scheduleType === 'cron' ? (
               <div className="space-y-2">
                 <Label htmlFor="cronExpr">Cron İfadesi</Label>
                 <Input
                   id="cronExpr"
-                  placeholder="0 6 * * *"
-                  value={newJob.cronExpression}
-                  onChange={(e) => setNewJob({ ...newJob, cronExpression: e.target.value })}
+                  placeholder="0 3 * * 0"
+                  value={formData.cronExpression}
+                  onChange={(e) => setFormData({ ...formData, cronExpression: e.target.value })}
                 />
                 <p className="text-xs text-muted-foreground">
-                  Örnek: 0 6 * * * = Her gün saat 06:00
+                  Örnekler: 0 3 * * 0 (Her Pazar 03:00), 0 6 * * * (Her gün 06:00)
                 </p>
               </div>
             ) : (
               <div className="space-y-2">
-                <Label htmlFor="intervalMin">Interval (dakika)</Label>
+                <Label htmlFor="intervalHours">Tekrar Aralığı (Saat)</Label>
                 <Input
-                  id="intervalMin"
+                  id="intervalHours"
                   type="number"
                   min={1}
-                  value={newJob.intervalMinutes}
-                  onChange={(e) => setNewJob({ ...newJob, intervalMinutes: parseInt(e.target.value) || 60 })}
+                  value={formData.intervalHours}
+                  onChange={(e) => setFormData({ ...formData, intervalHours: parseInt(e.target.value) || 168 })}
                 />
+                <p className="text-xs text-muted-foreground">
+                  168 saat = 1 hafta
+                </p>
               </div>
             )}
+
+            {/* Enabled Toggle */}
+            <div className="flex items-center justify-between">
+              <Label htmlFor="enabled">Aktif</Label>
+              <Switch
+                id="enabled"
+                checked={formData.enabled}
+                onCheckedChange={(checked) => setFormData({ ...formData, enabled: checked })}
+              />
+            </div>
           </div>
 
           {/* Actions */}
           <div className="flex justify-end gap-2">
-            <Button variant="outline" onClick={() => setShowAddModal(false)}>
+            <Button variant="outline" onClick={() => setShowModal(false)}>
               İptal
             </Button>
-            <Button onClick={handleCreateJob} disabled={creating}>
-              {creating ? (
+            <Button onClick={handleSave} disabled={saving}>
+              {saving ? (
                 <>
                   <Loader2 className="h-4 w-4 mr-1 animate-spin" />
-                  Oluşturuluyor...
+                  Kaydediliyor...
                 </>
               ) : (
-                <>
-                  <Plus className="h-4 w-4 mr-1" />
-                  Oluştur
-                </>
+                editingJob ? 'Güncelle' : 'Oluştur'
               )}
             </Button>
           </div>
