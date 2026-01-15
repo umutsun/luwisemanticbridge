@@ -445,21 +445,25 @@ class DataHealthService:
             # Batch işle
             for i in range(0, len(records), batch_size):
                 batch = records[i:i + batch_size]
-                source_ids = [r['source_id'] for r in batch]
+                # Convert source_ids to integers for proper type matching
+                source_ids = [int(r['source_id']) for r in batch if r['source_id'] is not None]
+
+                if not source_ids:
+                    continue
 
                 # Source'dan metadata çek
                 fields_sql = ", ".join(meta_fields)
                 source_query = f"""
                     SELECT {pk} as source_id, {fields_sql}
                     FROM "{source_table}"
-                    WHERE {pk} = ANY($1)
+                    WHERE {pk} = ANY($1::integer[])
                 """
                 source_data = await self.source_pool.fetch(source_query, source_ids)
-                source_map = {r['source_id']: dict(r) for r in source_data}
+                source_map = {int(r['source_id']): dict(r) for r in source_data}
 
                 # Her kayıt için metadata güncelle
                 for record in batch:
-                    source_row = source_map.get(record['source_id'])
+                    source_row = source_map.get(int(record['source_id']) if record['source_id'] else None)
 
                     if not source_row:
                         result.skipped_count += 1

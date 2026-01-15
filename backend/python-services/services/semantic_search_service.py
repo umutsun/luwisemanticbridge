@@ -793,14 +793,33 @@ class SemanticSearchService:
                         # Construct CSV table name (add csv_ prefix if not exists)
                         csv_table_name = f"csv_{source_table}" if not source_table.startswith('csv_') else source_table
 
-                        # Fetch source row from CSV table
-                        source_query = f"""
-                            SELECT *
-                            FROM {csv_table_name}
-                            WHERE id = $1
-                            LIMIT 1
-                        """
-                        source_row = await pool.fetchrow(source_query, int(source_id))
+                        # Fetch source row from CSV table - try row_id first, fallback to id
+                        # source_id is stored as INTEGER in unified_embeddings
+                        source_id_int = int(source_id) if str(source_id).isdigit() else None
+
+                        source_row = None
+                        if source_id_int is not None:
+                            # Try row_id first (most common for data tables)
+                            source_query = f"""
+                                SELECT *
+                                FROM {csv_table_name}
+                                WHERE row_id = $1
+                                LIMIT 1
+                            """
+                            source_row = await pool.fetchrow(source_query, source_id_int)
+
+                            # Fallback to id column if row_id not found
+                            if not source_row:
+                                source_query = f"""
+                                    SELECT *
+                                    FROM {csv_table_name}
+                                    WHERE id = $1::text OR id::integer = $1
+                                    LIMIT 1
+                                """
+                                try:
+                                    source_row = await pool.fetchrow(source_query, source_id_int)
+                                except:
+                                    pass  # id column might not exist or be different type
 
                         if source_row:
                             # Merge CSV columns into metadata
