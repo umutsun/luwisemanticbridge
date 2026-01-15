@@ -35,7 +35,7 @@ export const ZenHeader: React.FC<ZenHeaderProps> = ({
           </div>
           <div>
             <h1 className="text-lg font-semibold text-slate-800 dark:text-slate-100">
-              {chatbotSettings.title || 'Zen Assistant'}
+              🔥 TEST BUILD {new Date().getTime()} - {chatbotSettings.title || 'Zen Assistant'}
             </h1>
             {chatbotSettings.subtitle && (
               <p className="text-xs text-slate-500 dark:text-slate-400">{chatbotSettings.subtitle}</p>
