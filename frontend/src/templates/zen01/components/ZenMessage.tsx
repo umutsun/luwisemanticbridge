@@ -743,27 +743,52 @@ export const ZenMessage: React.FC<ZenMessageProps> = ({
                           const metadataTags: string[] = [];
                           const meta = source.metadata as any;
 
-                          // Extract meaningful metadata fields
+                          // Extract meaningful metadata fields from various CSV column names
                           if (meta) {
-                            // Add madde_no if exists (most important)
-                            if (meta.madde_no) {
-                              const madde = cleanCitationTitle(meta.madde_no);
+                            // Karar/Esas numarası - Danıştay kararları için
+                            const kararNo = meta.kararno || meta.karar_no || meta.esas_no || meta.esasno;
+                            if (kararNo) {
+                              const karar = cleanCitationTitle(String(kararNo));
+                              if (karar && karar.length < 30) {
+                                metadataTags.push(`Karar: ${karar}`);
+                              }
+                            }
+
+                            // Daire bilgisi - Danıştay için
+                            if (meta.daire) {
+                              const daire = cleanCitationTitle(String(meta.daire));
+                              if (daire && daire.length < 30) {
+                                metadataTags.push(daire);
+                              }
+                            }
+
+                            // Dergi bilgisi - Makaleler için
+                            if (meta.dergi) {
+                              const dergi = cleanCitationTitle(String(meta.dergi));
+                              if (dergi && dergi.length < 40) {
+                                metadataTags.push(dergi);
+                              }
+                            }
+
+                            // Madde numarası
+                            if (meta.madde_no || meta.madde) {
+                              const madde = cleanCitationTitle(String(meta.madde_no || meta.madde));
                               if (madde && madde.length < 30) {
                                 metadataTags.push(`Madde ${madde}`);
                               }
                             }
 
-                            // Add sayi/karar_no if exists
+                            // Sayı numarası
                             if (meta.sayi) {
-                              const sayi = cleanCitationTitle(meta.sayi);
+                              const sayi = cleanCitationTitle(String(meta.sayi));
                               if (sayi && sayi.length < 20) {
                                 metadataTags.push(`Sayı: ${sayi}`);
                               }
                             }
 
-                            // Add year from tarih if exists
+                            // Yıl/Tarih - en son ekle
                             if (meta.tarih) {
-                              const tarih = cleanCitationTitle(meta.tarih);
+                              const tarih = cleanCitationTitle(String(meta.tarih));
                               const yearMatch = tarih.match(/\d{4}/);
                               if (yearMatch) {
                                 metadataTags.push(yearMatch[0]);
