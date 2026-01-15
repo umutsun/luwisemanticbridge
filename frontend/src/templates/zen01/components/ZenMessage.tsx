@@ -406,12 +406,45 @@ export const ZenMessage: React.FC<ZenMessageProps> = ({
                         {children}
                       </h3>
                     ),
-                    // Paragraphs with keyword highlighting
+                    // Paragraphs with keyword highlighting and citation anchors
                     p: ({ children }) => {
-                      // Apply keyword highlighting to text nodes
+                      // Apply keyword highlighting and convert [1] to clickable anchors
                       const processChildren = (child: React.ReactNode): React.ReactNode => {
-                        if (typeof child === 'string' && highlightKeywords.length > 0) {
-                          return highlightKeywordsInText(child, highlightKeywords);
+                        if (typeof child === 'string') {
+                          // First handle citation numbers [1], [2], etc.
+                          const parts = child.split(/(\[\d+\])/g);
+                          const processed = parts.map((part, idx) => {
+                            const match = part.match(/^\[(\d+)\]$/);
+                            if (match) {
+                              const citationNum = match[1];
+                              return (
+                                <a
+                                  key={`cite-${idx}`}
+                                  href={`#citation-${message.id}-${citationNum}`}
+                                  className="text-cyan-600 dark:text-cyan-400 hover:text-cyan-700 dark:hover:text-cyan-300 no-underline font-mono text-[10px] font-semibold align-super transition-colors"
+                                  onClick={(e) => {
+                                    e.preventDefault();
+                                    const el = document.getElementById(`citation-${message.id}-${citationNum}`);
+                                    if (el) {
+                                      el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                                      el.classList.add('ring-2', 'ring-cyan-400', 'ring-opacity-50');
+                                      setTimeout(() => {
+                                        el.classList.remove('ring-2', 'ring-cyan-400', 'ring-opacity-50');
+                                      }, 2000);
+                                    }
+                                  }}
+                                >
+                                  [{citationNum}]
+                                </a>
+                              );
+                            }
+                            // Apply keyword highlighting to non-citation text
+                            if (highlightKeywords.length > 0) {
+                              return <React.Fragment key={idx}>{highlightKeywordsInText(part, highlightKeywords)}</React.Fragment>;
+                            }
+                            return part;
+                          });
+                          return <>{processed}</>;
                         }
                         if (Array.isArray(child)) {
                           return child.map((c, i) => <React.Fragment key={i}>{processChildren(c)}</React.Fragment>);
@@ -604,35 +637,18 @@ export const ZenMessage: React.FC<ZenMessageProps> = ({
                 return (
                   <div
                     key={idx}
-                    className={`zen01-source-item ${enableSourceClick ? 'cursor-pointer hover:bg-slate-800/30' : 'cursor-default'}`}
+                    id={`citation-${message.id}-${idx + 1}`}
+                    className={`zen01-source-item scroll-mt-20 ${enableSourceClick ? 'cursor-pointer hover:bg-slate-800/30' : 'cursor-default'}`}
                     {...(enableSourceClick && {
                       onClick: () => onSourceClick(source, message.sources || [])
                     })}
                   >
                     <div className="flex items-start gap-2">
                       <div className="flex-1 min-w-0">
-                        {/* Citation number - clean, minimal */}
+                        {/* Citation number - clean, minimal, no tooltip */}
                         <div className="flex items-baseline gap-2 mb-3">
                           <span
-                            className="text-cyan-500/70 dark:text-cyan-400/70 text-[9px] font-mono font-semibold cursor-help align-super"
-                            title={(() => {
-                              // Generate tooltip: "Özelge: T.C. Maliye Bakanlığı • Tarih: 01.01.2024 • Sayı: 123"
-                              const parts: string[] = [];
-
-                              // Add source type label first
-                              parts.push(`${typeInfo.label}:`);
-
-                              if (source.metadata?.kurum) parts.push(cleanCitationTitle(source.metadata.kurum));
-                              if (source.metadata?.tarih) parts.push(cleanCitationTitle(source.metadata.tarih));
-                              if (source.metadata?.sayi) parts.push(`Sayı: ${cleanCitationTitle(source.metadata.sayi)}`);
-                              if (source.metadata?.madde_no) parts.push(`Madde: ${cleanCitationTitle(source.metadata.madde_no)}`);
-
-                              if (parts.length > 1) return parts.join(' • ');
-
-                              // Fallback to title/excerpt
-                              const fallback = cleanCitationTitle(source.title || source.excerpt || 'Kaynak bilgisi');
-                              return `${typeInfo.label}: ${fallback.substring(0, 100)}`;
-                            })()}
+                            className="text-cyan-500/70 dark:text-cyan-400/70 text-[9px] font-mono font-semibold align-super"
                           >
                             [{idx + 1}]
                           </span>
