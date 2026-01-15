@@ -1175,21 +1175,54 @@ router.post('/start', async (req: Request, res: Response) => {
   });
 });
 
-// Get migration progress
+// Get migration progress with Redis fallback
 router.get('/progress', async (req: Request, res: Response) => {
   const { id } = req.query;
 
-  if (id) {
-    const progress = migrationProgress.getProgress(id as string);
-    res.json(progress || { status: 'not_found' });
-  } else {
-    // Return latest migration progress
-    const latestId = Array.from(migrationProgress['progress'].keys()).pop();
-    if (latestId) {
-      res.json(migrationProgress.getProgress(latestId));
+  try {
+    // First try to get from in-memory cache
+    if (id) {
+      const progress = migrationProgress.getProgress(id as string);
+      if (progress) {
+        return res.json(progress);
+      }
     } else {
-      res.json({ status: 'idle' });
+      // Try to get latest from in-memory
+      const latestId = Array.from(migrationProgress['progress'].keys()).pop();
+      if (latestId) {
+        const progress = migrationProgress.getProgress(latestId);
+        if (progress) {
+          return res.json(progress);
+        }
+      }
     }
+
+    // Fallback to Redis if not found in memory
+    const redis = redisClient();
+    if (redis && redis.status === 'ready') {
+      // Get active migration ID from Redis
+      const activeMigrationId = id as string || await redis.get(REDIS_KEYS.ACTIVE_MIGRATION);
+
+      if (activeMigrationId) {
+        const progressData = await redis.get(REDIS_KEYS.PROGRESS(activeMigrationId));
+        if (progressData) {
+          const parsed = JSON.parse(progressData);
+          // Restore to in-memory cache for future requests
+          migrationProgress['progress'].set(activeMigrationId, parsed);
+          return res.json({
+            ...parsed,
+            migrationId: activeMigrationId,
+            restoredFromRedis: true
+          });
+        }
+      }
+    }
+
+    // No progress found
+    res.json({ status: 'idle' });
+  } catch (error) {
+    console.error('Error getting migration progress:', error);
+    res.json({ status: 'error', message: 'Failed to get progress' });
   }
 });
 
