@@ -779,58 +779,17 @@ class SemanticSearchService:
                     except (json.JSONDecodeError, TypeError):
                         metadata = {}
 
-                # 🔧 CRITICAL FIX: Populate metadata from source CSV tables
-                # unified_embeddings.metadata only contains {table, originalId}
-                # We need to merge actual CSV columns (madde_no, sayi, tarih, etc.)
+                # NOTE: Metadata is already populated in unified_embeddings table
+                # No need to fetch from CSV tables - data_health.py fix_metadata() already merged CSV columns
+                # into unified_embeddings.metadata (daire, tarih, esasno, kararno, konusu, etc.)
                 source_table = row['source_table']
                 source_id = row['source_id']
 
-                # Check if source_table is a data table (not documents, not scraped_pages)
-                is_data_table = source_table and source_table not in ['documents', 'scraped_pages', 'messages']
-
-                if source_table and source_id and is_data_table:
-                    try:
-                        # Construct CSV table name (add csv_ prefix if not exists)
-                        csv_table_name = f"csv_{source_table}" if not source_table.startswith('csv_') else source_table
-
-                        # Fetch source row from CSV table - try row_id first, fallback to id
-                        # source_id is stored as INTEGER in unified_embeddings
-                        source_id_int = int(source_id) if str(source_id).isdigit() else None
-
-                        source_row = None
-                        if source_id_int is not None:
-                            # Try row_id first (most common for data tables)
-                            source_query = f"""
-                                SELECT *
-                                FROM {csv_table_name}
-                                WHERE row_id = $1
-                                LIMIT 1
-                            """
-                            source_row = await pool.fetchrow(source_query, source_id_int)
-
-                            # Fallback to id column if row_id not found
-                            if not source_row:
-                                source_query = f"""
-                                    SELECT *
-                                    FROM {csv_table_name}
-                                    WHERE id = $1::text OR id::integer = $1
-                                    LIMIT 1
-                                """
-                                try:
-                                    source_row = await pool.fetchrow(source_query, source_id_int)
-                                except:
-                                    pass  # id column might not exist or be different type
-
-                        if source_row:
-                            # Merge CSV columns into metadata
-                            # Common fields: tarih, madde_no, sayi, kararno, daire, dergi, yazar
-                            for key, value in dict(source_row).items():
-                                if key not in ['id', 'icerik', 'content', 'baslik'] and value is not None:
-                                    metadata[key] = str(value)
-
-                            logger.debug(f"[MetadataPopulate] Merged {len(dict(source_row))} fields from {csv_table_name} (id={source_id})")
-                    except Exception as e:
-                        logger.warning(f"[MetadataPopulate] Failed to fetch source metadata from {source_table} (id={source_id}): {e}")
+                # Log metadata fields for debugging
+                if metadata:
+                    meta_fields = [k for k in metadata.keys() if k not in ['table', 'embeddingModel', 'embeddingProvider', 'originalId', 'row_id', 'tokens_used']]
+                    if meta_fields:
+                        logger.debug(f"[Metadata] {source_table}[{source_id}]: {', '.join(meta_fields[:5])}")
 
                 result = {
                     "id": str(row['id']),
