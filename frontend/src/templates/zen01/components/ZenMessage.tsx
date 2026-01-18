@@ -112,11 +112,15 @@ function highlightKeywordsInText(text: string, keywords: string[]): React.ReactN
  * Fixes: "2018/280Karar No:" -> "2018/280 Karar No:"
  * Fixes: "GelirMüdürlüğüILGİ" -> "Gelir Müdürlüğü İLGİ"
  * Fixes: ".......... gün ve ................" -> "" (removes placeholder dots)
+ * Fixes: "15-4-2021 00:00:00" -> "15-4-2021" (removes time)
  */
 function cleanCitationTitle(title: string): string {
   if (!title) return '';
 
   return title
+    // Remove time portion from dates (00:00:00, 12:30:45, etc.)
+    .replace(/\s+\d{2}:\d{2}:\d{2}$/g, '')
+    .replace(/\s+\d{2}:\d{2}:\d{2}\s/g, ' ')
     // Remove long sequences of dots/periods (likely placeholder text)
     .replace(/\.{4,}/g, '')
     // Remove common placeholder patterns
@@ -129,8 +133,13 @@ function cleanCitationTitle(title: string): string {
     .replace(/([A-ZÇĞİÖŞÜ])\s+([A-ZÇĞİÖŞÜ])\s+([A-ZÇĞİÖŞÜ])\s+([A-ZÇĞİÖŞÜ])\s+([A-ZÇĞİÖŞÜ])/g, '$1$2$3$4$5')
     // Fix missing space after lowercase letter followed by uppercase (e.g., "MüdürlüğüILGİ" -> "Müdürlüğü İLGİ")
     .replace(/([a-zçğıöşü])([A-ZÇĞİÖŞÜ]{2,})/g, '$1 $2')
+    // Fix camelCase merged words: "HukukDairesi" -> "Hukuk Dairesi"
+    .replace(/([a-zçğıöşü])([A-ZÇĞİÖŞÜ][a-zçğıöşü])/g, '$1 $2')
+    // Fix ALL CAPS merged words: "BAŞVURUSAMI" -> "BAŞVURUSU AMI" - be careful
+    .replace(/([A-ZÇĞİÖŞÜ]{3,})([A-ZÇĞİÖŞÜ][a-zçğıöşü]{2,})/g, '$1 $2')
     // Fix "T.C.D" -> "T.C. D" (add space after T.C.)
     .replace(/T\.C\.D/g, 'T.C. D')
+    .replace(/T\.C\.Y/g, 'T.C. Y')
     // Fix merged words: "DAİREEsas" -> "DAİRE Esas"
     .replace(/DAİRE([A-Z])/g, 'DAİRE $1')
     .replace(/DAIRE([A-Z])/g, 'DAİRE $1')
@@ -690,6 +699,46 @@ export const ZenMessage: React.FC<ZenMessageProps> = ({
 
                 const typeInfo = getSourceTypeInfo(source.sourceTable);
 
+                // Extract metadata for header display
+                const meta = source.metadata as any;
+                const getMetadataInfo = () => {
+                  if (!meta) return { karar: '', daire: '', tarih: '' };
+
+                  // Get karar/esas number
+                  const kararRaw = meta.kararno || meta.karar_no || meta.esas_no || meta.esasno || meta.karar || '';
+                  const karar = kararRaw ? cleanCitationTitle(String(kararRaw)) : '';
+
+                  // Get daire
+                  const daireRaw = meta.daire || '';
+                  const daire = daireRaw ? cleanCitationTitle(String(daireRaw)) : '';
+
+                  // Get year from tarih
+                  const tarihRaw = meta.tarih || meta.date || meta.yil || meta.year || '';
+                  const tarihClean = cleanCitationTitle(String(tarihRaw));
+                  const yearMatch = tarihClean.match(/\d{4}/);
+                  const tarih = yearMatch ? yearMatch[0] : '';
+
+                  return { karar, daire, tarih };
+                };
+
+                const metaInfo = getMetadataInfo();
+
+                // Get excerpt/summary
+                const getExcerpt = () => {
+                  const raw = source.summary || source.excerpt || source.content || '';
+                  const cleaned = cleanCitationTitle(raw)
+                    .replace(/^(KONU|İLGİ|SORU|CEVAP|Dilekçenizde|konusu)[:.\s]*/gi, '')
+                    .replace(/\.{2,}/g, '.')
+                    .trim();
+
+                  if (cleaned.length > 200) {
+                    return cleaned.substring(0, 200).trim() + '...';
+                  }
+                  return cleaned;
+                };
+
+                const excerpt = getExcerpt();
+
                 return (
                   <div
                     key={idx}
@@ -699,182 +748,37 @@ export const ZenMessage: React.FC<ZenMessageProps> = ({
                       onClick: () => onSourceClick(source, message.sources || [])
                     })}
                   >
-                    <div className="flex items-start gap-2">
-                      <div className="flex-1 min-w-0">
-                        {/* Citation number - clean, simple format */}
-                        <div className="flex items-center gap-2 mb-2">
-                          <span className="text-xs font-semibold text-cyan-500 dark:text-cyan-400">
-                            [{idx + 1}]
-                          </span>
-                          <span className={`zen01-marker ${typeInfo.markerClass} text-[10px] font-medium px-2 py-0.5`}>
-                            {typeInfo.label}
-                          </span>
-                        </div>
-
-                        {/* Kaynak Bilgisi - Clean, readable format */}
-                        {source.metadata && Object.keys(source.metadata).length > 0 && (
-                          <div className="text-[11.5px] leading-relaxed space-y-1.5 mb-3">
-                            {/* Kurum/Tarih - single line, clean */}
-                            {(source.metadata.kurum || source.metadata.tarih) && (
-                              <div className="flex items-center gap-2 text-slate-300/90 dark:text-slate-200/90">
-                                {source.metadata.kurum && (
-                                  <span className="font-medium">{cleanCitationTitle(source.metadata.kurum)}</span>
-                                )}
-                                {source.metadata.tarih && (
-                                  <span className="text-slate-400/80 dark:text-slate-300/70">
-                                    {cleanCitationTitle(source.metadata.tarih)}
-                                  </span>
-                                )}
-                              </div>
-                            )}
-                            {/* Sayı/Madde - clean, readable */}
-                            {(source.metadata.sayi || source.metadata.madde_no) && (
-                              <div className="text-slate-400/90 dark:text-slate-300/80 text-[10.5px]">
-                                {source.metadata.sayi && `Sayı ${cleanCitationTitle(source.metadata.sayi)}`}
-                                {source.metadata.sayi && source.metadata.madde_no && ' / '}
-                                {source.metadata.madde_no && `Madde ${cleanCitationTitle(source.metadata.madde_no)}`}
-                              </div>
-                            )}
-                          </div>
-                        )}
-
-                        {/* Excerpt - ALWAYS show content summary */}
-                        {(() => {
-                          // Always show excerpt/summary - this is the important content explanation
-                          const excerpt = source.summary || source.excerpt || source.content || '';
-
-                          // Clean and truncate excerpt for display
-                          const cleanExcerpt = cleanCitationTitle(excerpt)
-                            .replace(/^(KONU|İLGİ|SORU|CEVAP|Dilekçenizde)[:.\s]*/gi, '') // Remove common prefixes
-                            .replace(/\.{2,}/g, '.') // Remove multiple dots
-                            .trim();
-
-                          if (cleanExcerpt && cleanExcerpt.length > 30) {
-                            // Show first 250 chars with ellipsis
-                            const displayText = cleanExcerpt.length > 250
-                              ? cleanExcerpt.substring(0, 250).trim() + '...'
-                              : cleanExcerpt;
-
-                            return (
-                              <p className="text-[11px] text-slate-500/90 dark:text-slate-300/80 line-clamp-3 leading-relaxed mb-3">
-                                {displayText}
-                              </p>
-                            );
-                          }
-                          return null;
-                        })()}
-
-                        {/* Metadata Tags - Extract meaningful info from metadata */}
-                        {(() => {
-                          const metadataTags: { label: string; value: string; color: string }[] = [];
-                          const meta = source.metadata as any;
-
-                          // Debug: Log raw metadata
-                          if (meta && Object.keys(meta).length > 0) {
-                            console.log('[ZenMessage] Source metadata:', { idx: idx + 1, meta });
-                          }
-
-                          // Extract meaningful metadata fields from various CSV column names
-                          if (meta) {
-                            // Karar/Esas numarası - Danıştay kararları için
-                            const kararNo = meta.kararno || meta.karar_no || meta.esas_no || meta.esasno || meta.karar;
-                            if (kararNo) {
-                              const karar = cleanCitationTitle(String(kararNo));
-                              if (karar && karar.length < 40 && karar.length > 1) {
-                                metadataTags.push({ label: 'Karar', value: karar, color: 'cyan' });
-                              }
-                            }
-
-                            // Esas numarası (ayrı field olarak)
-                            if (meta.esas && !meta.esasno) {
-                              const esas = cleanCitationTitle(String(meta.esas));
-                              if (esas && esas.length < 30 && esas.length > 1) {
-                                metadataTags.push({ label: 'Esas', value: esas, color: 'cyan' });
-                              }
-                            }
-
-                            // Daire bilgisi - Danıştay için
-                            if (meta.daire) {
-                              const daire = cleanCitationTitle(String(meta.daire));
-                              if (daire && daire.length < 40 && daire.length > 1) {
-                                metadataTags.push({ label: '', value: daire, color: 'amber' });
-                              }
-                            }
-
-                            // Dergi bilgisi - Makaleler için
-                            if (meta.dergi) {
-                              const dergi = cleanCitationTitle(String(meta.dergi));
-                              if (dergi && dergi.length < 50 && dergi.length > 1) {
-                                metadataTags.push({ label: '', value: dergi, color: 'purple' });
-                              }
-                            }
-
-                            // Yazar bilgisi - Makaleler için
-                            if (meta.yazar || meta.author) {
-                              const yazar = cleanCitationTitle(String(meta.yazar || meta.author));
-                              if (yazar && yazar.length < 40 && yazar.length > 1) {
-                                metadataTags.push({ label: 'Yazar', value: yazar, color: 'green' });
-                              }
-                            }
-
-                            // Madde numarası
-                            if (meta.madde_no || meta.madde) {
-                              const madde = cleanCitationTitle(String(meta.madde_no || meta.madde));
-                              if (madde && madde.length < 30 && madde.length > 0) {
-                                metadataTags.push({ label: 'Madde', value: madde, color: 'rose' });
-                              }
-                            }
-
-                            // Sayı numarası
-                            if (meta.sayi) {
-                              const sayi = cleanCitationTitle(String(meta.sayi));
-                              if (sayi && sayi.length < 25 && sayi.length > 0) {
-                                metadataTags.push({ label: 'Sayı', value: sayi, color: 'blue' });
-                              }
-                            }
-
-                            // Yıl/Tarih - en son ekle
-                            const tarihField = meta.tarih || meta.date || meta.yil || meta.year;
-                            if (tarihField) {
-                              const tarih = cleanCitationTitle(String(tarihField));
-                              const yearMatch = tarih.match(/\d{4}/);
-                              if (yearMatch) {
-                                metadataTags.push({ label: '', value: yearMatch[0], color: 'slate' });
-                              }
-                            }
-                          }
-
-                          // Color mapping for tags
-                          const colorMap: Record<string, string> = {
-                            cyan: 'text-cyan-600/90 dark:text-cyan-400/90 bg-cyan-500/15 dark:bg-cyan-400/15',
-                            amber: 'text-amber-600/90 dark:text-amber-400/90 bg-amber-500/15 dark:bg-amber-400/15',
-                            purple: 'text-purple-600/90 dark:text-purple-400/90 bg-purple-500/15 dark:bg-purple-400/15',
-                            green: 'text-emerald-600/90 dark:text-emerald-400/90 bg-emerald-500/15 dark:bg-emerald-400/15',
-                            rose: 'text-rose-600/90 dark:text-rose-400/90 bg-rose-500/15 dark:bg-rose-400/15',
-                            blue: 'text-blue-600/90 dark:text-blue-400/90 bg-blue-500/15 dark:bg-blue-400/15',
-                            slate: 'text-slate-500/90 dark:text-slate-400/90 bg-slate-500/15 dark:bg-slate-400/15',
-                          };
-
-                          // If we have metadata tags, show them
-                          if (metadataTags.length > 0) {
-                            return (
-                              <div className="flex flex-wrap gap-1.5 mt-3 pt-2.5 border-t border-slate-700/15 dark:border-slate-600/15">
-                                {metadataTags.map((tag, tidx) => (
-                                  <span
-                                    key={tidx}
-                                    className={`text-[10px] font-medium px-2 py-0.5 rounded ${colorMap[tag.color] || colorMap.cyan}`}
-                                  >
-                                    {tag.label ? `${tag.label}: ${tag.value}` : tag.value}
-                                  </span>
-                                ))}
-                              </div>
-                            );
-                          }
-
-                          return null;
-                        })()}
-                      </div>
+                    {/* Header Row: [1] + Type + Daire + Karar + Yıl */}
+                    <div className="flex items-center gap-2 flex-wrap mb-2">
+                      <span className="text-xs font-semibold text-cyan-500 dark:text-cyan-400">
+                        [{idx + 1}]
+                      </span>
+                      <span className={`zen01-marker ${typeInfo.markerClass} text-[10px] font-medium px-2 py-0.5`}>
+                        {typeInfo.label}
+                      </span>
+                      {metaInfo.daire && (
+                        <span className="text-[10px] text-amber-600/90 dark:text-amber-400/80 font-medium">
+                          {metaInfo.daire}
+                        </span>
+                      )}
+                      {metaInfo.karar && (
+                        <span className="text-[10px] text-slate-500/90 dark:text-slate-400/80">
+                          {metaInfo.karar}
+                        </span>
+                      )}
+                      {metaInfo.tarih && (
+                        <span className="text-[10px] text-slate-400/70 dark:text-slate-500/70">
+                          {metaInfo.tarih}
+                        </span>
+                      )}
                     </div>
+
+                    {/* Excerpt/Summary */}
+                    {excerpt && excerpt.length > 20 && (
+                      <p className="text-[11px] text-slate-500/90 dark:text-slate-300/80 line-clamp-2 leading-relaxed">
+                        {excerpt}
+                      </p>
+                    )}
                   </div>
                 );
               })}
