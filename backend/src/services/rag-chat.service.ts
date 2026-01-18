@@ -6866,55 +6866,90 @@ UNUT: ${conversationTone} üslubunda YORUMLA, kopyalama. KENDI KELİMELERİNLE a
 
   /**
    * 🔧 BACKEND KEYWORD EXTRACTOR
-   * Extracts keywords from query and source titles/metadata
-   * Does NOT use LLM - pure text extraction
+   * Extracts keywords from source content and titles
+   * Does NOT use LLM - pure text extraction from actual source content
    */
   private extractKeywordsFromSources(query: string, searchResults: any[]): string[] {
     const keywords = new Set<string>();
 
-    // Turkish stopwords to exclude
+    // Turkish stopwords to exclude - expanded list
     const stopwords = new Set([
+      // Common words
       'vergi', 'vergisi', 'kanun', 'kanunu', 'madde', 'maddesi', 'hakkında', 'ilgili',
       'nasıl', 'nedir', 'midir', 'mıdır', 'mudur', 'müdür', 'mıyım', 'miyim',
-      'bir', 'bu', 'şu', 'o', 've', 'ile', 'için', 'gibi', 'kadar', 'daha',
-      'olan', 'olarak', 'ise', 'veya', 'ya', 'de', 'da', 'den', 'dan', 'ne',
-      'var', 'yok', 'mi', 'mı', 'mu', 'mü', 'ki', 'ama', 'fakat', 'ancak'
+      'bir', 'bu', 'şu', 'olan', 'olarak', 'ise', 'veya', 'ile', 'için', 'gibi', 'kadar', 'daha',
+      'var', 'yok', 'ama', 'fakat', 'ancak', 'çünkü', 'dolayı', 'nedeni', 'olup',
+      'ayrıca', 'bunun', 'buna', 'bunu', 'bunlar', 'diğer', 'tarafından', 'üzere',
+      // Database field names to exclude
+      'daire', 'dairesi', 'esas', 'karar', 'tarih', 'sayı', 'sayi', 'kurum',
+      'dairesiesas', 'dairesitarih', 'kararno', 'esasno', 'record_type', 'source_type',
+      // Document structure words
+      'başlık', 'içerik', 'özet', 'sonuç', 'bölüm', 'konu', 'konusu',
+      // Yargıtay/Danıştay terms
+      'yargıtay', 'danıştay', 'temyiz', 'davacı', 'davalı', 'mahkeme', 'mahkemece',
+      'hüküm', 'karar', 'onama', 'bozma', 'itiraz'
     ]);
 
-    // Extract meaningful words from query (2+ chars, not stopword)
-    const queryWords = query.toLowerCase()
-      .replace(/[?!.,;:'"()]/g, ' ')
-      .split(/\s+/)
-      .filter(w => w.length > 2 && !stopwords.has(w));
+    // Legal terms to prioritize (Turkish tax/law)
+    const legalTerms = new Set([
+      'kdv', 'ötv', 'mtv', 'stopaj', 'tevkifat', 'istisna', 'muafiyet', 'indirim',
+      'matrah', 'beyanname', 'tebliğ', 'sirküler', 'özelge', 'mükellef',
+      'fatura', 'fiş', 'belge', 'iade', 'tahakkuk', 'tahsilat', 'ceza',
+      'gecikme', 'faiz', 'uzlaşma', 'inceleme', 'denetim', 'tarhiyat'
+    ]);
 
-    queryWords.forEach(w => {
-      if (w.length > 3) keywords.add(w);
-    });
-
-    // Extract keywords from source titles and metadata
+    // Extract meaningful content-based keywords from sources
     for (const source of searchResults.slice(0, 5)) {
+      const content = source.content || source.text || source.excerpt || '';
       const title = source.title || '';
-      const sourceType = source.source_type || source.sourceType || '';
 
-      // Add source type as keyword
-      if (sourceType && sourceType.length > 2) {
-        keywords.add(sourceType.toLowerCase());
-      }
+      // Combine title and first part of content
+      const textToAnalyze = (title + ' ' + content.substring(0, 800)).toLowerCase();
 
-      // Extract significant words from title
-      const titleWords = title.toLowerCase()
-        .replace(/[?!.,;:'"()]/g, ' ')
+      // Extract words (4+ chars, not stopword, not numeric-only)
+      const words = textToAnalyze
+        .replace(/[?!.,;:'"()\/\[\]\{\}]/g, ' ')
+        .replace(/\d{4,}/g, ' ')  // Remove long numbers (dates, case numbers)
         .split(/\s+/)
-        .filter((w: string) => w.length > 3 && !stopwords.has(w));
+        .filter((w: string) => {
+          if (w.length < 4) return false;
+          if (stopwords.has(w)) return false;
+          if (/^\d+$/.test(w)) return false;  // Exclude pure numbers
+          if (/^[a-z_]+$/i.test(w) && w.includes('_')) return false;  // Exclude db fields
+          return true;
+        });
 
-      titleWords.slice(0, 3).forEach((w: string) => keywords.add(w));
+      // Add legal terms first (higher priority)
+      words.forEach((w: string) => {
+        if (legalTerms.has(w)) {
+          keywords.add(w);
+        }
+      });
+
+      // Then add other meaningful words (limit per source)
+      let addedFromSource = 0;
+      words.forEach((w: string) => {
+        if (addedFromSource < 3 && !legalTerms.has(w) && w.length > 4) {
+          keywords.add(w);
+          addedFromSource++;
+        }
+      });
     }
 
-    // Return max 8 keywords, sorted by length (longer = more specific)
-    return Array.from(keywords)
+    // Return max 8 keywords, prioritize legal terms, then by length
+    const result = Array.from(keywords)
       .filter(k => k.length > 3)
-      .sort((a, b) => b.length - a.length)
+      .sort((a, b) => {
+        // Legal terms first
+        const aIsLegal = legalTerms.has(a) ? 1 : 0;
+        const bIsLegal = legalTerms.has(b) ? 1 : 0;
+        if (aIsLegal !== bIsLegal) return bIsLegal - aIsLegal;
+        // Then by length (longer = more specific)
+        return b.length - a.length;
+      })
       .slice(0, 8);
+
+    return result;
   }
 
   /**
