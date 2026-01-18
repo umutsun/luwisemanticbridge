@@ -738,21 +738,26 @@ export const ZenMessage: React.FC<ZenMessageProps> = ({
                           </div>
                         )}
 
-                        {/* Excerpt - only show if metadata is missing */}
+                        {/* Excerpt - ALWAYS show content summary */}
                         {(() => {
-                          const hasMetadata = source.metadata && (
-                            source.metadata.kurum || source.metadata.tarih || source.metadata.sayi
-                          );
+                          // Always show excerpt/summary - this is the important content explanation
+                          const excerpt = source.summary || source.excerpt || source.content || '';
 
-                          // If we have metadata, don't show excerpt (to avoid repetition)
-                          if (hasMetadata) return null;
+                          // Clean and truncate excerpt for display
+                          const cleanExcerpt = cleanCitationTitle(excerpt)
+                            .replace(/^(KONU|İLGİ|SORU|CEVAP|Dilekçenizde)[:.\s]*/gi, '') // Remove common prefixes
+                            .replace(/\.{2,}/g, '.') // Remove multiple dots
+                            .trim();
 
-                          // Otherwise show excerpt if available
-                          const excerpt = source.summary || source.excerpt || source.title || '';
-                          if (excerpt && excerpt.length > 20) {
+                          if (cleanExcerpt && cleanExcerpt.length > 30) {
+                            // Show first 250 chars with ellipsis
+                            const displayText = cleanExcerpt.length > 250
+                              ? cleanExcerpt.substring(0, 250).trim() + '...'
+                              : cleanExcerpt;
+
                             return (
-                              <p className="text-[11px] text-slate-400/90 dark:text-slate-300/80 line-clamp-2 leading-relaxed mb-3">
-                                {cleanCitationTitle(excerpt)}
+                              <p className="text-[11px] text-slate-500/90 dark:text-slate-300/80 line-clamp-3 leading-relaxed mb-3">
+                                {displayText}
                               </p>
                             );
                           }
