@@ -26,7 +26,7 @@ export const ZenWelcome: React.FC<ZenWelcomeProps> = ({
         {chatbotSettings.greeting || t('chat.greeting', 'Merhaba')}, {displayName}
       </h1>
       <p className="zen01-welcome-subtitle text-slate-600 dark:text-slate-400">
-        {chatbotSettings.welcomeMessage || t('chat.welcomeMessage', 'Size nasil yardimci olabilirim?')}
+        {chatbotSettings.welcomeMessage || t('chat.welcomeMessage', 'Size nasıl yardımcı olabilirim?')}
       </p>
 
       {/* Suggestion Pills */}
