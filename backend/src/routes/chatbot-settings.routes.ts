@@ -63,6 +63,7 @@ router.get('/settings', async (req: Request, res: Response) => {
       title: finalTitle,
       subtitle: finalSubtitle,
       logoUrl: chatbotData.logoUrl || '',
+      greeting: chatbotData.greeting || '',
       welcomeMessage: chatbotData.welcomeMessage || chatbotData.openingMessage || '',
       placeholder: cleanPlaceholder,
       primaryColor: chatbotData.primaryColor || '#3B82F6',
