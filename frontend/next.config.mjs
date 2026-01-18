@@ -22,11 +22,13 @@ const nextConfig = {
   },
 
   // Rewrite API requests to backend
+  // Uses BACKEND_URL env variable for production flexibility
   async rewrites() {
+    const backendUrl = process.env.BACKEND_URL || 'http://localhost:8083';
     return [
       {
         source: '/api/:path*',
-        destination: 'http://localhost:8083/api/:path*',
+        destination: `${backendUrl}/api/:path*`,
       },
     ];
   },
