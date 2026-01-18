@@ -123,7 +123,7 @@ export default function ChatInterface() {
     minResults: 7,
     maxResults: 20,
     similarityThreshold: 0.02,
-    minSourcesToShow: 5,
+    minSourcesToShow: 7,  // Dinamik: minResults ile senkronize
     maxSourcesToShow: 15
   });
   const [llmSettings, setLlmSettings] = useState<ZenLlmSettings>({
@@ -280,11 +280,13 @@ export default function ChatInterface() {
           responseSchemaId: chatbotData.responseSchemaId || 'vergilex-article'
         };
 
+        const minResultsValue = settingsData.ragSettings?.minResults || 7;
         const ragSettings: ZenRagSettings = {
-          minResults: settingsData.ragSettings?.minResults || 7,
+          minResults: minResultsValue,
           maxResults: settingsData.ragSettings?.maxResults || 20,
           similarityThreshold: settingsData.ragSettings?.similarityThreshold || 0.02,
-          minSourcesToShow: settingsData.ragSettings?.minSourcesToShow || 5,
+          // minSourcesToShow = minResults (dinamik olarak ayarlanır)
+          minSourcesToShow: settingsData.ragSettings?.minSourcesToShow || minResultsValue,
           maxSourcesToShow: settingsData.ragSettings?.maxSourcesToShow || 15
         };
 
@@ -767,12 +769,6 @@ export default function ChatInterface() {
           voiceSettings={voiceSettings}
         />
 
-        {/* Version Badge - Fixed bottom left, chip style */}
-        <div className="fixed bottom-3 left-3 z-50">
-          <span className="text-[8px] font-medium px-2 py-0.5 rounded bg-slate-200/60 dark:bg-slate-800/60 text-slate-600 dark:text-slate-400">
-            zen01 · v2026.01.15.E
-          </span>
-        </div>
       </div>
     </ProtectedRoute>
   );

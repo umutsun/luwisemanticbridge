@@ -826,10 +826,11 @@
 }
 
 .zen01-markdown p {
-  margin-top: 1.25rem;
-  margin-bottom: 1.25rem;
+  margin-top: 1.5rem !important;
+  margin-bottom: 1.5rem !important;
   text-align: justify;
   text-justify: inter-word;
+  line-height: 1.9 !important;
 }
 
 .zen01-markdown p:first-child {
@@ -877,10 +878,11 @@
   margin-bottom: 0.25rem;
 }
 
-/* Override prose defaults that may conflict */
+/* Override prose defaults that may conflict - FORCE with !important */
 .zen01-markdown.prose p {
-  margin-top: 1.25rem;
-  margin-bottom: 1.25rem;
+  margin-top: 1.5rem !important;
+  margin-bottom: 1.5rem !important;
+  line-height: 1.9 !important;
 }
 
 .zen01-markdown.prose strong {

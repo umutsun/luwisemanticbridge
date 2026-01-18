@@ -218,7 +218,7 @@ export const DEFAULT_RAG_SETTINGS: ZenRagSettings = {
   minResults: 7,
   maxResults: 20,
   similarityThreshold: 0.02,
-  minSourcesToShow: 5,
+  minSourcesToShow: 7,  // minResults ile senkronize
   maxSourcesToShow: 15
 };
 
