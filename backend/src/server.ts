@@ -358,8 +358,8 @@ app.use((req, res, next) => {
 
   // Track API queries (exclude static files, health checks, and SSE streams)
   const isApiRequest = req.path.startsWith('/api/') &&
-                       !req.path.includes('/health') &&
-                       !req.path.includes('/stream');
+    !req.path.includes('/health') &&
+    !req.path.includes('/stream');
 
   res.on('finish', async () => {
     const responseTime = Date.now() - startTime;
@@ -1567,10 +1567,8 @@ export function getSocketIO() {
 
 export {
   app,
-  io,
   httpServer,
   lsembPool as pgPool,
-  redis,
   chatWss,
   chatConnections,
 };

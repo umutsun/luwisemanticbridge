@@ -818,14 +818,18 @@
 
 /* ============================================
    Markdown Content - Better Typography
+   Article-style paragraphs with proper spacing
    ============================================ */
 .zen01-markdown {
-  line-height: 1.75;
+  line-height: 1.8;
+  font-size: 0.9375rem; /* 15px - slightly larger for readability */
 }
 
 .zen01-markdown p {
-  margin-top: 1rem;
-  margin-bottom: 1rem;
+  margin-top: 1.25rem;
+  margin-bottom: 1.25rem;
+  text-align: justify;
+  text-justify: inter-word;
 }
 
 .zen01-markdown p:first-child {
@@ -834,6 +838,16 @@
 
 .zen01-markdown p:last-child {
   margin-bottom: 0;
+}
+
+/* First paragraph - intro styling */
+.zen01-markdown p:first-of-type {
+  font-size: 0.95rem;
+  color: rgba(148, 163, 184, 0.95); /* slightly brighter for intro */
+}
+
+.zen01-container.light .zen01-markdown p:first-of-type {
+  color: rgba(51, 65, 85, 0.95);
 }
 
 .zen01-markdown strong {
@@ -865,8 +879,8 @@
 
 /* Override prose defaults that may conflict */
 .zen01-markdown.prose p {
-  margin-top: 1rem;
-  margin-bottom: 1rem;
+  margin-top: 1.25rem;
+  margin-bottom: 1.25rem;
 }
 
 .zen01-markdown.prose strong {
