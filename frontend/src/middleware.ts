@@ -2,7 +2,13 @@ import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 
 // Public routes that don't require authentication
-const publicRoutes = ['/login', '/register', '/forgot-password', '/initialize', '/api/auth', '/favicon.ico', '/_next'];
+const publicRoutes = [
+  '/login', '/register', '/forgot-password', '/initialize',
+  '/api/auth',
+  '/api/v2/chatbot/settings',  // Chatbot config - not sensitive
+  '/api/v2/settings',          // General settings - needed for UI config
+  '/favicon.ico', '/_next'
+];
 
 // Admin only routes
 const adminRoutes = ['/admin', '/api/admin'];
