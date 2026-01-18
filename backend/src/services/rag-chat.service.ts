@@ -2879,25 +2879,11 @@ FORMAT:
       };
       console.log(`📊 DEBUG_INFO: ${JSON.stringify(debugInfo)}`);
 
-      // 🏷️ KEYWORDS: Extract and append keywords from sources to response
-      if (finalSources.length > 0 && responseType === 'FOUND') {
-        const extractedKeywords = this.extractKeywordsFromSources(message, finalSources);
-        if (extractedKeywords.length > 0) {
-          const keywordsSection = `\n\n---\n\n**ANAHTAR KELİMELER:** ${extractedKeywords.join(' • ')}`;
-          finalResponse = finalResponse + keywordsSection;
-          console.log(`🏷️ [KEYWORDS] Added ${extractedKeywords.length} keywords to response`);
-        }
-      }
+      // 🏷️ KEYWORDS: Disabled - tags already shown in source cards (Atıflar section)
+      // Keywords were redundant with the type badges and metadata shown per source
 
-      // 📝 FOOTNOTES: Generate footnotes from sources metadata (BACKEND-GENERATED)
-      // This ensures footnotes are accurate and not hallucinated by LLM
-      if (finalSources.length > 0 && responseType === 'FOUND') {
-        const footnotes = this.generateFootnotes(finalSources);
-        if (footnotes) {
-          finalResponse = finalResponse + footnotes;
-          console.log(`📝 [FOOTNOTES] Added ${finalSources.length} footnotes from metadata`);
-        }
-      }
+      // 📝 FOOTNOTES: Disabled - sources already shown in Atıflar section with full metadata
+      // Footnotes at end of response were redundant
 
       return {
         response: finalResponse,  // Use cleaned response if refusal detected
