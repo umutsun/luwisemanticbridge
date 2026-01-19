@@ -518,7 +518,7 @@ export const ZenMessage: React.FC<ZenMessageProps> = ({
                       };
 
                       return (
-                        <p className="text-slate-700 dark:text-slate-100 leading-relaxed my-4 first:mt-0 last:mb-0">
+                        <p className="text-slate-700 dark:text-slate-100 leading-relaxed my-6 first:mt-0 last:mb-0" style={{ marginBottom: '1.5em', marginTop: '1.5em' }}>
                           {processChildren(children)}
                         </p>
                       );
