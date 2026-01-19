@@ -61,7 +61,7 @@ export default function UnifiedQueryPage() {
     try {
       const [lightragRes, dashboardRes] = await Promise.all([
         fetch('/api/v2/lightrag/stats'),
-        fetch(`${process.env.NEXT_PUBLIC_API_URL || process.env.NEXT_PUBLIC_API_URL || process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8083'}/api/v2/dashboard`)
+        fetch(`${process.env.NEXT_PUBLIC_API_URL || process.env.NEXT_PUBLIC_API_URL || process.env.NEXT_PUBLIC_API_URL || ''}/api/v2/dashboard`)
       ]);
       
       const lightrag = await lightragRes.json();

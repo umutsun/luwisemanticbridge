@@ -36,7 +36,7 @@ export function useChatStream() {
 
   useEffect(() => {
     // Initialize WebSocket connection
-    const wsUrl = `${process.env.NEXT_PUBLIC_WEBSOCKET_URL || 'ws://localhost:8083'}/ws/chat?userId=${clientId}`;
+    const wsUrl = `${process.env.NEXT_PUBLIC_WEBSOCKET_URL || ''}/ws/chat?userId=${clientId}`;
 
     try {
       wsRef.current = new WebSocket(wsUrl);
@@ -137,7 +137,7 @@ export function useChatStream() {
         formData.append('pdf', pdfFile);
         formData.append('conversationId', currentConversationId);
 
-        const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8083';
+        const apiUrl = process.env.NEXT_PUBLIC_API_URL || '';
         const pdfResponse = await fetchWithAuth(`${apiUrl}/api/v2/chat/with-pdf`, {
           method: 'POST',
           body: formData,

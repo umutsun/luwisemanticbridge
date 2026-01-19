@@ -48,7 +48,7 @@ interface MessageItemProps {
 export function MessageItem({ message }: MessageItemProps) {
   const isUser = message.role === 'user';
   const [voiceOutputEnabled, setVoiceOutputEnabled] = useState(false);
-  const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8083';
+  const apiUrl = process.env.NEXT_PUBLIC_API_URL || '';
 
   // Audio player hook for TTS
   const { isPlaying, isLoading, play, pause, stop } = useAudioPlayer({

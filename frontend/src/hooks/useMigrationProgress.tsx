@@ -60,7 +60,7 @@ export function useMigrationProgress(options: UseMigrationProgressOptions = {}) 
       return;
     }
 
-    const wsUrl = `ws://localhost:8083/ws/migration/${id}`;
+    const wsUrl = `${process.env.NEXT_PUBLIC_API_URL?.replace("http", "ws") || ""}/ws/migration/${id}`;
     debug.log('Connecting to WebSocket:', wsUrl);
 
     try {
@@ -118,7 +118,7 @@ export function useMigrationProgress(options: UseMigrationProgressOptions = {}) 
       return;
     }
 
-    const sseUrl = `http://localhost:8083/api/v2/migration/progress/${id}/stream`;
+    const sseUrl = `${process.env.NEXT_PUBLIC_API_URL || ""}/api/v2/migration/progress/${id}/stream`;
     debug.log('Connecting to SSE:', sseUrl);
 
     try {
@@ -197,7 +197,7 @@ export function useMigrationProgress(options: UseMigrationProgressOptions = {}) 
   // Fetch initial progress (non-real-time)
   const fetchProgress = useCallback(async (id: string) => {
     try {
-      const response = await fetch(`http://localhost:8083/api/v2/migration/progress/${id}`);
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || ""}/api/v2/migration/progress/${id}`);
       if (response.ok) {
         const data = await response.json();
         setProgress({

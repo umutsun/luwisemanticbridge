@@ -3,6 +3,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { motion } from 'framer-motion';
 import { Mail, Lock, Eye, EyeOff, AlertTriangle } from 'lucide-react';
+
+const API_URL = process.env.NEXT_PUBLIC_API_URL || '';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -92,7 +94,7 @@ const UnifiedLogin: React.FC<UnifiedLoginProps> = ({
 
     // Try to connect to real-time logs
     try {
-      eventSourceRef.current = new EventSource('http://localhost:8083/api/v2/system/stream');
+      eventSourceRef.current = new EventSource(`${API_URL}/api/v2/system/stream`);
       eventSourceRef.current.onmessage = (event) => {
         try {
           const data = JSON.parse(event.data);

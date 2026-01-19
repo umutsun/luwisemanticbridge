@@ -9,7 +9,7 @@ export async function DELETE(request: NextRequest) {
       // If no body, use empty object
       body = {};
     }
-    const ASB_API_URL = process.env.ASB_API_URL || process.env.NEXT_PUBLIC_API_URL || process.env.NEXT_PUBLIC_API_URL || process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8083';
+    const ASB_API_URL = process.env.ASB_API_URL || process.env.NEXT_PUBLIC_API_URL || process.env.NEXT_PUBLIC_API_URL || process.env.NEXT_PUBLIC_API_URL || '';
 
     const response = await fetch(`${ASB_API_URL}/api/v2/embeddings/clear`, {
       method: 'DELETE',
@@ -44,7 +44,7 @@ export async function POST(request: NextRequest) {
       // If no body, use empty object
       body = {};
     }
-    const ASB_API_URL = process.env.ASB_API_URL || process.env.NEXT_PUBLIC_API_URL || process.env.NEXT_PUBLIC_API_URL || process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8083';
+    const ASB_API_URL = process.env.ASB_API_URL || process.env.NEXT_PUBLIC_API_URL || process.env.NEXT_PUBLIC_API_URL || process.env.NEXT_PUBLIC_API_URL || '';
 
     const response = await fetch(`${ASB_API_URL}/api/v2/embeddings/clear`, {
       method: 'POST',

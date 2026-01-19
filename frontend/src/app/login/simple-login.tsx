@@ -1,6 +1,8 @@
 'use client';
 
 import React, { useState } from 'react';
+
+const API_URL = process.env.NEXT_PUBLIC_API_URL || '';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -22,7 +24,7 @@ export default function SimpleLoginPage() {
     setError(null);
 
     try {
-      const response = await fetch('http://localhost:8083/api/v2/auth/login', {
+      const response = await fetch(`${API_URL}/api/v2/auth/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, password }),

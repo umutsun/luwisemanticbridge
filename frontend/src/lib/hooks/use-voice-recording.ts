@@ -37,7 +37,7 @@ export function useVoiceRecording(options: UseVoiceRecordingOptions = {}): UseVo
   const durationIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const maxDurationTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
-  const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8083';
+  const apiUrl = process.env.NEXT_PUBLIC_API_URL || '';
 
   // Cleanup function
   const cleanup = useCallback(() => {

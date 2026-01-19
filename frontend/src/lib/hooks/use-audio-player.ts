@@ -28,7 +28,7 @@ export function useAudioPlayer(options: UseAudioPlayerOptions = {}): UseAudioPla
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
 
-  const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8083';
+  const apiUrl = process.env.NEXT_PUBLIC_API_URL || '';
 
   // Cleanup on unmount
   useEffect(() => {

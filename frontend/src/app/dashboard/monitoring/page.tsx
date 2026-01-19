@@ -36,7 +36,7 @@ import {
   Zap
 } from 'lucide-react';
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8083';
+const API_URL = process.env.NEXT_PUBLIC_API_URL || '';
 
 interface CacheStats {
   totalOperations: number;

@@ -154,8 +154,8 @@ export default function ActivityPage() {
 
       // Fetch activities from correct endpoint
       const [activitiesRes, statsRes, dashboardRes] = await Promise.all([
-        fetch(`http://localhost:8083/api/v2/activity?${params.toString()}`),
-        fetch(`http://localhost:8083/api/v2/activity/stats/overview`),
+        fetch(`${process.env.NEXT_PUBLIC_API_URL || ""}/api/v2/activity?${params.toString()}`),
+        fetch(`${process.env.NEXT_PUBLIC_API_URL || ""}/api/v2/activity/stats/overview`),
         fetch(getApiUrl('dashboard'))
       ]);
 

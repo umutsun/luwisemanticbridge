@@ -34,7 +34,7 @@ class PDFProgressWSClient {
       return acc;
     }, {});
 
-    this.socket = io(process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8083', {
+    this.socket = io(process.env.NEXT_PUBLIC_API_URL || '', {
       path: '/socket.io',
       transports: ['websocket', 'polling'],
       auth: {

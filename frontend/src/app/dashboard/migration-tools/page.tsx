@@ -1,6 +1,8 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
+
+const API_URL = process.env.NEXT_PUBLIC_API_URL || '';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Alert, AlertDescription } from '@/components/ui/alert';
@@ -151,7 +153,7 @@ export default function MigrationToolsPage() {
 
   const loadStats = async () => {
     try {
-      const response = await fetch('http://localhost:8083/api/v2/migration/stats');
+      const response = await fetch(`${API_URL}/api/v2/migration/stats`);
       if (response.ok) {
         const data = await response.json();
         setStats(data);
@@ -172,7 +174,7 @@ export default function MigrationToolsPage() {
       
       switch(sourceType) {
         case 'database':
-          endpoint = 'http://localhost:8083/api/v2/migration/start';
+          endpoint = `${API_URL}/api/v2/migration/start`;
           body = {
             sourceTable: sourceConfig.table,
             ...migrationConfig
@@ -183,7 +185,7 @@ export default function MigrationToolsPage() {
           if (!sourceConfig.file) {
             throw new Error('Lütfen bir dosya seçin');
           }
-          endpoint = 'http://localhost:8083/api/v2/migration/file';
+          endpoint = `${API_URL}/api/v2/migration/file`;
           const formData = new FormData();
           formData.append('file', sourceConfig.file);
           Object.entries(migrationConfig).forEach(([key, value]) => {
@@ -196,7 +198,7 @@ export default function MigrationToolsPage() {
           if (!sourceConfig.url) {
             throw new Error('Lütfen bir URL girin');
           }
-          endpoint = 'http://localhost:8083/api/v2/migration/scrape';
+          endpoint = `${API_URL}/api/v2/migration/scrape`;
           body = {
             url: sourceConfig.url,
             selector: sourceConfig.selector,
@@ -216,7 +218,7 @@ export default function MigrationToolsPage() {
 
       // Start polling for progress
       const pollInterval = setInterval(async () => {
-        const progressResponse = await fetch('http://localhost:8083/api/v2/migration/progress');
+        const progressResponse = await fetch(`${API_URL}/api/v2/migration/progress`);
         if (progressResponse.ok) {
           const progressData = await progressResponse.json();
           setProgress(progressData);
@@ -252,7 +254,7 @@ export default function MigrationToolsPage() {
     setProgress({ current: 0, total: stats?.pendingRecords || 0, percentage: 0, status: 'Embedding oluşturuluyor...' });
 
     try {
-      const response = await fetch('http://localhost:8083/api/v2/migration/generate', {
+      const response = await fetch(`${API_URL}/api/v2/migration/generate`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

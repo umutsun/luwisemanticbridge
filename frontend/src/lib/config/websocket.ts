@@ -1,8 +1,8 @@
 export const WEBSOCKET_CONFIG = {
   // WebSocket URL based on environment
   url: process.env.NODE_ENV === 'production'
-    ? process.env.NEXT_PUBLIC_WS_URL || `ws://localhost:8083`
-    : `ws://localhost:8083`,
+    ? process.env.NEXT_PUBLIC_WS_URL || ''
+    : `${process.env.NEXT_PUBLIC_API_URL?.replace("http", "ws") || ""}`,
 
   // Connection settings
   reconnectAttempts: 5,

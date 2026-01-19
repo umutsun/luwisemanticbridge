@@ -68,7 +68,7 @@ export default function BatchFolderUpload() {
   // WebSocket connection
   useEffect(() => {
     const token = localStorage.getItem('accessToken');
-    const newSocket = io(process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8083', {
+    const newSocket = io(process.env.NEXT_PUBLIC_API_URL || '', {
       auth: { token },
       transports: ['websocket']
     });
@@ -120,7 +120,7 @@ export default function BatchFolderUpload() {
   const scanFolder = async () => {
     setIsScanning(true);
     try {
-      const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8083';
+      const baseUrl = process.env.NEXT_PUBLIC_API_URL || '';
       const response = await fetch(`${baseUrl}/api/v2/batch-folders/scan`, {
         method: 'POST',
         headers: {
@@ -180,7 +180,7 @@ export default function BatchFolderUpload() {
 
     setIsProcessing(true);
     try {
-      const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8083';
+      const baseUrl = process.env.NEXT_PUBLIC_API_URL || '';
       const response = await fetch(`${baseUrl}/api/v2/batch-folders/process`, {
         method: 'POST',
         headers: {
@@ -227,7 +227,7 @@ export default function BatchFolderUpload() {
   // Load processed documents
   const loadProcessedDocuments = async () => {
     try {
-      const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8083';
+      const baseUrl = process.env.NEXT_PUBLIC_API_URL || '';
       const response = await fetch(`${baseUrl}/api/v2/batch-folders/documents`, {
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('accessToken')}`

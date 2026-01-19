@@ -481,7 +481,7 @@ export default function ProfilePage() {
                     <div className="w-24 h-24 rounded-full overflow-hidden bg-gray-100 dark:bg-gray-700">
                       {profileImage ? (
                         <img
-                          src={profileImage.startsWith('http') ? profileImage : `http://localhost:8083/uploads/${profileImage}`}
+                          src={profileImage.startsWith('http') ? profileImage : `${process.env.NEXT_PUBLIC_API_URL || ""}/uploads/${profileImage}`}
                           alt="Profile"
                           className="w-full h-full object-cover"
                           onError={(e) => {

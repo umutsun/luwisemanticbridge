@@ -44,7 +44,7 @@ export function ChatInput({ onSend, disabled }: ChatInputProps) {
   });
 
   // API URL
-  const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8083';
+  const apiUrl = process.env.NEXT_PUBLIC_API_URL || '';
 
   // Voice recording hook
   const {

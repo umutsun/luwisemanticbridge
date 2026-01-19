@@ -139,7 +139,7 @@ export default function ScraperPage() {
     // Import socket.io only on client side
     if (typeof window !== 'undefined') {
       import('socket.io-client').then(({ io }) => {
-        const socketInstance = io('http://localhost:8083', {
+        const socketInstance = io(process.env.NEXT_PUBLIC_API_URL || '', {
           transports: ['websocket'],
           timeout: 10000,
           reconnection: true,

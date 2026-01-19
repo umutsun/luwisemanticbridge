@@ -114,7 +114,7 @@ export default function SystemMonitor() {
   const fetchSystemData = async () => {
     try {
       // Fetch real health data from backend
-      const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8083';
+      const baseUrl = process.env.NEXT_PUBLIC_API_URL || '';
       const response = await fetch(`${baseUrl}/api/v2/health`, {
         method: 'GET',
         headers: { 'Content-Type': 'application/json' },

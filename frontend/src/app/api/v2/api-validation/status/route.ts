@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from 'next/server';
 export async function GET(request: NextRequest) {
   try {
     // Forward the request to backend
-    const backendUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8083';
+    const backendUrl = process.env.NEXT_PUBLIC_API_URL || '';
     const response = await fetch(`${backendUrl}/api/v2/api-validation/status`, {
       method: 'GET',
       headers: {

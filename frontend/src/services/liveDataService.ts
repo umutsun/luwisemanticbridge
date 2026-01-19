@@ -27,8 +27,8 @@ export class LiveDataService {
 
     // Initialize Socket.IO connection
     const wsUrl = process.env.NODE_ENV === 'production'
-      ? process.env.NEXT_PUBLIC_WS_URL || `ws://localhost:8083`
-      : `ws://localhost:8083`;
+      ? process.env.NEXT_PUBLIC_WS_URL || ''
+      : `${process.env.NEXT_PUBLIC_API_URL?.replace("http", "ws") || ""}`;
 
     // Use existing useSocketIO hook logic
     const { socket } = useSocketIO(wsUrl, {

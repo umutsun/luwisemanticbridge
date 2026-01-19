@@ -127,7 +127,7 @@ export default function WorkflowsPage() {
   const fetchWorkflows = async () => {
     setLoading(true);
     try {
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || process.env.NEXT_PUBLIC_API_URL || process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8083'}/api/v2/workflows`);
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || process.env.NEXT_PUBLIC_API_URL || process.env.NEXT_PUBLIC_API_URL || ''}/api/v2/workflows`);
       const data = await response.json();
       setWorkflows(data.workflows || [
         // Demo data
@@ -219,7 +219,7 @@ export default function WorkflowsPage() {
     if (!newWorkflow.name) return;
 
     try {
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || process.env.NEXT_PUBLIC_API_URL || process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8083'}/api/v2/workflows`, {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || process.env.NEXT_PUBLIC_API_URL || process.env.NEXT_PUBLIC_API_URL || ''}/api/v2/workflows`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(newWorkflow),
@@ -237,7 +237,7 @@ export default function WorkflowsPage() {
 
   const handleDeployTemplate = async (template: WorkflowTemplate) => {
     try {
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || process.env.NEXT_PUBLIC_API_URL || process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8083'}/api/v2/workflows/deploy`, {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || process.env.NEXT_PUBLIC_API_URL || process.env.NEXT_PUBLIC_API_URL || ''}/api/v2/workflows/deploy`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ templateId: template.id }),

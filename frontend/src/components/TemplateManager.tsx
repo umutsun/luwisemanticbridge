@@ -66,7 +66,7 @@ export default function TemplateManager({ open, onClose }: TemplateManagerProps)
   const fetchTemplates = async () => {
     setLoading(true);
     try {
-      const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8083';
+      const baseUrl = process.env.NEXT_PUBLIC_API_URL || '';
       const response = await fetch(`${baseUrl}/api/v2/pdf/analysis-templates`);
 
       if (!response.ok) {
@@ -114,7 +114,7 @@ export default function TemplateManager({ open, onClose }: TemplateManagerProps)
         return;
       }
 
-      const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8083';
+      const baseUrl = process.env.NEXT_PUBLIC_API_URL || '';
       const response = await fetch(`${baseUrl}/api/v2/pdf/analysis-templates`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },

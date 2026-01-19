@@ -4,9 +4,10 @@
  */
 export const API_CONFIG = {
   // Empty baseUrl means use relative paths (Next.js rewrites handle proxy)
+  // MUST be set in .env.local for each instance
   baseUrl: process.env.NEXT_PUBLIC_API_URL || '',
-  port: process.env.NEXT_PUBLIC_API_PORT || '8083',
-  wsUrl: process.env.NEXT_PUBLIC_WEBSOCKET_URL || `ws://localhost:8083/socket.io`,
+  port: process.env.NEXT_PUBLIC_API_PORT || '',
+  wsUrl: process.env.NEXT_PUBLIC_WEBSOCKET_URL || (process.env.NEXT_PUBLIC_API_URL?.replace('http', 'ws') + '/socket.io') || '',
 
   endpoints: {
     // Dashboard

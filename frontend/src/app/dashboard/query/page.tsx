@@ -29,7 +29,7 @@ import { Switch } from '@/components/ui/switch';
 import { toast } from 'sonner';
 
 // API endpoint'leri
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || process.env.NEXT_PUBLIC_API_URL || process.env.NEXT_PUBLIC_API_URL || "http://localhost:8083";
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || process.env.NEXT_PUBLIC_API_URL || process.env.NEXT_PUBLIC_API_URL || '';
 
 interface QueryResult {
   answer?: string;

@@ -5,8 +5,8 @@
 
 // Base configuration
 export const API_CONFIG = {
-  // Base URL - single source of truth
-  BASE_URL: process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8083',
+  // Base URL - single source of truth (MUST be set in .env.local)
+  BASE_URL: process.env.NEXT_PUBLIC_API_URL || '',
 
   // API versions
   V1: '/api/v1',

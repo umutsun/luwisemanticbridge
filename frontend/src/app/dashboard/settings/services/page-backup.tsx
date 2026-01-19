@@ -97,7 +97,7 @@ export default function IntegrationsPage() {
       description: "Main API gateway",
       status: "running",
       port: 8083,
-      url: "http://localhost:8083",
+      url: (process.env.NEXT_PUBLIC_API_URL || ''),
       version: "Express 4.18",
       icon: Server
     },

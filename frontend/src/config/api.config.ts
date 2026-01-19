@@ -2,10 +2,10 @@
 // All API endpoints and URLs should be configured here
 
 const config = {
-  // Base URLs from environment variables
+  // Base URLs from environment variables (MUST be set in .env.local)
   api: {
-    baseUrl: process.env.NEXT_PUBLIC_API_URL || `http://localhost:8083`,
-    websocketUrl: process.env.NEXT_PUBLIC_WEBSOCKET_URL || `ws://localhost:8083`,
+    baseUrl: process.env.NEXT_PUBLIC_API_URL || '',
+    websocketUrl: process.env.NEXT_PUBLIC_WEBSOCKET_URL || process.env.NEXT_PUBLIC_API_URL?.replace('http', 'ws') || '',
   },
   
   // API Endpoints

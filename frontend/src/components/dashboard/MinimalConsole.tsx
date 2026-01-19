@@ -29,7 +29,7 @@ export default function MinimalConsole({
   useEffect(() => {
     const connectWebSocket = () => {
       // WebSocket server runs on separate port (8084) with /ws/logs path
-      const backendUrl = config?.env?.backendUrl || 'http://localhost:8083';
+      const backendUrl = config?.env?.backendUrl || '';
       const baseUrl = backendUrl.replace(':8083', ':8084');
       const wsUrl = baseUrl.replace(/^http/, 'ws') + '/ws/logs';
 

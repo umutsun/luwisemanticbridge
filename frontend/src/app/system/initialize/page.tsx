@@ -80,7 +80,7 @@ export default function SystemInitializePage() {
   // Check health endpoint and parse for essential services
   const checkEssentialServices = async () => {
     try {
-      const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8083';
+      const baseUrl = process.env.NEXT_PUBLIC_API_URL || '';
       const response = await fetch(`${baseUrl}/api/v2/health`, {
         method: 'GET',
         headers: { 'Content-Type': 'application/json' },

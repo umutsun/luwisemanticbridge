@@ -3,6 +3,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { motion } from 'framer-motion';
 
+const API_URL = process.env.NEXT_PUBLIC_API_URL || '';
+
 interface LoadingStep {
   id: string;
   label: string;
@@ -83,7 +85,7 @@ const ImpressiveLoader: React.FC<ImpressiveLoaderProps> = ({
 
     // Try to connect to real-time logs
     try {
-      eventSourceRef.current = new EventSource('http://localhost:8083/api/v2/system/stream');
+      eventSourceRef.current = new EventSource(`${API_URL}/api/v2/system/stream`);
 
       eventSourceRef.current.onmessage = (event) => {
         try {

@@ -474,7 +474,7 @@ export default function DocumentPreviewModal({
   const fetchAnalysisTemplates = async () => {
     try {
       debug.log('[DocumentPreviewModal] Loading templates from database...');
-      const response = await fetch(`${config?.backendUrl || 'http://localhost:8083'}/api/v2/templates?active=true`, {
+      const response = await fetch(`${config?.backendUrl || ''}/api/v2/templates?active=true`, {
         method: 'GET',
         headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
         credentials: 'include',
@@ -507,7 +507,7 @@ export default function DocumentPreviewModal({
 
   const fetchActiveLLM = async () => {
     try {
-      const response = await fetch(`${config?.backendUrl || 'http://localhost:8083'}/health/system`);
+      const response = await fetch(`${config?.backendUrl || ''}/health/system`);
       if (response.ok) {
         const data = await response.json();
         if (data.services?.active_llm?.provider && data.services?.active_llm?.model) {
@@ -1489,7 +1489,7 @@ export default function DocumentPreviewModal({
       let detectedLanguage: any = null;
       try {
         debug.log('[Language Detection] Detecting language...');
-        const languageResponse = await fetch(`${config?.backendUrl || 'http://localhost:8083'}/api/v2/pdf/detect-language`, {
+        const languageResponse = await fetch(`${config?.backendUrl || ''}/api/v2/pdf/detect-language`, {
           method: 'POST',
           headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
           body: JSON.stringify({
@@ -1523,7 +1523,7 @@ export default function DocumentPreviewModal({
         debug.log('[Template Detection] Visual types:', visualElements.map((v: any) => v.type).join(', '));
       }
 
-      const response = await fetch(`${config?.backendUrl || 'http://localhost:8083'}/api/v2/templates/detect`, {
+      const response = await fetch(`${config?.backendUrl || ''}/api/v2/templates/detect`, {
         method: 'POST',
         headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
         body: JSON.stringify({
