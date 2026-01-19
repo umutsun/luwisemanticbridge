@@ -36,7 +36,12 @@ export function useChatStream() {
 
   useEffect(() => {
     // Initialize WebSocket connection
-    const wsUrl = `${process.env.NEXT_PUBLIC_WEBSOCKET_URL || ''}/ws/chat?userId=${clientId}`;
+    // Use env variable if set, otherwise construct from window.location
+    const wsProtocol = typeof window !== 'undefined' && window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const wsHost = typeof window !== 'undefined' ? window.location.host : '';
+    const wsUrl = process.env.NEXT_PUBLIC_WEBSOCKET_URL
+      ? `${process.env.NEXT_PUBLIC_WEBSOCKET_URL}/ws/chat?userId=${clientId}`
+      : `${wsProtocol}//${wsHost}/ws/chat?userId=${clientId}`;
 
     try {
       wsRef.current = new WebSocket(wsUrl);
