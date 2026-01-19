@@ -326,8 +326,13 @@ export function ConfigProvider({ children }: { children: ReactNode }) {
       // Listen for custom token change events if valid
       window.addEventListener('tokenChanged', handleTokenChange as EventListener); // Legacy support
 
+      // Debounce fetchConfig to prevent excessive API calls
+      let settingsUpdateTimeout: NodeJS.Timeout | null = null;
+      const SETTINGS_UPDATE_DEBOUNCE_MS = 2000; // Wait 2 seconds before refetching
+
       const handleSettingsUpdate = (e: Event) => {
         if (e instanceof CustomEvent && e.detail && e.detail.category === 'app' && e.detail.settings) {
+          // Update local state immediately for 'app' category
           setConfig(prev => {
             if (!prev) return null;
             return {
@@ -339,8 +344,18 @@ export function ConfigProvider({ children }: { children: ReactNode }) {
             };
           });
         }
-        const token = apiClient.getToken();
-        if (token) fetchConfig(token);
+
+        // Debounce fetchConfig to prevent TIME_WAIT connection buildup
+        // Only refetch if category requires full config refresh
+        if (e instanceof CustomEvent && e.detail?.category && e.detail.category !== 'app') {
+          if (settingsUpdateTimeout) {
+            clearTimeout(settingsUpdateTimeout);
+          }
+          settingsUpdateTimeout = setTimeout(() => {
+            const token = apiClient.getToken();
+            if (token) fetchConfig(token);
+          }, SETTINGS_UPDATE_DEBOUNCE_MS);
+        }
       };
       window.addEventListener('settingsUpdated', handleSettingsUpdate);
 
@@ -348,6 +363,9 @@ export function ConfigProvider({ children }: { children: ReactNode }) {
         window.removeEventListener('storage', handleTokenChange);
         window.removeEventListener('tokenChanged', handleTokenChange as EventListener);
         window.removeEventListener('settingsUpdated', handleSettingsUpdate);
+        if (settingsUpdateTimeout) {
+          clearTimeout(settingsUpdateTimeout);
+        }
       };
     }
   }, [fetchConfig]);
