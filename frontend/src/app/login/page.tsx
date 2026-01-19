@@ -227,6 +227,12 @@ export default function LoginPage() {
           </div>
         </div>
       </div>
+      {/* Build Version Badge - Fixed bottom left */}
+      <div className="fixed bottom-3 left-3 z-50">
+        <span className="text-[10px] font-medium px-2 py-1 rounded bg-slate-800/60 text-slate-400">
+          Build v2026.01.19.A
+        </span>
+      </div>
     </div>
   );
 }
