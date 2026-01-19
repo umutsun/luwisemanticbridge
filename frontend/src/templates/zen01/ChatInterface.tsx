@@ -239,8 +239,18 @@ export default function ChatInterface() {
           prompts: promptsData.prompts || {}
         };
 
-        const promptsList = settingsData.prompts?.list || [];
-        const activePromptObj = promptsList.find((p: { isActive?: boolean }) => p.isActive === true);
+        // prompts.list may be a JSON string, parse if needed
+        let promptsList = settingsData.prompts?.list || [];
+        if (typeof promptsList === 'string') {
+          try {
+            promptsList = JSON.parse(promptsList);
+          } catch (e) {
+            promptsList = [];
+          }
+        }
+        const activePromptObj = Array.isArray(promptsList)
+          ? promptsList.find((p: { isActive?: boolean }) => p.isActive === true)
+          : null;
 
         let activePromptData = {
           content: '',
