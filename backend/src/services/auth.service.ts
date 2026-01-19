@@ -368,25 +368,27 @@ export class AuthService {
     // Use environment variable for admin email, default to admin@asb.com
     const email = process.env.ADMIN_EMAIL || "admin@asb.com";
     const password = process.env.ADMIN_PASSWORD || "admin123";
+    const username = "admin";
 
-    // Check if admin user already exists
+    // Check if admin user already exists (by email OR username OR role)
     const existingAdmin = await this.pool.query(
-      "SELECT id FROM users WHERE email = $1",
-      [email]
+      "SELECT id, email FROM users WHERE email = $1 OR username = $2 OR role = 'admin'",
+      [email, username]
     );
 
     if (existingAdmin.rows.length > 0) {
-      console.log("✅ Admin user already exists:", email);
+      console.log("✅ Admin user already exists:", existingAdmin.rows[0].email);
       return;
     }
 
-    // Create admin user
+    // Create admin user with ON CONFLICT to prevent duplicates
     const passwordHash = await bcrypt.hash(password, this.saltRounds);
 
     await this.pool.query(
       `INSERT INTO users (username, email, password, name, role, status, email_verified)
-       VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-      ["admin", email, passwordHash, "Administrator", "admin", "active", true]
+       VALUES ($1, $2, $3, $4, $5, $6, $7)
+       ON CONFLICT (username) DO NOTHING`,
+      [username, email, passwordHash, "Administrator", "admin", "active", true]
     );
 
     console.log("✅ Default admin user created successfully");
