@@ -1154,6 +1154,7 @@ ${questionLabel}: ${message}`;
         // Core settings
         'ragSettings.maxResults', 'maxResults',
         'ragSettings.minResults', 'minResults',
+        'ragSettings.minSourcesToShow', 'ragSettings.maxSourcesToShow',  // Source display limits
         'parallel_llm_batch_size',
         'enable_parallel_llm',
         'parallel_llm_count',
@@ -2047,6 +2048,7 @@ FORMAT:
           // Supports {sourceCount} and {maxLength} placeholders for dynamic values
           const defaultSummaryEn =
             `RESPONSE INSTRUCTIONS:\n` +
+            `• Start your response with a SHORT introductory sentence that acknowledges the user's question (e.g., "According to the relevant law...", "Based on tax regulations...", "Under the applicable legislation...")\n` +
             `• Write a DETAILED natural language summary that synthesizes ALL {sourceCount} sources provided above\n` +
             `• DO NOT use citation markers like [1], [2], [3] - write as a cohesive narrative\n` +
             `• Aim for approximately {maxLength} characters (write LONGER if needed for completeness)\n` +
@@ -2062,6 +2064,7 @@ FORMAT:
 
           const defaultSummaryTr =
             `YANIT TALİMATLARI:\n` +
+            `• Yanıta kullanıcının sorusunu anladığını gösteren KISA bir giriş cümlesiyle başla (örn: "İlgili kanun gereği...", "Bu konuda mevzuata göre...", "Vergi mevzuatı çerçevesinde...")\n` +
             `• Yukarıda verilen TÜM {sourceCount} kaynağı sentezleyen DETAYLI bir doğal dil özeti yaz\n` +
             `• [1], [2], [3] gibi kaynak işaretleri KULLANMA - tutarlı bir anlatım olarak yaz\n` +
             `• Yaklaşık {maxLength} karakter hedefle (bütünlük için gerekirse DAHA UZUN yaz)\n` +
@@ -2535,7 +2538,8 @@ FORMAT:
       // ⚡ FAST MODE: Simple source formatting without LLM summaries
       if (citationsDisabled) {
         // Format sources quickly without LLM-generated summaries
-        const fastModeSources = searchResults.slice(0, initialDisplayCount || 5).map((r, idx) => {
+        // Use minResults for display count (fallback to initialDisplayCount then 7)
+        const fastModeSources = searchResults.slice(0, initialDisplayCount || minResults || 7).map((r, idx) => {
           // Clean raw metadata content
           const rawContent = r.excerpt || r.content || '';
           const cleanedContent = this.cleanRawMetadataContent(rawContent, r.metadata);
@@ -2642,14 +2646,27 @@ FORMAT:
       // 1. Add hierarchy weight + combined score to all sources
       // 2. Filter by similarity threshold (from RAG Settings)
       // 3. Apply min/max bounds (from RAG Settings)
-      const maxSourcesToShow = parseInt(settingsMap.get('ragSettings.maxSourcesToShow') || '5');
-      const minSourcesToShow = parseInt(settingsMap.get('ragSettings.minSourcesToShow') || '1');
+      // NOTE: Use minResults/maxResults as fallback for minSourcesToShow/maxSourcesToShow
+      const maxSourcesToShow = parseInt(
+        settingsMap.get('ragSettings.maxSourcesToShow') ||
+        settingsMap.get('ragSettings.maxResults') ||
+        '15'
+      );
+      const minSourcesToShow = parseInt(
+        settingsMap.get('ragSettings.minSourcesToShow') ||
+        settingsMap.get('ragSettings.minResults') ||
+        '7'
+      );
       // Use the same threshold as search (already loaded earlier)
       const sourceThreshold = parseFloat(
         settingsMap.get('ragSettings.similarityThreshold') ||
         settingsMap.get('similarityThreshold') ||
         '0.25'
       );
+
+      // DEBUG: Log source count settings
+      console.log(`📊 [SOURCE_LIMITS] formattedSources=${formattedSources.length}, minSourcesToShow=${minSourcesToShow}, maxSourcesToShow=${maxSourcesToShow}, threshold=${sourceThreshold}`);
+      console.log(`📊 [SOURCE_LIMITS] DB values: ragSettings.minResults=${settingsMap.get('ragSettings.minResults')}, ragSettings.maxResults=${settingsMap.get('ragSettings.maxResults')}, ragSettings.minSourcesToShow=${settingsMap.get('ragSettings.minSourcesToShow')}`);
 
       // Step 1: Add hierarchy weight and combined score to all sources
       const sourcesWithScores = formattedSources.map(source => {

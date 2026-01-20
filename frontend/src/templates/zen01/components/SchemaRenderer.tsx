@@ -59,6 +59,7 @@ interface SchemaRendererProps {
   keywords?: string[];
   dayanaklar?: string[];
   className?: string;
+  messageId?: string;  // For citation scroll targeting
 }
 
 /**
@@ -214,7 +215,8 @@ export const SchemaRenderer: React.FC<SchemaRendererProps> = ({
   schema: customSchema,
   keywords = [],
   dayanaklar = [],
-  className = ''
+  className = '',
+  messageId
 }) => {
   // Get schema - prefer custom, then by ID, then default
   const schema = customSchema || getActiveSchema(schemaId);
@@ -271,6 +273,7 @@ export const SchemaRenderer: React.FC<SchemaRendererProps> = ({
             key={section.id}
             section={section}
             content={sectionContent}
+            messageId={messageId}
           />
         );
       })}
@@ -293,9 +296,10 @@ export const SchemaRenderer: React.FC<SchemaRendererProps> = ({
 interface SectionRendererProps {
   section: ResponseSection;
   content: string | string[] | null;
+  messageId?: string;
 }
 
-const SectionRenderer: React.FC<SectionRendererProps> = ({ section, content }) => {
+const SectionRenderer: React.FC<SectionRendererProps> = ({ section, content, messageId }) => {
   if (!content) return null;
 
   switch (section.style) {
@@ -430,12 +434,23 @@ const SectionRenderer: React.FC<SectionRendererProps> = ({ section, content }) =
                               style={{ fontSize: '0.75em', fontWeight: 600 }}
                               onClick={(e) => {
                                 e.preventDefault();
-                                // Try to find and scroll to citation in sources
-                                const sourceEl = document.querySelector(`[data-citation="${citationNum}"]`);
+                                e.stopPropagation();
+                                // Find source by ID: citation-{messageId}-{citationNum}
+                                // If no messageId, fallback to class-based selector
+                                let sourceEl: HTMLElement | null = null;
+                                if (messageId) {
+                                  sourceEl = document.getElementById(`citation-${messageId}-${citationNum}`);
+                                }
+                                if (!sourceEl) {
+                                  // Fallback: find by class and index
+                                  const sourceItems = document.querySelectorAll('.zen01-source-item');
+                                  sourceEl = sourceItems[parseInt(citationNum) - 1] as HTMLElement;
+                                }
                                 if (sourceEl) {
                                   sourceEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                                  (sourceEl as HTMLElement).style.boxShadow = '0 0 0 2px rgba(34, 211, 238, 0.5)';
-                                  setTimeout(() => { (sourceEl as HTMLElement).style.boxShadow = 'none'; }, 2000);
+                                  sourceEl.style.boxShadow = '0 0 0 2px rgba(34, 211, 238, 0.5)';
+                                  sourceEl.style.transition = 'box-shadow 0.3s ease';
+                                  setTimeout(() => { sourceEl!.style.boxShadow = 'none'; }, 2000);
                                 }
                               }}
                             >

@@ -199,6 +199,13 @@ router.get('/', cacheMiddleware, async (req: Request, res: Response) => {
       );
     }
 
+    // DEBUG: Log minResults/maxResults specifically for RAG
+    if (category === 'rag') {
+      const minResultsRow = result.rows.find(r => r.key === 'ragSettings.minResults');
+      const maxResultsRow = result.rows.find(r => r.key === 'ragSettings.maxResults');
+      console.log(`📊 [RAG_SETTINGS] minResults=${minResultsRow?.value || 'NOT_FOUND'}, maxResults=${maxResultsRow?.value || 'NOT_FOUND'}`);
+    }
+
     // Build category-specific response
     const config: any = {};
 
@@ -664,6 +671,10 @@ router.put('/:categoryName', async (req: Request, res: Response) => {
       if (hybridSetting) {
         console.log('[Settings] RAG enableHybridSearch:', hybridSetting.value);
       }
+      // DEBUG: Log minResults/maxResults updates
+      const minResultsSetting = updates.find(u => u.key === 'ragSettings.minResults');
+      const maxResultsSetting = updates.find(u => u.key === 'ragSettings.maxResults');
+      console.log(`📊 [RAG_SETTINGS_SAVE] minResults=${minResultsSetting?.value || 'NOT_IN_UPDATE'}, maxResults=${maxResultsSetting?.value || 'NOT_IN_UPDATE'}`);
     }
 
     // Batch update

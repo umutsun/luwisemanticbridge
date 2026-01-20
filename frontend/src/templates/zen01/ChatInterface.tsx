@@ -328,6 +328,20 @@ export default function ChatInterface() {
           }
         });
 
+        // Debug: Log RAG settings
+        console.log('[ChatInterface] 📊 RAG Settings:', {
+          minResults: ragSettings.minResults,
+          maxResults: ragSettings.maxResults,
+          minSourcesToShow: ragSettings.minSourcesToShow,
+          maxSourcesToShow: ragSettings.maxSourcesToShow,
+          similarityThreshold: ragSettings.similarityThreshold,
+          rawFromBackend: {
+            minResults: settingsData.ragSettings?.minResults,
+            maxResults: settingsData.ragSettings?.maxResults,
+            minSourcesToShow: settingsData.ragSettings?.minSourcesToShow
+          }
+        });
+
         setChatbotSettings(config);
         setRagSettings(ragSettings);
         setLlmSettings(llm);

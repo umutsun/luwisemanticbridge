@@ -337,12 +337,15 @@ export const ZenMessage: React.FC<ZenMessageProps> = ({
 
   // Debug: Log component version on mount
   React.useEffect(() => {
-    console.log('[ZenMessage] 🔄 v2026.01.15.B - Citation cleanup + Toggle fix', {
+    console.log('[ZenMessage] 🔄 v2026.01.20 - Source count fix', {
       enableSourceClick,
       enableKeywordHighlighting,
-      messageId: message.id
+      messageId: message.id,
+      sourcesCount: message.sources?.length || 0,
+      minSourcesToShow,
+      showAllSources
     });
-  }, []);
+  }, [message.sources?.length, minSourcesToShow]);
 
   // Extract keywords from last user query for highlighting (only if enabled)
   const highlightKeywords = React.useMemo(() => {
@@ -401,9 +404,9 @@ export const ZenMessage: React.FC<ZenMessageProps> = ({
       transition={{ duration: 0.3, ease: 'easeOut' }}
       className={`flex gap-3 ${isUser ? 'justify-end' : 'justify-start'} zen01-fade-in`}
     >
-      {/* Assistant Avatar */}
+      {/* Assistant Avatar - hidden on mobile */}
       {!isUser && (
-        <div className="zen01-avatar zen01-avatar-assistant flex-shrink-0">
+        <div className="zen01-avatar zen01-avatar-assistant flex-shrink-0 hidden sm:flex">
           <Bot className="h-4 w-4" />
         </div>
       )}
@@ -429,6 +432,7 @@ export const ZenMessage: React.FC<ZenMessageProps> = ({
                 keywords={backendKeywords}
                 dayanaklar={backendDayanaklar}
                 className="zen01-schema-response"
+                messageId={message.id}
               />
             ) : (
               <div className="zen01-markdown prose prose-sm max-w-none dark:prose-invert">
@@ -813,9 +817,9 @@ export const ZenMessage: React.FC<ZenMessageProps> = ({
         )}
       </div>
 
-      {/* User Avatar */}
+      {/* User Avatar - hidden on mobile */}
       {isUser && (
-        <div className="zen01-avatar zen01-avatar-user flex-shrink-0">
+        <div className="zen01-avatar zen01-avatar-user flex-shrink-0 hidden sm:flex">
           <User className="h-4 w-4" />
         </div>
       )}

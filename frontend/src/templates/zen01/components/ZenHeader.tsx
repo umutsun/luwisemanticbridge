@@ -39,7 +39,7 @@ export const ZenHeader: React.FC<ZenHeaderProps> = ({
                 {chatbotSettings.title || 'Zen Assistant'}
               </h1>
               <span className="text-[10px] font-medium px-1.5 py-0.5 rounded-md bg-cyan-500/10 dark:bg-cyan-500/20 text-cyan-700 dark:text-cyan-300 border border-cyan-500/20 dark:border-cyan-500/30">
-                v2026.01.19
+                v2026.01.20
               </span>
             </div>
             {chatbotSettings.subtitle && (
