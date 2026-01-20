@@ -3070,7 +3070,7 @@ function RAGSettings() {
                   </AlertDescription>
                 </Alert>
               ) : (
-                <div className="space-y-3 max-h-[300px] overflow-y-auto pr-2">
+                <div className="space-y-3 max-h-[500px] overflow-y-auto pr-2">
                   {sourceTables.map((table) => (
                     <div key={table.name} className="space-y-2 p-3 border rounded-lg bg-muted/30">
                       <div className="flex items-center justify-between">
