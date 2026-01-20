@@ -1,7 +1,7 @@
 'use client';
 
-import React, { useState, useEffect, useRef } from 'react';
-import { ChevronDown, LogOut, Trash2, MessageSquare, Sun, Moon, Sparkles } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { ChevronDown, LogOut, Trash2, MessageSquare, Sun, Moon } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import {
@@ -45,9 +45,9 @@ export const ZenHeader: React.FC<ZenHeaderProps> = ({
   isDark,
   onToggleTheme,
 }) => {
-  const [showZenQuote, setShowZenQuote] = useState(false);
+  const [showZenToast, setShowZenToast] = useState(false);
   const [currentQuote, setCurrentQuote] = useState(zenQuotes[0]);
-  const zenRef = useRef<HTMLDivElement>(null);
+  const [isFirstRender, setIsFirstRender] = useState(true);
 
   // Get random quote
   const getRandomQuote = () => {
@@ -55,27 +55,22 @@ export const ZenHeader: React.FC<ZenHeaderProps> = ({
     setCurrentQuote(zenQuotes[randomIndex]);
   };
 
-  // Handle click on online indicator
-  const handleZenClick = () => {
+  // Handle theme toggle with Zen toast
+  const handleThemeToggle = () => {
     getRandomQuote();
-    setShowZenQuote(!showZenQuote);
+    onToggleTheme();
+    setShowZenToast(true);
+
+    // Auto-hide after 4 seconds
+    setTimeout(() => {
+      setShowZenToast(false);
+    }, 4000);
   };
 
-  // Close dropdown when clicking outside
+  // Skip showing toast on initial render
   useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (zenRef.current && !zenRef.current.contains(event.target as Node)) {
-        setShowZenQuote(false);
-      }
-    };
-
-    if (showZenQuote) {
-      document.addEventListener('mousedown', handleClickOutside);
-    }
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
-    };
-  }, [showZenQuote]);
+    setIsFirstRender(false);
+  }, []);
 
   return (
     <header className="zen01-header">
@@ -102,79 +97,91 @@ export const ZenHeader: React.FC<ZenHeaderProps> = ({
 
         {/* Live Indicator, Theme Toggle & User Menu */}
         <div className="flex items-center gap-3">
-          {/* Zen Quote Dropdown */}
-          <div className="relative" ref={zenRef}>
-            <button
-              onClick={handleZenClick}
-              className="zen01-live cursor-pointer hover:scale-105 transition-transform duration-200"
-              title="Zen bilgeliği için tıklayın"
-            >
-              <div className="zen01-live-dot" />
-              <span className="text-xs text-emerald-500 dark:text-emerald-400">Online</span>
-              <Sparkles className="h-3 w-3 ml-1 text-emerald-500/50 dark:text-emerald-400/50" />
-            </button>
-
-            {/* Zen Quote Dropdown */}
-            <AnimatePresence>
-              {showZenQuote && (
-                <motion.div
-                  initial={{ opacity: 0, y: -10, scale: 0.95 }}
-                  animate={{ opacity: 1, y: 0, scale: 1 }}
-                  exit={{ opacity: 0, y: -10, scale: 0.95 }}
-                  transition={{ duration: 0.2, ease: 'easeOut' }}
-                  className="absolute right-0 top-full mt-2 w-72 p-4 rounded-xl
-                    bg-gradient-to-br from-slate-900/95 to-slate-800/95 dark:from-slate-900/98 dark:to-slate-800/98
-                    backdrop-blur-xl border border-cyan-500/20 shadow-xl shadow-cyan-500/10
-                    z-50"
-                >
-                  {/* Decorative corner */}
-                  <div className="absolute -top-1.5 right-4 w-3 h-3 rotate-45 bg-slate-900/95 border-l border-t border-cyan-500/20" />
-
-                  {/* Quote icon */}
-                  <div className="flex items-start gap-3">
-                    <div className="flex-shrink-0 w-8 h-8 rounded-lg bg-gradient-to-br from-cyan-500/20 to-purple-500/20 flex items-center justify-center">
-                      <span className="text-lg">&#9775;</span>
-                    </div>
-                    <div className="flex-1">
-                      <p className="text-sm text-slate-200 dark:text-slate-100 leading-relaxed italic">
-                        "{currentQuote.text}"
-                      </p>
-                      <p className="text-[10px] text-cyan-500/70 dark:text-cyan-400/60 mt-2 text-right">
-                        — {currentQuote.source}
-                      </p>
-                    </div>
-                  </div>
-
-                  {/* Refresh button */}
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      getRandomQuote();
-                    }}
-                    className="mt-3 w-full py-1.5 text-[10px] text-cyan-500/70 hover:text-cyan-400
-                      border border-cyan-500/20 hover:border-cyan-500/40 rounded-lg
-                      transition-colors duration-200 flex items-center justify-center gap-1"
-                  >
-                    <Sparkles className="h-3 w-3" />
-                    Başka bir bilgelik
-                  </button>
-                </motion.div>
-              )}
-            </AnimatePresence>
-          </div>
-
-          {/* Theme Toggle Button */}
+          {/* Theme Toggle with Zen - Single Combined Button */}
           <button
-            onClick={onToggleTheme}
-            className="zen01-theme-toggle"
-            aria-label={isDark ? 'Switch to light mode' : 'Switch to dark mode'}
+            onClick={handleThemeToggle}
+            className="w-9 h-9 rounded-xl flex items-center justify-center
+              bg-gradient-to-br from-slate-100 to-slate-200 dark:from-slate-800 dark:to-slate-700
+              hover:from-cyan-50 hover:to-purple-50 dark:hover:from-cyan-900/30 dark:hover:to-purple-900/30
+              border border-slate-300 dark:border-slate-600
+              hover:border-cyan-400/50 dark:hover:border-cyan-500/50
+              transition-all duration-300 hover:scale-105 hover:shadow-lg
+              group relative overflow-hidden"
+            aria-label={isDark ? 'Aydınlık mod' : 'Karanlık mod'}
+            title={isDark ? 'Aydınlık moda geç' : 'Karanlık moda geç'}
           >
+            {/* Animated background glow */}
+            <div className="absolute inset-0 bg-gradient-to-r from-cyan-500/0 via-cyan-500/10 to-purple-500/0
+              translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-700" />
+
             {isDark ? (
-              <Sun className="h-4 w-4" />
+              <Sun className="h-4 w-4 text-amber-500 group-hover:text-amber-400 transition-colors relative z-10" />
             ) : (
-              <Moon className="h-4 w-4" />
+              <Moon className="h-4 w-4 text-slate-600 group-hover:text-purple-600 transition-colors relative z-10" />
             )}
           </button>
+
+          {/* Zen Toast - Fixed Position */}
+          <AnimatePresence>
+            {showZenToast && !isFirstRender && (
+              <motion.div
+                initial={{ opacity: 0, y: -50, scale: 0.9 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                exit={{ opacity: 0, y: -30, scale: 0.95 }}
+                transition={{
+                  type: "spring",
+                  stiffness: 300,
+                  damping: 25,
+                  duration: 0.4
+                }}
+                className="fixed top-20 left-1/2 -translate-x-1/2
+                  w-[calc(100vw-2rem)] sm:w-auto sm:min-w-[320px] sm:max-w-[420px]
+                  p-4 sm:p-5 rounded-2xl
+                  bg-gradient-to-br from-slate-900/95 to-slate-800/95 dark:from-slate-100/95 dark:to-white/95
+                  backdrop-blur-xl
+                  border border-cyan-500/30 dark:border-cyan-600/30
+                  shadow-2xl shadow-cyan-500/20 dark:shadow-cyan-600/10
+                  z-[100]"
+              >
+                {/* Animated border glow */}
+                <div className="absolute inset-0 rounded-2xl bg-gradient-to-r from-cyan-500/20 via-purple-500/20 to-cyan-500/20
+                  animate-pulse opacity-50" style={{ padding: '1px', margin: '-1px' }} />
+
+                {/* Content */}
+                <div className="flex items-center gap-4 relative">
+                  {/* Yin-Yang with rotation animation */}
+                  <motion.div
+                    initial={{ rotate: 0 }}
+                    animate={{ rotate: 360 }}
+                    transition={{ duration: 2, ease: "easeInOut" }}
+                    className="flex-shrink-0 w-10 h-10 sm:w-12 sm:h-12 rounded-xl
+                      bg-gradient-to-br from-cyan-500/20 to-purple-500/20 dark:from-cyan-600/20 dark:to-purple-600/20
+                      flex items-center justify-center"
+                  >
+                    <span className="text-xl sm:text-2xl">☯</span>
+                  </motion.div>
+
+                  {/* Quote text */}
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm sm:text-base text-slate-100 dark:text-slate-800 leading-relaxed font-light italic">
+                      "{currentQuote.text}"
+                    </p>
+                    <p className="text-[10px] sm:text-xs text-cyan-400/80 dark:text-cyan-600/80 mt-2 text-right font-medium">
+                      — {currentQuote.source}
+                    </p>
+                  </div>
+                </div>
+
+                {/* Progress bar */}
+                <motion.div
+                  initial={{ scaleX: 1 }}
+                  animate={{ scaleX: 0 }}
+                  transition={{ duration: 4, ease: "linear" }}
+                  className="absolute bottom-0 left-0 right-0 h-0.5 bg-gradient-to-r from-cyan-500 to-purple-500 origin-left rounded-b-2xl"
+                />
+              </motion.div>
+            )}
+          </AnimatePresence>
 
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
