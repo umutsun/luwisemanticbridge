@@ -102,19 +102,8 @@ const nextConfig = {
     ];
   },
   
-  // Bundle analyzer
-  webpack: (config, { isServer }) => {
-    // Bundle analyzer in development
-    if (process.env.ANALYZE === 'true') {
-      const { BundleAnalyzerPlugin } = await import('webpack-bundle-analyzer');
-      config.plugins.push(
-        new BundleAnalyzerPlugin({
-          analyzerMode: 'static',
-          reportFilename: isServer ? '../analyze/server.html' : './analyze/client.html',
-        })
-      );
-    }
-    
+  // Webpack customization (if needed)
+  webpack: (config) => {
     return config;
   },
 };
