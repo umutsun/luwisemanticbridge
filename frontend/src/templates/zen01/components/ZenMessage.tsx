@@ -453,9 +453,23 @@ export const ZenMessage: React.FC<ZenMessageProps> = ({
                     ),
                     // Paragraphs with keyword highlighting and citation anchors
                     p: ({ children }) => {
+                      // DEBUG: Log what we receive
+                      console.log('[ZenMessage] p children:', {
+                        type: typeof children,
+                        isArray: Array.isArray(children),
+                        enableSourceClick,
+                        value: typeof children === 'string' ? children.substring(0, 100) : 'not-string'
+                      });
+
                       // Apply keyword highlighting and convert citations to clickable anchors
                       // Supports: [1], [Kaynak 1], [Source 1] formats
                       const processChildren = (child: React.ReactNode): React.ReactNode => {
+                        // Handle React elements with children (like <strong>, <em>, etc.)
+                        if (React.isValidElement(child) && child.props?.children) {
+                          const processedChildren = processChildren(child.props.children);
+                          return React.cloneElement(child, { ...child.props }, processedChildren);
+                        }
+
                         if (typeof child === 'string') {
                           // Handle multiple citation formats:
                           // - [1], [2], [3] - simple format
