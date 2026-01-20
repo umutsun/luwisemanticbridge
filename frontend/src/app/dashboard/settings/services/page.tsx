@@ -1580,9 +1580,47 @@ function SystemStatusCard() {
   );
 }
 
-// DevOps Card - Debug Mode + DevOps Terminal
+// DevOps Card - Debug Mode + DevOps Terminal + Cache Clear
 function DevOpsCard() {
   const [showModal, setShowModal] = useState(false);
+  const [clearingCache, setClearingCache] = useState(false);
+
+  const handleClearCache = async () => {
+    setClearingCache(true);
+    try {
+      // Clear localStorage
+      localStorage.clear();
+
+      // Clear sessionStorage
+      sessionStorage.clear();
+
+      // Clear service worker caches
+      if ('caches' in window) {
+        const cacheNames = await caches.keys();
+        await Promise.all(cacheNames.map(name => caches.delete(name)));
+      }
+
+      // Unregister service workers
+      if ('serviceWorker' in navigator) {
+        const registrations = await navigator.serviceWorker.getRegistrations();
+        await Promise.all(registrations.map(reg => reg.unregister()));
+      }
+
+      toast.success('Önbellek temizlendi', {
+        description: 'Sayfa yeniden yüklenecek...'
+      });
+
+      // Reload page after short delay
+      setTimeout(() => {
+        window.location.reload();
+      }, 1000);
+    } catch (error) {
+      console.error('Cache clear error:', error);
+      toast.error('Önbellek temizlenemedi');
+    } finally {
+      setClearingCache(false);
+    }
+  };
 
   return (
     <>
@@ -1594,6 +1632,30 @@ function DevOpsCard() {
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-2 pt-0">
+          {/* Clear Cache Row */}
+          <div className="flex items-center justify-between p-2 rounded-md bg-muted/50 hover:bg-muted/70 transition-colors">
+            <div className="flex items-center gap-2">
+              <RefreshCw className="h-3.5 w-3.5 text-muted-foreground" />
+              <div>
+                <span className="text-xs font-medium">Önbellek Temizle</span>
+                <p className="text-[10px] text-muted-foreground">LocalStorage, Cache, SW</p>
+              </div>
+            </div>
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-6 text-[10px] px-2"
+              onClick={handleClearCache}
+              disabled={clearingCache}
+            >
+              {clearingCache ? (
+                <Loader2 className="h-3 w-3 animate-spin" />
+              ) : (
+                'Temizle'
+              )}
+            </Button>
+          </div>
+
           {/* Debug Mode Row */}
           <div className="flex items-center justify-between p-2 rounded-md bg-muted/50 hover:bg-muted/70 transition-colors">
             <div className="flex items-center gap-2">
