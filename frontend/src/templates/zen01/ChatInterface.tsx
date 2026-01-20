@@ -277,10 +277,10 @@ export default function ChatInterface() {
           enableSuggestions: chatbotData.enableSuggestions !== undefined ? chatbotData.enableSuggestions : true,
           welcomeMessage: chatbotData.welcomeMessage || '',
           greeting: chatbotData.greeting || '',
-          // Feature toggles from schema - default to false for safety
-          enableSourceClick: chatbotData.enableSourceClick === true,
+          // Feature toggles from schema - default to TRUE for better UX
+          enableSourceClick: chatbotData.enableSourceClick !== false, // Default true - citations clickable
           enableSourceQuestionGeneration: chatbotData.enableSourceQuestionGeneration === true,
-          enableKeywordHighlighting: chatbotData.enableKeywordHighlighting !== false, // Only this defaults to true
+          enableKeywordHighlighting: chatbotData.enableKeywordHighlighting !== false, // Default true - keywords highlighted
           // PDF Upload toggle
           enablePdfUpload: chatbotData.enablePdfUpload !== undefined ? chatbotData.enablePdfUpload : false,
           // Voice Feature Toggles (master toggles)
@@ -502,7 +502,14 @@ export default function ChatInterface() {
           systemPrompt,
           enableSemanticAnalysis: true,
           trackUserInsights: true,
-          stream: true
+          stream: true,
+          // RAG settings for source retrieval
+          ragSettings: {
+            minResults: ragSettings.minResults,
+            maxResults: ragSettings.maxResults,
+            similarityThreshold: ragSettings.similarityThreshold,
+            minSourcesToShow: ragSettings.minSourcesToShow
+          }
         }),
       });
 
@@ -594,7 +601,14 @@ export default function ChatInterface() {
               systemPrompt,
               enableSemanticAnalysis: true,
               trackUserInsights: true,
-              stream: false
+              stream: false,
+              // RAG settings for source retrieval
+              ragSettings: {
+                minResults: ragSettings.minResults,
+                maxResults: ragSettings.maxResults,
+                similarityThreshold: ragSettings.similarityThreshold,
+                minSourcesToShow: ragSettings.minSourcesToShow
+              }
             }),
           });
           if (finalResponse.ok) {

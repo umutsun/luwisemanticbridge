@@ -28,14 +28,14 @@ const DEFAULT_STOP_WORDS = [
  * Extract keywords from user query for highlighting
  * @param query - User's search query
  * @param stopWords - Optional custom stop words list
- * @param minLength - Minimum word length (default: 4)
- * @param maxKeywords - Maximum keywords to extract (default: 5)
+ * @param minLength - Minimum word length (default: 3 for Turkish abbreviations like KDV)
+ * @param maxKeywords - Maximum keywords to extract (default: 8)
  */
 function extractKeywords(
   query: string,
   stopWords: string[] = DEFAULT_STOP_WORDS,
-  minLength: number = 4,
-  maxKeywords: number = 5
+  minLength: number = 3,  // Reduced for Turkish (KDV, etc.)
+  maxKeywords: number = 8  // Increased for better coverage
 ): string[] {
   return query
     .toLowerCase()
@@ -269,24 +269,28 @@ function preprocessMarkdown(content: string): string {
     // Also handle Turkish sentences ending with percentage or number
     .replace(/([0-9%])(\s*(?:\[\d+\]|\[Kaynak\s*\d+\]|\[Source\s*\d+\])+)?\.\s*\n(?!\n)([A-ZÇĞİÖŞÜ])/gi, '$1$2.\n\n$3');
 
-  // PARAGRAPH SPLITTING: If content has few paragraph breaks, add more
+  // PARAGRAPH SPLITTING: Count existing paragraphs and sentences
   const paragraphCount = (result.match(/\n\n/g) || []).length;
-  const sentenceCount = (result.match(/[.!?]\s/g) || []).length;
+  const sentenceCount = (result.match(/[.!?](?:\s*\[\d+\])*\s/g) || []).length;
 
   // Debug paragraph analysis
   console.log('[ZenMessage] 📝 Paragraph analysis:', { sentenceCount, paragraphCount, contentLength: result.length });
 
-  // If we have sentences but few paragraphs, add breaks every 2 sentences
-  if (sentenceCount >= 3 && paragraphCount < Math.floor(sentenceCount / 2)) {
+  // AGGRESSIVE PARAGRAPH BREAKING: If few or no paragraphs, add breaks after sentences
+  // This handles LLM responses that come as a single block of text
+  if (sentenceCount >= 2 && paragraphCount < Math.ceil(sentenceCount / 3)) {
     let sentenceCounter = 0;
-    result = result.replace(/([.!?])(\s*)(?=[A-ZÇĞİÖŞÜa-zçğıöşü])/g, (match, punct, _space) => {
-      sentenceCounter++;
-      // Add paragraph break every 2 sentences
-      if (sentenceCounter % 2 === 0) {
-        return `${punct}\n\n`;
+    // Match: sentence ending + optional citations + space + next word starting with capital
+    result = result.replace(/([.!?])(\s*(?:\[\d+\]|\[Kaynak\s*\d+\]|\[Source\s*\d+\])*)(\s+)([A-ZÇĞİÖŞÜ])/g,
+      (match, punct, citations, _space, nextChar) => {
+        sentenceCounter++;
+        // Add paragraph break every 2-3 sentences
+        if (sentenceCounter % 2 === 0) {
+          return `${punct}${citations || ''}\n\n${nextChar}`;
+        }
+        return `${punct}${citations || ''} ${nextChar}`;
       }
-      return match;
-    });
+    );
   }
 
   // Add line breaks before each known section header
