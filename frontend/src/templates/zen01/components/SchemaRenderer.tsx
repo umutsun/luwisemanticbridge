@@ -387,6 +387,11 @@ const SectionRenderer: React.FC<SectionRendererProps> = ({ section, content }) =
 
     case 'text':
     default:
+      // Preprocess content for better paragraph breaks
+      const preprocessedContent = preprocessMarkdownContent(
+        typeof content === 'string' ? content : content.join('\n\n')
+      );
+
       return (
         <div className="mb-4">
           {/* Hide section label - show content directly */}
@@ -395,19 +400,106 @@ const SectionRenderer: React.FC<SectionRendererProps> = ({ section, content }) =
                           prose-h1:text-lg prose-h1:font-bold prose-h1:mt-4 prose-h1:mb-2
                           prose-h2:text-base prose-h2:font-semibold prose-h2:mt-3 prose-h2:mb-2
                           prose-h3:text-sm prose-h3:font-semibold prose-h3:mt-2 prose-h3:mb-1
-                          prose-p:my-2 prose-p:leading-relaxed
+                          prose-p:my-4 prose-p:leading-relaxed
                           prose-ul:my-2 prose-ul:ml-4 prose-ul:list-disc
                           prose-ol:my-2 prose-ol:ml-4 prose-ol:list-decimal
                           prose-li:my-1 prose-li:pl-1
                           prose-strong:text-cyan-700 dark:prose-strong:text-cyan-300
                           prose-blockquote:border-l-4 prose-blockquote:border-cyan-500/50 prose-blockquote:pl-4 prose-blockquote:italic">
-            <ReactMarkdown remarkPlugins={[remarkGfm]}>
-              {typeof content === 'string' ? content : content.join('\n\n')}
+            <ReactMarkdown
+              remarkPlugins={[remarkGfm]}
+              components={{
+                // Custom paragraph renderer with citation support
+                p: ({ children }) => {
+                  const processChildren = (child: React.ReactNode): React.ReactNode => {
+                    if (typeof child === 'string') {
+                      // Citation regex: [1], [Kaynak 1], [Source 1]
+                      const citationRegex = /(\[\d+\]|\[Kaynak\s*\d+\]|\[Source\s*\d+\])/gi;
+                      const parts = child.split(citationRegex);
+                      return parts.map((part, idx) => {
+                        const simpleMatch = part.match(/^\[(\d+)\]$/);
+                        const kaynakMatch = part.match(/^\[Kaynak\s*(\d+)\]$/i);
+                        const sourceMatch = part.match(/^\[Source\s*(\d+)\]$/i);
+                        const citationNum = simpleMatch?.[1] || kaynakMatch?.[1] || sourceMatch?.[1];
+
+                        if (citationNum) {
+                          return (
+                            <sup
+                              key={`cite-${idx}`}
+                              className="cursor-pointer text-cyan-600 dark:text-cyan-400 hover:text-cyan-500 dark:hover:text-cyan-300"
+                              style={{ fontSize: '0.75em', fontWeight: 600 }}
+                              onClick={(e) => {
+                                e.preventDefault();
+                                // Try to find and scroll to citation in sources
+                                const sourceEl = document.querySelector(`[data-citation="${citationNum}"]`);
+                                if (sourceEl) {
+                                  sourceEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                                  (sourceEl as HTMLElement).style.boxShadow = '0 0 0 2px rgba(34, 211, 238, 0.5)';
+                                  setTimeout(() => { (sourceEl as HTMLElement).style.boxShadow = 'none'; }, 2000);
+                                }
+                              }}
+                            >
+                              [{citationNum}]
+                            </sup>
+                          );
+                        }
+                        return part;
+                      });
+                    }
+                    if (Array.isArray(child)) {
+                      return child.map((c, i) => <React.Fragment key={i}>{processChildren(c)}</React.Fragment>);
+                    }
+                    // Handle React elements
+                    if (React.isValidElement(child) && child.props?.children) {
+                      return React.cloneElement(child, { ...child.props }, processChildren(child.props.children));
+                    }
+                    return child;
+                  };
+
+                  return (
+                    <p className="my-4 leading-relaxed" style={{ marginBottom: '1.25em', marginTop: '1.25em' }}>
+                      {processChildren(children)}
+                    </p>
+                  );
+                }
+              }}
+            >
+              {preprocessedContent}
             </ReactMarkdown>
           </div>
         </div>
       );
   }
 };
+
+/**
+ * Preprocess markdown content for better paragraph breaks
+ */
+function preprocessMarkdownContent(content: string): string {
+  let result = content;
+
+  // Count paragraphs and sentences
+  const paragraphCount = (result.match(/\n\n/g) || []).length;
+  const sentenceCount = (result.match(/[.!?](?:\s*\[\d+\])*\s/g) || []).length;
+
+  // If few paragraphs relative to sentences, add paragraph breaks
+  if (sentenceCount >= 2 && paragraphCount < Math.ceil(sentenceCount / 3)) {
+    let counter = 0;
+    result = result.replace(/([.!?])(\s*(?:\[\d+\]|\[Kaynak\s*\d+\]|\[Source\s*\d+\])*)(\s+)([A-ZÇĞİÖŞÜ])/g,
+      (match, punct, citations, space, nextChar) => {
+        counter++;
+        if (counter % 2 === 0) {
+          return `${punct}${citations || ''}\n\n${nextChar}`;
+        }
+        return `${punct}${citations || ''} ${nextChar}`;
+      }
+    );
+  }
+
+  // Clean excessive newlines
+  result = result.replace(/\n{3,}/g, '\n\n');
+
+  return result;
+}
 
 export default SchemaRenderer;
