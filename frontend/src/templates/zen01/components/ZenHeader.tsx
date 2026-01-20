@@ -14,15 +14,37 @@ import {
 import { motion, AnimatePresence } from 'framer-motion';
 import type { ZenHeaderProps } from '../types';
 
-// Zen/Tao wisdom quotes
+// Zen/Tao wisdom quotes - expanded collection
 const zenQuotes = [
+  // Lao Tzu (Tao Te Ching)
   { text: "Bilge kişi konuşmaz, konuşan bilmez.", source: "Lao Tzu" },
   { text: "Bin millik yolculuk tek bir adımla başlar.", source: "Lao Tzu" },
   { text: "Su yumuşaktır ama kayaları oyar.", source: "Lao Tzu" },
+  { text: "Boşluk, doluluktan değerlidir.", source: "Lao Tzu" },
+  { text: "Sade ol, kendini tut, az iste.", source: "Lao Tzu" },
+  { text: "Doğa acele etmez, yine de her şey tamamlanır.", source: "Lao Tzu" },
+  { text: "En yumuşak şey, en sert şeyi yener.", source: "Lao Tzu" },
+  { text: "Kendini bilen aydınlanmıştır.", source: "Lao Tzu" },
+  { text: "Başkalarına karşı anlayışlı ol, kendine karşı sert.", source: "Lao Tzu" },
+  { text: "Büyük Tao akar, hem sola hem sağa.", source: "Lao Tzu" },
+  { text: "Az bilen çok konuşur, çok bilen az konuşur.", source: "Lao Tzu" },
+  { text: "Güçlü olan galip gelmez, galip gelen güçlüdür.", source: "Lao Tzu" },
+  { text: "Yapma, bırak olsun.", source: "Lao Tzu" },
+  { text: "En iyi lider, halkın varlığından habersiz olduğudur.", source: "Lao Tzu" },
+  { text: "Kendi ışığını sön, kaosla bir ol.", source: "Lao Tzu" },
+
+  // Chuang Tzu (Zhuangzi)
+  { text: "Büyük bilgelik çocuk gibidir.", source: "Chuang Tzu" },
+  { text: "Mutluluk hafif bir şeydir; kim tutabilir?", source: "Chuang Tzu" },
+  { text: "Uyku halinde rüya olduğunu bilmezsin.", source: "Chuang Tzu" },
+  { text: "Balık suyu bilmez, insan havayı.", source: "Chuang Tzu" },
+  { text: "Faydasız ağaç uzun yaşar.", source: "Chuang Tzu" },
+  { text: "Kelebek mi insan rüyası, insan mı kelebek rüyası?", source: "Chuang Tzu" },
+
+  // Zen Masters
   { text: "Sessizlik, en güçlü çığlıktır.", source: "Zen Atasözü" },
   { text: "Şimdi'den başka zaman yoktur.", source: "Zen Atasözü" },
   { text: "Zihin durgun su gibi olmalı.", source: "Zen Atasözü" },
-  { text: "Boşluk, doluluktan değerlidir.", source: "Lao Tzu" },
   { text: "Nehir akmakla yorulmaz.", source: "Zen Atasözü" },
   { text: "En büyük bilgelik basitliktir.", source: "Zen Atasözü" },
   { text: "Yaprak düşer, ağaç kalır.", source: "Zen Atasözü" },
@@ -31,6 +53,34 @@ const zenQuotes = [
   { text: "Aydınlanma, arayışı bıraktığında gelir.", source: "Zen Atasözü" },
   { text: "Ay'ı işaret eden parmağa değil, Ay'a bak.", source: "Zen Atasözü" },
   { text: "Dağ ne kadar yüksek olursa olsun, yol vardır.", source: "Zen Atasözü" },
+  { text: "Boş bardak doldurulabilir.", source: "Zen Atasözü" },
+  { text: "Odun taşı, su çek - işte mucize.", source: "Zen Atasözü" },
+  { text: "Düşen kar gibi ol: sessiz ama dönüştürücü.", source: "Zen Atasözü" },
+  { text: "Söz gümüşse, sükut altındır.", source: "Zen Atasözü" },
+  { text: "Köprüyü geçene kadar ayıya dayı deme.", source: "Zen Atasözü" },
+  { text: "Gerçek yol kapısız bir kapıdır.", source: "Mumon" },
+  { text: "Oturduğun yerde otur, yürüdüğün yerde yürü.", source: "Unmon" },
+  { text: "Bir el çırpınca ne ses çıkar?", source: "Hakuin" },
+
+  // Buddha
+  { text: "Zihin her şeydir. Ne düşünürsen o olursun.", source: "Buddha" },
+  { text: "Acı kaçınılmaz, ıstırap seçimdir.", source: "Buddha" },
+  { text: "Bırakmayı öğrendiğinde, huzur seni bulur.", source: "Buddha" },
+  { text: "Her sabah yeniden doğuyoruz.", source: "Buddha" },
+  { text: "Dünya korkuyla değil, sevgiyle değişir.", source: "Buddha" },
+  { text: "Kendi kurtuluşunu kendin gerçekleştir.", source: "Buddha" },
+
+  // Confucius
+  { text: "Öğrenip düşünmemek boşuna, düşünüp öğrenmemek tehlikelidir.", source: "Konfüçyüs" },
+  { text: "Her yerde üç öğretmenim var.", source: "Konfüçyüs" },
+  { text: "Bilmediğini bilmek, gerçek bilgeliktir.", source: "Konfüçyüs" },
+
+  // Japanese Proverbs
+  { text: "Yedi kere düş, sekiz kere kalk.", source: "Japon Atasözü" },
+  { text: "Acele işe şeytan karışır.", source: "Japon Atasözü" },
+  { text: "Ağacın gölgesinde bile değişim vardır.", source: "Japon Atasözü" },
+  { text: "Düşmeden yürümeyi öğrenen olmadı.", source: "Japon Atasözü" },
+  { text: "Bir adım atılmazsa yol bitmez.", source: "Japon Atasözü" },
 ];
 
 /**
