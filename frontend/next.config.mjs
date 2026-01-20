@@ -33,8 +33,9 @@ const nextConfig = {
   },
 
   // Environment variables
+  // Use ?? to only fallback when undefined/null, not empty string
   env: {
-    NEXT_PUBLIC_API_URL: process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8083',
+    NEXT_PUBLIC_API_URL: process.env.NEXT_PUBLIC_API_URL ?? '',
   },
 
   // Rewrite API requests to backend
