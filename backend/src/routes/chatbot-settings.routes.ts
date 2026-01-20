@@ -6,15 +6,26 @@ const router = Router();
 // Get chatbot settings
 router.get('/settings', async (req: Request, res: Response) => {
   try {
-    // Get chatbot settings AND app settings from main settings table
+    // Get chatbot settings, app settings, AND RAG settings from main settings table
     const result = await pool.query(`
       SELECT key, value FROM settings
-      WHERE key IN ('chatbot', 'app.name', 'app.description')
+      WHERE key IN (
+        'chatbot', 'app.name', 'app.description',
+        'ragSettings.minResults', 'ragSettings.maxResults',
+        'ragSettings.similarityThreshold', 'ragSettings.minSourcesToShow', 'ragSettings.maxSourcesToShow'
+      )
     `);
 
     let chatbotData: any = {};
     let appName = '';
     let appDescription = '';
+
+    // RAG settings
+    let ragMinResults = 7;
+    let ragMaxResults = 15;
+    let ragSimilarityThreshold = 0.7;
+    let ragMinSourcesToShow = 7;
+    let ragMaxSourcesToShow = 15;
 
     // Parse the results
     for (const row of result.rows) {
@@ -25,8 +36,21 @@ router.get('/settings', async (req: Request, res: Response) => {
         appName = row.value;
       } else if (row.key === 'app.description') {
         appDescription = row.value;
+      } else if (row.key === 'ragSettings.minResults') {
+        ragMinResults = parseInt(row.value) || 7;
+      } else if (row.key === 'ragSettings.maxResults') {
+        ragMaxResults = parseInt(row.value) || 15;
+      } else if (row.key === 'ragSettings.similarityThreshold') {
+        ragSimilarityThreshold = parseFloat(row.value) || 0.7;
+      } else if (row.key === 'ragSettings.minSourcesToShow') {
+        ragMinSourcesToShow = parseInt(row.value) || ragMinResults;
+      } else if (row.key === 'ragSettings.maxSourcesToShow') {
+        ragMaxSourcesToShow = parseInt(row.value) || ragMaxResults;
       }
     }
+
+    // Log RAG settings for debugging
+    console.log(`📊 [Chatbot] RAG: min=${ragMinResults}, max=${ragMaxResults}, threshold=${ragSimilarityThreshold}`);
 
     // Use app.name/description as primary, fallback to chatbot.title/subtitle, then to defaults
     const finalTitle = appName || chatbotData.title || 'Luwi Semantic Bridge';
@@ -91,6 +115,14 @@ router.get('/settings', async (req: Request, res: Response) => {
       app: {
         name: finalTitle,
         description: finalSubtitle
+      },
+      // RAG settings for source count
+      ragSettings: {
+        minResults: ragMinResults,
+        maxResults: ragMaxResults,
+        similarityThreshold: ragSimilarityThreshold,
+        minSourcesToShow: ragMinSourcesToShow,
+        maxSourcesToShow: ragMaxSourcesToShow
       }
     };
 
