@@ -4941,6 +4941,68 @@ FORMAT:
   }
 
   /**
+   * Fast regex-based Turkish word spacing fix for OCR/PDF text
+   * Adds spaces at common Turkish word boundaries without LLM
+   */
+  private fixTurkishWordSpacing(text: string): string {
+    if (!text || text.length < 20) return text;
+
+    // Check if text needs fixing (low space ratio + long uppercase sequences)
+    const spaceRatio = (text.match(/\s/g) || []).length / text.length;
+    const hasLongUppercase = /[A-ZÇĞİÖŞÜ]{20,}/.test(text);
+    if (spaceRatio > 0.1 && !hasLongUppercase) return text;
+
+    let result = text;
+
+    // 1. Add space before common Turkish words/particles (case insensitive matching, preserve case)
+    const particles = [
+      'VE', 'VEYA', 'İLE', 'İÇİN', 'OLAN', 'OLARAK', 'OLMAK', 'KADAR',
+      'DAHA', 'ANCAK', 'AMA', 'FAKAT', 'ÇÜNKÜ', 'EĞER', 'GİBİ', 'GÖRE',
+      'HAKKINDA', 'KARŞI', 'SONRA', 'ÖNCE', 'SIRASINDA', 'DOLAYI',
+      'DAHİL', 'HARİÇ', 'AYRICA', 'BU', 'ŞU', 'O', 'HER', 'BİR',
+      'KANUN', 'KANUNU', 'MADDE', 'MADDESİ', 'SAYILI', 'TARİHLİ',
+      'GELİR', 'VERGİ', 'VERGİSİ', 'ÖDEME', 'ÖDEMESİ', 'BEYAN', 'BEYANI'
+    ];
+
+    // Add space before particles when preceded by letters
+    for (const p of particles) {
+      // Match lowercase/uppercase letter followed by particle
+      const regex = new RegExp(`([a-zçğıöşüA-ZÇĞİÖŞÜ])(?=${p}[^a-zçğıöşü])`, 'g');
+      result = result.replace(regex, '$1 ');
+    }
+
+    // 2. Add space between number and uppercase word
+    result = result.replace(/(\d)([A-ZÇĞİÖŞÜ]{2,})/g, '$1 $2');
+
+    // 3. Add space between lowercase ending and uppercase start (camelCase fix)
+    // e.g., "metinVERGİ" -> "metin VERGİ"
+    result = result.replace(/([a-zçğıöşü]{2,})([A-ZÇĞİÖŞÜ]{2,})/g, '$1 $2');
+
+    // 4. Add space before common suffixed words
+    // e.g., "KONSOLOSLUKLARDAçalışan" -> "KONSOLOSLUKLARDA çalışan"
+    result = result.replace(/([A-ZÇĞİÖŞÜ]{3,}(?:DA|DE|DAN|DEN|TA|TE|NDA|NDE))([a-zçğıöşü])/g, '$1 $2');
+
+    // 5. Fix common Turkish suffix patterns (uppercase context)
+    // Add space after common word endings before new uppercase word
+    const suffixPatterns = [
+      /([İI]N)([A-ZÇĞİÖŞÜ]{3,})/g,      // -İN, -IN before uppercase
+      /([Sİ]İ)([A-ZÇĞİÖŞÜ]{3,})/g,       // -Sİ before uppercase
+      /(LARI|LERİ)([A-ZÇĞİÖŞÜ]{3,})/g,   // -LARI, -LERİ before uppercase
+      /(MASI|MESİ)([A-ZÇĞİÖŞÜ]{3,})/g,   // -MASI, -MESİ before uppercase
+      /(ININ|İNİN|UNUN|ÜNÜN)([A-ZÇĞİÖŞÜ]{2,})/g, // Genitive before uppercase
+    ];
+
+    for (const pattern of suffixPatterns) {
+      result = result.replace(pattern, '$1 $2');
+    }
+
+    // 6. Clean up multiple spaces
+    result = result.replace(/\s{2,}/g, ' ').trim();
+
+    return result;
+  }
+
+  /**
    * Detect if text has OCR-style concatenated words (missing word spaces)
    * Examples: "İŞEİADEBAŞVURUSU" should be "İŞE İADE BAŞVURUSU"
    */
@@ -5801,11 +5863,13 @@ DÜZELTILMIŞ METİN:`;
         }
 
         // Clean HTML from title and excerpt, convert ALL CAPS to sentence case
-        const cleanTitle = this.toSentenceCase(this.stripHtml(r.title?.replace(/ \(Part \d+\/\d+\)/g, '') || citation));
+        // Apply Turkish word spacing fix for OCR/PDF content
+        const rawTitle = r.title?.replace(/ \(Part \d+\/\d+\)/g, '') || citation;
+        const cleanTitle = this.toSentenceCase(this.stripHtml(this.fixTurkishWordSpacing(rawTitle)));
         // Clean raw metadata content (handles crawler records with listing_id/url format)
-        const rawContent = r.excerpt || r.content || '';
-        const cleanedContent = this.cleanRawMetadataContent(rawContent, r.metadata);
-        const cleanExcerpt = this.toSentenceCase(this.stripHtml(cleanedContent));
+        const rawExcerpt = r.excerpt || r.content || '';
+        const cleanedContent = this.cleanRawMetadataContent(rawExcerpt, r.metadata);
+        const cleanExcerpt = this.toSentenceCase(this.stripHtml(this.fixTurkishWordSpacing(cleanedContent)));
 
         return {
           originalResult: r,
@@ -5861,7 +5925,10 @@ DÜZELTILMIŞ METİN:`;
 
         // Create natural language title and excerpt from LLM-processed content (if available)
         // Uses processedContent which is either LLM-generated or falls back to cleanExcerpt
-        const displayContent = this.fixMetadataSpacing(processedContent || prep.cleanExcerpt);
+        // Apply Turkish word spacing fix for OCR/PDF content, then metadata spacing fix
+        const rawContent = processedContent || prep.cleanExcerpt;
+        const spacedContent = this.fixTurkishWordSpacing(rawContent);
+        const displayContent = this.fixMetadataSpacing(spacedContent);
         const naturalTitle = this.truncateExcerpt(displayContent, Math.min(excerptMaxLength, 120));
         const naturalExcerpt = this.truncateExcerpt(displayContent, excerptMaxLength);
         const naturalContent = this.truncateExcerpt(displayContent, summaryMaxLength);
