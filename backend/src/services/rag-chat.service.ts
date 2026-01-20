@@ -4941,6 +4941,111 @@ FORMAT:
   }
 
   /**
+   * Detect if text has OCR-style concatenated words (missing word spaces)
+   * Examples: "İŞEİADEBAŞVURUSU" should be "İŞE İADE BAŞVURUSU"
+   */
+  private detectConcatenatedText(text: string): boolean {
+    if (!text || text.length < 30) return false;
+
+    // Count spaces vs total length
+    const spaceCount = (text.match(/\s/g) || []).length;
+    const spaceRatio = spaceCount / text.length;
+
+    // Normal Turkish text has ~15-20% spaces, OCR-broken text has <5%
+    if (spaceRatio > 0.08) return false;
+
+    // Look for long sequences of uppercase Turkish letters without spaces (25+ chars)
+    const longUppercasePattern = /[A-ZÇĞİÖŞÜ]{25,}/;
+    if (longUppercasePattern.test(text)) return true;
+
+    // Look for mixed case concatenation patterns (lowercase followed by uppercase)
+    // Normal: "kelime Kelime" | OCR-broken: "kelimeKelime"
+    const concatenatedPattern = /[a-zçğıöşü][A-ZÇĞİÖŞÜ][a-zçğıöşü]/;
+    const concatenatedCount = (text.match(new RegExp(concatenatedPattern, 'g')) || []).length;
+    if (concatenatedCount > 5) return true;
+
+    return false;
+  }
+
+  /**
+   * Normalize OCR text with LLM - adds proper word breaks to concatenated text
+   * Only called when detectConcatenatedText returns true
+   */
+  private async normalizeOCRTextWithLLM(text: string): Promise<string> {
+    try {
+      // Skip if text is too short or already looks normal
+      if (!text || text.length < 30 || !this.detectConcatenatedText(text)) {
+        return text;
+      }
+
+      console.log(`🔧 [OCR] Normalizing concatenated text (${text.length} chars)...`);
+
+      // Take first 500 chars for normalization (LLM context limit)
+      const textToNormalize = text.substring(0, 500);
+
+      const prompt = `Sen bir OCR hata düzeltme uzmanısın. Aşağıdaki metin PDF/OCR taramasından geldi ve kelimeler arasında boşluklar eksik.
+
+GÖREV: Kelimeleri ayır ve doğru boşlukları ekle. Türkçe dil bilgisi kurallarına göre kelimeleri tanı.
+
+ÖNEMLİ KURALLAR:
+- SADECE boşluk ekle, kelime değiştirme
+- Orijinal harfleri AYNEN koru (büyük/küçük harf dahil)
+- Noktalama işaretlerini koru
+- Sayıları ve tarihleri koru
+
+ÖRNEK:
+GİRDİ: "İŞEİADEBAŞVURUSUSAMİMİOLMAYANİŞÇİ"
+ÇIKTI: "İŞE İADE BAŞVURUSU SAMİMİ OLMAYAN İŞÇİ"
+
+GİRDİ: "VERGİKANUNUNUN193SAYILI"
+ÇIKTI: "VERGİ KANUNUNUN 193 SAYILI"
+
+ŞİMDİ BU METNİ DÜZELt:
+${textToNormalize}
+
+DÜZELTILMIŞ METİN:`;
+
+      const response = await this.llmManager.generateChatResponse(prompt, {
+        temperature: 0.1, // Low temperature for accuracy
+        maxTokens: 600,
+        systemPrompt: ''
+      });
+
+      if (!response || !response.content) {
+        console.warn('⚠️ [OCR] LLM returned empty response, using original');
+        return text;
+      }
+
+      let normalizedText = response.content.trim();
+
+      // Remove any preamble the LLM might add
+      normalizedText = normalizedText
+        .replace(/^(DÜZELTİLMİŞ METİN:|ÇIKTI:|İşte düzeltilmiş metin:)/i, '')
+        .trim();
+
+      // If normalized text is similar length (±20%) to original, use it
+      // Otherwise, something went wrong
+      const lengthRatio = normalizedText.length / textToNormalize.length;
+      if (lengthRatio < 0.8 || lengthRatio > 1.3) {
+        console.warn(`⚠️ [OCR] Normalized text length mismatch (ratio: ${lengthRatio.toFixed(2)}), using original`);
+        return text;
+      }
+
+      // If original text was longer than 500 chars, append the rest
+      if (text.length > 500) {
+        normalizedText += text.substring(500);
+      }
+
+      console.log(`✅ [OCR] Normalized successfully: "${normalizedText.substring(0, 50)}..."`);
+      return normalizedText;
+
+    } catch (error) {
+      console.error('❌ [OCR] Normalization failed:', error);
+      return text; // Return original on error
+    }
+  }
+
+  /**
    * Fix spacing issues in metadata content
    * Adds spaces between concatenated metadata fields like "TARİH:2012SAYI:123" -> "TARİH: 2012 SAYI: 123"
    */

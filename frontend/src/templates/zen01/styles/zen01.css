@@ -554,6 +554,26 @@
   color: #9a3412;
 }
 
+/* Slate/Gray highlighter - subtle for metadata */
+.zen01-marker.zen01-marker-slate {
+  background: linear-gradient(135deg, rgba(148, 163, 184, 0.22) 0%, rgba(148, 163, 184, 0.14) 100%);
+  color: #cbd5e1;
+}
+.zen01-container.light .zen01-marker.zen01-marker-slate {
+  background: linear-gradient(135deg, rgba(71, 85, 105, 0.18) 0%, rgba(71, 85, 105, 0.10) 100%);
+  color: #475569;
+}
+
+/* Amber highlighter - for daire/court info */
+.zen01-marker.zen01-marker-amber {
+  background: linear-gradient(135deg, rgba(245, 158, 11, 0.28) 0%, rgba(245, 158, 11, 0.18) 100%);
+  color: #fcd34d;
+}
+.zen01-container.light .zen01-marker.zen01-marker-amber {
+  background: linear-gradient(135deg, rgba(245, 158, 11, 0.32) 0%, rgba(245, 158, 11, 0.20) 100%);
+  color: #92400e;
+}
+
 /* ============================================
    Citation Superscript - CRITICAL FIX
    ============================================ */

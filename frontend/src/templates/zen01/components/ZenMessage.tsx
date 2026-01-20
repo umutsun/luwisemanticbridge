@@ -779,17 +779,17 @@ export const ZenMessage: React.FC<ZenMessageProps> = ({
                         {typeInfo.label}
                       </span>
                       {metaInfo.daire && (
-                        <span className="text-[10px] text-amber-600/90 dark:text-amber-400/80 font-medium">
+                        <span className="zen01-marker zen01-marker-amber text-[10px] font-medium px-1.5 py-0.5">
                           {metaInfo.daire}
                         </span>
                       )}
                       {metaInfo.karar && (
-                        <span className="text-[10px] text-slate-500/90 dark:text-slate-400/80">
+                        <span className="zen01-marker zen01-marker-slate text-[10px] font-medium px-1.5 py-0.5">
                           {metaInfo.karar}
                         </span>
                       )}
                       {metaInfo.tarih && (
-                        <span className="text-[10px] text-slate-400/70 dark:text-slate-500/70">
+                        <span className="zen01-marker zen01-marker-slate text-[10px] px-1.5 py-0.5">
                           {metaInfo.tarih}
                         </span>
                       )}
