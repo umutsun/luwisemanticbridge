@@ -7,8 +7,9 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { ZenTypingIndicator } from './ZenTypingIndicator';
 import { SchemaRenderer } from './SchemaRenderer';
+import { TranslationBadge } from './TranslationBadge';
 import { useAudioPlayer } from '@/lib/hooks/use-audio-player';
-import type { ZenMessageProps, ZenSource } from '../types';
+import type { ZenMessageProps, ZenSource, MessageTranslation } from '../types';
 
 // Default stop words - can be overridden via settings
 const DEFAULT_STOP_WORDS = [
@@ -331,6 +332,8 @@ export const ZenMessage: React.FC<ZenMessageProps> = ({
   keywords: backendKeywords = [],  // Backend-extracted keywords for schema sections
   dayanaklar: backendDayanaklar = [],  // Backend-extracted legal references for schema sections
   minSourcesToShow = 5,  // From RAG settings, default 5
+  translation,  // Translation state for this message
+  onToggleTranslation,  // Callback to toggle translation
 }) => {
   const isUser = message.role === 'user';
   const [showAllSources, setShowAllSources] = useState(false);
@@ -365,6 +368,11 @@ export const ZenMessage: React.FC<ZenMessageProps> = ({
 
   // Use schema-based rendering when schemaId is provided
   const useSchemaRenderer = Boolean(responseSchemaId);
+
+  // Determine content to display (original or translated)
+  const displayContent = translation?.isShowingTranslation
+    ? translation.translatedContent
+    : message.content;
 
   // Audio player hook for TTS
   const { isPlaying, isLoading: isTTSLoading, play, pause } = useAudioPlayer({
@@ -630,13 +638,13 @@ export const ZenMessage: React.FC<ZenMessageProps> = ({
                     ),
                   }}
                 >
-                  {preprocessMarkdown(cleanLLMResponse(message.content))}
+                  {preprocessMarkdown(cleanLLMResponse(displayContent))}
                 </ReactMarkdown>
               </div>
             )}
           </div>
 
-          {/* Response Time Badge & TTS Button */}
+          {/* Response Time Badge & TTS Button & Translation Badge */}
           {!isUser && !message.isStreaming && (
             <div className="px-4 pb-3 flex items-center gap-2">
               {message.responseTime && (
@@ -669,6 +677,15 @@ export const ZenMessage: React.FC<ZenMessageProps> = ({
                   )}
                 </button>
               )}
+
+              {/* Translation Badge - show when message has been translated */}
+              {translation && onToggleTranslation && (
+                <TranslationBadge
+                  targetLanguage={translation.targetLanguage}
+                  isShowingTranslation={translation.isShowingTranslation}
+                  onToggle={onToggleTranslation}
+                />
+              )}
             </div>
           )}
         </div>
@@ -684,42 +701,112 @@ export const ZenMessage: React.FC<ZenMessageProps> = ({
             <div className="space-y-2">
               {visibleSources?.map((source: ZenSource, idx: number) => {
                 // Get source type info with hierarchy and marker color
-                const getSourceTypeInfo = (sourceTable?: string) => {
-                  if (!sourceTable) return { label: 'Kaynak', weight: 0, markerClass: 'zen01-marker-blue' };
+                const getSourceTypeInfo = (sourceTable?: string, metadata?: any) => {
+                  // Detailed type mapping with Turkish labels
+                  const typeMap: Record<string, { label: string; weight: number; markerClass: string }> = {
+                    // Legal/Official documents (highest priority)
+                    'kanun': { label: 'Kanun/Mevzuat', weight: 100, markerClass: 'zen01-marker-purple' },
+                    'mevzuat': { label: 'Mevzuat', weight: 100, markerClass: 'zen01-marker-purple' },
+                    'teblig': { label: 'Tebliğ', weight: 95, markerClass: 'zen01-marker-blue' },
+                    'tebliğ': { label: 'Tebliğ', weight: 95, markerClass: 'zen01-marker-blue' },
+                    'yonetmelik': { label: 'Yönetmelik', weight: 95, markerClass: 'zen01-marker-blue' },
+                    'yönetmelik': { label: 'Yönetmelik', weight: 95, markerClass: 'zen01-marker-blue' },
+                    'sirkuler': { label: 'Sirküler', weight: 90, markerClass: 'zen01-marker-pink' },
+                    'sirkü': { label: 'Sirküler', weight: 90, markerClass: 'zen01-marker-pink' },
+                    // Tax authority documents
+                    'ozelge': { label: 'GİB Özelgesi', weight: 75, markerClass: 'zen01-marker-yellow' },
+                    'özelge': { label: 'GİB Özelgesi', weight: 75, markerClass: 'zen01-marker-yellow' },
+                    'gib': { label: 'GİB Belgesi', weight: 75, markerClass: 'zen01-marker-yellow' },
+                    'mukteza': { label: 'Mukteza', weight: 75, markerClass: 'zen01-marker-yellow' },
+                    'genelyazi': { label: 'Genel Yazı', weight: 65, markerClass: 'zen01-marker-yellow' },
+                    'genelyazı': { label: 'Genel Yazı', weight: 65, markerClass: 'zen01-marker-yellow' },
+                    // Court decisions
+                    'danistay': { label: 'Danıştay Kararı', weight: 70, markerClass: 'zen01-marker-orange' },
+                    'danıştay': { label: 'Danıştay Kararı', weight: 70, markerClass: 'zen01-marker-orange' },
+                    'danistaykararlari': { label: 'Danıştay Kararı', weight: 70, markerClass: 'zen01-marker-orange' },
+                    'yargitay': { label: 'Yargıtay Kararı', weight: 70, markerClass: 'zen01-marker-orange' },
+                    'yargıtay': { label: 'Yargıtay Kararı', weight: 70, markerClass: 'zen01-marker-orange' },
+                    'karar': { label: 'Mahkeme Kararı', weight: 70, markerClass: 'zen01-marker-orange' },
+                    // Articles and publications
+                    'makale': { label: 'Makale', weight: 50, markerClass: 'zen01-marker-green' },
+                    'yayin': { label: 'Yayın', weight: 50, markerClass: 'zen01-marker-green' },
+                    'yayın': { label: 'Yayın', weight: 50, markerClass: 'zen01-marker-green' },
+                    'dergi': { label: 'Dergi Makalesi', weight: 50, markerClass: 'zen01-marker-green' },
+                    // Q&A and guides
+                    'sorucevap': { label: 'Soru-Cevap', weight: 50, markerClass: 'zen01-marker-green' },
+                    'sss': { label: 'SSS', weight: 50, markerClass: 'zen01-marker-green' },
+                    'rehber': { label: 'Rehber', weight: 55, markerClass: 'zen01-marker-green' },
+                    'kilavuz': { label: 'Kılavuz', weight: 55, markerClass: 'zen01-marker-green' },
+                    'kılavuz': { label: 'Kılavuz', weight: 55, markerClass: 'zen01-marker-green' },
+                    // Legal assessments
+                    'hukdkk': { label: 'Hukuki Değerlendirme', weight: 60, markerClass: 'zen01-marker-blue' },
+                    'hukuki': { label: 'Hukuki Görüş', weight: 60, markerClass: 'zen01-marker-blue' },
+                    // Documents and files
+                    'documents': { label: 'Doküman', weight: 40, markerClass: 'zen01-marker-slate' },
+                    'document': { label: 'Doküman', weight: 40, markerClass: 'zen01-marker-slate' },
+                    'dokuman': { label: 'Doküman', weight: 40, markerClass: 'zen01-marker-slate' },
+                    'doküman': { label: 'Doküman', weight: 40, markerClass: 'zen01-marker-slate' },
+                    'pdf': { label: 'PDF Belgesi', weight: 40, markerClass: 'zen01-marker-slate' },
+                    'belge': { label: 'Belge', weight: 40, markerClass: 'zen01-marker-slate' },
+                    // Unified embeddings (detect from content/metadata)
+                    'unified': { label: 'Arşiv Belgesi', weight: 35, markerClass: 'zen01-marker-slate' },
+                    'unifiedembeddings': { label: 'Arşiv Belgesi', weight: 35, markerClass: 'zen01-marker-slate' },
+                    'embeddings': { label: 'Veri Kaynağı', weight: 30, markerClass: 'zen01-marker-slate' },
+                    // Calendar/schedule items
+                    'pratik': { label: 'Pratik Bilgi', weight: 45, markerClass: 'zen01-marker-amber' },
+                    'takvim': { label: 'Vergi Takvimi', weight: 45, markerClass: 'zen01-marker-amber' },
+                    'hatirlatma': { label: 'Hatırlatma', weight: 45, markerClass: 'zen01-marker-amber' },
+                    'hatırlatma': { label: 'Hatırlatma', weight: 45, markerClass: 'zen01-marker-amber' }
+                  };
+
+                  // Default fallback - more descriptive than "Kaynak"
+                  const defaultInfo = { label: 'Belge', weight: 0, markerClass: 'zen01-marker-slate' };
+
+                  if (!sourceTable) {
+                    // Try to detect from metadata
+                    if (metadata?.source_type) {
+                      const metaType = String(metadata.source_type).toLowerCase();
+                      for (const [key, value] of Object.entries(typeMap)) {
+                        if (metaType.includes(key)) return value;
+                      }
+                    }
+                    return defaultInfo;
+                  }
 
                   const sourceStr = sourceTable.toLowerCase()
                     .replace(/^csv_/, '')
                     .replace(/_/g, '')
-                    .replace(/arsiv.*/, '');
+                    .replace(/arsiv.*/, '')
+                    .replace(/\d+$/, ''); // Remove trailing numbers
 
-                  const typeMap: Record<string, { label: string; weight: number; markerClass: string }> = {
-                    'kanun': { label: 'Kanun/Mevzuat', weight: 100, markerClass: 'zen01-marker-purple' },
-                    'teblig': { label: 'Tebliğ/Yönetmelik', weight: 95, markerClass: 'zen01-marker-blue' },
-                    'tebliğ': { label: 'Tebliğ/Yönetmelik', weight: 95, markerClass: 'zen01-marker-blue' },
-                    'yonetmelik': { label: 'Yönetmelik', weight: 95, markerClass: 'zen01-marker-blue' },
-                    'sirkuler': { label: 'Sirküler', weight: 90, markerClass: 'zen01-marker-pink' },
-                    'ozelge': { label: 'GİB Özelgesi', weight: 75, markerClass: 'zen01-marker-yellow' },
-                    'danistay': { label: 'Danıştay Kararı', weight: 70, markerClass: 'zen01-marker-orange' },
-                    'danistaykararlari': { label: 'Danıştay Kararı', weight: 70, markerClass: 'zen01-marker-orange' },
-                    'makale': { label: 'Makale', weight: 50, markerClass: 'zen01-marker-green' },
-                    'sorucevap': { label: 'Soru-Cevap', weight: 50, markerClass: 'zen01-marker-green' },
-                    'hukdkk': { label: 'Hukuki Değerlendirme', weight: 60, markerClass: 'zen01-marker-blue' },
-                    'genelyazi': { label: 'Genel Yazı', weight: 65, markerClass: 'zen01-marker-yellow' },
-                    'genelyazı': { label: 'Genel Yazı', weight: 65, markerClass: 'zen01-marker-yellow' }
-                  };
-
+                  // Direct match
                   if (typeMap[sourceStr]) return typeMap[sourceStr];
 
+                  // Partial match
                   for (const [key, value] of Object.entries(typeMap)) {
                     if (sourceStr.includes(key) || key.includes(sourceStr)) {
                       return value;
                     }
                   }
 
-                  return { label: 'Kaynak', weight: 0, markerClass: 'zen01-marker-blue' };
+                  // Check metadata for additional hints
+                  if (metadata) {
+                    const metaStr = JSON.stringify(metadata).toLowerCase();
+                    if (metaStr.includes('özelge') || metaStr.includes('ozelge')) {
+                      return typeMap['ozelge'];
+                    }
+                    if (metaStr.includes('danıştay') || metaStr.includes('danistay')) {
+                      return typeMap['danistay'];
+                    }
+                    if (metaStr.includes('makale') || metaStr.includes('yazar')) {
+                      return typeMap['makale'];
+                    }
+                  }
+
+                  return defaultInfo;
                 };
 
-                const typeInfo = getSourceTypeInfo(source.sourceTable);
+                const typeInfo = getSourceTypeInfo(source.sourceTable, source.metadata);
 
                 // Extract metadata for header display
                 const meta = source.metadata as any;
