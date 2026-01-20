@@ -337,7 +337,7 @@ export const ZenMessage: React.FC<ZenMessageProps> = ({
 
   // Debug: Log component version on mount
   React.useEffect(() => {
-    console.log('[ZenMessage] 🔄 v2026.01.20 - Source count fix', {
+    console.log('[ZenMessage] 🔄 v2026.01.20.B - Inline avatars fix', {
       enableSourceClick,
       enableKeywordHighlighting,
       messageId: message.id,
@@ -402,16 +402,16 @@ export const ZenMessage: React.FC<ZenMessageProps> = ({
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.3, ease: 'easeOut' }}
-      className={`flex gap-3 ${isUser ? 'justify-end' : 'justify-start'} zen01-fade-in`}
+      className={`flex gap-2 sm:gap-3 ${isUser ? 'justify-end' : 'justify-start'} zen01-fade-in`}
     >
-      {/* Assistant Avatar - hidden on mobile */}
+      {/* Assistant Avatar - smaller on mobile, always inline */}
       {!isUser && (
-        <div className="zen01-avatar zen01-avatar-assistant flex-shrink-0 hidden sm:flex">
-          <Bot className="h-4 w-4" />
+        <div className="zen01-avatar zen01-avatar-assistant flex-shrink-0 flex items-center justify-center w-6 h-6 sm:w-8 sm:h-8">
+          <Bot className="h-3 w-3 sm:h-4 sm:w-4" />
         </div>
       )}
 
-      <div className={`max-w-[80%] ${isUser ? 'order-first' : ''}`}>
+      <div className={`max-w-[75%] sm:max-w-[80%] ${isUser ? 'order-first' : ''}`}>
         {/* Message Bubble */}
         <div className={isUser ? 'zen01-message-user' : 'zen01-message-assistant'}>
           <div className="p-4">
@@ -817,10 +817,10 @@ export const ZenMessage: React.FC<ZenMessageProps> = ({
         )}
       </div>
 
-      {/* User Avatar - hidden on mobile */}
+      {/* User Avatar - smaller on mobile, always inline */}
       {isUser && (
-        <div className="zen01-avatar zen01-avatar-user flex-shrink-0 hidden sm:flex">
-          <User className="h-4 w-4" />
+        <div className="zen01-avatar zen01-avatar-user flex-shrink-0 flex items-center justify-center w-6 h-6 sm:w-8 sm:h-8">
+          <User className="h-3 w-3 sm:h-4 sm:w-4" />
         </div>
       )}
     </motion.div>
