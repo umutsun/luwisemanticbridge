@@ -17,6 +17,7 @@ const config = {
       history: '/api/v2/chat/conversations',
       clear: '/api/v2/chat/clear',
       complete: '/api/v2/chat/complete', // LLM excerpt completion
+      translate: '/api/v2/chat/translate', // Slash command translation
     },
     
     // Search endpoints

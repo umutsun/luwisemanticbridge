@@ -3176,7 +3176,7 @@ function RAGSettings() {
                   <div className="flex-1">
                     <Label>Max Suggestion Cards</Label>
                     <p className="text-xs text-muted-foreground mt-1">
-                      Maximum number of suggestion cards to show (1-6)
+                      Maximum number of suggestion cards to show (1-10)
                     </p>
                   </div>
                   <div className="w-20">
@@ -3186,11 +3186,11 @@ function RAGSettings() {
                       onChange={(e) =>
                         updateChatbotSetting(
                           "maxSuggestionCards",
-                          Math.min(6, Math.max(1, parseInt(e.target.value) || 4))
+                          Math.min(10, Math.max(1, parseInt(e.target.value) || 4))
                         )
                       }
                       min="1"
-                      max="6"
+                      max="10"
                     />
                   </div>
                 </div>

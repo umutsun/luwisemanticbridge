@@ -912,3 +912,151 @@
 .zen01-container.light .zen01-markdown.prose strong {
   color: #0891b2;
 }
+
+/* ============================================
+   Slash Command Autocomplete
+   ============================================ */
+.zen01-slash-autocomplete {
+  position: absolute;
+  bottom: 100%;
+  left: 0;
+  right: 0;
+  margin-bottom: 0.5rem;
+  background: var(--zen-surface-hover);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid var(--zen-glass-border);
+  border-radius: 0.75rem;
+  box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.2);
+  overflow: hidden;
+  z-index: 60;
+}
+
+.zen01-container.light .zen01-slash-autocomplete {
+  background: rgba(255, 255, 255, 0.98);
+  border: 1px solid rgba(203, 213, 225, 0.6);
+  box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.08);
+}
+
+.zen01-slash-command-item {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.75rem 1rem;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.zen01-slash-command-item:hover,
+.zen01-slash-command-item.selected {
+  background: rgba(6, 182, 212, 0.1);
+}
+
+.zen01-container.light .zen01-slash-command-item:hover,
+.zen01-container.light .zen01-slash-command-item.selected {
+  background: rgba(8, 145, 178, 0.08);
+}
+
+.zen01-slash-command-icon {
+  font-size: 1.25rem;
+  line-height: 1;
+}
+
+.zen01-slash-command-trigger {
+  font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--zen-cyan);
+  min-width: 2.5rem;
+}
+
+.zen01-slash-command-label {
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--zen-text-primary);
+}
+
+.zen01-slash-command-desc {
+  font-size: 0.75rem;
+  color: var(--zen-text-muted);
+  margin-left: auto;
+}
+
+.zen01-slash-command-hint {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 1rem;
+  font-size: 0.7rem;
+  color: var(--zen-text-muted);
+  border-top: 1px solid var(--zen-glass-border);
+  background: rgba(0, 0, 0, 0.1);
+}
+
+.zen01-container.light .zen01-slash-command-hint {
+  background: rgba(0, 0, 0, 0.03);
+}
+
+.zen01-slash-command-hint kbd {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.25rem;
+  padding: 0.125rem 0.375rem;
+  font-size: 0.65rem;
+  font-family: inherit;
+  background: rgba(6, 182, 212, 0.15);
+  border: 1px solid rgba(6, 182, 212, 0.3);
+  border-radius: 0.25rem;
+  color: var(--zen-cyan);
+}
+
+/* ============================================
+   Translation Badge
+   ============================================ */
+.zen01-translation-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.25rem 0.5rem;
+  background: rgba(139, 92, 246, 0.15);
+  border: 1px solid rgba(139, 92, 246, 0.3);
+  border-radius: 9999px;
+  font-size: 0.7rem;
+  font-weight: 500;
+  color: var(--zen-purple);
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.zen01-translation-badge:hover {
+  background: rgba(139, 92, 246, 0.25);
+  border-color: rgba(139, 92, 246, 0.5);
+}
+
+.zen01-translation-badge.active {
+  background: rgba(139, 92, 246, 0.25);
+  border-color: rgba(139, 92, 246, 0.5);
+}
+
+.zen01-container.light .zen01-translation-badge {
+  background: rgba(124, 58, 237, 0.1);
+  border: 1px solid rgba(124, 58, 237, 0.25);
+  color: #7c3aed;
+}
+
+.zen01-container.light .zen01-translation-badge:hover,
+.zen01-container.light .zen01-translation-badge.active {
+  background: rgba(124, 58, 237, 0.2);
+  border-color: rgba(124, 58, 237, 0.4);
+}
+
+.zen01-translation-badge-flag {
+  font-size: 0.85rem;
+  line-height: 1;
+}
+
+.zen01-translation-badge-lang {
+  text-transform: uppercase;
+  letter-spacing: 0.025em;
+}

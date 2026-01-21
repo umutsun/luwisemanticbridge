@@ -1,9 +1,11 @@
 'use client';
 
-import React, { useRef, ChangeEvent } from 'react';
+import React, { useRef, useState, ChangeEvent } from 'react';
 import { Send, Paperclip, X, FileText, Mic, Square, Loader2 } from 'lucide-react';
 import { useVoiceRecording } from '@/lib/hooks/use-voice-recording';
-import type { ZenInputProps } from '../types';
+import type { ZenInputProps, SlashCommand } from '../types';
+import { SlashCommandAutocomplete } from './SlashCommandAutocomplete';
+import { SLASH_COMMANDS, filterCommands } from '../config/slashCommands';
 
 /**
  * Zen01 Input Component
@@ -20,8 +22,17 @@ export const ZenInput: React.FC<ZenInputProps> = ({
   pdfFile,
   onPdfSelect,
   voiceSettings,
+  onSlashCommand,
 }) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Slash command autocomplete state
+  const [showSlashAutocomplete, setShowSlashAutocomplete] = useState(false);
+  const [slashSearchText, setSlashSearchText] = useState('');
+  const [selectedCommandIndex, setSelectedCommandIndex] = useState(0);
+
+  // Get filtered commands based on search
+  const filteredCommands = filterCommands(slashSearchText);
 
   // Voice recording hook
   const {
@@ -43,9 +54,70 @@ export const ZenInput: React.FC<ZenInputProps> = ({
   });
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
+    // Handle slash command autocomplete navigation
+    if (showSlashAutocomplete && filteredCommands.length > 0) {
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        setSelectedCommandIndex(prev =>
+          prev < filteredCommands.length - 1 ? prev + 1 : 0
+        );
+        return;
+      }
+      if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        setSelectedCommandIndex(prev =>
+          prev > 0 ? prev - 1 : filteredCommands.length - 1
+        );
+        return;
+      }
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        handleCommandSelect(filteredCommands[selectedCommandIndex]);
+        return;
+      }
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        setShowSlashAutocomplete(false);
+        onChange('');
+        return;
+      }
+      if (e.key === 'Tab') {
+        e.preventDefault();
+        handleCommandSelect(filteredCommands[selectedCommandIndex]);
+        return;
+      }
+    }
+
+    // Normal enter handling
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       handleSend();
+    }
+  };
+
+  // Handle input change with slash command detection
+  const handleInputChange = (newValue: string) => {
+    onChange(newValue);
+
+    // Check if input starts with "/" for slash commands
+    if (newValue.startsWith('/')) {
+      setShowSlashAutocomplete(true);
+      setSlashSearchText(newValue.slice(1)); // Text after "/"
+      setSelectedCommandIndex(0);
+    } else {
+      setShowSlashAutocomplete(false);
+      setSlashSearchText('');
+    }
+  };
+
+  // Handle command selection
+  const handleCommandSelect = (command: SlashCommand) => {
+    setShowSlashAutocomplete(false);
+    setSlashSearchText('');
+    onChange(''); // Clear input
+
+    if (onSlashCommand) {
+      onSlashCommand(command);
     }
   };
 
@@ -136,7 +208,16 @@ export const ZenInput: React.FC<ZenInputProps> = ({
           </div>
         )}
 
-        <div className="zen01-input flex items-end gap-3 p-3">
+        <div className="zen01-input flex items-end gap-3 p-3 relative">
+          {/* Slash Command Autocomplete */}
+          <SlashCommandAutocomplete
+            isOpen={showSlashAutocomplete}
+            commands={filteredCommands}
+            selectedIndex={selectedCommandIndex}
+            onSelect={handleCommandSelect}
+            onClose={() => setShowSlashAutocomplete(false)}
+          />
+
           {/* Paperclip button - only visible when PDF upload is enabled */}
           {pdfSettings?.enabled && (
             <button
@@ -186,7 +267,7 @@ export const ZenInput: React.FC<ZenInputProps> = ({
           <textarea
             ref={textareaRef}
             value={value}
-            onChange={(e) => onChange(e.target.value)}
+            onChange={(e) => handleInputChange(e.target.value)}
             onKeyDown={handleKeyDown}
             placeholder={
               isRecording

@@ -182,6 +182,8 @@ export interface ZenInputProps {
   pdfFile?: File | null;
   onPdfSelect?: (file: File | null) => void;
   voiceSettings?: ZenVoiceSettings;
+  // Slash command support
+  onSlashCommand?: (command: SlashCommand) => void;
 }
 
 export interface ZenMessageProps {
@@ -199,6 +201,28 @@ export interface ZenMessageProps {
   dayanaklar?: string[];
   // Source display configuration
   minSourcesToShow?: number;
+  // Translation support
+  translation?: MessageTranslation;
+  onToggleTranslation?: () => void;
+}
+
+// Slash Command Types
+export interface SlashCommand {
+  id: string;
+  trigger: string;       // '/en', '/tr', '/de'
+  label: string;         // 'English', 'Türkçe'
+  description: string;   // 'Translate to English'
+  icon: string;          // Flag emoji
+  category: 'translation' | 'utility';
+  targetLanguage?: string;
+}
+
+// Message Translation State
+export interface MessageTranslation {
+  originalContent: string;
+  translatedContent: string;
+  targetLanguage: string;
+  isShowingTranslation: boolean;
 }
 
 // Default Settings

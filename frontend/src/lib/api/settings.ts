@@ -257,6 +257,18 @@ export async function updateSettingsCategory(category: string, settings: any): P
       throw new Error(responseData.error || `Failed to update ${category} settings`);
     }
 
+    // Invalidate frontend cache for this category
+    settingsCache.clear(`settings:${category}`);
+    console.log(`🗑️ [CACHE] Invalidated settings:${category}`);
+
+    // Dispatch settingsUpdated event so other components can refresh
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('settingsUpdated', {
+        detail: { category, settings }
+      }));
+      console.log(`📢 [EVENT] Dispatched settingsUpdated for ${category}`);
+    }
+
     return responseData;
   } catch (error: any) {
     console.error(`❌ Error updating ${category} settings:`, error);

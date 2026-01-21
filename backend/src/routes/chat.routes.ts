@@ -1,5 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { ragChat } from '../services/rag-chat.service';
+import { LLMManager } from '../services/llm-manager.service';
 import { authenticateToken, checkQueryLimits, AuthenticatedRequest } from '../middleware/auth.middleware';
 import { SubscriptionService } from '../services/subscription.service';
 import { lsembPool } from '../config/database.config';
@@ -1150,6 +1151,70 @@ router.get('/api/v2/chat/voice-settings', authenticateToken, async (req: Authent
   } catch (error: any) {
     console.error('[Voice Settings] Error:', error);
     res.status(500).json({ error: 'Failed to get voice settings' });
+  }
+});
+
+/**
+ * Translate message content - used by slash commands (/en, /tr, /de)
+ */
+router.post('/api/v2/chat/translate', authenticateToken, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    if (!req.user) {
+      return res.status(401).json({ error: 'Authentication required' });
+    }
+
+    const { text, targetLanguage } = req.body;
+
+    if (!text || !targetLanguage) {
+      return res.status(400).json({ error: 'Text and targetLanguage are required' });
+    }
+
+    // Validate target language
+    const validLanguages: Record<string, string> = {
+      en: 'English',
+      tr: 'Turkish',
+      de: 'German',
+      fr: 'French',
+      es: 'Spanish',
+      ar: 'Arabic'
+    };
+
+    if (!validLanguages[targetLanguage]) {
+      return res.status(400).json({ error: 'Invalid target language' });
+    }
+
+    console.log(`[Translate] Translating to ${targetLanguage}, text length: ${text.length}`);
+
+    const llmManager = LLMManager.getInstance();
+
+    const translationPrompt = `Translate the following text to ${validLanguages[targetLanguage]}.
+Preserve the original formatting (markdown, lists, bullet points, etc.).
+Only output the translated text, nothing else. Do not add any explanations or notes.
+
+Text to translate:
+${text}`;
+
+    const result = await llmManager.generateChatResponse(translationPrompt, {
+      temperature: 0.3, // Low temperature for accuracy
+      maxTokens: 4096,
+      systemPrompt: 'You are a professional translator. Translate accurately while preserving all formatting.'
+    });
+
+    console.log(`[Translate] Translation completed, result length: ${result.content?.length || 0}`);
+
+    res.json({
+      translatedText: result.content,
+      targetLanguage,
+      provider: result.provider,
+      model: result.model
+    });
+
+  } catch (error: any) {
+    console.error('[Translate] Error:', error);
+    res.status(500).json({
+      error: 'Translation failed',
+      details: error instanceof Error ? error.message : 'Unknown error'
+    });
   }
 });
 

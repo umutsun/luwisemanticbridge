@@ -30,11 +30,14 @@ import type {
   ZenActivePrompt,
   ZenSource,
   ZenPdfSettings,
+  SlashCommand,
+  MessageTranslation,
   DEFAULT_CHATBOT_SETTINGS,
   DEFAULT_RAG_SETTINGS,
   DEFAULT_LLM_SETTINGS,
   DEFAULT_ACTIVE_PROMPT
 } from './types';
+import { useToast } from '@/hooks/use-toast';
 
 // Suggestions cache TTL
 const SUGGESTIONS_CACHE_TTL = 60 * 60 * 1000; // 1 hour
@@ -151,6 +154,13 @@ export default function ChatInterface() {
     enableVoiceOutput: false,
     maxRecordingSeconds: 60
   });
+
+  // Translation state - tracks translations per message
+  const [messageTranslations, setMessageTranslations] = useState<Map<string, MessageTranslation>>(new Map());
+  const [isTranslating, setIsTranslating] = useState(false);
+
+  // Toast for notifications
+  const { toast } = useToast();
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -353,6 +363,41 @@ export default function ChatInterface() {
         setSettingsLoaded(true);
       });
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Listen for settings updates (e.g., when RAG settings are changed in admin panel)
+  useEffect(() => {
+    const handleSettingsUpdate = async (event: CustomEvent<{ category: string; settings: any }>) => {
+      const { category } = event.detail;
+
+      // Only refresh RAG settings when RAG category is updated
+      if (category === 'rag') {
+        console.log('[ChatInterface] 🔄 RAG settings updated, refreshing...');
+        try {
+          const ragRes = await fetch('/api/v2/settings?category=rag');
+          if (ragRes.ok) {
+            const ragData = await ragRes.json();
+            const minResultsValue = ragData.ragSettings?.minResults || 7;
+            const newRagSettings: ZenRagSettings = {
+              minResults: minResultsValue,
+              maxResults: ragData.ragSettings?.maxResults || 20,
+              similarityThreshold: ragData.ragSettings?.similarityThreshold || 0.02,
+              minSourcesToShow: ragData.ragSettings?.minSourcesToShow || minResultsValue,
+              maxSourcesToShow: ragData.ragSettings?.maxSourcesToShow || 15
+            };
+            setRagSettings(newRagSettings);
+            console.log('[ChatInterface] ✅ RAG settings refreshed:', newRagSettings);
+          }
+        } catch (error) {
+          console.error('[ChatInterface] Failed to refresh RAG settings:', error);
+        }
+      }
+    };
+
+    window.addEventListener('settingsUpdated', handleSettingsUpdate as EventListener);
+    return () => {
+      window.removeEventListener('settingsUpdated', handleSettingsUpdate as EventListener);
+    };
   }, []);
 
   // Fetch PDF settings when token is available AND chatbot settings are loaded
@@ -723,8 +768,106 @@ export default function ChatInterface() {
     [chatbotSettings.enableSourceQuestionGeneration, inputText, setInputText]
   );
 
+  // Handle slash commands (translation, etc.)
+  const handleSlashCommand = async (command: SlashCommand) => {
+    if (command.category === 'translation') {
+      // Find last assistant message
+      const lastAssistantMsg = [...messages].reverse().find(m => m.role === 'assistant');
+
+      if (!lastAssistantMsg) {
+        toast({
+          title: 'Çeviri yapılamadı',
+          description: 'Çevrilecek mesaj bulunamadı',
+          variant: 'destructive'
+        });
+        return;
+      }
+
+      // Check if already translated to same language - toggle instead
+      const existingTranslation = messageTranslations.get(lastAssistantMsg.id);
+      if (existingTranslation?.targetLanguage === command.targetLanguage) {
+        // Toggle between original and translated
+        setMessageTranslations(prev => {
+          const newMap = new Map(prev);
+          newMap.set(lastAssistantMsg.id, {
+            ...existingTranslation,
+            isShowingTranslation: !existingTranslation.isShowingTranslation
+          });
+          return newMap;
+        });
+        return;
+      }
+
+      // Call translation API
+      try {
+        setIsTranslating(true);
+
+        const response = await fetch(getEndpoint('chat', 'translate'), {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify({
+            text: lastAssistantMsg.content,
+            targetLanguage: command.targetLanguage
+          })
+        });
+
+        if (!response.ok) {
+          throw new Error('Translation failed');
+        }
+
+        const data = await response.json();
+
+        // Store translation
+        setMessageTranslations(prev => {
+          const newMap = new Map(prev);
+          newMap.set(lastAssistantMsg.id, {
+            originalContent: lastAssistantMsg.content,
+            translatedContent: data.translatedText,
+            targetLanguage: command.targetLanguage!,
+            isShowingTranslation: true
+          });
+          return newMap;
+        });
+
+        toast({
+          title: 'Çeviri tamamlandı',
+          description: `Mesaj ${command.label} diline çevrildi`
+        });
+
+      } catch (error) {
+        console.error('Translation error:', error);
+        toast({
+          title: 'Çeviri başarısız',
+          description: 'Lütfen tekrar deneyin',
+          variant: 'destructive'
+        });
+      } finally {
+        setIsTranslating(false);
+      }
+    }
+  };
+
+  // Toggle translation for a message
+  const handleToggleTranslation = (messageId: string) => {
+    const translation = messageTranslations.get(messageId);
+    if (translation) {
+      setMessageTranslations(prev => {
+        const newMap = new Map(prev);
+        newMap.set(messageId, {
+          ...translation,
+          isShowingTranslation: !translation.isShowingTranslation
+        });
+        return newMap;
+      });
+    }
+  };
+
   const clearChat = () => {
     setMessages([]);
+    setMessageTranslations(new Map()); // Clear translations too
     setShowSuggestions(chatbotSettings.enableSuggestions);
     setConversationId(undefined);
 
@@ -785,6 +928,8 @@ export default function ChatInterface() {
                     enableKeywordHighlighting={chatbotSettings.enableKeywordHighlighting}
                     responseSchemaId={chatbotSettings.responseSchemaId}
                     minSourcesToShow={ragSettings.minSourcesToShow}
+                    translation={messageTranslations.get(message.id)}
+                    onToggleTranslation={() => handleToggleTranslation(message.id)}
                   />
                 ))}
               </AnimatePresence>
@@ -799,12 +944,13 @@ export default function ChatInterface() {
           onChange={setInputText}
           onSend={(pdf) => handleSendMessage(false, pdf)}
           placeholder={chatbotSettings.placeholder}
-          isLoading={isLoading}
+          isLoading={isLoading || isTranslating}
           textareaRef={textareaRef}
           pdfSettings={pdfSettings}
           pdfFile={pdfFile}
           onPdfSelect={setPdfFile}
           voiceSettings={voiceSettings}
+          onSlashCommand={handleSlashCommand}
         />
 
       </div>
