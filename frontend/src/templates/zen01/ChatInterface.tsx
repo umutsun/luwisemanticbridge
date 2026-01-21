@@ -209,6 +209,7 @@ export default function ChatInterface() {
 
   const [shuffledSuggestions, setShuffledSuggestions] = useState<string[]>([]);
 
+  // Shuffle and limit suggestions based on maxSuggestionCards setting
   useEffect(() => {
     if (suggestedQuestions.length === 0) {
       setShuffledSuggestions([]);
@@ -222,8 +223,10 @@ export default function ChatInterface() {
       const j = Math.floor(((i + 1) * seed * 7) % shuffled.length);
       [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
     }
-    setShuffledSuggestions(shuffled.slice(0, 4));
-  }, [suggestedQuestions]);
+    // Use maxSuggestionCards from settings (default 4)
+    const maxCards = chatbotSettings.maxSuggestionCards || 4;
+    setShuffledSuggestions(shuffled.slice(0, maxCards));
+  }, [suggestedQuestions, chatbotSettings.maxSuggestionCards]);
 
   const memoizedSuggestions = shuffledSuggestions;
 
@@ -285,6 +288,8 @@ export default function ChatInterface() {
           primaryColor: chatbotData.primaryColor || '',
           activeChatModel: settingsData.llmSettings?.activeChatModel || '',
           enableSuggestions: chatbotData.enableSuggestions !== undefined ? chatbotData.enableSuggestions : true,
+          // Suggestion Cards count - from settings
+          maxSuggestionCards: chatbotData.maxSuggestionCards || 4,
           welcomeMessage: chatbotData.welcomeMessage || '',
           greeting: chatbotData.greeting || '',
           // Feature toggles from schema - default to TRUE for better UX

@@ -85,6 +85,8 @@ export interface ZenChatbotSettings {
   enableSuggestions: boolean;
   welcomeMessage?: string;
   greeting?: string;
+  // Suggestion Cards
+  maxSuggestionCards?: number;
   // Source Interaction Features (from schema)
   enableSourceClick?: boolean;
   enableSourceQuestionGeneration?: boolean;
@@ -234,6 +236,7 @@ export const DEFAULT_CHATBOT_SETTINGS: ZenChatbotSettings = {
   primaryColor: '',
   activeChatModel: '',
   enableSuggestions: true,
+  maxSuggestionCards: 4,
   welcomeMessage: '',
   greeting: ''
 };

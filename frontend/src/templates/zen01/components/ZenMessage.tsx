@@ -340,7 +340,7 @@ export const ZenMessage: React.FC<ZenMessageProps> = ({
 
   // Debug: Log component version on mount
   React.useEffect(() => {
-    console.log('[ZenMessage] 🔄 v2026.01.20.B - Inline avatars fix', {
+    console.log('[ZenMessage] 🔄 v2026.01.21 - Dynamic suggestion cards', {
       enableSourceClick,
       enableKeywordHighlighting,
       messageId: message.id,
