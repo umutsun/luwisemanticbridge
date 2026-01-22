@@ -93,6 +93,8 @@ router.get('/settings', async (req: Request, res: Response) => {
       primaryColor: chatbotData.primaryColor || '#3B82F6',
       suggestionQuestions: chatbotData.suggestionQuestions || [],
       enableSuggestions: chatbotData.enableSuggestions !== undefined ? chatbotData.enableSuggestions : true,
+      // Suggestion Cards count (1-10)
+      maxSuggestionCards: chatbotData.maxSuggestionCards || 4,
       autoGenerateSuggestions: chatbotData.autoGenerateSuggestions !== undefined ? chatbotData.autoGenerateSuggestions : true,
       maxResponseLength: chatbotData.maxResponseLength || 1000,
       maxQuestionLength: chatbotData.maxQuestionLength || 500,
