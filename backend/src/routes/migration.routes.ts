@@ -1764,33 +1764,43 @@ router.post('/generate', async (req: Request, res: Response) => {
         let pendingCount = totalCount;
 
         if (unifiedEmbeddingsExists) {
-          // Only get IDs of already embedded records (not full rows)
-          // Match all possible source_table variations:
-          // - Normalized name (e.g., danistaykararlari) - what we insert with
-          // - Original table name (e.g., csv_danistaykararlari)
-          // - Display name format (e.g., Csv Danistaykararlari, Danistaykararlari)
-          // - Without csv_ prefix (e.g., danistaykararlari)
-          const displayName = table
-            .split('_')
-            .map((word: string) => word.charAt(0).toUpperCase() + word.slice(1))
-            .join(' ');
-
+          // Get IDs of already embedded records from unified_embeddings
+          // Use simpler query matching ONLY the original table name (consistent with stats endpoint)
           const embeddedIdsResult = await pools.targetPool.query(
             `SELECT DISTINCT source_id FROM unified_embeddings
-             WHERE LOWER(source_table) = LOWER($1)
-                OR LOWER(source_table) = LOWER($2)
-                OR LOWER(source_table) = LOWER($3)
-                OR LOWER(source_table) = LOWER($4)
-                OR LOWER(metadata->>'table') = LOWER($1)`,
-            [normalizedTableName, table, displayName, table.replace(/^csv_/i, '')]
+             WHERE LOWER(source_table) = LOWER($1)`,
+            [table]
           );
+
+          // Also get IDs from skipped_embeddings (records with no content or empty embeddings)
+          let skippedIds: number[] = [];
+          try {
+            const skippedIdsResult = await pools.targetPool.query(
+              `SELECT DISTINCT source_id FROM skipped_embeddings
+               WHERE LOWER(source_table) = LOWER($1)`,
+              [table]
+            );
+            skippedIds = skippedIdsResult.rows.map(row => parseInt(row.source_id, 10));
+          } catch (skipErr) {
+            // skipped_embeddings table might not exist
+          }
+
           // IMPORTANT: Convert source_id to number for proper Set comparison
           // PostgreSQL bigint comes as string in some cases, but row.row_id comparison uses parseInt
-          embeddedIds = new Set(embeddedIdsResult.rows.map(row => parseInt(row.source_id, 10)));
+          embeddedIds = new Set([
+            ...embeddedIdsResult.rows.map(row => parseInt(row.source_id, 10)),
+            ...skippedIds
+          ]);
           pendingCount = totalCount - embeddedIds.size;
-        }
 
-        console.log(` Table ${table}: ${totalCount} total, ${embeddedIds.size} embedded, ${pendingCount} pending`);
+          // Log detailed breakdown for debugging
+          const embeddedCount = embeddedIdsResult.rows.length;
+          const skippedCount = skippedIds.length;
+          console.log(`📊 ${table}: ${totalCount} total, ${embeddedCount} embedded, ${skippedCount} skipped → ${pendingCount} pending`);
+        } else {
+          // unified_embeddings doesn't exist yet, all records are pending
+          console.log(`📊 ${table}: ${totalCount} total, 0 embedded, 0 skipped → ${pendingCount} pending`);
+        }
 
         if (pendingCount > 0) {
           tablePendingInfo.push({
@@ -2068,20 +2078,34 @@ router.post('/generate', async (req: Request, res: Response) => {
         // Calculate content_hash FIRST (before embedding) for duplicate check
         const contentHash = createHash('sha256').update(content).digest('hex');
 
-        // Check if this exact content already exists - COPY embedding instead of regenerating
+        // Check if this exact content already exists anywhere in unified_embeddings
+        // Match ALL possible source_table variations to find duplicate content
+        const tableWithoutCsv = table.replace(/^csv_/i, '');
         const existingRecord = await pools.targetPool.query(`
-          SELECT id, source_id, content_hash, embedding, source_type, source_name, tokens_used, embedding_model, embedding_provider
+          SELECT id, source_id, source_table, content_hash, embedding, source_type, source_name, tokens_used, embedding_model, embedding_provider
           FROM unified_embeddings
-          WHERE LOWER(source_table) = LOWER($1)
-          AND content_hash = $2
+          WHERE content_hash = $1
+          AND (
+            LOWER(source_table) = LOWER($2)
+            OR LOWER(source_table) = LOWER($3)
+            OR LOWER(source_table) = LOWER($4)
+          )
           LIMIT 1
-        `, [table, contentHash]);
+        `, [contentHash, table, normalizedTableName, tableWithoutCsv]);
 
         if (existingRecord.rows.length > 0) {
           const existing = existingRecord.rows[0];
 
           // COPY existing embedding to new source_id (saves API costs)
           try {
+            const copyMetadata = {
+              copied_from_source_id: existing.source_id,
+              copied_from_source_table: existing.source_table,
+              embeddingProvider,
+              embeddingModel,
+              copied_at: new Date().toISOString()
+            };
+
             const copyResult = await pools.targetPool.query(`
               INSERT INTO unified_embeddings (
                 source_table, source_type, source_id, source_name, content, content_hash, embedding, metadata, tokens_used, embedding_model, embedding_provider
@@ -2096,14 +2120,14 @@ router.post('/generate', async (req: Request, res: Response) => {
               content,
               contentHash,
               existing.embedding,
-              JSON.stringify({ ...metadata, copied_from_source_id: existing.source_id }),
+              JSON.stringify(copyMetadata),
               existing.tokens_used || 0,
               existing.embedding_model || embeddingModel,
               existing.embedding_provider || embeddingProvider
             ]);
 
             if (copyResult.rows.length > 0) {
-              console.log(`📋 Copied embedding for ${table}[${row.row_id}] from source_id ${existing.source_id}`);
+              console.log(`📋 Copied embedding for ${table}[${row.row_id}] from ${existing.source_table}[${existing.source_id}]`);
               processed++;
               tableProcessed++;
             } else {
