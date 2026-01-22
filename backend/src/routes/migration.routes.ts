@@ -2096,47 +2096,14 @@ router.post('/generate', async (req: Request, res: Response) => {
         if (existingRecord.rows.length > 0) {
           const existing = existingRecord.rows[0];
 
-          // COPY existing embedding to new source_id (saves API costs)
-          try {
-            const copyMetadata = {
-              copied_from_source_id: existing.source_id,
-              copied_from_source_table: existing.source_table,
-              embeddingProvider,
-              embeddingModel,
-              copied_at: new Date().toISOString()
-            };
+          // SKIP duplicate content - don't create another embedding entry
+          // The content is already embedded, search will find it via content_hash
+          console.log(`⏭️ Skipping ${table}[${row.row_id}] - duplicate content exists in ${existing.source_table}[${existing.source_id}]`);
 
-            const copyResult = await pools.targetPool.query(`
-              INSERT INTO unified_embeddings (
-                source_table, source_type, source_id, source_name, content, content_hash, embedding, metadata, tokens_used, model_used, embedding_provider
-              ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
-              ON CONFLICT (source_table, source_id) DO NOTHING
-              RETURNING id
-            `, [
-              table,
-              existing.source_type || sourceType,
-              row.row_id,
-              title,
-              content,
-              contentHash,
-              existing.embedding,
-              JSON.stringify(copyMetadata),
-              existing.tokens_used || 0,
-              existing.model_used || embeddingModel,
-              embeddingProvider
-            ]);
-
-            if (copyResult.rows.length > 0) {
-              console.log(`📋 Copied embedding for ${table}[${row.row_id}] from ${existing.source_table}[${existing.source_id}]`);
-              processed++;
-              tableProcessed++;
-            } else {
-              console.log(`⏭️  ${table}[${row.row_id}] already exists, skipping`);
-            }
-            embeddedIds.add(parseInt(row.row_id, 10));
-          } catch (copyError) {
-            console.error(`❌ Failed to copy embedding for ${table}[${row.row_id}]:`, copyError);
-          }
+          // Mark as processed (won't be re-attempted)
+          embeddedIds.add(parseInt(row.row_id, 10));
+          processed++;
+          tableProcessed++;
           continue;
         }
 
