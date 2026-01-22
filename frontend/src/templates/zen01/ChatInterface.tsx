@@ -91,7 +91,14 @@ export default function ChatInterface() {
     }
 
     try {
-      const response = await fetch(getEndpoint('chat', 'suggestions'));
+      // Get auth token from localStorage
+      const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
+      const response = await fetch(getEndpoint('chat', 'suggestions'), {
+        headers: {
+          'Authorization': token ? `Bearer ${token}` : '',
+          'Content-Type': 'application/json'
+        }
+      });
       if (response.ok) {
         const data = await response.json();
         const suggestions = data.suggestions || [];
