@@ -2068,9 +2068,9 @@ router.post('/generate', async (req: Request, res: Response) => {
         // Calculate content_hash FIRST (before embedding) for duplicate check
         const contentHash = createHash('sha256').update(content).digest('hex');
 
-        // Check if this exact content already exists (skip embedding if duplicate)
+        // Check if this exact content already exists - COPY embedding instead of regenerating
         const existingRecord = await pools.targetPool.query(`
-          SELECT id, source_id, content_hash
+          SELECT id, source_id, content_hash, embedding, source_type, source_name, tokens_used, embedding_model, embedding_provider
           FROM unified_embeddings
           WHERE LOWER(source_table) = LOWER($1)
           AND content_hash = $2
@@ -2079,11 +2079,40 @@ router.post('/generate', async (req: Request, res: Response) => {
 
         if (existingRecord.rows.length > 0) {
           const existing = existingRecord.rows[0];
-          console.log(`⏭️  Skipping ${table}[${row.row_id}] - identical content already exists (source_id: ${existing.source_id})`);
 
-          // Add to embeddedIds to prevent re-processing
-          embeddedIds.add(parseInt(row.row_id, 10));
-          // Don't increment processed (not a new embedding)
+          // COPY existing embedding to new source_id (saves API costs)
+          try {
+            const copyResult = await pools.targetPool.query(`
+              INSERT INTO unified_embeddings (
+                source_table, source_type, source_id, source_name, content, content_hash, embedding, metadata, tokens_used, embedding_model, embedding_provider
+              ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+              ON CONFLICT (source_table, source_id) DO NOTHING
+              RETURNING id
+            `, [
+              table,
+              existing.source_type || sourceType,
+              row.row_id,
+              title,
+              content,
+              contentHash,
+              existing.embedding,
+              JSON.stringify({ ...metadata, copied_from_source_id: existing.source_id }),
+              existing.tokens_used || 0,
+              existing.embedding_model || embeddingModel,
+              existing.embedding_provider || embeddingProvider
+            ]);
+
+            if (copyResult.rows.length > 0) {
+              console.log(`📋 Copied embedding for ${table}[${row.row_id}] from source_id ${existing.source_id}`);
+              processed++;
+              tableProcessed++;
+            } else {
+              console.log(`⏭️  ${table}[${row.row_id}] already exists, skipping`);
+            }
+            embeddedIds.add(parseInt(row.row_id, 10));
+          } catch (copyError) {
+            console.error(`❌ Failed to copy embedding for ${table}[${row.row_id}]:`, copyError);
+          }
           continue;
         }
 
