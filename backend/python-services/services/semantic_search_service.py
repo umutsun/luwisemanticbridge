@@ -1181,6 +1181,273 @@ class SemanticSearchService:
 
         return min(boost, 0.50)  # Increased cap to 0.50 for stronger keyword influence
 
+    # =========================================================================
+    # ARTICLE ANCHORING SYSTEM
+    # When user asks about specific law articles (VUK 19, KDVK 29, GVK 40),
+    # the response MUST be anchored to the exact law text, not related content.
+    # =========================================================================
+
+    # Known Turkish law codes with their full names and variations
+    LAW_CODES = {
+        "VUK": ["VUK", "Vergi Usul Kanunu", "213"],
+        "GVK": ["GVK", "Gelir Vergisi Kanunu", "193"],
+        "KVK": ["KVK", "Kurumlar Vergisi Kanunu", "5520"],
+        "KDVK": ["KDVK", "Katma Değer Vergisi Kanunu", "3065", "KDV"],
+        "ÖTVK": ["ÖTVK", "Özel Tüketim Vergisi Kanunu", "4760", "ÖTV", "OTVK", "OTV"],
+        "MTV": ["MTV", "Motorlu Taşıtlar Vergisi Kanunu"],
+        "DVK": ["DVK", "Damga Vergisi Kanunu"],
+        "VİVK": ["VİVK", "Veraset ve İntikal Vergisi Kanunu", "VIVK"],
+        "AATUHK": ["AATUHK", "Amme Alacaklarının Tahsil Usulü Hakkında Kanun", "6183"],
+        "TTK": ["TTK", "Türk Ticaret Kanunu", "6102"],
+        "BK": ["BK", "Borçlar Kanunu", "6098", "TBK"],
+        "HMK": ["HMK", "Hukuk Muhakemeleri Kanunu"],
+        "SGK": ["SGK", "Sosyal Güvenlik Kanunu", "5510"],
+        "İYUK": ["İYUK", "İdari Yargılama Usulü Kanunu", "IYUK", "2577"],
+    }
+
+    # Article reference patterns (e.g., "VUK 19", "KDVK Madde 29", "GVK md. 40")
+    ARTICLE_PATTERNS = [
+        # Direct patterns: VUK 19, GVK 40, KDVK 29
+        r'\b({codes})\s*[Mm](?:adde)?\s*\.?\s*(\d+(?:/[A-ZÇĞİÖŞÜa-zçğıöşü])?)',
+        # Short patterns: VUK 19, VUK19
+        r'\b({codes})\s*(\d+(?:/[A-ZÇĞİÖŞÜa-zçğıöşü])?)\b',
+        # With "madde" keyword: Madde 19 of VUK
+        r'[Mm]adde\s*(\d+(?:/[A-ZÇĞİÖŞÜa-zçğıöşü])?)\s*(?:\'?[ıiuü]?n?)?.*?\b({codes})\b',
+    ]
+
+    def _detect_article_query(self, query: str) -> Optional[Dict[str, Any]]:
+        """
+        Detect if query asks about a specific law article.
+
+        Args:
+            query: User's search query
+
+        Returns:
+            Dict with law_code, article_number, and matched_text if found, None otherwise
+            Example: {"law_code": "VUK", "article_number": "19", "matched_text": "VUK 19"}
+        """
+        if not query:
+            return None
+
+        query_upper = query.upper()
+
+        # Build codes pattern from all variations
+        all_codes = []
+        for variations in self.LAW_CODES.values():
+            all_codes.extend(variations)
+        codes_pattern = '|'.join(sorted(all_codes, key=len, reverse=True))
+
+        for pattern_template in self.ARTICLE_PATTERNS:
+            pattern = pattern_template.format(codes=codes_pattern)
+
+            match = re.search(pattern, query, re.IGNORECASE)
+            if match:
+                groups = match.groups()
+
+                # Handle different pattern group orders
+                if len(groups) == 2:
+                    # Check which group is the code vs article number
+                    g1, g2 = groups
+                    if g1 and g1.upper() in query_upper and any(g1.upper() in variations for variations in self.LAW_CODES.values()):
+                        law_code_raw = g1.upper()
+                        article_number = g2
+                    elif g2 and g2.upper() in query_upper and any(g2.upper() in variations for variations in self.LAW_CODES.values()):
+                        law_code_raw = g2.upper()
+                        article_number = g1
+                    else:
+                        continue
+
+                    # Normalize law code to standard form
+                    normalized_code = self._normalize_law_code(law_code_raw)
+
+                    if normalized_code and article_number:
+                        logger.info(f"🎯 Article query detected: {normalized_code} Madde {article_number}")
+                        return {
+                            "law_code": normalized_code,
+                            "article_number": article_number.strip(),
+                            "matched_text": match.group(0),
+                            "query_type": "article_specific"
+                        }
+
+        return None
+
+    def _normalize_law_code(self, code: str) -> Optional[str]:
+        """Normalize law code variations to standard form (e.g., KDV -> KDVK)"""
+        code_upper = code.upper().strip()
+
+        for standard_code, variations in self.LAW_CODES.items():
+            if code_upper in [v.upper() for v in variations]:
+                return standard_code
+
+        return code_upper if code_upper else None
+
+    def _check_article_match(
+        self,
+        result: Dict[str, Any],
+        target_law: str,
+        target_article: str
+    ) -> Dict[str, Any]:
+        """
+        Check if a search result contains the exact target law article.
+
+        Args:
+            result: Search result dict
+            target_law: Target law code (e.g., "VUK")
+            target_article: Target article number (e.g., "19")
+
+        Returns:
+            Dict with match_type, match_score, and reason
+        """
+        source_table = (result.get("source_table") or "").lower()
+        metadata = result.get("metadata", {}) or {}
+        content = (result.get("content") or "").upper()
+
+        # Check if this is a law article source (maddeler table)
+        if source_table == "maddeler":
+            mevzuat_id = (metadata.get("mevzuat_id") or "").upper()
+            madde_no = str(metadata.get("madde_numarasi") or metadata.get("madde_no") or "").strip()
+
+            # Normalize mevzuat_id
+            normalized_mevzuat = self._normalize_law_code(mevzuat_id)
+
+            # EXACT MATCH: Same law AND same article number
+            if normalized_mevzuat == target_law and madde_no == target_article:
+                return {
+                    "match_type": "exact",
+                    "match_score": 1.0,
+                    "is_law_text": True,
+                    "reason": f"Exact match: {target_law} Madde {target_article}"
+                }
+
+            # WRONG ARTICLE: Same law but different article
+            if normalized_mevzuat == target_law and madde_no and madde_no != target_article:
+                return {
+                    "match_type": "wrong_article",
+                    "match_score": -0.5,
+                    "is_law_text": True,
+                    "reason": f"Wrong article: {target_law} Madde {madde_no} (wanted {target_article})"
+                }
+
+            # WRONG LAW: Different law
+            if normalized_mevzuat and normalized_mevzuat != target_law:
+                return {
+                    "match_type": "wrong_law",
+                    "match_score": -0.8,
+                    "is_law_text": True,
+                    "reason": f"Wrong law: {normalized_mevzuat} (wanted {target_law})"
+                }
+
+        # Check if this is a mevzuat (legislation) source
+        if source_table == "mevzuat":
+            mevzuat_adi = (metadata.get("mevzuat_adi") or "").upper()
+            mevzuat_no = metadata.get("mevzuat_no", "")
+
+            # Check if the content MENTIONS the target article
+            article_pattern = rf'\b{target_law}\b.*?\b[Mm]adde\s*{target_article}\b|\b[Mm]adde\s*{target_article}\b.*?\b{target_law}\b'
+            if re.search(article_pattern, content, re.IGNORECASE):
+                return {
+                    "match_type": "mentions",
+                    "match_score": 0.3,
+                    "is_law_text": False,
+                    "reason": f"Mentions {target_law} Madde {target_article} in content"
+                }
+
+        # For non-law sources (articles, ozelge, danistay, etc.)
+        # Check if they REFERENCE the target article
+        article_ref_pattern = rf'\b{target_law}\s*(?:[Mm]adde\s*)?{target_article}\b'
+        if re.search(article_ref_pattern, content, re.IGNORECASE):
+            return {
+                "match_type": "reference",
+                "match_score": 0.1,  # Lower score - references don't replace law text
+                "is_law_text": False,
+                "reason": f"References {target_law} Madde {target_article}"
+            }
+
+        # Check for WRONG law references (citing other laws)
+        for law_code in self.LAW_CODES.keys():
+            if law_code != target_law:
+                wrong_law_pattern = rf'\b{law_code}\s*(?:[Mm]adde\s*)?\d+'
+                if re.search(wrong_law_pattern, content, re.IGNORECASE):
+                    return {
+                        "match_type": "wrong_law_reference",
+                        "match_score": -0.3,
+                        "is_law_text": False,
+                        "reason": f"References different law: {law_code}"
+                    }
+
+        # No match found
+        return {
+            "match_type": "no_match",
+            "match_score": 0.0,
+            "is_law_text": False,
+            "reason": "No article match found"
+        }
+
+    def _calculate_article_boost(
+        self,
+        result: Dict[str, Any],
+        article_query: Optional[Dict[str, Any]]
+    ) -> Tuple[float, Dict[str, Any]]:
+        """
+        Calculate score boost/penalty based on article anchoring rules.
+
+        When user asks about a specific article (VUK 19), we:
+        1. BOOST results that contain the exact article text
+        2. PENALIZE results that cite wrong articles or wrong laws
+        3. Mark results so LLM knows which are authoritative
+
+        Args:
+            result: Search result dict
+            article_query: Detected article query (from _detect_article_query)
+
+        Returns:
+            Tuple of (boost_value, match_details)
+        """
+        if not article_query:
+            return 0.0, {"article_anchoring": "not_applicable"}
+
+        target_law = article_query["law_code"]
+        target_article = article_query["article_number"]
+
+        match_result = self._check_article_match(result, target_law, target_article)
+
+        # Calculate boost based on match type
+        match_type = match_result["match_type"]
+        base_score = match_result["match_score"]
+
+        # Apply boost/penalty
+        if match_type == "exact":
+            # EXACT MATCH: Strong boost for the actual law text
+            boost = 0.5
+        elif match_type == "wrong_article":
+            # WRONG ARTICLE: Penalize heavily
+            boost = -0.3
+        elif match_type == "wrong_law":
+            # WRONG LAW: Penalize most heavily
+            boost = -0.4
+        elif match_type == "mentions":
+            # MENTIONS: Small positive boost
+            boost = 0.1
+        elif match_type == "reference":
+            # REFERENCE: Very small boost (secondary source)
+            boost = 0.05
+        elif match_type == "wrong_law_reference":
+            # WRONG LAW REFERENCE: Small penalty
+            boost = -0.15
+        else:
+            # NO MATCH: Slight penalty for irrelevant content
+            boost = -0.05
+
+        details = {
+            "article_anchoring": match_type,
+            "article_boost": round(boost * 100, 2),
+            "is_law_text": match_result.get("is_law_text", False),
+            "match_reason": match_result.get("reason", ""),
+            "target": f"{target_law} Madde {target_article}"
+        }
+
+        return boost, details
+
     def _get_source_priority(self, source_table: str, settings: RAGSettings) -> float:
         """Get priority multiplier for source table"""
         table_lower = (source_table or '').lower()
@@ -2064,6 +2331,13 @@ class SemanticSearchService:
         # Load penalty configuration (from DB or defaults)
         penalty_config = await self._load_penalty_config()
 
+        # === ARTICLE ANCHORING: Detect if query asks about specific law article ===
+        article_query = self._detect_article_query(query)
+        article_anchoring_enabled = article_query is not None
+
+        if article_anchoring_enabled:
+            logger.info(f"🎯 Article-specific query: {article_query['law_code']} Madde {article_query['article_number']}")
+
         # Check search result cache
         if use_cache:
             cache_key = self._get_search_cache_key(query, limit)
@@ -2199,9 +2473,30 @@ class SemanticSearchService:
                     penalty_stats["metadata_quality_count"] += 1
                     penalty_stats["metadata_boost_total"] += metadata_boost
 
-                # Calculate final score (includes keyword boost, penalties, AND metadata quality boost)
-                # Penalty is negative, metadata_boost is positive
-                final_score = max(0, weighted_similarity + keyword_boost + retrieval_penalty + metadata_boost)
+                # === ARTICLE ANCHORING BOOST/PENALTY ===
+                # When query asks about specific article, boost exact matches, penalize wrong articles
+                article_boost = 0.0
+                article_details = {"article_anchoring": "not_applicable"}
+
+                if article_anchoring_enabled:
+                    article_boost, article_details = self._calculate_article_boost(result, article_query)
+
+                    # Track article anchoring statistics
+                    if "article_exact_count" not in penalty_stats:
+                        penalty_stats["article_exact_count"] = 0
+                        penalty_stats["article_wrong_count"] = 0
+                        penalty_stats["article_reference_count"] = 0
+
+                    if article_details.get("article_anchoring") == "exact":
+                        penalty_stats["article_exact_count"] += 1
+                    elif article_details.get("article_anchoring") in ["wrong_article", "wrong_law", "wrong_law_reference"]:
+                        penalty_stats["article_wrong_count"] += 1
+                    elif article_details.get("article_anchoring") == "reference":
+                        penalty_stats["article_reference_count"] += 1
+
+                # Calculate final score (includes keyword boost, penalties, metadata boost, AND article boost)
+                # Penalty is negative, metadata_boost and article_boost can be positive or negative
+                final_score = max(0, weighted_similarity + keyword_boost + retrieval_penalty + metadata_boost + article_boost)
 
                 scored_results.append({
                     "id": result["id"],
@@ -2215,11 +2510,15 @@ class SemanticSearchService:
                     "similarity_score": round(weighted_similarity * 100, 2),
                     "keyword_boost": round(keyword_boost * 100, 2),
                     "metadata_boost": round(metadata_boost * 100, 2),
+                    "article_boost": round(article_boost * 100, 2),
                     "source_priority": round(source_priority, 2),
                     "table_weight": round(table_weight, 2),
                     "final_score": round(final_score * 100, 2),
                     "metadata": result.get("metadata", {}),
                     "search_source": result.get("search_source", "unknown"),
+                    # Article anchoring info for LLM context
+                    "is_law_text": article_details.get("is_law_text", False),
+                    "article_match_type": article_details.get("article_anchoring", "not_applicable"),
                     "_debug": {
                         "pure_similarity": round(similarity * 100, 2),
                         "weighted_similarity": round(weighted_similarity * 100, 2),
@@ -2227,6 +2526,8 @@ class SemanticSearchService:
                         "table_weight": round(table_weight, 2),
                         "keyword_boost": round(keyword_boost * 100, 2),
                         "metadata_boost": round(metadata_boost * 100, 2),
+                        "article_boost": round(article_boost * 100, 2),
+                        "article_anchoring": article_details,
                         "metadata_quality": metadata_details,
                         "retrieval_penalty": round(retrieval_penalty * 100, 2),
                         "temporal_penalty": round(penalty_details["temporal_penalty"] * 100, 2),
@@ -2244,6 +2545,15 @@ class SemanticSearchService:
             if penalty_stats.get("metadata_quality_count", 0) > 0:
                 avg_boost = penalty_stats["metadata_boost_total"] / penalty_stats["metadata_quality_count"]
                 logger.info(f"Metadata quality boost: {penalty_stats['metadata_quality_count']} results boosted, avg={avg_boost*100:.1f}%")
+
+            # Log article anchoring statistics
+            if article_anchoring_enabled:
+                exact_count = penalty_stats.get("article_exact_count", 0)
+                wrong_count = penalty_stats.get("article_wrong_count", 0)
+                ref_count = penalty_stats.get("article_reference_count", 0)
+                logger.info(f"🎯 Article anchoring: exact={exact_count}, wrong={wrong_count}, references={ref_count}")
+                if exact_count == 0:
+                    logger.warning(f"⚠️ No exact article match found for {article_query['law_code']} Madde {article_query['article_number']}")
 
             # Sort by final score and limit
             scored_results.sort(key=lambda x: x["final_score"], reverse=True)
@@ -2288,6 +2598,15 @@ class SemanticSearchService:
                     "table_weights_count": len(settings.source_table_weights or {}),
                     "used_keyword_fallback": use_keyword_fallback
                 },
+                # Article anchoring context for LLM
+                "article_query": {
+                    "detected": article_anchoring_enabled,
+                    "law_code": article_query["law_code"] if article_query else None,
+                    "article_number": article_query["article_number"] if article_query else None,
+                    "exact_match_found": penalty_stats.get("article_exact_count", 0) > 0 if article_anchoring_enabled else None,
+                    "exact_match_count": penalty_stats.get("article_exact_count", 0) if article_anchoring_enabled else None,
+                    "wrong_match_count": penalty_stats.get("article_wrong_count", 0) if article_anchoring_enabled else None,
+                } if article_anchoring_enabled else None,
                 "prompt_context": {
                     "conversation_tone": prompt_settings.conversation_tone,
                     "schema_name": prompt_settings.schema_name,
@@ -2330,6 +2649,22 @@ class SemanticSearchService:
                 # Sort by metadata boost (highest first)
                 top_metadata_quality.sort(key=lambda x: x["metadata_boost"], reverse=True)
 
+                # Get article anchoring debug results
+                article_anchoring_debug = []
+                if article_anchoring_enabled:
+                    article_anchoring_debug = [
+                        {
+                            "id": r["id"],
+                            "title": r.get("title", "")[:50],
+                            "source_table": r.get("source_table"),
+                            "article_boost": r.get("article_boost", 0),
+                            "is_law_text": r.get("is_law_text", False),
+                            "match_type": r.get("article_match_type", "unknown"),
+                            "match_details": r.get("_debug", {}).get("article_anchoring", {}),
+                        }
+                        for r in scored_results[:20]  # Top 20 for debug
+                    ]
+
                 response["_debug"] = {
                     "penalty_config": penalty_config,
                     "penalty_stats": penalty_stats,
@@ -2342,7 +2677,19 @@ class SemanticSearchService:
                     "top_penalized": penalized_results[:5],
                     "top_metadata_quality": top_metadata_quality[:5],
                     "search_mode": "keyword_fallback" if use_keyword_fallback else "vector",
-                    "source_table_weights": settings.source_table_weights or {}
+                    "source_table_weights": settings.source_table_weights or {},
+                    # Article anchoring debug info
+                    "article_anchoring": {
+                        "enabled": article_anchoring_enabled,
+                        "target": f"{article_query['law_code']} Madde {article_query['article_number']}" if article_query else None,
+                        "exact_match_found": penalty_stats.get("article_exact_count", 0) > 0 if article_anchoring_enabled else None,
+                        "stats": {
+                            "exact": penalty_stats.get("article_exact_count", 0),
+                            "wrong": penalty_stats.get("article_wrong_count", 0),
+                            "references": penalty_stats.get("article_reference_count", 0),
+                        } if article_anchoring_enabled else None,
+                        "results": article_anchoring_debug if article_anchoring_enabled else []
+                    }
                 }
 
             return response
