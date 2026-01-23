@@ -66,16 +66,20 @@ export class SemanticSearchService {
   private readonly WEIGHTS_CACHE_TTL = 30000; // 30 seconds
 
   // 🔧 NEW: Source type hierarchy for ranking (from ragSettings.sourceTypeHierarchy)
-  // Default weights based on authority level
+  // Default weights based on authority level - MUST match database settings keys
   private sourceTypeHierarchy: Record<string, { weight: number; label: string }> = {
+    'law': { weight: 100, label: 'Kanun/Mevzuat' },
+    'regulation': { weight: 95, label: 'Tebliğ/Yönetmelik' },
+    'sirkuler': { weight: 90, label: 'Sirküler' },
+    'kararname': { weight: 85, label: 'Kararname' },
+    'court': { weight: 80, label: 'Yargı Kararları' },
     'ozelge': { weight: 75, label: 'Özelge' },
-    'kanun': { weight: 80, label: 'Kanun' },
-    'teblig': { weight: 65, label: 'Tebliğ' },
-    'danistay': { weight: 70, label: 'Danıştay Kararı' },
-    'sirkuler': { weight: 60, label: 'Sirküler' },
-    'sorucevap': { weight: 50, label: 'Soru-Cevap' },
-    'makale': { weight: 40, label: 'Makale' },
-    'document': { weight: 30, label: 'Belge' }
+    'danistay': { weight: 70, label: 'Danıştay Kararları' },
+    'article': { weight: 50, label: 'Makale' },
+    'huk_dkk': { weight: 45, label: 'HUK DKK' },
+    'ebook': { weight: 40, label: 'E-Kitap/PDF' },
+    'qna': { weight: 30, label: 'Soru-Cevap' },
+    'document': { weight: 20, label: 'Genel Doküman' }
   };
 
   // 🔧 NEW: Ranking formula weights (configurable via settings)
@@ -1136,19 +1140,44 @@ export class SemanticSearchService {
             const cached = pythonResult.cached ? ' (CACHED)' : '';
             console.log(`[SemanticSearch] Python search completed: ${pythonResult.results.length} results in ${elapsedMs}ms${cached}`);
 
-            // Transform Python results to match Node.js format
-            return pythonResult.results.map(r => ({
-              id: r.id,
-              title: r.title || r.metadata?.title || r.metadata?.name || 'Untitled',
-              excerpt: r.content,
-              full_content: r.full_content,
-              source_table: r.source_table,
-              source_id: r.source_id,
-              similarity_score: r.similarity_score,
-              final_score: r.final_score,
-              keyword_boost: r.keyword_boost,
-              metadata: r.metadata
-            }));
+            // 🔧 FIX: Apply hierarchy scoring to Python results (Python doesn't support hierarchy)
+            // Transform Python results and apply hierarchy boost
+            const resultsWithHierarchy = pythonResult.results.map(r => {
+              const sourceTable = r.source_table || '';
+              const normalizedSourceType = this.normalizeSourceType(sourceTable);
+              const hierarchyEntry = this.sourceTypeHierarchy[normalizedSourceType];
+              const hierarchyScore = hierarchyEntry ? hierarchyEntry.weight / 100 : 0.3; // Default 30%
+
+              const pureSimilarity = r.similarity_score || 0;
+              const keywordBoost = r.keyword_boost || 0;
+
+              // Combined score: semantic * 0.70 + hierarchy * 0.30 + keyword * 0.10
+              const combinedScore = Math.min(
+                (pureSimilarity * this.semanticWeight + hierarchyScore * this.hierarchyWeight + keywordBoost * 0.1) * 100,
+                100
+              );
+
+              return {
+                id: r.id,
+                title: r.title || r.metadata?.title || r.metadata?.name || 'Untitled',
+                excerpt: r.content,
+                full_content: r.full_content,
+                source_table: r.source_table,
+                source_id: r.source_id,
+                similarity_score: r.similarity_score,
+                final_score: combinedScore, // Use combined score with hierarchy
+                keyword_boost: r.keyword_boost,
+                metadata: r.metadata,
+                hierarchyScore: hierarchyScore,
+                pureSimilarity: pureSimilarity
+              };
+            });
+
+            // Re-sort by combined score (with hierarchy)
+            resultsWithHierarchy.sort((a, b) => b.final_score - a.final_score);
+
+            console.log(`[SemanticSearch] Applied hierarchy boost to ${resultsWithHierarchy.length} Python results`);
+            return resultsWithHierarchy;
           }
 
           // If Python returned no results, fall through to Node.js
@@ -1684,26 +1713,63 @@ export class SemanticSearchService {
     const normalized = (sourceTable || '').toLowerCase()
       .replace(/^csv_/, '')  // Remove csv_ prefix
       .replace(/_embeddings$/, '')  // Remove _embeddings suffix
-      .replace(/ler$|ları$|lari$/, '')  // Remove Turkish plural suffixes
-      .replace(/kararlari$|kararlari$/, '')  // Remove 'kararlari'
       .trim();
 
-    // Map common variations to standard hierarchy keys
+    // Map source_table names to hierarchy keys (matching ragSettings.sourceTypeHierarchy)
+    // These keys must match the database settings: law, court, ozelge, article, etc.
     const mappings: Record<string, string> = {
+      // Law sources - highest priority (100)
+      'vergilex_mevzuat_kanunlar': 'law',
+      'vergilex_mevzuat_kanunlar_chunks': 'law',  // Chunked law articles
+      'mevzuat_kanunlar': 'law',
+      'kanun': 'law',
+      'kanunlar': 'law',
+
+      // Regulation sources (95)
+      'teblig': 'regulation',
+      'tebligler': 'regulation',
+      'yonetmelik': 'regulation',
+
+      // Sirkuler sources (90)
+      'sirkuler': 'sirkuler',
+      'vergilex_gib_sirkuler': 'sirkuler',
+      'gib_sirkuler': 'sirkuler',
+
+      // Court decisions - general (80)
+      'yargi': 'court',
+      'yargi_kararlari': 'court',
+
+      // Ozelge sources (75)
       'ozelge': 'ozelge',
       'ozelgeler': 'ozelge',
+
+      // Danistay Kararları - specific (70)
       'danistay': 'danistay',
-      'danistaykarar': 'danistay',
-      'teblig': 'teblig',
-      'tebligler': 'teblig',
-      'kanun': 'kanun',
-      'kanunlar': 'kanun',
-      'sirkuler': 'sirkuler',
-      'sorucevap': 'sorucevap',
-      'makale': 'makale',
-      'makaleler': 'makale',
+      'danistaykararlari': 'danistay',
+
+      // Article sources (50)
+      'makale': 'article',
+      'makaleler': 'article',
+      'makale_arsiv_2021': 'article',
+      'makale_arsiv_2022': 'article',
+      'makale_arsiv_2023': 'article',
+      'makale_arsiv_2024': 'article',
+      'makale_arsiv_2025': 'article',
+      'maliansiklopedi': 'article',
+
+      // HUK DKK (45)
+      'hukdkk': 'huk_dkk',
+      'huk_dkk': 'huk_dkk',
+
+      // QnA sources (30)
+      'sorucevap': 'qna',
+      'soru_cevap': 'qna',
+
+      // Document sources (20)
       'document': 'document',
-      'unified': 'document'
+      'documents': 'document',
+      'unified': 'document',
+      'document_embeddings': 'document'
     };
 
     return mappings[normalized] || normalized;
