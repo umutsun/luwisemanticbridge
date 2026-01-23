@@ -4791,11 +4791,16 @@ function PromptsSettings() {
     setLoading(true);
     try {
       const data = await getSettingsCategory('prompts');
+      console.log('[PromptsSettings] Loaded data:', JSON.stringify(data, null, 2)?.substring(0, 500));
+      console.log('[PromptsSettings] prompts.list:', data?.prompts?.list?.length, 'items');
       setPromptsConfig(data);
       setTempConfig(data);
       // Set first prompt as active if exists
       if (data?.prompts?.list && data.prompts.list.length > 0) {
         setActivePromptId(data.prompts.list[0].id);
+        console.log('[PromptsSettings] Set active prompt:', data.prompts.list[0].id);
+      } else {
+        console.log('[PromptsSettings] No prompts found in list');
       }
     } catch (error) {
       console.error('Failed to load prompts settings:', error);
