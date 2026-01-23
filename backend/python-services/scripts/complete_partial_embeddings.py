@@ -37,8 +37,8 @@ TABLE_CONFIG = {
     'csv_ozelge': {
         'unified_name': 'ozelge',
         'id_col': 'row_id',
-        'content_cols': ['baslik', 'ozet', 'metin'],
-        'name_col': 'baslik',
+        'content_cols': ['konusu', 'icerik'],
+        'name_col': 'konusu',
         'source_type': 'ozelge'
     },
     'csv_sorucevap': {
