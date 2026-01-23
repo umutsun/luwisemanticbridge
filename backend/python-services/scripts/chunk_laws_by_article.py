@@ -108,6 +108,10 @@ def parse_articles(content: str, law_name: str) -> List[Dict]:
     """
     articles = []
 
+    # Pre-process: Add newline before "Madde" when preceded by lowercase (e.g., "indirmeMadde 376")
+    # This handles cases where articles are concatenated without proper delimiters
+    content = re.sub(r'([a-zğüşöçı])(Madde\s*\d)', r'\1\n\2', content, flags=re.IGNORECASE)
+
     # Pattern to match article headers
     # Matches: Madde 1, MADDE 1, Madde 1 –, Madde 1-, Madde 1.
     # Also matches articles after : or . (inline format in some documents)
