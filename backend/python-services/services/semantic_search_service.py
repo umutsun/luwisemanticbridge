@@ -2750,6 +2750,40 @@ class SemanticSearchService:
 
             # Sort by final score and limit
             scored_results.sort(key=lambda x: x["final_score"], reverse=True)
+
+            # 🎯 ARTICLE FILTERING: When article anchoring is enabled and exact match found,
+            # remove OTHER law article chunks to prevent LLM confusion
+            if article_anchoring_enabled and penalty_stats.get("article_exact_count", 0) > 0:
+                target_law = article_query["law_code"]
+                target_article = article_query["article_number"]
+
+                def should_keep_result(result: Dict) -> bool:
+                    source_table = result.get("source_table", "")
+
+                    # Keep non-law-chunk sources (özelge, makale, sirküler, etc.)
+                    if source_table != "vergilex_mevzuat_kanunlar_chunks":
+                        return True
+
+                    # For law chunks, only keep if it matches target article
+                    metadata = result.get("metadata", {})
+                    law_name = metadata.get("law_name", "")
+                    article_num = str(metadata.get("article_number", ""))
+
+                    # Check if this is the target article
+                    is_target = (
+                        article_num == str(target_article) and
+                        (target_law.upper() in law_name.upper() or
+                         self._law_name_to_code(law_name) == target_law)
+                    )
+                    return is_target
+
+                filtered_count = len(scored_results)
+                scored_results = [r for r in scored_results if should_keep_result(r)]
+                removed_count = filtered_count - len(scored_results)
+
+                if removed_count > 0:
+                    logger.info(f"🎯 Article filter: removed {removed_count} non-matching law chunks, keeping {len(scored_results)} results")
+
             final_results = scored_results[:limit]
 
             timings["scoring_ms"] = (datetime.now() - score_start).total_seconds() * 1000
