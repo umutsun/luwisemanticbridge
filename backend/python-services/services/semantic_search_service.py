@@ -668,6 +668,42 @@ class SemanticSearchService:
             if settings.enable_unified_embeddings and settings.database_priority > 0:
                 try:
                     logger.info(f"[VectorSearch] Querying unified_embeddings (database_priority={settings.database_priority})")
+
+                    # 🔧 SOURCE DIVERSITY: Query priority sources separately to ensure representation
+                    # Priority sources that should always be included if relevant
+                    priority_sources = [
+                        'vergilex_mevzuat_kanunlar_chunks',  # Law chunks - highest priority
+                        'vergilex_mevzuat_kanunlar',  # Original laws
+                        'vergilex_gib_sirkuler',  # Tax circulars
+                    ]
+
+                    seen_ids = set()
+
+                    # First, query priority sources to ensure they're represented
+                    for priority_source in priority_sources:
+                        priority_query = """
+                            SELECT
+                                id, content, source_table, source_type, source_id, metadata,
+                                1 - (embedding <=> $1::vector) as similarity_score,
+                                'unified' as search_source
+                            FROM unified_embeddings
+                            WHERE embedding IS NOT NULL
+                            AND source_table = $2
+                            ORDER BY embedding <=> $1::vector
+                            LIMIT 5
+                        """
+                        try:
+                            priority_rows = await pool.fetch(priority_query, embedding_str, priority_source)
+                            for row in priority_rows:
+                                if float(row['similarity_score']) >= similarity_threshold and row['id'] not in seen_ids:
+                                    all_results.append(dict(row))
+                                    seen_ids.add(row['id'])
+                            if priority_rows:
+                                logger.info(f"[VectorSearch] Priority source {priority_source}: {len(priority_rows)} results")
+                        except Exception as e:
+                            logger.debug(f"Priority source {priority_source} query skipped: {e}")
+
+                    # Then query all sources for general results
                     unified_query = """
                         SELECT
                             id, content, source_table, source_type, source_id, metadata,
@@ -678,12 +714,13 @@ class SemanticSearchService:
                         ORDER BY embedding <=> $1::vector
                         LIMIT $2
                     """
-                    # Fetch minimum 15 results to ensure good coverage across sources
-                    unified_limit = max(15, limit)
+                    # Fetch more results to ensure good coverage across sources
+                    unified_limit = max(50, limit * 2)
                     rows = await pool.fetch(unified_query, embedding_str, unified_limit)
                     for row in rows:
-                        if float(row['similarity_score']) >= similarity_threshold:
+                        if float(row['similarity_score']) >= similarity_threshold and row['id'] not in seen_ids:
                             all_results.append(dict(row))
+                            seen_ids.add(row['id'])
                 except Exception as e:
                     logger.warning(f"unified_embeddings query error: {e}")
             elif settings.database_priority == 0:
