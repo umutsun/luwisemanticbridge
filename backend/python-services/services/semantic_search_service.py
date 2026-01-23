@@ -1281,6 +1281,48 @@ class SemanticSearchService:
 
         return code_upper if code_upper else None
 
+    # Full law name to code mapping for article matching
+    LAW_NAME_TO_CODE = {
+        "VERGİ USUL KANUNU": "VUK",
+        "VERGI USUL KANUNU": "VUK",
+        "GELİR VERGİSİ KANUNU": "GVK",
+        "GELIR VERGISI KANUNU": "GVK",
+        "KURUMLAR VERGİSİ KANUNU": "KVK",
+        "KURUMLAR VERGISI KANUNU": "KVK",
+        "KATMA DEĞER VERGİSİ KANUNU": "KDVK",
+        "KATMA DEGER VERGISI KANUNU": "KDVK",
+        "ÖZEL TÜKETİM VERGİSİ KANUNU": "ÖTVK",
+        "OZEL TUKETIM VERGISI KANUNU": "ÖTVK",
+        "MOTORLU TAŞITLAR VERGİSİ KANUNU": "MTV",
+        "DAMGA VERGİSİ KANUNU": "DVK",
+        "VERASET VE İNTİKAL VERGİSİ KANUNU": "VİVK",
+        "AMME ALACAKLARININ TAHSİL USULÜ HAKKINDA KANUN": "AATUHK",
+        "TÜRK TİCARET KANUNU": "TTK",
+        "BORÇLAR KANUNU": "BK",
+        "TÜRK BORÇLAR KANUNU": "BK",
+    }
+
+    def _law_name_to_code(self, law_name: str) -> Optional[str]:
+        """Convert full law name to standard code (e.g., 'VERGİ USUL KANUNU' -> 'VUK')"""
+        if not law_name:
+            return None
+
+        name_upper = law_name.upper().strip()
+
+        # Remove common prefixes like "213 SAYILI"
+        name_upper = re.sub(r'^\d+\s*SAYILI\s*', '', name_upper)
+
+        # Direct lookup
+        if name_upper in self.LAW_NAME_TO_CODE:
+            return self.LAW_NAME_TO_CODE[name_upper]
+
+        # Partial match - check if any key is contained in the name
+        for full_name, code in self.LAW_NAME_TO_CODE.items():
+            if full_name in name_upper:
+                return code
+
+        return None
+
     def _check_article_match(
         self,
         result: Dict[str, Any],
@@ -1302,13 +1344,43 @@ class SemanticSearchService:
         metadata = result.get("metadata", {}) or {}
         content = (result.get("content") or "").upper()
 
-        # Check if this is a law article source (maddeler table)
-        if source_table == "maddeler":
-            mevzuat_id = (metadata.get("mevzuat_id") or "").upper()
-            madde_no = str(metadata.get("madde_numarasi") or metadata.get("madde_no") or "").strip()
+        # Check if this is a law article source
+        # Supports both old "maddeler" table and new "vergilex_mevzuat_kanunlar_chunks" table
+        is_law_chunk = (
+            source_table == "maddeler" or
+            "kanunlar_chunks" in source_table or
+            "mevzuat_chunk" in source_table or
+            (result.get("source_type") or "").lower() == "kanun"
+        )
 
-            # Normalize mevzuat_id
+        if is_law_chunk:
+            # Get law identifier from metadata (supports multiple field names)
+            mevzuat_id = (
+                metadata.get("mevzuat_id") or
+                metadata.get("law_name") or
+                metadata.get("kanun_adi") or
+                ""
+            ).upper()
+
+            # Get article number from metadata (supports multiple field names)
+            madde_no = str(
+                metadata.get("madde_numarasi") or
+                metadata.get("madde_no") or
+                metadata.get("article_number") or
+                ""
+            ).strip()
+
+            # Normalize law identifier to standard code
+            # First try direct normalization (for codes like "VUK")
             normalized_mevzuat = self._normalize_law_code(mevzuat_id)
+
+            # If that fails, try full name to code conversion
+            if not normalized_mevzuat or normalized_mevzuat == mevzuat_id:
+                code_from_name = self._law_name_to_code(mevzuat_id)
+                if code_from_name:
+                    normalized_mevzuat = code_from_name
+
+            logger.debug(f"Article match check: source={source_table}, law={mevzuat_id}->{normalized_mevzuat}, article={madde_no}, target={target_law} {target_article}")
 
             # EXACT MATCH: Same law AND same article number
             if normalized_mevzuat == target_law and madde_no == target_article:
