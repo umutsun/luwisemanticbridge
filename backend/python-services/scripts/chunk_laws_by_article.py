@@ -166,6 +166,25 @@ async def check_existing_chunks(pool: asyncpg.Pool, original_id: int) -> int:
     return result or 0
 
 
+# Global counter for generating unique source_ids
+_chunk_id_counter = 0
+
+
+async def get_next_chunk_id(pool: asyncpg.Pool) -> int:
+    """Get the next available source_id for chunks"""
+    global _chunk_id_counter
+    if _chunk_id_counter == 0:
+        # Initialize from database
+        max_id = await pool.fetchval("""
+            SELECT COALESCE(MAX(source_id), 0) FROM unified_embeddings
+            WHERE source_table = 'vergilex_mevzuat_kanunlar_chunks'
+        """)
+        _chunk_id_counter = (max_id or 0) + 1
+    else:
+        _chunk_id_counter += 1
+    return _chunk_id_counter
+
+
 async def insert_article_chunk(
     pool: asyncpg.Pool,
     chunk: ArticleChunk,
@@ -174,11 +193,10 @@ async def insert_article_chunk(
 ) -> bool:
     """Insert a single article chunk with its embedding"""
 
-    # Generate unique source_id
-    content_hash = hashlib.md5(chunk.content.encode()).hexdigest()[:12]
-    source_id = f"{chunk.original_id}_m{chunk.article_number}_{content_hash}"
+    # Generate unique integer source_id (source_id is bigint, not varchar!)
+    source_id = await get_next_chunk_id(pool)
 
-    # Build metadata
+    # Build metadata with original references
     metadata = {
         "original_id": chunk.original_id,
         "law_name": chunk.law_name,
@@ -186,7 +204,8 @@ async def insert_article_chunk(
         "article_number": chunk.article_number,
         "article_title": chunk.article_title,
         "chunked_at": datetime.now().isoformat(),
-        "chunk_type": "article"
+        "chunk_type": "article",
+        "content_hash": hashlib.md5(chunk.content.encode()).hexdigest()[:12]
     }
 
     # Source name for display
@@ -199,11 +218,10 @@ async def insert_article_chunk(
         return True
 
     try:
-        # Use explicit type casting for asyncpg
         await pool.execute("""
             INSERT INTO unified_embeddings
             (source_table, source_type, source_id, source_name, content, embedding, metadata, tokens_used, model_used, embedding_provider)
-            VALUES ($1::text, $2::text, $3::text, $4::text, $5::text, $6::vector, $7::jsonb, $8::integer, $9::text, $10::text)
+            VALUES ($1, $2, $3, $4, $5, $6::vector, $7::jsonb, $8, $9, $10)
             ON CONFLICT (source_table, source_id) DO UPDATE SET
                 content = EXCLUDED.content,
                 embedding = EXCLUDED.embedding,
@@ -212,9 +230,9 @@ async def insert_article_chunk(
         """,
             'vergilex_mevzuat_kanunlar_chunks',  # New source_table for chunks
             'kanun',  # Türkçe key for hierarchy
-            str(source_id),  # Ensure string
-            str(source_name[:500]),
-            str(chunk.content),
+            source_id,  # Integer ID
+            source_name[:500],
+            chunk.content,
             f"[{','.join(map(str, embedding))}]",  # Vector format
             json.dumps(metadata),
             len(chunk.content) // 3,  # Approximate token count
