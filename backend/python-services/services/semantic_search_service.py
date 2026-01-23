@@ -669,13 +669,15 @@ class SemanticSearchService:
                 try:
                     logger.info(f"[VectorSearch] Querying unified_embeddings (database_priority={settings.database_priority})")
 
-                    # 🔧 SOURCE DIVERSITY: Query priority sources separately to ensure representation
-                    # Priority sources that should always be included if relevant
-                    priority_sources = [
-                        'vergilex_mevzuat_kanunlar_chunks',  # Law chunks - highest priority
-                        'vergilex_mevzuat_kanunlar',  # Original laws
-                        'vergilex_gib_sirkuler',  # Tax circulars
-                    ]
+                    # 🔧 SOURCE DIVERSITY: Get priority sources from settings (weight >= 1.0)
+                    # This ensures high-priority sources like kanun always get representation
+                    priority_sources = []
+                    if settings.source_table_weights:
+                        priority_sources = [
+                            table for table, weight in settings.source_table_weights.items()
+                            if weight >= 1.0
+                        ]
+                        logger.info(f"[VectorSearch] Priority sources from settings: {priority_sources}")
 
                     seen_ids = set()
 
