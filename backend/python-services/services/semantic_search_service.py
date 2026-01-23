@@ -814,21 +814,8 @@ class SemanticSearchService:
                 # Source weight is 0-1 range, multiply by 100 to match similarity scale
                 return sim * 0.7 + (source_weight * 100) * 0.3
 
-            # Debug: Log top weighted scores
-            scored_results = [(r, get_weighted_score(r)) for r in all_results]
-            scored_results.sort(key=lambda x: x[1], reverse=True)
-            for r, ws in scored_results[:10]:
-                st = r.get('source_table', '')
-                sim = r['similarity_score']
-                wt = settings.source_table_weights.get(st, 0.5) if settings.source_table_weights else 0.5
-                logger.info(f"[WeightedSort] TOP {st}: sim={sim:.3f}, weight={wt}, weighted={ws:.2f}")
-
             all_results.sort(key=get_weighted_score, reverse=True)
             rows = all_results[:limit]
-
-            # Debug: Log final selection
-            kanun_in_final = [r for r in rows if 'kanun' in r.get('source_table', '').lower()]
-            logger.info(f"[WeightedSort] Final selection: {len(rows)} results, {len(kanun_in_final)} kanun sources")
 
             elapsed = (datetime.now() - start_time).total_seconds() * 1000
             logger.info(f"Multi-source vector search: {len(rows)} results in {elapsed:.1f}ms")
@@ -2167,9 +2154,17 @@ class SemanticSearchService:
                 if table_weight <= 0:
                     continue
 
-                # Calculate weighted similarity
+                # Calculate weighted similarity with additive boost for high-priority sources
+                # High-weight sources (weight >= 1.0) get a bonus to compete with high-similarity results
                 similarity = result["similarity_score"]
-                weighted_similarity = similarity * source_priority * table_weight
+                base_weighted = similarity * source_priority * table_weight
+
+                # Additive boost for priority sources (weight >= 1.0 gets up to +0.20 bonus)
+                priority_boost = 0.0
+                if table_weight >= 1.0:
+                    priority_boost = 0.20  # 20% boost for priority sources like kanun
+
+                weighted_similarity = base_weighted + priority_boost
 
                 # === RETRIEVAL-LEVEL QUALITY PENALTIES ===
                 # Apply temporal mismatch and TOC content penalties (with loaded config)
