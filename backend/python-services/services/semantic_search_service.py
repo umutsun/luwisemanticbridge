@@ -814,11 +814,14 @@ class SemanticSearchService:
                 # Source weight is 0-1 range, multiply by 100 to match similarity scale
                 return sim * 0.7 + (source_weight * 100) * 0.3
 
-            # Debug: Log weighted scores for priority sources
-            for r in all_results:
-                if 'kanun' in r.get('source_table', '').lower() or 'chunk' in r.get('source_table', '').lower():
-                    ws = get_weighted_score(r)
-                    logger.info(f"[WeightedSort] {r['source_table']}: sim={r['similarity_score']:.3f}, weight={settings.source_table_weights.get(r['source_table'], 0.5)}, weighted={ws:.2f}")
+            # Debug: Log top weighted scores
+            scored_results = [(r, get_weighted_score(r)) for r in all_results]
+            scored_results.sort(key=lambda x: x[1], reverse=True)
+            for r, ws in scored_results[:10]:
+                st = r.get('source_table', '')
+                sim = r['similarity_score']
+                wt = settings.source_table_weights.get(st, 0.5) if settings.source_table_weights else 0.5
+                logger.info(f"[WeightedSort] TOP {st}: sim={sim:.3f}, weight={wt}, weighted={ws:.2f}")
 
             all_results.sort(key=get_weighted_score, reverse=True)
             rows = all_results[:limit]
