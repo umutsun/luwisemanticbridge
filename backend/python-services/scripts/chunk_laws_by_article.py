@@ -64,9 +64,12 @@ def parse_law_header(content: str) -> Tuple[str, Optional[str]]:
         if not line:
             continue
 
-        # Look for law name patterns
-        if 'KANUN' in line.upper() or 'KANUNU' in line.upper():
-            law_name = line
+        # Look for law name patterns - take FIRST match that looks like a title
+        # (short line, mostly uppercase, contains KANUN)
+        if not law_name and ('KANUN' in line.upper() or 'KANUNU' in line.upper()):
+            # Only use if it looks like a title (not too long, reasonable format)
+            if len(line) < 150 and not line.startswith('Madde'):
+                law_name = line
 
         # Look for "Kanun Numarası" or similar
         num_match = re.search(r'(?:Kanun\s*Numarası|No)\s*[:\s]*(\d+)', line, re.IGNORECASE)
