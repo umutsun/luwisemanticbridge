@@ -291,34 +291,33 @@ class SemanticSearchService:
             pool = await get_db()
             settings = PromptSettings()
 
-            # 1. Get active prompt from settings table
-            active_prompt_row = await pool.fetchrow("""
-                SELECT key, value FROM settings
-                WHERE key LIKE 'prompts.%.active' AND value = 'true'
-                LIMIT 1
+            # 1. Get prompts from settings table (new format: prompts.list JSON array)
+            prompts_list_row = await pool.fetchrow("""
+                SELECT value FROM settings WHERE key = 'prompts.list'
             """)
 
-            if active_prompt_row:
-                # Extract prompt ID (e.g., 'prompts.abc123.active' -> 'abc123')
-                active_key = active_prompt_row['key']
-                prompt_id = active_key.split('.')[1]
-                settings.active_prompt_id = prompt_id
+            if prompts_list_row and prompts_list_row['value']:
+                try:
+                    prompts_list = json.loads(prompts_list_row['value'])
+                    if isinstance(prompts_list, list) and len(prompts_list) > 0:
+                        # Find active prompt or use first one
+                        active_prompt = None
+                        for prompt in prompts_list:
+                            if prompt.get('isActive', False):
+                                active_prompt = prompt
+                                break
 
-                # Get prompt content
-                content_row = await pool.fetchrow(
-                    "SELECT value FROM settings WHERE key = $1",
-                    f"prompts.{prompt_id}.content"
-                )
-                if content_row:
-                    settings.system_prompt = content_row['value'] or ""
+                        # Fallback to first prompt if none is active
+                        if not active_prompt:
+                            active_prompt = prompts_list[0]
 
-                # Get conversation tone
-                tone_row = await pool.fetchrow(
-                    "SELECT value FROM settings WHERE key = $1",
-                    f"prompts.{prompt_id}.tone"
-                )
-                if tone_row:
-                    settings.conversation_tone = tone_row['value'] or "professional"
+                        if active_prompt:
+                            settings.active_prompt_id = active_prompt.get('id')
+                            settings.system_prompt = active_prompt.get('systemPrompt', '')
+                            settings.conversation_tone = active_prompt.get('conversationTone', 'professional')
+                            logger.info(f"Loaded prompt from prompts.list: id={settings.active_prompt_id}, len={len(settings.system_prompt)}")
+                except json.JSONDecodeError as e:
+                    logger.warning(f"Failed to parse prompts.list JSON: {e}")
 
             # 2. Fallback: Try old chatbot_settings table
             if not settings.system_prompt:
@@ -328,6 +327,7 @@ class SemanticSearchService:
                 """)
                 if old_prompt_row and old_prompt_row['setting_value']:
                     settings.system_prompt = old_prompt_row['setting_value']
+                    logger.info("Loaded prompt from chatbot_settings fallback")
 
             # 3. Get LLM Guide from active schema (industry_presets or user_schemas)
             # First try to get active schema from user_schema_settings
