@@ -1520,6 +1520,114 @@ class SemanticSearchService:
 
         return boost, details
 
+    async def _inject_target_article(
+        self,
+        raw_results: List[Dict[str, Any]],
+        article_query: Dict[str, Any],
+        query_embedding: List[float]
+    ) -> bool:
+        """
+        Directly fetch and inject the target article into search results.
+
+        When user asks about a specific article (VUK 8, KDVK 29), we MUST include
+        the actual law text even if vector similarity didn't rank it high enough.
+
+        Args:
+            raw_results: Current search results (will be modified in place)
+            article_query: Detected article query info
+            query_embedding: Query embedding for similarity calculation
+
+        Returns:
+            True if article was injected, False otherwise
+        """
+        if not article_query:
+            return False
+
+        target_law = article_query["law_code"]
+        target_article = article_query["article_number"]
+
+        # Check if target article already in results
+        existing_ids = {r["id"] for r in raw_results}
+
+        try:
+            pool = await get_db()
+
+            # Build law name patterns to search for
+            law_name_patterns = []
+            if target_law in self.LAW_CODES:
+                law_name_patterns.extend(self.LAW_CODES[target_law])
+
+            # Also add reverse lookup from LAW_NAME_TO_CODE
+            for full_name, code in self.LAW_NAME_TO_CODE.items():
+                if code == target_law:
+                    law_name_patterns.append(full_name)
+
+            # Create SQL pattern for law name matching
+            law_patterns_sql = " OR ".join([
+                f"metadata->>'law_name' ILIKE '%{p}%'" for p in law_name_patterns if p
+            ])
+
+            if not law_patterns_sql:
+                law_patterns_sql = f"metadata->>'law_name' ILIKE '%{target_law}%'"
+
+            # Query for exact article match
+            query_sql = f"""
+                SELECT id::text, content, source_table, source_type, source_id, metadata,
+                       1 - (embedding <=> $1::vector) as similarity_score
+                FROM unified_embeddings
+                WHERE (
+                    source_table LIKE '%kanun%chunks%'
+                    OR source_table = 'maddeler'
+                    OR source_type = 'kanun'
+                )
+                AND ({law_patterns_sql})
+                AND (
+                    metadata->>'article_number' = $2
+                    OR metadata->>'madde_numarasi' = $2
+                    OR metadata->>'madde_no' = $2
+                )
+                AND embedding IS NOT NULL
+                ORDER BY similarity_score DESC
+                LIMIT 3
+            """
+
+            # Execute query
+            embedding_str = f"[{','.join(map(str, query_embedding))}]"
+            rows = await pool.fetch(query_sql, embedding_str, target_article)
+
+            injected_count = 0
+            for row in rows:
+                row_id = str(row['id'])
+                if row_id not in existing_ids:
+                    # Parse metadata
+                    metadata = row['metadata']
+                    if isinstance(metadata, str):
+                        try:
+                            metadata = json.loads(metadata)
+                        except:
+                            metadata = {}
+
+                    # Add to results
+                    raw_results.insert(0, {
+                        "id": row_id,
+                        "content": row['content'],
+                        "source_table": row['source_table'],
+                        "source_type": row['source_type'],
+                        "source_id": row['source_id'],
+                        "metadata": metadata,
+                        "similarity_score": float(row['similarity_score']),
+                        "search_source": "article_injection"
+                    })
+                    existing_ids.add(row_id)
+                    injected_count += 1
+                    logger.debug(f"Injected article: {row['source_table']} id={row_id}")
+
+            return injected_count > 0
+
+        except Exception as e:
+            logger.error(f"Error injecting target article: {e}")
+            return False
+
     def _get_source_priority(self, source_table: str, settings: RAGSettings) -> float:
         """Get priority multiplier for source table"""
         table_lower = (source_table or '').lower()
@@ -2468,6 +2576,19 @@ class SemanticSearchService:
                             raw_results.append(kr)
                             existing_ids.add(kr["id"])
                     logger.info(f"Hybrid search: {len(keyword_results)} keyword augment results added")
+
+            # === ARTICLE INJECTION: Ensure target article is included when detected ===
+            # When user asks for specific article (VUK 8, KDVK 29), inject it directly
+            if article_anchoring_enabled and not use_keyword_fallback:
+                article_inject_start = datetime.now()
+                injected = await self._inject_target_article(
+                    raw_results,
+                    article_query,
+                    query_embedding
+                )
+                timings["article_inject_ms"] = (datetime.now() - article_inject_start).total_seconds() * 1000
+                if injected:
+                    logger.info(f"🎯 Injected target article: {article_query['law_code']} Madde {article_query['article_number']}")
 
             # Apply hybrid scoring with table weights and retrieval-level penalties
             score_start = datetime.now()
