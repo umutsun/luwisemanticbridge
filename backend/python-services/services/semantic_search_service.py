@@ -2155,14 +2155,16 @@ class SemanticSearchService:
                     continue
 
                 # Calculate weighted similarity with additive boost for high-priority sources
-                # High-weight sources (weight >= 1.0) get a bonus to compete with high-similarity results
+                # Only sources EXPLICITLY set with weight >= 1.0 in settings get the boost
                 similarity = result["similarity_score"]
+                source_table = result["source_table"]
                 base_weighted = similarity * source_priority * table_weight
 
-                # Additive boost for priority sources (weight >= 1.0 gets up to +0.20 bonus)
+                # Additive boost for priority sources that are EXPLICITLY in settings with weight >= 1.0
                 priority_boost = 0.0
-                if table_weight >= 1.0:
-                    priority_boost = 0.20  # 20% boost for priority sources like kanun
+                explicit_weight = settings.source_table_weights.get(source_table) if settings.source_table_weights else None
+                if explicit_weight is not None and explicit_weight >= 1.0:
+                    priority_boost = 0.25  # 25% boost for explicitly configured priority sources
 
                 weighted_similarity = base_weighted + priority_boost
 
