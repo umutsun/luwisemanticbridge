@@ -301,7 +301,8 @@ export default function ChatInterface() {
           greeting: chatbotData.greeting || '',
           // Feature toggles from schema - default to TRUE for better UX
           enableSourceClick: chatbotData.enableSourceClick !== false, // Default true - citations clickable
-          enableSourceQuestionGeneration: chatbotData.enableSourceQuestionGeneration === true,
+          // Read from ragSettings (where the toggle saves) with fallback to chatbotData
+          enableSourceQuestionGeneration: settingsData.ragSettings?.enableSourceQuestionGeneration ?? chatbotData.enableSourceQuestionGeneration ?? false,
           enableKeywordHighlighting: chatbotData.enableKeywordHighlighting !== false, // Default true - keywords highlighted
           // PDF Upload toggle
           enablePdfUpload: chatbotData.enablePdfUpload !== undefined ? chatbotData.enablePdfUpload : false,
@@ -346,7 +347,8 @@ export default function ChatInterface() {
           enableKeywordHighlighting: config.enableKeywordHighlighting,
           rawData: {
             sourceClick: chatbotData.enableSourceClick,
-            questionGen: chatbotData.enableSourceQuestionGeneration
+            questionGenRag: settingsData.ragSettings?.enableSourceQuestionGeneration,
+            questionGenChatbot: chatbotData.enableSourceQuestionGeneration
           }
         });
 
