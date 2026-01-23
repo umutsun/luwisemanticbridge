@@ -42,6 +42,8 @@ class SearchResponse(BaseModel):
     total: int
     timings: Optional[dict] = None
     settings: Optional[dict] = None
+    article_query: Optional[dict] = None  # Article anchoring detection result
+    prompt_context: Optional[dict] = None  # System prompt context
     error: Optional[str] = None
 
 
