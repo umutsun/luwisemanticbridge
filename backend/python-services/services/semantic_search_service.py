@@ -814,8 +814,18 @@ class SemanticSearchService:
                 # Source weight is 0-1 range, multiply by 100 to match similarity scale
                 return sim * 0.7 + (source_weight * 100) * 0.3
 
+            # Debug: Log weighted scores for priority sources
+            for r in all_results:
+                if 'kanun' in r.get('source_table', '').lower() or 'chunk' in r.get('source_table', '').lower():
+                    ws = get_weighted_score(r)
+                    logger.info(f"[WeightedSort] {r['source_table']}: sim={r['similarity_score']:.3f}, weight={settings.source_table_weights.get(r['source_table'], 0.5)}, weighted={ws:.2f}")
+
             all_results.sort(key=get_weighted_score, reverse=True)
             rows = all_results[:limit]
+
+            # Debug: Log final selection
+            kanun_in_final = [r for r in rows if 'kanun' in r.get('source_table', '').lower()]
+            logger.info(f"[WeightedSort] Final selection: {len(rows)} results, {len(kanun_in_final)} kanun sources")
 
             elapsed = (datetime.now() - start_time).total_seconds() * 1000
             logger.info(f"Multi-source vector search: {len(rows)} results in {elapsed:.1f}ms")
