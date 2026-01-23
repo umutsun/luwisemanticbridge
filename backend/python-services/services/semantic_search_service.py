@@ -801,8 +801,20 @@ class SemanticSearchService:
                 except Exception as e:
                     logger.debug(f"message_embeddings query skipped: {e}")
 
-            # Sort all results by similarity and limit
-            all_results.sort(key=lambda x: float(x['similarity_score']), reverse=True)
+            # Sort all results by weighted score (similarity + source weight bonus)
+            # This ensures priority sources like kanun get boosted even with lower similarity
+            def get_weighted_score(result):
+                sim = float(result['similarity_score'])
+                source_table = result.get('source_table', '')
+                # Get source weight from settings (default 0.5 for unknown)
+                source_weight = 0.5
+                if settings.source_table_weights and source_table in settings.source_table_weights:
+                    source_weight = settings.source_table_weights[source_table]
+                # Weighted score: 70% similarity + 30% source weight bonus
+                # Source weight is 0-1 range, multiply by 100 to match similarity scale
+                return sim * 0.7 + (source_weight * 100) * 0.3
+
+            all_results.sort(key=get_weighted_score, reverse=True)
             rows = all_results[:limit]
 
             elapsed = (datetime.now() - start_time).total_seconds() * 1000
