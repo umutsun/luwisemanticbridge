@@ -66,20 +66,20 @@ export class SemanticSearchService {
   private readonly WEIGHTS_CACHE_TTL = 30000; // 30 seconds
 
   // 🔧 NEW: Source type hierarchy for ranking (from ragSettings.sourceTypeHierarchy)
-  // Default weights based on authority level - MUST match database settings keys
+  // Default weights based on authority level - Türkçe key'ler (veri Türkçe olduğu için)
   private sourceTypeHierarchy: Record<string, { weight: number; label: string }> = {
-    'law': { weight: 100, label: 'Kanun/Mevzuat' },
-    'regulation': { weight: 95, label: 'Tebliğ/Yönetmelik' },
+    'kanun': { weight: 100, label: 'Kanun/Mevzuat' },
+    'teblig': { weight: 95, label: 'Tebliğ/Yönetmelik' },
     'sirkuler': { weight: 90, label: 'Sirküler' },
     'kararname': { weight: 85, label: 'Kararname' },
-    'court': { weight: 80, label: 'Yargı Kararları' },
+    'yargi': { weight: 80, label: 'Yargı Kararları' },
     'ozelge': { weight: 75, label: 'Özelge' },
     'danistay': { weight: 70, label: 'Danıştay Kararları' },
-    'article': { weight: 50, label: 'Makale' },
+    'makale': { weight: 50, label: 'Makale' },
     'huk_dkk': { weight: 45, label: 'HUK DKK' },
-    'ebook': { weight: 40, label: 'E-Kitap/PDF' },
-    'qna': { weight: 30, label: 'Soru-Cevap' },
-    'document': { weight: 20, label: 'Genel Doküman' }
+    'ekitap': { weight: 40, label: 'E-Kitap/PDF' },
+    'sorucevap': { weight: 30, label: 'Soru-Cevap' },
+    'dokuman': { weight: 20, label: 'Genel Doküman' }
   };
 
   // 🔧 NEW: Ranking formula weights (configurable via settings)
@@ -1715,61 +1715,60 @@ export class SemanticSearchService {
       .replace(/_embeddings$/, '')  // Remove _embeddings suffix
       .trim();
 
-    // Map source_table names to hierarchy keys (matching ragSettings.sourceTypeHierarchy)
-    // These keys must match the database settings: law, court, ozelge, article, etc.
+    // Map source_table names to hierarchy keys (Türkçe key'ler - veri Türkçe olduğu için)
     const mappings: Record<string, string> = {
-      // Law sources - highest priority (100)
-      'vergilex_mevzuat_kanunlar': 'law',
-      'vergilex_mevzuat_kanunlar_chunks': 'law',  // Chunked law articles
-      'mevzuat_kanunlar': 'law',
-      'kanun': 'law',
-      'kanunlar': 'law',
+      // Kanun kaynakları - en yüksek öncelik (100)
+      'vergilex_mevzuat_kanunlar': 'kanun',
+      'vergilex_mevzuat_kanunlar_chunks': 'kanun',  // Madde bazlı chunk'lanmış kanunlar
+      'mevzuat_kanunlar': 'kanun',
+      'kanun': 'kanun',
+      'kanunlar': 'kanun',
 
-      // Regulation sources (95)
-      'teblig': 'regulation',
-      'tebligler': 'regulation',
-      'yonetmelik': 'regulation',
+      // Tebliğ/Yönetmelik kaynakları (95)
+      'teblig': 'teblig',
+      'tebligler': 'teblig',
+      'yonetmelik': 'teblig',
 
-      // Sirkuler sources (90)
+      // Sirküler kaynakları (90)
       'sirkuler': 'sirkuler',
       'vergilex_gib_sirkuler': 'sirkuler',
       'gib_sirkuler': 'sirkuler',
 
-      // Court decisions - general (80)
-      'yargi': 'court',
-      'yargi_kararlari': 'court',
+      // Yargı Kararları - genel (80)
+      'yargi': 'yargi',
+      'yargi_kararlari': 'yargi',
 
-      // Ozelge sources (75)
+      // Özelge kaynakları (75)
       'ozelge': 'ozelge',
       'ozelgeler': 'ozelge',
 
-      // Danistay Kararları - specific (70)
+      // Danıştay Kararları - spesifik (70)
       'danistay': 'danistay',
       'danistaykararlari': 'danistay',
 
-      // Article sources (50)
-      'makale': 'article',
-      'makaleler': 'article',
-      'makale_arsiv_2021': 'article',
-      'makale_arsiv_2022': 'article',
-      'makale_arsiv_2023': 'article',
-      'makale_arsiv_2024': 'article',
-      'makale_arsiv_2025': 'article',
-      'maliansiklopedi': 'article',
+      // Makale kaynakları (50)
+      'makale': 'makale',
+      'makaleler': 'makale',
+      'makale_arsiv_2021': 'makale',
+      'makale_arsiv_2022': 'makale',
+      'makale_arsiv_2023': 'makale',
+      'makale_arsiv_2024': 'makale',
+      'makale_arsiv_2025': 'makale',
+      'maliansiklopedi': 'makale',
 
       // HUK DKK (45)
       'hukdkk': 'huk_dkk',
       'huk_dkk': 'huk_dkk',
 
-      // QnA sources (30)
-      'sorucevap': 'qna',
-      'soru_cevap': 'qna',
+      // Soru-Cevap kaynakları (30)
+      'sorucevap': 'sorucevap',
+      'soru_cevap': 'sorucevap',
 
-      // Document sources (20)
-      'document': 'document',
-      'documents': 'document',
-      'unified': 'document',
-      'document_embeddings': 'document'
+      // Doküman kaynakları (20)
+      'document': 'dokuman',
+      'documents': 'dokuman',
+      'unified': 'dokuman',
+      'document_embeddings': 'dokuman'
     };
 
     return mappings[normalized] || normalized;
