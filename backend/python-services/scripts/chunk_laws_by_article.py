@@ -110,8 +110,10 @@ def parse_articles(content: str, law_name: str) -> List[Dict]:
 
     # Pattern to match article headers
     # Matches: Madde 1, MADDE 1, Madde 1 –, Madde 1-, Madde 1.
+    # Also matches articles after : or . (inline format in some documents)
+    # Example: "Zamanaşımı süreleri:Madde 114 –"
     article_pattern = re.compile(
-        r'(?:^|\n)\s*((?:MADDE|Madde)\s*(\d+(?:\s*/\s*[A-Za-z])?)\s*[-–.]?\s*)',
+        r'(?:^|\n|[:.])[ \t]*((?:MADDE|Madde)\s*(\d+(?:\s*/\s*[A-Za-z])?)\s*[-–.]?\s*)',
         re.MULTILINE | re.IGNORECASE
     )
 
@@ -268,7 +270,8 @@ async def process_law_document(
     pool: asyncpg.Pool,
     search_service: SemanticSearchService,
     doc: Dict,
-    dry_run: bool = False
+    dry_run: bool = False,
+    force: bool = False
 ) -> Tuple[int, int]:
     """Process a single law document: parse articles and create embeddings"""
 
@@ -281,8 +284,18 @@ async def process_law_document(
     # Check if already chunked
     existing = await check_existing_chunks(pool, doc_id)
     if existing > 0:
-        print(f"  ⏭️ Already chunked ({existing} articles exist)")
-        return 0, 0
+        if force:
+            # Delete existing chunks when force=True
+            print(f"  🗑️ Force mode: Deleting {existing} existing chunks...")
+            if not dry_run:
+                await pool.execute("""
+                    DELETE FROM unified_embeddings
+                    WHERE source_table = 'vergilex_mevzuat_kanunlar_chunks'
+                    AND metadata->>'original_id' = $1
+                """, str(doc_id))
+        else:
+            print(f"  ⏭️ Already chunked ({existing} articles exist)")
+            return 0, 0
 
     # Parse law header - prefer source_name if it looks like a proper law name
     parsed_name, law_number = parse_law_header(content)
@@ -384,12 +397,15 @@ async def main():
     parser = argparse.ArgumentParser(description='Chunk law documents by article')
     parser.add_argument('--dry-run', action='store_true', help='Show what would be done without making changes')
     parser.add_argument('--limit', type=int, help='Process only first N documents')
+    parser.add_argument('--force', action='store_true', help='Re-chunk even if already processed (deletes existing chunks first)')
     args = parser.parse_args()
 
     print("=" * 60)
     print("🏛️  Law Document Chunking Script")
     print("=" * 60)
     print(f"Mode: {'DRY-RUN (no changes)' if args.dry_run else 'LIVE'}")
+    if args.force:
+        print("Force: Re-chunking all documents (deleting existing chunks)")
     if args.limit:
         print(f"Limit: {args.limit} documents")
     print()
@@ -416,7 +432,7 @@ async def main():
 
         for doc in docs:
             inserted, failed = await process_law_document(
-                pool, search_service, doc, args.dry_run
+                pool, search_service, doc, args.dry_run, args.force
             )
             total_inserted += inserted
             total_failed += failed
