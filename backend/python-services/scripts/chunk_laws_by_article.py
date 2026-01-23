@@ -114,10 +114,10 @@ def parse_articles(content: str, law_name: str) -> List[Dict]:
 
     # Pattern to match article headers
     # Matches: Madde 1, MADDE 1, Madde 1 –, Madde 1-, Madde 1.
-    # Also matches articles after : or . (inline format in some documents)
-    # Example: "Zamanaşımı süreleri:Madde 114 –"
+    # Also matches articles after : or . or ] (inline format in some documents)
+    # Example: "Zamanaşımı süreleri:Madde 114 –" or "giderler:[35]Madde 40"
     article_pattern = re.compile(
-        r'(?:^|\n|[:.])[ \t]*((?:MADDE|Madde)\s*(\d+(?:\s*/\s*[A-Za-z])?)\s*[-–.]?\s*)',
+        r'(?:^|\n|[:.\]])[ \t]*((?:MADDE|Madde)\s*(\d+(?:\s*/\s*[A-Za-z])?)\s*[-–.]?\s*)',
         re.MULTILINE | re.IGNORECASE
     )
 
