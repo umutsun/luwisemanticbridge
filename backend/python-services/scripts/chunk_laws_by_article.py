@@ -208,10 +208,11 @@ async def insert_article_chunk(
         "content_hash": hashlib.md5(chunk.content.encode()).hexdigest()[:12]
     }
 
-    # Source name for display
-    source_name = f"{chunk.law_name} - Madde {chunk.article_number}"
+    # Source name for display (max 255 chars for VARCHAR column)
+    source_name = f"{chunk.law_name[:150]} - Madde {chunk.article_number}"
     if chunk.article_title:
-        source_name += f" ({chunk.article_title})"
+        source_name += f" ({chunk.article_title[:50]})"
+    source_name = source_name[:250]  # Safety truncate
 
     if dry_run:
         print(f"    [DRY-RUN] Would insert: {source_name[:60]}... ({len(chunk.content)} chars)")
