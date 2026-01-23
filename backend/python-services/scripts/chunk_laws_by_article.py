@@ -55,29 +55,44 @@ class ArticleChunk:
 
 def parse_law_header(content: str) -> Tuple[str, Optional[str]]:
     """Extract law name and number from content header"""
-    lines = content[:2000].split('\n')
-    law_name = ""
-    law_number = None
+    # First, try to get law name from first 500 chars (usually contains title)
+    first_part = content[:500]
 
-    for line in lines[:20]:
-        line = line.strip()
-        if not line:
+    # Look for law number pattern anywhere in header
+    law_number = None
+    num_match = re.search(r'(?:Kanun\s*Numarası|No)\s*[:\s]*(\d+)', first_part, re.IGNORECASE)
+    if num_match:
+        law_number = num_match.group(1)
+
+    # Try to extract law name - look for pattern ending with KANUNU or KANUN
+    # Common patterns: "VERGİ USUL KANUNU", "GELİR VERGİSİ KANUNU"
+    law_name = ""
+
+    # Method 1: Look for lines ending with KANUNU or KANUN
+    lines = first_part.split('\n')
+    for line in lines[:10]:
+        line = line.strip().rstrip(',')  # Remove trailing comma
+        if not line or len(line) > 100:
             continue
 
-        # Look for law name patterns - take FIRST match that looks like a title
-        # (short line, mostly uppercase, contains KANUN)
-        if not law_name and ('KANUN' in line.upper() or 'KANUNU' in line.upper()):
-            # Only use if it looks like a title (not too long, reasonable format)
-            if len(line) < 150 and not line.startswith('Madde'):
-                law_name = line
+        # Check if line ends with KANUN/KANUNU (the actual law name)
+        if re.search(r'KANUNU?\s*$', line.upper()):
+            law_name = line
+            break
 
-        # Look for "Kanun Numarası" or similar
-        num_match = re.search(r'(?:Kanun\s*Numarası|No)\s*[:\s]*(\d+)', line, re.IGNORECASE)
-        if num_match:
-            law_number = num_match.group(1)
+        # Also check for common patterns at start of content
+        if re.match(r'^[A-ZİĞÜŞÖÇ\s]+KANUNU?', line):
+            law_name = line
+            break
 
-    # Clean up law name
-    law_name = re.sub(r'\s+', ' ', law_name).strip()
+    # Method 2: If no match, try first line if it contains KANUN
+    if not law_name and lines:
+        first_line = lines[0].strip().rstrip(',')
+        if 'KANUN' in first_line.upper() and len(first_line) < 80:
+            law_name = first_line
+
+    # Clean up law name - remove trailing comma and extra whitespace
+    law_name = re.sub(r'\s+', ' ', law_name).strip().rstrip(',')
 
     return law_name or "Bilinmeyen Kanun", law_number
 
@@ -269,8 +284,15 @@ async def process_law_document(
         print(f"  ⏭️ Already chunked ({existing} articles exist)")
         return 0, 0
 
-    # Parse law header
-    law_name, law_number = parse_law_header(content)
+    # Parse law header - prefer source_name if it looks like a proper law name
+    parsed_name, law_number = parse_law_header(content)
+
+    # Use source_name if it contains KANUN and is reasonably formatted
+    if source_name and ('KANUN' in source_name.upper()) and len(source_name) < 100:
+        law_name = source_name.strip()
+    else:
+        law_name = parsed_name
+
     print(f"  📋 Law: {law_name[:50]}... (No: {law_number or 'N/A'})")
 
     # Parse articles
