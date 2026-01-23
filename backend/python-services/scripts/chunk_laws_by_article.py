@@ -199,10 +199,11 @@ async def insert_article_chunk(
         return True
 
     try:
+        # Use explicit type casting for asyncpg
         await pool.execute("""
             INSERT INTO unified_embeddings
             (source_table, source_type, source_id, source_name, content, embedding, metadata, tokens_used, model_used, embedding_provider)
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+            VALUES ($1::text, $2::text, $3::text, $4::text, $5::text, $6::vector, $7::jsonb, $8::integer, $9::text, $10::text)
             ON CONFLICT (source_table, source_id) DO UPDATE SET
                 content = EXCLUDED.content,
                 embedding = EXCLUDED.embedding,
@@ -210,11 +211,11 @@ async def insert_article_chunk(
                 updated_at = NOW()
         """,
             'vergilex_mevzuat_kanunlar_chunks',  # New source_table for chunks
-            'law',  # Keep source_type as 'law' for hierarchy
-            source_id,
-            source_name[:500],
-            chunk.content,
-            json.dumps(embedding),
+            'kanun',  # Türkçe key for hierarchy
+            str(source_id),  # Ensure string
+            str(source_name[:500]),
+            str(chunk.content),
+            f"[{','.join(map(str, embedding))}]",  # Vector format
             json.dumps(metadata),
             len(chunk.content) // 3,  # Approximate token count
             'text-embedding-3-small',
