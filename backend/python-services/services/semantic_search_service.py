@@ -93,6 +93,34 @@ class PromptSettings:
     schema_name: Optional[str] = None
 
 
+@dataclass
+class LawCodeConfig:
+    """
+    Law code configuration for article anchoring.
+    Loaded dynamically from schema's llm_config.lawCodeConfig.
+    Enables multi-tenant law code mappings.
+    """
+    # Law code → aliases (e.g., "VUK" → ["Vergi Usul Kanunu", ...])
+    law_codes: Dict[str, List[str]] = None
+    # Law number → code (e.g., "213" → "VUK")
+    law_number_to_code: Dict[str, str] = None
+    # Full law name → code (handles malformed names)
+    law_name_to_code: Dict[str, str] = None
+    # Patterns for matching law codes
+    law_code_patterns: List[Dict[str, str]] = None
+
+    def __post_init__(self):
+        """Initialize with defaults if None"""
+        if self.law_codes is None:
+            self.law_codes = {}
+        if self.law_number_to_code is None:
+            self.law_number_to_code = {}
+        if self.law_name_to_code is None:
+            self.law_name_to_code = {}
+        if self.law_code_patterns is None:
+            self.law_code_patterns = []
+
+
 class SemanticSearchService:
     """High-performance semantic search service with multi-provider support"""
 
@@ -117,6 +145,106 @@ class SemanticSearchService:
         self._prompt_cache: Optional[PromptSettings] = None
         self._prompt_cache_time: Optional[float] = None
         self._prompt_cache_ttl = 10  # 10 seconds
+        self._law_code_config: Optional[LawCodeConfig] = None
+        self._law_code_config_time: Optional[float] = None
+        self._law_code_config_ttl = 60  # 60 seconds
+
+    async def get_law_code_config(self) -> LawCodeConfig:
+        """
+        Load law code configuration from database (schema's llm_config.lawCodeConfig).
+        Falls back to hardcoded defaults if not configured in database.
+        Cached for _law_code_config_ttl seconds.
+        """
+        import time
+        current_time = time.time()
+
+        # Check cache
+        if (self._law_code_config is not None and
+            self._law_code_config_time is not None and
+            current_time - self._law_code_config_time < self._law_code_config_ttl):
+            return self._law_code_config
+
+        try:
+            pool = await get_db()
+
+            # Try to get lawCodeConfig from active schema's llm_config
+            # First check user_schema_settings for active schema
+            result = await pool.fetchrow("""
+                SELECT ip.llm_config
+                FROM user_schema_settings uss
+                JOIN industry_presets ip ON ip.id = uss.active_schema_id
+                WHERE uss.active_schema_type = 'preset'
+                LIMIT 1
+            """)
+
+            law_config_data = None
+
+            if result and result['llm_config']:
+                llm_config = result['llm_config']
+                if isinstance(llm_config, str):
+                    llm_config = json.loads(llm_config)
+                law_config_data = llm_config.get('lawCodeConfig')
+
+            # If not found in presets, try user schemas
+            if not law_config_data:
+                result = await pool.fetchrow("""
+                    SELECT us.llm_config
+                    FROM user_schema_settings uss
+                    JOIN user_schemas us ON us.id = uss.active_schema_id
+                    WHERE uss.active_schema_type = 'custom'
+                    LIMIT 1
+                """)
+                if result and result['llm_config']:
+                    llm_config = result['llm_config']
+                    if isinstance(llm_config, str):
+                        llm_config = json.loads(llm_config)
+                    law_config_data = llm_config.get('lawCodeConfig')
+
+            # If still not found, try settings table directly
+            if not law_config_data:
+                settings_result = await pool.fetchrow("""
+                    SELECT value FROM settings WHERE key = 'lawCodeConfig'
+                """)
+                if settings_result and settings_result['value']:
+                    value = settings_result['value']
+                    if isinstance(value, str):
+                        law_config_data = json.loads(value)
+                    else:
+                        law_config_data = value
+
+            # Build config from database or use defaults
+            if law_config_data:
+                config = LawCodeConfig(
+                    law_codes=law_config_data.get('lawCodes', {}),
+                    law_number_to_code=law_config_data.get('lawNumberToCode', {}),
+                    law_name_to_code=law_config_data.get('lawNameToCode', {}),
+                    law_code_patterns=law_config_data.get('lawCodePatterns', [])
+                )
+                logger.info(f"[LawCodeConfig] Loaded from database: {len(config.law_codes)} codes, {len(config.law_number_to_code)} numbers, {len(config.law_name_to_code)} names")
+            else:
+                # Use class-level defaults
+                config = LawCodeConfig(
+                    law_codes=self.LAW_CODES,
+                    law_number_to_code=self.KANUN_NO_TO_CODE,
+                    law_name_to_code=self.LAW_NAME_TO_CODE,
+                    law_code_patterns=[]
+                )
+                logger.debug("[LawCodeConfig] Using hardcoded defaults")
+
+            # Update cache
+            self._law_code_config = config
+            self._law_code_config_time = current_time
+            return config
+
+        except Exception as e:
+            logger.warning(f"[LawCodeConfig] Error loading from database, using defaults: {e}")
+            # Return defaults on error
+            return LawCodeConfig(
+                law_codes=self.LAW_CODES,
+                law_number_to_code=self.KANUN_NO_TO_CODE,
+                law_name_to_code=self.LAW_NAME_TO_CODE,
+                law_code_patterns=[]
+            )
 
     async def _get_embedding_config(self) -> EmbeddingConfig:
         """Load embedding provider configuration from database settings"""
@@ -2840,33 +2968,72 @@ class SemanticSearchService:
                 target_article = article_query["article_number"]
                 exact_match_found = penalty_stats.get("article_exact_count", 0) > 0
 
+                def check_content_for_wrong_article(content: str, target_law: str, target_article: str) -> bool:
+                    """
+                    Check if content mentions other articles of the same law.
+                    Returns True if content has WRONG article references that might confuse LLM.
+                    """
+                    content_upper = content.upper()
+
+                    # Get all code variations for this law
+                    law_variations = [target_law]
+                    if target_law in self.LAW_CODES:
+                        law_variations.extend(self.LAW_CODES[target_law])
+
+                    # Check if content mentions this law at all
+                    mentions_target_law = any(v.upper() in content_upper for v in law_variations)
+                    if not mentions_target_law:
+                        return False  # Doesn't mention target law, OK to keep
+
+                    # Content mentions target law - check if it mentions WRONG article numbers
+                    # Pattern: "Madde X" or "Md. X" where X is NOT target_article
+                    import re
+                    article_refs = re.findall(r'(?:MADDE|Madde|Md\.?)\s*(\d+(?:/[A-Za-z])?)', content, re.IGNORECASE)
+
+                    if not article_refs:
+                        return False  # No specific article mentioned, OK to keep
+
+                    # Check if any mentioned article is NOT the target
+                    for ref in article_refs:
+                        ref_num = ref.split('/')[0].strip()  # Handle "40/A" format
+                        if ref_num != str(target_article):
+                            # Found reference to WRONG article of the same law
+                            return True
+
+                    return False  # Only mentions target article or general law
+
                 def should_keep_result(result: Dict) -> bool:
                     source_table = result.get("source_table", "")
+                    content = result.get("content", "")
+                    metadata = result.get("metadata", {}) or {}
 
-                    # Keep non-law-chunk sources (özelge, makale, sirküler, etc.)
-                    if source_table != "vergilex_mevzuat_kanunlar_chunks":
-                        return True
+                    # ===== LAW CHUNKS =====
+                    if source_table == "vergilex_mevzuat_kanunlar_chunks":
+                        # For law chunks - strict filtering
+                        if not exact_match_found:
+                            # 🚫 Critical: No exact match means ALL law chunks are wrong articles
+                            return False
 
-                    # For law chunks:
-                    # - If exact match found: only keep matching article
-                    # - If NO exact match: REMOVE ALL law chunks (they're all wrong!)
+                        # Exact match found - only keep the matching article
+                        law_name = metadata.get("law_name", "")
+                        article_num = str(metadata.get("article_number", ""))
+
+                        is_target = (
+                            article_num == str(target_article) and
+                            (target_law.upper() in law_name.upper() or
+                             self._law_name_to_code(law_name) == target_law)
+                        )
+                        return is_target
+
+                    # ===== SECONDARY SOURCES (özelge, makale, sirküler, etc.) =====
+                    # V2 FIX: Also filter secondary sources that cite WRONG articles
                     if not exact_match_found:
-                        # 🚫 Critical: No exact match means ALL law chunks are wrong articles
-                        # Remove them to prevent LLM from citing wrong Madde numbers
-                        return False
+                        # When target article NOT found, filter secondary sources that
+                        # mention OTHER articles of the same law (to prevent wrong citations)
+                        if check_content_for_wrong_article(content, target_law, target_article):
+                            return False  # Remove - mentions wrong article of target law
 
-                    # Exact match found - only keep the matching article
-                    metadata = result.get("metadata", {})
-                    law_name = metadata.get("law_name", "")
-                    article_num = str(metadata.get("article_number", ""))
-
-                    # Check if this is the target article
-                    is_target = (
-                        article_num == str(target_article) and
-                        (target_law.upper() in law_name.upper() or
-                         self._law_name_to_code(law_name) == target_law)
-                    )
-                    return is_target
+                    return True  # Keep secondary source
 
                 filtered_count = len(scored_results)
                 scored_results = [r for r in scored_results if should_keep_result(r)]
@@ -2874,9 +3041,9 @@ class SemanticSearchService:
 
                 if removed_count > 0:
                     if exact_match_found:
-                        logger.info(f"🎯 Article filter: removed {removed_count} non-matching law chunks, keeping {len(scored_results)} results")
+                        logger.info(f"🎯 Article filter: removed {removed_count} non-matching chunks, keeping {len(scored_results)} results")
                     else:
-                        logger.warning(f"⚠️ Article filter: {target_law} Madde {target_article} NOT FOUND - removed ALL {removed_count} law chunks to prevent wrong citations")
+                        logger.warning(f"⚠️ Article filter: {target_law} Madde {target_article} NOT FOUND - removed {removed_count} wrong-article chunks to prevent wrong citations")
 
             final_results = scored_results[:limit]
 

@@ -28,6 +28,22 @@ export interface SchemaField {
   showInTags?: boolean;
 }
 
+/**
+ * Law Code Configuration for article anchoring
+ * Used by semantic search to match law article queries (e.g., "VUK 114", "GVK 40")
+ * Multi-tenant: Each schema can have its own law code mappings
+ */
+export interface LawCodeConfig {
+  /** Map of law code → aliases (e.g., "VUK" → ["Vergi Usul Kanunu", ...]) */
+  lawCodes?: Record<string, string[]>;
+  /** Map of law number → code (e.g., "213" → "VUK") */
+  lawNumberToCode?: Record<string, string>;
+  /** Map of full law name → code (handles malformed names) */
+  lawNameToCode?: Record<string, string>;
+  /** Patterns for matching law codes in malformed text */
+  lawCodePatterns?: Array<{ pattern: string; code: string }>;
+}
+
 // LLM Configuration
 export interface LLMConfig {
   analyzePrompt?: string;
@@ -37,6 +53,8 @@ export interface LLMConfig {
   transformRules?: string;
   questionGenerator?: string;
   searchContext?: string;
+  /** Law code configuration for article anchoring */
+  lawCodeConfig?: LawCodeConfig;
 }
 
 // Ana Data Schema yapısı

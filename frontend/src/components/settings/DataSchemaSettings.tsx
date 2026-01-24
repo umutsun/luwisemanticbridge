@@ -394,6 +394,11 @@ export default function DataSchemaSettings() {
         const fields = JSON.parse(value);
         if (Array.isArray(fields)) setEditedSchema({ ...editedSchema, fields });
       } catch { toast.error('Geçersiz JSON'); return; }
+    } else if (field === 'lawCodeConfig') {
+      try {
+        const lawCodeConfig = JSON.parse(value);
+        setEditedSchema({ ...editedSchema, llmConfig: { ...editedSchema.llmConfig, lawCodeConfig } });
+      } catch { toast.error('Geçersiz JSON formatı'); return; }
     }
     setEditModal({ ...editModal, open: false });
     toast.success('Güncellendi');
@@ -809,6 +814,58 @@ export default function DataSchemaSettings() {
                 </div>
               </div>
 
+              {/* Article Anchoring - Law Code Configuration */}
+              <div className="border-t pt-4 space-y-2">
+                <h3 className="text-sm font-medium mb-3">Madde Çapalama (Article Anchoring)</h3>
+                <p className="text-xs text-muted-foreground mb-3">
+                  "VUK 114" veya "GVK 40" gibi kanun madde sorgularının doğru eşleştirilmesi için kanun kodu yapılandırması.
+                </p>
+
+                {/* Law Code Config Card */}
+                <div
+                  className="p-3 border rounded-lg cursor-pointer hover:bg-muted/50 transition-colors"
+                  onClick={() => setEditModal({
+                    open: true,
+                    field: 'lawCodeConfig',
+                    title: 'Kanun Kodu Yapılandırması',
+                    value: JSON.stringify(editedSchema.llmConfig?.lawCodeConfig || {
+                      lawCodes: {
+                        "VUK": ["Vergi Usul Kanunu", "VERGİ USUL KANUNU", "213 Sayılı Kanun"],
+                        "GVK": ["Gelir Vergisi Kanunu", "GELİR VERGİSİ KANUNU", "193 Sayılı Kanun"],
+                        "KVK": ["Kurumlar Vergisi Kanunu", "KURUMLAR VERGİSİ KANUNU", "5520 Sayılı Kanun"],
+                        "KDVK": ["Katma Değer Vergisi Kanunu", "KDV KANUNU", "3065 Sayılı Kanun"]
+                      },
+                      lawNumberToCode: {
+                        "213": "VUK",
+                        "193": "GVK",
+                        "5520": "KVK",
+                        "3065": "KDVK"
+                      },
+                      lawNameToCode: {
+                        "VERGİSİ KANUNU (G.V.K.)Kanun": "GVK",
+                        "Kanunlar No: 492": "HK"
+                      }
+                    }, null, 2),
+                    placeholder: '{"lawCodes": {"VUK": ["Vergi Usul Kanunu"]}, "lawNumberToCode": {"213": "VUK"}}'
+                  })}
+                >
+                  <div className="flex items-start justify-between">
+                    <div className="flex-1">
+                      <div className="text-xs font-medium mb-1">Kanun Kodu Eşleştirmeleri</div>
+                      <div className="text-lg font-bold text-primary">
+                        {Object.keys(editedSchema.llmConfig?.lawCodeConfig?.lawCodes || {}).length}
+                      </div>
+                      <div className="text-xs text-muted-foreground truncate">
+                        {Object.keys(editedSchema.llmConfig?.lawCodeConfig?.lawCodes || {}).slice(0, 4).join(', ') || 'Varsayılan'}
+                      </div>
+                    </div>
+                    <Badge variant="outline" className="text-xs shrink-0">
+                      {editedSchema.llmConfig?.lawCodeConfig ? 'Özel' : 'Varsayılan'}
+                    </Badge>
+                  </div>
+                </div>
+              </div>
+
             </>
           ) : (
             <div className="text-center py-8 text-muted-foreground">
@@ -1163,6 +1220,13 @@ export default function DataSchemaSettings() {
                 {editModal.field === 'chatbotContext' && 'Chat yanıtları için domain bağlamı'}
                 {editModal.field === 'citationTemplate' && 'Kaynak gösterim şablonu: {{alan_adi}} formatında değişkenler kullanın'}
                 {editModal.field === 'routingSchema' && 'RAG yanıt formatı ve routing kuralları'}
+                {editModal.field === 'lawCodeConfig' && (
+                  <>
+                    <strong>lawCodes:</strong> Kanun kodu → alias listesi (VUK → ["Vergi Usul Kanunu"]) <br/>
+                    <strong>lawNumberToCode:</strong> Kanun no → kod (213 → VUK) <br/>
+                    <strong>lawNameToCode:</strong> Hatalı isim → kod düzeltmeleri
+                  </>
+                )}
               </p>
             </div>
           )}

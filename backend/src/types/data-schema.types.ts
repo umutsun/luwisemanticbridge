@@ -194,6 +194,37 @@ export interface TopicEntity {
 }
 
 /**
+ * Law Code Configuration for article anchoring
+ * Used by semantic search to match law article queries (e.g., "VUK 114", "GVK 40")
+ * Multi-tenant: Each schema can have its own law code mappings
+ */
+export interface LawCodeConfig {
+  /**
+   * Map of law code → aliases (used for query detection)
+   * Example: { "VUK": ["Vergi Usul Kanunu", "VERGİ USUL KANUNU", "213 Sayılı Kanun"] }
+   */
+  lawCodes?: Record<string, string[]>;
+
+  /**
+   * Map of law number → code (for number-based lookup)
+   * Example: { "213": "VUK", "193": "GVK", "3065": "KDVK" }
+   */
+  lawNumberToCode?: Record<string, string>;
+
+  /**
+   * Map of full law name → code (handles malformed names from chunked data)
+   * Example: { "VERGİSİ KANUNU (G.V.K.)Kanun": "GVK", "Kanunlar No: 492": "HK" }
+   */
+  lawNameToCode?: Record<string, string>;
+
+  /**
+   * Patterns for matching law codes in malformed text
+   * Example: [{ pattern: "G\\.V\\.K", code: "GVK" }, { pattern: "\\(GVK\\)", code: "GVK" }]
+   */
+  lawCodePatterns?: Array<{ pattern: string; code: string }>;
+}
+
+/**
  * LLM Configuration for schema-aware processing
  * Used across all LLM-powered features: analyze, chatbot, embedding, transform
  */
@@ -234,6 +265,13 @@ export interface LLMConfig {
    * Example: { "kanun": 100, "teblig": 90, "ozelge": 75, "danistay": 70, "makale": 50, "qna": 30 }
    */
   authorityLevels?: Record<string, number>;
+
+  /**
+   * Law code configuration for article anchoring in semantic search
+   * Enables dynamic mapping of law codes, numbers, and names
+   * Multi-tenant: Each schema can have its own law configurations
+   */
+  lawCodeConfig?: LawCodeConfig;
 }
 
 /**
