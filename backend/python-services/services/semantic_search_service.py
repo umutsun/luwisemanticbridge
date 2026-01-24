@@ -1392,12 +1392,83 @@ class SemanticSearchService:
 
                     if normalized_code and article_number:
                         logger.info(f"🎯 Article query detected: {normalized_code} Madde {article_number}")
+                        # Detect intent keywords for sub-clause filtering
+                        intent = self._detect_query_intent(query)
+
                         return {
                             "law_code": normalized_code,
                             "article_number": article_number.strip(),
                             "matched_text": match.group(0),
-                            "query_type": "article_specific"
+                            "query_type": "article_specific",
+                            "intent": intent
                         }
+
+        return None
+
+    # Intent keyword mappings for sub-clause routing
+    # Format: intent_name -> (positive_keywords, negative_keywords, sub_clause_hints)
+    INTENT_KEYWORDS = {
+        "indirim": {
+            "positive": ["indirim", "indirimi", "indirilir", "indirilecek", "indirilmesi", "indirilebilir", "indirilme"],
+            "negative": ["iade", "nakden", "mahsup"],
+            "sub_clause": "29/1",
+            "description": "KDV indirimi şartları"
+        },
+        "iade": {
+            "positive": ["iade", "iadesi", "nakden", "mahsup", "geri alma", "geri ödeme"],
+            "negative": ["indirim"],
+            "sub_clause": "29/2",
+            "description": "KDV iadesi şartları"
+        },
+        "istisna": {
+            "positive": ["istisna", "istisnası", "muaf", "muafiyet"],
+            "negative": [],
+            "sub_clause": None,
+            "description": "Vergi istisnası"
+        },
+        "ceza": {
+            "positive": ["ceza", "usulsüzlük", "vergi ziyaı", "gecikme", "faiz"],
+            "negative": [],
+            "sub_clause": None,
+            "description": "Vergi cezaları"
+        }
+    }
+
+    def _detect_query_intent(self, query: str) -> Optional[Dict[str, Any]]:
+        """
+        Detect the primary intent/concept from the query.
+
+        This helps distinguish between related but different concepts like:
+        - KDV indirimi (KDVK 29/1) vs KDV iadesi (KDVK 29/2)
+        - Vergi istisnası vs vergi muafiyeti
+
+        Returns:
+            Dict with intent info if detected, None otherwise
+        """
+        if not query:
+            return None
+
+        query_lower = query.lower()
+
+        detected_intents = []
+
+        for intent_name, intent_config in self.INTENT_KEYWORDS.items():
+            positive_match = any(kw in query_lower for kw in intent_config["positive"])
+            negative_match = any(kw in query_lower for kw in intent_config["negative"])
+
+            if positive_match and not negative_match:
+                detected_intents.append({
+                    "intent": intent_name,
+                    "sub_clause": intent_config["sub_clause"],
+                    "description": intent_config["description"],
+                    "confidence": "high" if not negative_match else "medium"
+                })
+
+        if detected_intents:
+            # Return primary intent (first match with highest confidence)
+            primary = detected_intents[0]
+            logger.info(f"📌 Intent detected: {primary['intent']} ({primary['description']})")
+            return primary
 
         return None
 
@@ -1690,6 +1761,7 @@ class SemanticSearchService:
 
         target_law = article_query["law_code"]
         target_article = article_query["article_number"]
+        intent = article_query.get("intent")
 
         match_result = self._check_article_match(result, target_law, target_article)
 
@@ -1720,6 +1792,13 @@ class SemanticSearchService:
             # NO MATCH: Slight penalty for irrelevant content
             boost = -0.05
 
+        # Intent-based sub-clause filtering (e.g., KDVK 29 indirim vs iade)
+        intent_penalty = 0.0
+        intent_info = None
+        if intent and intent.get("intent"):
+            intent_penalty, intent_info = self._apply_intent_filter(result, intent)
+            boost += intent_penalty
+
         details = {
             "article_anchoring": match_type,
             "article_boost": round(boost * 100, 2),
@@ -1728,7 +1807,127 @@ class SemanticSearchService:
             "target": f"{target_law} Madde {target_article}"
         }
 
+        if intent_info:
+            details["intent_filter"] = intent_info
+
         return boost, details
+
+    # Aggressive content patterns that indicate wrong intent (for hard filtering)
+    # These patterns are strong signals of off-topic content
+    INTENT_HARD_FILTERS = {
+        "indirim": {
+            # When asking about "indirim", heavily penalize these iade-specific patterns
+            "hard_negative": [
+                "nakden iade",
+                "mahsup yoluyla iade",
+                "iade edilir",
+                "iade talep",
+                "iade hakkı",
+                "geri ödeme",
+                "29/2",  # KDVK 29/2 is about refund, not deduction
+                "29 uncu maddesinin 2",
+                "29. maddesinin 2",
+                "ikinci fıkra",
+                "2. fıkra",
+                "2 nci fıkra",
+                "%51",  # Public ownership threshold - only relevant for refund
+                "kamuya ait",
+            ],
+            "hard_penalty": -0.5  # Heavy penalty for iade content in indirim query
+        },
+        "iade": {
+            # When asking about "iade", heavily penalize these indirim-only patterns
+            "hard_negative": [
+                "indirim hakkı doğar",
+                "indirim konusu yapılır",
+                "indirilecek kdv",
+                "29/1",
+                "29 uncu maddesinin 1",
+                "birinci fıkra",
+                "1. fıkra",
+            ],
+            "hard_penalty": -0.5
+        }
+    }
+
+    def _apply_intent_filter(
+        self,
+        result: Dict[str, Any],
+        intent: Dict[str, Any]
+    ) -> Tuple[float, Optional[Dict[str, Any]]]:
+        """
+        Apply intent-based filtering to boost/penalize results based on query intent.
+
+        For example, if user asks about "KDVK 29 indirim", we:
+        - Boost content about indirim (29/1 context)
+        - HEAVILY penalize content about iade (29/2 context)
+
+        Args:
+            result: Search result dict
+            intent: Intent info from _detect_query_intent
+
+        Returns:
+            Tuple of (penalty_value, details)
+        """
+        intent_name = intent.get("intent")
+        if not intent_name or intent_name not in self.INTENT_KEYWORDS:
+            return 0.0, None
+
+        content = (result.get("content") or "").lower()
+        title = (result.get("title") or "").lower()
+        text = f"{title} {content}"
+
+        intent_config = self.INTENT_KEYWORDS[intent_name]
+        positive_keywords = intent_config["positive"]
+        negative_keywords = intent_config["negative"]
+
+        # Count keyword occurrences
+        positive_count = sum(1 for kw in positive_keywords if kw in text)
+        negative_count = sum(1 for kw in negative_keywords if kw in text)
+
+        # Calculate base intent alignment score
+        penalty = 0.0
+        alignment = "neutral"
+        hard_filtered = False
+        hard_match = None
+
+        # AGGRESSIVE HARD FILTERING: Check for strong off-topic signals
+        if intent_name in self.INTENT_HARD_FILTERS:
+            hard_config = self.INTENT_HARD_FILTERS[intent_name]
+            for pattern in hard_config["hard_negative"]:
+                if pattern.lower() in text:
+                    penalty = hard_config["hard_penalty"]
+                    alignment = "hard_filtered"
+                    hard_filtered = True
+                    hard_match = pattern
+                    logger.info(f"📌 HARD FILTER: '{pattern}' found in result for intent={intent_name}, penalty={penalty}")
+                    break
+
+        # If not hard-filtered, apply soft filtering
+        if not hard_filtered:
+            if negative_count > positive_count:
+                # Content talks more about opposite concept - penalize
+                penalty = -0.25
+                alignment = "misaligned"
+                logger.debug(f"📌 Intent filter: {intent_name} misaligned (pos={positive_count}, neg={negative_count})")
+            elif positive_count > 0 and negative_count == 0:
+                # Content aligns with intent - boost
+                penalty = 0.15
+                alignment = "aligned"
+            elif positive_count > 0 and negative_count > 0:
+                # Mixed content - slight penalty
+                penalty = -0.05
+                alignment = "mixed"
+
+        return penalty, {
+            "intent": intent_name,
+            "alignment": alignment,
+            "positive_matches": positive_count,
+            "negative_matches": negative_count,
+            "hard_filtered": hard_filtered,
+            "hard_match": hard_match,
+            "penalty": round(penalty * 100, 2)
+        }
 
     async def _inject_target_article(
         self,
@@ -2726,7 +2925,9 @@ class SemanticSearchService:
         article_anchoring_enabled = article_query is not None
 
         if article_anchoring_enabled:
-            logger.info(f"🎯 Article-specific query: {article_query['law_code']} Madde {article_query['article_number']}")
+            intent_info = article_query.get('intent', {})
+            intent_str = f" | Intent: {intent_info.get('intent', 'none')}" if intent_info else ""
+            logger.info(f"🎯 Article-specific query: {article_query['law_code']} Madde {article_query['article_number']}{intent_str}")
 
         # Check search result cache
         if use_cache:
@@ -3094,6 +3295,8 @@ class SemanticSearchService:
                     "exact_match_found": penalty_stats.get("article_exact_count", 0) > 0 if article_anchoring_enabled else None,
                     "exact_match_count": penalty_stats.get("article_exact_count", 0) if article_anchoring_enabled else None,
                     "wrong_match_count": penalty_stats.get("article_wrong_count", 0) if article_anchoring_enabled else None,
+                    # Intent info for sub-clause routing (e.g., indirim vs iade)
+                    "intent": article_query.get("intent") if article_query else None,
                 } if article_anchoring_enabled else None,
                 "prompt_context": {
                     "conversation_tone": prompt_settings.conversation_tone,
