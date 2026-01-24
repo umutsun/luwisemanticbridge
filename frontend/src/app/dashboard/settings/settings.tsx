@@ -2828,20 +2828,6 @@ function RAGSettings() {
                     </AlertDescription>
                   </Alert>
                 )}
-
-                {/* Streaming Mode Toggle */}
-                <div className="flex items-center justify-between p-3 border rounded-lg bg-muted/30">
-                  <div className="space-y-0.5">
-                    <Label className="text-sm font-medium">Streaming Modu</Label>
-                    <p className="text-xs text-muted-foreground">
-                      Yanıtları kelime kelime göster. Kapalıyken tek seferde yüklenir.
-                    </p>
-                  </div>
-                  <Switch
-                    checked={tempRAGConfig?.ragSettings?.streamingEnabled ?? DEFAULT_RAG_SETTINGS.streamingEnabled}
-                    onCheckedChange={(checked) => updateRAGSetting('streamingEnabled', checked)}
-                  />
-                </div>
               </div>
             </div>
 
@@ -2881,6 +2867,20 @@ function RAGSettings() {
             <div className="space-y-4">
               <h3 className="text-lg font-medium">{t('settings.rag.searchOptions')}</h3>
               <div className="space-y-3">
+                {/* Streaming Mode Toggle */}
+                <div className="flex items-center justify-between py-2">
+                  <div className="flex-1">
+                    <Label>Streaming Modu</Label>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Yanıtları kelime kelime göster. Kapalıyken tek seferde yüklenir.
+                    </p>
+                  </div>
+                  <Switch
+                    checked={tempRAGConfig?.ragSettings?.streamingEnabled ?? DEFAULT_RAG_SETTINGS.streamingEnabled}
+                    onCheckedChange={(checked) => updateRAGSetting('streamingEnabled', checked)}
+                  />
+                </div>
+
                 {/* Strict RAG Mode - Source-faithful responses */}
                 <div className="flex items-center justify-between py-2 border-b border-yellow-200 dark:border-yellow-900 bg-yellow-50 dark:bg-yellow-900/20 rounded-lg px-3 mb-2">
                   <div className="flex-1">
