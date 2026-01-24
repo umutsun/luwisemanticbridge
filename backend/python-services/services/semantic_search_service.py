@@ -2751,11 +2751,12 @@ class SemanticSearchService:
             # Sort by final score and limit
             scored_results.sort(key=lambda x: x["final_score"], reverse=True)
 
-            # 🎯 ARTICLE FILTERING: When article anchoring is enabled and exact match found,
-            # remove OTHER law article chunks to prevent LLM confusion
-            if article_anchoring_enabled and penalty_stats.get("article_exact_count", 0) > 0:
+            # 🎯 ARTICLE FILTERING: When article anchoring is enabled,
+            # filter law chunks to prevent LLM from citing wrong articles
+            if article_anchoring_enabled:
                 target_law = article_query["law_code"]
                 target_article = article_query["article_number"]
+                exact_match_found = penalty_stats.get("article_exact_count", 0) > 0
 
                 def should_keep_result(result: Dict) -> bool:
                     source_table = result.get("source_table", "")
@@ -2764,7 +2765,15 @@ class SemanticSearchService:
                     if source_table != "vergilex_mevzuat_kanunlar_chunks":
                         return True
 
-                    # For law chunks, only keep if it matches target article
+                    # For law chunks:
+                    # - If exact match found: only keep matching article
+                    # - If NO exact match: REMOVE ALL law chunks (they're all wrong!)
+                    if not exact_match_found:
+                        # 🚫 Critical: No exact match means ALL law chunks are wrong articles
+                        # Remove them to prevent LLM from citing wrong Madde numbers
+                        return False
+
+                    # Exact match found - only keep the matching article
                     metadata = result.get("metadata", {})
                     law_name = metadata.get("law_name", "")
                     article_num = str(metadata.get("article_number", ""))
@@ -2782,7 +2791,10 @@ class SemanticSearchService:
                 removed_count = filtered_count - len(scored_results)
 
                 if removed_count > 0:
-                    logger.info(f"🎯 Article filter: removed {removed_count} non-matching law chunks, keeping {len(scored_results)} results")
+                    if exact_match_found:
+                        logger.info(f"🎯 Article filter: removed {removed_count} non-matching law chunks, keeping {len(scored_results)} results")
+                    else:
+                        logger.warning(f"⚠️ Article filter: {target_law} Madde {target_article} NOT FOUND - removed ALL {removed_count} law chunks to prevent wrong citations")
 
             final_results = scored_results[:limit]
 
