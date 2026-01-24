@@ -434,8 +434,9 @@ export const ZenMessage: React.FC<ZenMessageProps> = ({
               </div>
             ) : useSchemaRenderer ? (
               // Schema-based structured response rendering
+              // Use displayContent to support translation toggle
               <SchemaRenderer
-                content={cleanLLMResponse(message.content)}
+                content={cleanLLMResponse(displayContent)}
                 schemaId={responseSchemaId}
                 keywords={backendKeywords}
                 dayanaklar={backendDayanaklar}
