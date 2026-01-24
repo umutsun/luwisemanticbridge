@@ -112,12 +112,25 @@ export const DEFAULT_RAG_ROUTING_SCHEMA: RAGRoutingSchema = {
 3. "KONU:", "DEĞERLENDİRME:", "ANAHTAR_TERİMLER:" gibi BAŞLIK YAZMA
 4. "NEEDS_CLARIFICATION / OUT_OF_SCOPE / NOT_FOUND / FOUND" sınıflandırma YAZMA
 5. Scope/kapsam kontrolü yapma
+6. Soruda geçmeyen madde numarasını ana dayanak olarak gösterme
 
 ✅ SEN SADECE:
 - Sources'tan metin üret
 - Atıf yap [1], [2], [3]
 - Paragraf paragraf yaz (en az 2 paragraf)
 - Direkt metne başla, başlık yok
+
+🚨 MADDE TUTARLILIK KURALI (KRİTİK):
+Soru spesifik bir madde içeriyorsa (örn: "VUK 114", "KDVK 29", "GVK 40"):
+1. Atıfların EN AZ BİRİNDE o madde numarası geçmeli (Madde 114, Madde 29 vb.)
+2. Sources'ta o madde metni YOKSA: "Kaynaklarda [Kanun] Madde [X]'e ilişkin doğrudan metin bulunamamıştır" yaz
+3. ASLA farklı bir maddeyi (Madde 1, Madde 19 vb.) sorulan madde gibi sunma
+4. Alakasız maddeleri "ek bilgi" olarak verebilirsin ama ana cevap sorulan maddeye dayanmalı
+
+⚠️ KESİN FİİL KISITLAMASI:
+"belirtmektedir", "düzenlemektedir", "hükme bağlamaktadır", "emretmektedir" gibi kesin fiiller:
+- SADECE source'ta kelimesi kelimesine geçen hükümler için kullanılabilir
+- Aksi halde şu fiilleri kullan: "değerlendirilebilir", "ifade edilmektedir", "çıkarım yapılabilir", "yorumlanabilir"
 
 KRİTİK KURAL (Karar sende değil):
 - Yalnızca sources içeriğine dayan. Kaynakta olmayanı ekleme.
@@ -131,12 +144,23 @@ KRİTİK KURAL (Karar sende değil):
   7) Soru/Cevap
 - Aynı seviyede birden fazla kaynak varsa: tarih olarak daha yeni olanı öncele.
 - Metin içinde dipnotları [1], [2] şeklinde kullan. Dipnot numarası sources sırasına bağlı kalmalı (sources sırasını değiştirme).
-- Kesin hüküm (evet/hayır) isteyen sorularda: kaynak açık ve net demiyorsa kesin konuşma; "kaynaklarda doğrudan net ifade seçilemedi" diye temkinli yaz.`,
+- Kesin hüküm (evet/hayır) isteyen sorularda: kaynak açık ve net demiyorsa kesin konuşma; "kaynaklarda doğrudan net ifade bulunamadı" diye temkinli yaz.`,
           en: `1. Only cite law/article numbers if they EXPLICITLY appear in source text. Do NOT invent references not in sources.
 2. For verdict questions ("must I", "can I", "is it prohibited"): If no EXPLICIT ruling in sources, say "No clear regulation found in sources on this matter."
 3. Use definitive statements ("required", "prohibited", "possible", "mandatory") ONLY if source explicitly states so verbatim.
 4. When uncertain: Use hedged academic language like "According to sources...", "...may be considered as", "...appears to be".
-5. For conflicting sources: Present both views, explain which is more recent/higher norm.`
+5. For conflicting sources: Present both views, explain which is more recent/higher norm.
+
+🚨 ARTICLE MATCHING RULE (CRITICAL):
+If question mentions a specific article (e.g., "VUK 114", "KDVK 29"):
+1. At least ONE citation MUST reference that article number
+2. If source text for that article is NOT in sources: State "No direct text found for [Law] Article [X] in sources"
+3. NEVER present a different article as if it were the asked article
+4. Unrelated articles can be "additional info" but main answer must cite the asked article
+
+⚠️ DEFINITIVE VERB RESTRICTION:
+Words like "states", "mandates", "requires", "prohibits" can ONLY be used when source text contains verbatim ruling.
+Otherwise use: "may be interpreted as", "suggests", "indicates", "could be considered"`
         },
 
         // Kaynak Öncelik Sırası (yüksekten düşüğe)

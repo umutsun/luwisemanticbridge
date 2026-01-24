@@ -1140,8 +1140,14 @@ export class SemanticSearchService {
             const cached = pythonResult.cached ? ' (CACHED)' : '';
             console.log(`[SemanticSearch] Python search completed: ${pythonResult.results.length} results in ${elapsedMs}ms${cached}`);
 
+            // 🔧 NEW: Extract article info from query for boosting
+            const articleInfo = this.extractArticleFromQuery(query);
+            if (articleInfo) {
+              console.log(`[SemanticSearch] 📚 Article query detected: ${articleInfo.law || 'Generic'} Madde ${articleInfo.articleNo}`);
+            }
+
             // 🔧 FIX: Apply hierarchy scoring to Python results (Python doesn't support hierarchy)
-            // Transform Python results and apply hierarchy boost
+            // Transform Python results and apply hierarchy boost + article boost
             const resultsWithHierarchy = pythonResult.results.map(r => {
               const sourceTable = r.source_table || '';
               const normalizedSourceType = this.normalizeSourceType(sourceTable);
@@ -1151,11 +1157,25 @@ export class SemanticSearchService {
               const pureSimilarity = r.similarity_score || 0;
               const keywordBoost = r.keyword_boost || 0;
 
-              // Combined score: semantic * 0.70 + hierarchy * 0.30 + keyword * 0.10
-              const combinedScore = Math.min(
-                (pureSimilarity * this.semanticWeight + hierarchyScore * this.hierarchyWeight + keywordBoost * 0.1) * 100,
-                100
-              );
+              // 🔧 NEW: Calculate article boost if article query detected
+              let articleBoostMultiplier = 1.0;
+              let articleMatched = false;
+              let matchedPattern: string | null = null;
+              if (articleInfo) {
+                const articleBoostResult = this.calculateArticleBoost(
+                  r.content || '',
+                  r.title || r.metadata?.title || '',
+                  r.metadata,
+                  articleInfo
+                );
+                articleBoostMultiplier = articleBoostResult.boost;
+                articleMatched = articleBoostResult.matched;
+                matchedPattern = articleBoostResult.matchedPattern;
+              }
+
+              // Combined score: (semantic * 0.70 + hierarchy * 0.30 + keyword * 0.10) * articleBoost
+              const baseScore = pureSimilarity * this.semanticWeight + hierarchyScore * this.hierarchyWeight + keywordBoost * 0.1;
+              const combinedScore = Math.min(baseScore * articleBoostMultiplier * 100, 100);
 
               return {
                 id: r.id,
@@ -1165,18 +1185,31 @@ export class SemanticSearchService {
                 source_table: r.source_table,
                 source_id: r.source_id,
                 similarity_score: r.similarity_score,
-                final_score: combinedScore, // Use combined score with hierarchy
+                final_score: combinedScore, // Use combined score with hierarchy + article boost
                 keyword_boost: r.keyword_boost,
                 metadata: r.metadata,
                 hierarchyScore: hierarchyScore,
-                pureSimilarity: pureSimilarity
+                pureSimilarity: pureSimilarity,
+                // 🔧 NEW: Article match info
+                articleMatched: articleMatched,
+                articleMatchedPattern: matchedPattern,
+                articleBoost: articleBoostMultiplier
               };
             });
 
-            // Re-sort by combined score (with hierarchy)
+            // Re-sort by combined score (with hierarchy + article boost)
             resultsWithHierarchy.sort((a, b) => b.final_score - a.final_score);
 
-            console.log(`[SemanticSearch] Applied hierarchy boost to ${resultsWithHierarchy.length} Python results`);
+            // 🔧 NEW: Log article match statistics
+            if (articleInfo) {
+              const matchedCount = resultsWithHierarchy.filter(r => r.articleMatched).length;
+              console.log(`[SemanticSearch] 📊 Article match stats: ${matchedCount}/${resultsWithHierarchy.length} results contain ${articleInfo.law || ''} Madde ${articleInfo.articleNo}`);
+              if (matchedCount === 0) {
+                console.warn(`[SemanticSearch] ⚠️ WARNING: No results matched the asked article (${articleInfo.law || ''} ${articleInfo.articleNo}). Results may be irrelevant.`);
+              }
+            }
+
+            console.log(`[SemanticSearch] Applied hierarchy + article boost to ${resultsWithHierarchy.length} Python results`);
             return resultsWithHierarchy;
           }
 
@@ -1237,6 +1270,12 @@ export class SemanticSearchService {
       const keywordPattern = `%${query}%`;
       const keywordPatterns = queryWords.map(w => `%${w}%`);
       const keywordPatternsJSON = JSON.stringify(keywordPatterns);
+
+      // 🔧 NEW: Extract article info from query for boosting (Node.js path)
+      const articleInfo = this.extractArticleFromQuery(query);
+      if (articleInfo) {
+        console.log(`[SemanticSearch] 📚 Node.js: Article query detected: ${articleInfo.law || 'Generic'} Madde ${articleInfo.articleNo}`);
+      }
 
       // Refresh record types cache if needed
       await this.refreshUnifiedRecordTypes();
@@ -1478,16 +1517,30 @@ export class SemanticSearchService {
         // This gives users honest feedback about relevance with table prioritization
         const displayScore = Math.round(weightedSimilarity * 100);
 
-        // 🔧 NEW: Combined score with configurable weights
-        // Default: 70% semantic similarity + 30% source hierarchy
-        // Formula: (semantic * semanticWeight) + (hierarchy * hierarchyWeight) + (keyword * 0.1)
-        const combinedScore = Math.min(
-          (pureSimilarity * this.semanticWeight + hierarchyScore * this.hierarchyWeight + keywordBoost * 0.1) * 100,
-          100
-        );
-
-        // Format title and excerpt from metadata for better display
+        // Format title and excerpt from metadata for better display (moved up for article boost)
         const formatted = this.formatSearchContent(row);
+
+        // 🔧 NEW: Calculate article boost if article query detected (Node.js path)
+        let articleBoostMultiplier = 1.0;
+        let articleMatched = false;
+        let matchedPattern: string | null = null;
+        if (articleInfo) {
+          const articleBoostResult = this.calculateArticleBoost(
+            row.excerpt || row.content || '',
+            formatted.title || row.title || '',
+            row.metadata,
+            articleInfo
+          );
+          articleBoostMultiplier = articleBoostResult.boost;
+          articleMatched = articleBoostResult.matched;
+          matchedPattern = articleBoostResult.matchedPattern;
+        }
+
+        // 🔧 UPDATED: Combined score with configurable weights + article boost
+        // Default: 70% semantic similarity + 30% source hierarchy
+        // Formula: ((semantic * semanticWeight) + (hierarchy * hierarchyWeight) + (keyword * 0.1)) * articleBoost
+        const baseScore = pureSimilarity * this.semanticWeight + hierarchyScore * this.hierarchyWeight + keywordBoost * 0.1;
+        const combinedScore = Math.min(baseScore * articleBoostMultiplier * 100, 100);
 
         return {
           ...row,
@@ -1507,12 +1560,19 @@ export class SemanticSearchService {
             normalizedSourceType: normalizedSourceType,
             semanticWeight: this.semanticWeight,
             hierarchyWeight: this.hierarchyWeight,
-            combined: Math.round(combinedScore)
+            combined: Math.round(combinedScore),
+            // 🔧 NEW: Article match debug info
+            articleMatched: articleMatched,
+            articleMatchedPattern: matchedPattern,
+            articleBoost: articleBoostMultiplier
           },
           content: formatted.excerpt, // Human-readable content from metadata
           excerpt: formatted.excerpt, // Human-readable excerpt from metadata
           keywords: keywords,
-          sourceType: this.getSourceDisplayName(row.source_table || row.record_type)
+          sourceType: this.getSourceDisplayName(row.source_table || row.record_type),
+          // 🔧 NEW: Article match info for frontend
+          articleMatched: articleMatched,
+          articleMatchedPattern: matchedPattern
         };
       });
 
@@ -1522,6 +1582,15 @@ export class SemanticSearchService {
       sources.forEach(source => {
         source.summary = source.excerpt?.substring(0, 200) || '';
       });
+
+      // 🔧 NEW: Log article match statistics (Node.js path)
+      if (articleInfo) {
+        const matchedCount = sources.filter(s => s.articleMatched).length;
+        console.log(`[SemanticSearch] 📊 Node.js Article match stats: ${matchedCount}/${sources.length} results contain ${articleInfo.law || ''} Madde ${articleInfo.articleNo}`);
+        if (matchedCount === 0) {
+          console.warn(`[SemanticSearch] ⚠️ WARNING: No results matched the asked article (${articleInfo.law || ''} ${articleInfo.articleNo}). Results may be irrelevant.`);
+        }
+      }
 
       console.log(`[SemanticSearch] Returned ${sources.length} sources (fast mode - no LLM summaries)`);
 
@@ -1795,6 +1864,94 @@ export class SemanticSearchService {
       default:
         return sourceTable.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
     }
+  }
+
+  /**
+   * 🔧 NEW: Extract law/article pattern from query
+   * Detects patterns like "VUK 114", "KDVK 29", "GVK Madde 40" etc.
+   * Returns { law, articleNo } or null if not found
+   */
+  extractArticleFromQuery(query: string): { law: string; articleNo: string; patterns: string[] } | null {
+    const normalizedQuery = query.toUpperCase().replace(/İ/g, 'I');
+
+    // Law abbreviation patterns (Turkish tax laws)
+    const lawPatterns = [
+      { regex: /\b(VUK|VERGUSULKANUNU|VERGIUSULKANUNU)\s*[:\s]*(?:MADDE\s*)?(\d+)/i, law: 'VUK' },
+      { regex: /\b(GVK|GELIRVERGI|GELIRVERGISINIKANUNU)\s*[:\s]*(?:MADDE\s*)?(\d+)/i, law: 'GVK' },
+      { regex: /\b(KVK|KURUMLARVERGI|KURUMLARVERGISINIKANUNU)\s*[:\s]*(?:MADDE\s*)?(\d+)/i, law: 'KVK' },
+      { regex: /\b(KDVK|KDV|KATMADEGER|KATMADEGERVERGI)\s*[:\s]*(?:MADDE\s*)?(\d+)/i, law: 'KDVK' },
+      { regex: /\b(OTV|OTVK|OZELTUK)\s*[:\s]*(?:MADDE\s*)?(\d+)/i, law: 'ÖTV' },
+      { regex: /\b(DAMGA|DV|DAMGAVERGI)\s*[:\s]*(?:MADDE\s*)?(\d+)/i, law: 'DAMGA' },
+      { regex: /\b(MTV|MOTORLU)\s*[:\s]*(?:MADDE\s*)?(\d+)/i, law: 'MTV' },
+      { regex: /\b(EMLAK)\s*[:\s]*(?:MADDE\s*)?(\d+)/i, law: 'EMLAK' },
+      // Generic "Madde X" pattern (article number only)
+      { regex: /MADDE\s*(\d+)/i, law: null }
+    ];
+
+    for (const pattern of lawPatterns) {
+      const match = query.match(pattern.regex);
+      if (match) {
+        const articleNo = pattern.law ? match[2] : match[1];
+        const law = pattern.law || '';
+
+        // Generate search patterns for matching in content
+        const patterns = [
+          `Madde ${articleNo}`,
+          `madde ${articleNo}`,
+          `MADDE ${articleNo}`,
+          `md.${articleNo}`,
+          `md. ${articleNo}`,
+          `${articleNo}. madde`,
+          `${articleNo} üncü madde`,
+          `${articleNo} inci madde`,
+          `${articleNo} nci madde`
+        ];
+
+        if (law) {
+          patterns.push(
+            `${law} ${articleNo}`,
+            `${law} Madde ${articleNo}`,
+            `${law.toLowerCase()} ${articleNo}`
+          );
+        }
+
+        console.log(`[SemanticSearch] 🔍 Detected article query: ${law || 'Generic'} Madde ${articleNo}`);
+        return { law, articleNo, patterns };
+      }
+    }
+
+    return null;
+  }
+
+  /**
+   * 🔧 NEW: Calculate article match boost for a result
+   * Boosts score if the result content contains the asked article number
+   * Returns boost multiplier (1.0 = no boost, up to 1.5 = max boost)
+   */
+  calculateArticleBoost(content: string, title: string, metadata: any, articleInfo: { law: string; articleNo: string; patterns: string[] }): { boost: number; matched: boolean; matchedPattern: string | null } {
+    const searchText = `${title || ''} ${content || ''} ${JSON.stringify(metadata || {})}`.toLowerCase();
+
+    // Check if any pattern matches
+    for (const pattern of articleInfo.patterns) {
+      if (searchText.includes(pattern.toLowerCase())) {
+        console.log(`[SemanticSearch] ✅ Article match: "${pattern}" found in result`);
+        return { boost: 1.4, matched: true, matchedPattern: pattern };  // 40% boost for exact article match
+      }
+    }
+
+    // Check for partial match (just the article number)
+    const articleNoPattern = new RegExp(`\\b${articleInfo.articleNo}\\b`);
+    if (articleNoPattern.test(searchText)) {
+      // Check if it's in a "madde" context
+      const maddeContext = new RegExp(`madde[^0-9]*${articleInfo.articleNo}|${articleInfo.articleNo}[^0-9]*madde`, 'i');
+      if (maddeContext.test(searchText)) {
+        console.log(`[SemanticSearch] ✅ Partial article match: article ${articleInfo.articleNo} in madde context`);
+        return { boost: 1.3, matched: true, matchedPattern: `Madde ${articleInfo.articleNo}` };  // 30% boost
+      }
+    }
+
+    // No match - apply penalty to push down irrelevant results
+    return { boost: 0.85, matched: false, matchedPattern: null };  // 15% penalty for non-matching results
   }
 
   /**

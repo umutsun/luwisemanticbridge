@@ -1190,14 +1190,16 @@ class SemanticSearchService:
     # Known Turkish law codes with their full names and variations
     LAW_CODES = {
         "VUK": ["VUK", "Vergi Usul Kanunu", "213"],
-        "GVK": ["GVK", "Gelir Vergisi Kanunu", "193"],
+        "GVK": ["GVK", "Gelir Vergisi Kanunu", "193", "G.V.K."],
         "KVK": ["KVK", "Kurumlar Vergisi Kanunu", "5520"],
         "KDVK": ["KDVK", "Katma Değer Vergisi Kanunu", "3065", "KDV"],
         "ÖTVK": ["ÖTVK", "Özel Tüketim Vergisi Kanunu", "4760", "ÖTV", "OTVK", "OTV"],
         "MTV": ["MTV", "Motorlu Taşıtlar Vergisi Kanunu"],
-        "DVK": ["DVK", "Damga Vergisi Kanunu"],
-        "VİVK": ["VİVK", "Veraset ve İntikal Vergisi Kanunu", "VIVK"],
+        "DVK": ["DVK", "Damga Vergisi Kanunu", "488"],
+        "VİVK": ["VİVK", "Veraset ve İntikal Vergisi Kanunu", "VIVK", "7338"],
         "AATUHK": ["AATUHK", "Amme Alacaklarının Tahsil Usulü Hakkında Kanun", "6183"],
+        "HK": ["HK", "Harçlar Kanunu", "492"],  # Added
+        "BGK": ["BGK", "Belediye Gelirleri Kanunu", "2464"],  # Added
         "TTK": ["TTK", "Türk Ticaret Kanunu", "6102"],
         "BK": ["BK", "Borçlar Kanunu", "6098", "TBK"],
         "HMK": ["HMK", "Hukuk Muhakemeleri Kanunu"],
@@ -1282,28 +1284,90 @@ class SemanticSearchService:
         return code_upper if code_upper else None
 
     # Full law name to code mapping for article matching
+    # Includes both proper names and malformed variations found in chunk data
     LAW_NAME_TO_CODE = {
+        # VUK - Vergi Usul Kanunu
         "VERGİ USUL KANUNU": "VUK",
         "VERGI USUL KANUNU": "VUK",
+
+        # GVK - Gelir Vergisi Kanunu (+ malformed variations)
         "GELİR VERGİSİ KANUNU": "GVK",
         "GELIR VERGISI KANUNU": "GVK",
+        "VERGİSİ KANUNU (G.V.K.)KANUN": "GVK",  # Malformed in chunk data
+        "VERGİSİ KANUNU (G.V.K.)": "GVK",       # Malformed variation
+        "(G.V.K.)KANUN": "GVK",                 # Short malformed
+        "G.V.K.": "GVK",                        # Abbreviation
+
+        # KVK - Kurumlar Vergisi Kanunu
         "KURUMLAR VERGİSİ KANUNU": "KVK",
         "KURUMLAR VERGISI KANUNU": "KVK",
+
+        # KDVK - Katma Değer Vergisi Kanunu
         "KATMA DEĞER VERGİSİ KANUNU": "KDVK",
         "KATMA DEGER VERGISI KANUNU": "KDVK",
+
+        # ÖTVK - Özel Tüketim Vergisi Kanunu
         "ÖZEL TÜKETİM VERGİSİ KANUNU": "ÖTVK",
         "OZEL TUKETIM VERGISI KANUNU": "ÖTVK",
+
+        # MTV - Motorlu Taşıtlar Vergisi Kanunu
         "MOTORLU TAŞITLAR VERGİSİ KANUNU": "MTV",
+
+        # DVK - Damga Vergisi Kanunu
         "DAMGA VERGİSİ KANUNU": "DVK",
+
+        # VİVK - Veraset ve İntikal Vergisi Kanunu
         "VERASET VE İNTİKAL VERGİSİ KANUNU": "VİVK",
+
+        # AATUHK - Amme Alacaklarının Tahsil Usulü Hakkında Kanun
         "AMME ALACAKLARININ TAHSİL USULÜ HAKKINDA KANUN": "AATUHK",
+
+        # HK - Harçlar Kanunu (+ number-based variations)
+        "HARÇLAR KANUNU": "HK",
+        "HARCLAR KANUNU": "HK",
+        "KANUNLAR NO: 492": "HK",  # Malformed in chunk data
+
+        # İYUK - İdari Yargılama Usulü Kanunu
+        "İDARİ YARGILAMA USULÜ KANUNU": "İYUK",
+        "IDARI YARGILAMA USULU KANUNU": "İYUK",
+        "KANUNLAR NO: 2575": "İYUK",  # Malformed variation
+
+        # TTK - Türk Ticaret Kanunu
         "TÜRK TİCARET KANUNU": "TTK",
+
+        # BK - Borçlar Kanunu
         "BORÇLAR KANUNU": "BK",
         "TÜRK BORÇLAR KANUNU": "BK",
+
+        # BELEDİYE - Belediye Gelirleri Kanunu
+        "BELEDİYE GELİRLERİ KANUNU": "BGK",
+    }
+
+    # Kanun numarası -> Kod mapping (for number-based lookups)
+    KANUN_NO_TO_CODE = {
+        "213": "VUK",
+        "193": "GVK",
+        "5520": "KVK",
+        "3065": "KDVK",
+        "4760": "ÖTVK",
+        "492": "HK",
+        "488": "DVK",
+        "7338": "VİVK",
+        "6183": "AATUHK",
+        "2577": "İYUK",
+        "6102": "TTK",
+        "6098": "BK",
     }
 
     def _law_name_to_code(self, law_name: str) -> Optional[str]:
-        """Convert full law name to standard code (e.g., 'VERGİ USUL KANUNU' -> 'VUK')"""
+        """Convert full law name to standard code (e.g., 'VERGİ USUL KANUNU' -> 'VUK')
+
+        Handles:
+        - Standard law names: "VERGİ USUL KANUNU" -> "VUK"
+        - Malformed names: "VERGİSİ KANUNU (G.V.K.)Kanun" -> "GVK"
+        - Number-based: "Kanunlar No: 492" -> "HK"
+        - Abbreviations: "G.V.K." -> "GVK"
+        """
         if not law_name:
             return None
 
@@ -1312,14 +1376,32 @@ class SemanticSearchService:
         # Remove common prefixes like "213 SAYILI"
         name_upper = re.sub(r'^\d+\s*SAYILI\s*', '', name_upper)
 
-        # Direct lookup
+        # 1. Direct lookup
         if name_upper in self.LAW_NAME_TO_CODE:
             return self.LAW_NAME_TO_CODE[name_upper]
 
-        # Partial match - check if any key is contained in the name
+        # 2. Partial match - check if any key is contained in the name
         for full_name, code in self.LAW_NAME_TO_CODE.items():
             if full_name in name_upper:
                 return code
+
+        # 3. GVK special patterns (handles malformed "VERGİSİ KANUNU (G.V.K.)Kanun")
+        if 'G.V.K' in name_upper or '(GVK)' in name_upper:
+            return 'GVK'
+
+        # 4. Number-based lookup (handles "Kanunlar No: 492")
+        num_match = re.search(r'(?:NO:|NUMARASI:?)\s*(\d+)', name_upper)
+        if num_match:
+            kanun_no = num_match.group(1)
+            if kanun_no in self.KANUN_NO_TO_CODE:
+                return self.KANUN_NO_TO_CODE[kanun_no]
+
+        # 5. Try extracting number from start of name
+        start_num_match = re.match(r'^(\d+)\s', name_upper)
+        if start_num_match:
+            kanun_no = start_num_match.group(1)
+            if kanun_no in self.KANUN_NO_TO_CODE:
+                return self.KANUN_NO_TO_CODE[kanun_no]
 
         return None
 
