@@ -3378,134 +3378,164 @@ FORMAT:
   }
 
   /**
-   * 🛡️ PROSEDÜR CLAIM SANITIZER
-   * Post-processes LLM output to soften ungrounded procedural claims.
-   * Replaces definitive verbs with hedged alternatives when source evidence is weak.
+   * 🛡️ PROSEDÜR CLAIM SANITIZER v2 - "GROUNDED DEĞİLSE KALDIR"
    *
-   * Performance: ~1-2ms (regex-based, no LLM call)
+   * Post-processes LLM output to REMOVE (not soften) ungrounded procedural claims.
+   * If a claim contains normative verbs (gerekmektedir, zorunludur, şarttır, etc.)
+   * and the source chunks don't contain supporting evidence, the ENTIRE SENTENCE is removed.
    *
-   * Target patterns:
-   * - "X gerekmektedir" → "X olarak değerlendirilebilir"
-   * - "Y zorunludur" → "Y önerilebilir"
-   * - "Z şarttır" → "Z önem taşımaktadır"
-   * - "aksi takdirde W" → removes or softens
+   * Philosophy: "Soften" approach masks hallucinations. "Remove" approach is honest.
+   *
+   * Performance: ~2-5ms (regex + source check, no LLM call)
    */
   private sanitizeProsedurClaims(response: string, sources: any[]): string {
-    let sanitized = response;
+    // Build source content corpus for grounding check (lowercase, normalized)
+    const sourceCorpus = sources
+      .map(s => `${s.content || ''} ${s.excerpt || ''} ${s.title || ''}`.toLowerCase())
+      .join(' ')
+      .replace(/\s+/g, ' ');
 
-    // Track changes for logging
-    let changeCount = 0;
+    // Split response into sentences for granular removal
+    const sentences = response.split(/(?<=[.!?])\s+/);
+    const processedSentences: string[] = [];
+
+    let removedCount = 0;
+    let keptWithGroundingCount = 0;
 
     // ═══════════════════════════════════════════════════════════════
-    // PATTERN 1: Definitive verb endings → Soften to "değerlendirilebilir"
+    // FORBIDDEN PATTERNS - If detected AND not grounded → REMOVE SENTENCE
     // ═══════════════════════════════════════════════════════════════
-    const definitivePatterns: Array<{ pattern: RegExp; replacement: string }> = [
-      // "X gerekmektedir" → "X olarak değerlendirilebilir"
-      { pattern: /(\S+)\s+gerekmektedir/gi, replacement: '$1 olarak değerlendirilebilir' },
-      { pattern: /(\S+)\s+gerekir/gi, replacement: '$1 önerilebilir' },
-      { pattern: /(\S+)\s+gereklidir/gi, replacement: '$1 önem taşımaktadır' },
+    const forbiddenPatterns = [
+      // Normative verbs (all variants)
+      /gerek(?:mektedir|ir|iyor|lidir|tirmektedir|tirir)[.,;]?/i,
+      /zorunlu(?:dur)?[.,;]?/i,
+      /mecbur(?:idir|i)?[.,;]?/i,
+      /şart(?:tır|ı)?[.,;]?/i,
+      /esas(?:tır)?[.,;]?/i,
 
-      // "X zorunludur" → "X önerilmektedir"
-      { pattern: /(\S+)\s+zorunludur/gi, replacement: '$1 önerilmektedir' },
-      { pattern: /(\S+)\s+mecburidir/gi, replacement: '$1 önerilmektedir' },
+      // Procedural imperatives
+      /ibraz(?:ı|edilmesi|edilmeli)[^.]*(?:gerek|zorunlu|şart)/i,
+      /saklan(?:ması|malı)[^.]*(?:gerek|zorunlu)/i,
+      /muhafaza(?:sı|edilmesi)[^.]*(?:gerek|zorunlu)/i,
+      /belge(?:lenmesi|lemesi)[^.]*(?:gerek|zorunlu)/i,
+      /sunul(?:ması|malı)[^.]*(?:gerek|zorunlu)/i,
+      /beyan(?:name)?\s+veril(?:mesi|melidir)/i,
+      /bildiril(?:mesi|melidir)/i,
+      /başvur(?:ulmalıdır|u\s+yapılmalı)/i,
 
-      // "X şarttır" → "X önem taşımaktadır"
-      { pattern: /(\S+)\s+şarttır/gi, replacement: '$1 önem taşımaktadır' },
-      { pattern: /(\S+)\s+esastır/gi, replacement: '$1 dikkate alınmalıdır' },
+      // Consequence warnings
+      /aksi\s+(?:takdirde|halde)/i,
+      /(?:hak|indirim|iade)\s+kayb(?:edilir|ı)/i,
+      /düşer[.,;]?/i,
+      /sona\s+erer/i,
+      /uygulan(?:a)?maz/i,
 
-      // "ibraz edilmesi gerekmektedir" → "ibraz edilmesi önerilmektedir"
-      { pattern: /ibraz edilmesi gerekmektedir/gi, replacement: 'ibraz edilmesi önerilmektedir' },
-      { pattern: /saklanması gerekmektedir/gi, replacement: 'saklanması tavsiye edilmektedir' },
-      { pattern: /belgelenmesi gerekmektedir/gi, replacement: 'belgelenmesi önerilmektedir' },
+      // Ungrounded warnings
+      /unutulmamalıdır/i,
+      /ihmal\s+edilmemelidir/i,
+      /göz\s+ardı\s+edilmemelidir/i,
+      /dikkat\s+edilmelidir/i,
+      /gözetilmelidir/i,
+      /atlanmamalıdır/i,
+      /titizlikle\s+incelenmesi/i,
 
-      // "beyanname verilmelidir" → "beyanname verilmesi gerekebilir"
-      { pattern: /verilmelidir/gi, replacement: 'verilmesi gerekebilir' },
-      { pattern: /bildirilmelidir/gi, replacement: 'bildirilmesi gerekebilir' },
-      { pattern: /başvurulmalıdır/gi, replacement: 'başvuru yapılması düşünülebilir' },
+      // Duration/deadline claims (without citation)
+      /belirli\s+süre\s+içinde/i,
+      /süre\s+(?:içerisinde|içinde|koşul)/i,
+      /\d+\s+(?:yıl|ay|gün)\s+içinde(?!\s*\[\d+\])/i,  // Keep if cited [X]
+      /takvim\s+yılı\s+içinde/i,
 
-      // "dikkat edilmelidir" → "dikkat edilmesi önerilir"
-      { pattern: /dikkat edilmelidir/gi, replacement: 'dikkat edilmesi önerilir' },
-      { pattern: /gözetilmelidir/gi, replacement: 'gözetilmesi önerilir' },
-      { pattern: /incelenmelidir/gi, replacement: 'incelenmesi faydalı olabilir' },
-      { pattern: /titizlikle incelenmesi gerekmektedir/gi, replacement: 'detaylı incelenmesi önerilir' },
+      // Modal imperatives
+      /verilmelidir/i,
+      /yapılmalıdır/i,
+      /sunulmalıdır/i,
+      /ödenmeli/i,
+      /incelenmelidir/i,
     ];
 
-    for (const { pattern, replacement } of definitivePatterns) {
-      const before = sanitized;
-      sanitized = sanitized.replace(pattern, replacement);
-      if (before !== sanitized) changeCount++;
+    // ═══════════════════════════════════════════════════════════════
+    // GROUNDING KEYWORDS - Extract from forbidden pattern to check in sources
+    // ═══════════════════════════════════════════════════════════════
+    const extractGroundingKeywords = (sentence: string): string[] => {
+      const keywords: string[] = [];
+
+      // Extract key terms that should appear in sources
+      const termPatterns = [
+        /ibraz/gi, /saklama|muhafaza/gi, /belgeleme/gi, /sunulma/gi,
+        /beyanname/gi, /bildirim/gi, /başvuru/gi,
+        /zorunlu/gi, /şart/gi, /mecbur/gi,
+        /süre/gi, /takvim\s*yılı/gi,
+        /hak\s*kayb/gi, /düşer/gi,
+        /(\d+)\s*(yıl|ay|gün)/gi,
+      ];
+
+      for (const pattern of termPatterns) {
+        const matches = sentence.match(pattern);
+        if (matches) {
+          keywords.push(...matches.map(m => m.toLowerCase().trim()));
+        }
+      }
+
+      return keywords;
+    };
+
+    // ═══════════════════════════════════════════════════════════════
+    // PROCESS EACH SENTENCE
+    // ═══════════════════════════════════════════════════════════════
+    for (const sentence of sentences) {
+      const trimmedSentence = sentence.trim();
+      if (!trimmedSentence) continue;
+
+      // Check if sentence contains any forbidden pattern
+      const hasForbiddenPattern = forbiddenPatterns.some(p => p.test(trimmedSentence));
+
+      if (!hasForbiddenPattern) {
+        // No forbidden pattern → keep sentence
+        processedSentences.push(trimmedSentence);
+        continue;
+      }
+
+      // Sentence has forbidden pattern → check if grounded in sources
+      const groundingKeywords = extractGroundingKeywords(trimmedSentence);
+
+      // Grounding check: At least 2 keywords must appear in source corpus
+      // OR the exact phrase must appear
+      const groundedKeywords = groundingKeywords.filter(kw =>
+        sourceCorpus.includes(kw.toLowerCase())
+      );
+
+      const isGrounded = groundedKeywords.length >= 2 ||
+        sourceCorpus.includes(trimmedSentence.toLowerCase().substring(0, 50));
+
+      if (isGrounded) {
+        // Grounded in sources → keep but log
+        processedSentences.push(trimmedSentence);
+        keptWithGroundingCount++;
+      } else {
+        // NOT grounded → REMOVE sentence entirely
+        removedCount++;
+        console.log(`[SANITIZER] REMOVED ungrounded: "${trimmedSentence.substring(0, 80)}..."`);
+      }
     }
 
     // ═══════════════════════════════════════════════════════════════
-    // PATTERN 2: "aksi takdirde" / "aksi halde" consequences → Remove or soften
-    // These imply negative outcomes without source backing
+    // RECONSTRUCTION & CLEANUP
     // ═══════════════════════════════════════════════════════════════
-    const consequencePatterns = [
-      // "aksi takdirde hak kaybedilir" → remove entire phrase
-      /aksi\s+takdirde\s+[^.;,]+(?:kaybedilir|düşer|sona erer|uygulanmaz)[^.;,]*/gi,
-      /aksi\s+halde\s+[^.;,]+(?:kaybedilir|düşer|sona erer|uygulanmaz)[^.;,]*/gi,
-      // Generic "aksi takdirde..." warnings
-      /[,;]?\s*aksi\s+takdirde[^.;]+/gi,
-      /[,;]?\s*aksi\s+halde[^.;]+/gi,
-    ];
+    let result = processedSentences.join(' ');
 
-    for (const pattern of consequencePatterns) {
-      const before = sanitized;
-      sanitized = sanitized.replace(pattern, '');
-      if (before !== sanitized) changeCount++;
+    // Clean up artifacts
+    result = result.replace(/\s{2,}/g, ' ');           // Double spaces
+    result = result.replace(/\s+([,;.])/g, '$1');      // Space before punctuation
+    result = result.replace(/([,;])\s*([,;.])/g, '$1'); // Double punctuation
+    result = result.replace(/\n{3,}/g, '\n\n');        // Multiple newlines
+    result = result.replace(/\[\d+\]\s*\[\d+\]/g, (m) => m.split('][').join('], [')); // Fix citation clusters
+
+    // Log summary
+    if (removedCount > 0 || keptWithGroundingCount > 0) {
+      console.log(`[SANITIZER] Summary: removed=${removedCount}, kept_with_grounding=${keptWithGroundingCount}`);
     }
 
-    // ═══════════════════════════════════════════════════════════════
-    // PATTERN 3: "unutulmamalıdır" / "ihmal edilmemelidir" warnings → Soften
-    // ═══════════════════════════════════════════════════════════════
-    const warningPatterns: Array<{ pattern: RegExp; replacement: string }> = [
-      { pattern: /unutulmamalıdır/gi, replacement: 'dikkate alınabilir' },
-      { pattern: /ihmal edilmemelidir/gi, replacement: 'göz önünde bulundurulabilir' },
-      { pattern: /göz ardı edilmemelidir/gi, replacement: 'değerlendirilebilir' },
-      { pattern: /atlanmamalıdır/gi, replacement: 'dikkate alınabilir' },
-    ];
-
-    for (const { pattern, replacement } of warningPatterns) {
-      const before = sanitized;
-      sanitized = sanitized.replace(pattern, replacement);
-      if (before !== sanitized) changeCount++;
-    }
-
-    // ═══════════════════════════════════════════════════════════════
-    // PATTERN 4: Ungrounded duration claims → Flag or soften
-    // "belirli süre içinde" without source backing
-    // ═══════════════════════════════════════════════════════════════
-    const durationPatterns: Array<{ pattern: RegExp; replacement: string }> = [
-      // "belirli süre içinde" → "süre koşulları değerlendirilerek"
-      { pattern: /belirli süre içinde/gi, replacement: 'ilgili süre koşulları değerlendirilerek' },
-      { pattern: /süre içerisinde/gi, replacement: 'süre koşulları çerçevesinde' },
-      // Remove ungrounded "X yıl içinde" if not cited
-      // (Keep if followed by citation like [1])
-      { pattern: /(\d+)\s+yıl\s+içinde(?!\s*\[\d+\])/gi, replacement: 'ilgili süre içinde' },
-    ];
-
-    for (const { pattern, replacement } of durationPatterns) {
-      const before = sanitized;
-      sanitized = sanitized.replace(pattern, replacement);
-      if (before !== sanitized) changeCount++;
-    }
-
-    // ═══════════════════════════════════════════════════════════════
-    // PATTERN 5: Clean up artifacts from removals
-    // ═══════════════════════════════════════════════════════════════
-    // Remove double spaces
-    sanitized = sanitized.replace(/\s{2,}/g, ' ');
-    // Remove orphaned punctuation
-    sanitized = sanitized.replace(/\s+([,;])/g, '$1');
-    sanitized = sanitized.replace(/([,;])\s*([,;])/g, '$1');
-    // Clean multiple newlines
-    sanitized = sanitized.replace(/\n{3,}/g, '\n\n');
-
-    if (changeCount > 0) {
-      console.log(`[SANITIZER] Softened ${changeCount} prosedür claim(s) in response`);
-    }
-
-    return sanitized.trim();
+    return result.trim();
   }
 
 
