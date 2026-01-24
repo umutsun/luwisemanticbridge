@@ -2873,7 +2873,7 @@ FORMAT:
       // FIX: Ensure proper markdown formatting and remove hallucinated citations
       finalResponse = this.fixMarkdownAndCitations(finalResponse, limitedSources);
 
-      // 🛡️ PROSEDÜR CLAIM SANITIZER v7: Schema-driven strict verification
+      // 🛡️ PROSEDÜR CLAIM SANITIZER v8: forbidden+no-citation = REMOVE (no fallback)
       finalResponse = this.sanitizeProsedurClaims(finalResponse, limitedSources, domainConfig.sanitizerConfig, domainConfig.lawCodes);
 
       if (isRefusalResponse) {
@@ -3779,32 +3779,21 @@ FORMAT:
         continue;
       }
 
-      // NO CITATION → Check grounding in full corpus
-      const claims = extractClaims(trimmedSentence);
-      const groundedClaims = claims.filter(claim => sourceCorpus.includes(claim.toLowerCase()));
+      // ═══════════════════════════════════════════════════════════════
+      // NO CITATION + FORBIDDEN PATTERN = REMOVE (v8 - No second chances)
+      // If sentence matched a normative/procedural pattern but has no citation,
+      // it MUST be removed. No generic grounding fallback allowed.
+      // This prevents "atıfsız normatif" sentences from slipping through.
+      // ═══════════════════════════════════════════════════════════════
 
-      // Stricter: require 70% of claims grounded AND exact phrase match
-      const phraseStart = trimmedSentence.toLowerCase().substring(0, 50).replace(/[^\wığüşöçİĞÜŞÖÇ\s]/g, '');
-      const exactPhraseInSource = sourceCorpus.includes(phraseStart);
-      const groundingRatio = claims.length > 0 ? groundedClaims.length / claims.length : 0;
-
-      const isGrounded = groundingRatio >= 0.7 && exactPhraseInSource;
-
-      if (isGrounded) {
-        processedSentences.push(trimmedSentence);
-        keptWithGroundingCount++;
-        if (sanitizerConfig.logRemovals) {
-          console.log(`[SANITIZER] KEPT (corpus): "${trimmedSentence.substring(0, 60)}..." - grounded: [${groundedClaims.join(', ')}]`);
-        }
-      } else {
-        // NOT grounded and NO valid citation → REMOVE
-        removedCount++;
-        if (sanitizerConfig.logRemovals) {
-          console.log(`[SANITIZER] REMOVED (ungrounded): "${trimmedSentence.substring(0, 80)}..."`);
-          console.log(`   Pattern: ${matchedPattern.source}`);
-          console.log(`   Claims: [${claims.join(', ')}], grounded: [${groundedClaims.join(', ')}] (${(groundingRatio * 100).toFixed(0)}%)`);
-          console.log(`   Phrase in corpus: ${exactPhraseInSource}`);
-        }
+      // Log the removal with detailed reason
+      removedCount++;
+      if (sanitizerConfig.logRemovals) {
+        const claims = extractClaims(trimmedSentence);
+        console.log(`[SANITIZER] REMOVED (forbidden+no-citation): "${trimmedSentence.substring(0, 80)}..."`);
+        console.log(`   Forbidden pattern matched: ${matchedPattern.source}`);
+        console.log(`   No citation present - normative claim requires citation to survive`);
+        console.log(`   Extracted claims for reference: [${claims.join(', ')}]`);
       }
     }
 
@@ -3822,7 +3811,7 @@ FORMAT:
 
     // Log summary
     if (removedCount > 0 || keptWithGroundingCount > 0) {
-      console.log(`[SANITIZER v5] Summary: removed=${removedCount}, kept=${keptWithGroundingCount}, sources=${sources.length}`);
+      console.log(`[SANITIZER v8] Summary: removed=${removedCount}, kept=${keptWithGroundingCount}, sources=${sources.length}`);
     }
 
     return result.trim();
