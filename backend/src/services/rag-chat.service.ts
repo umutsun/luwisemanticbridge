@@ -513,6 +513,29 @@ PROHIBITED:
       return { isFollowUp: false, enhancedQuery: currentMessage, contextInfo: '' };
     }
 
+    // ═══════════════════════════════════════════════════════════════
+    // ARTICLE QUERY ISOLATION: Prevent mixing different law articles
+    // If current asks about KDVK 29 and previous was VUK 114, DON'T combine
+    // ═══════════════════════════════════════════════════════════════
+    const articlePattern = /\b(VUK|GVK|KVK|KDVK|ÖTVK|MTV|DVK|HMK|SGK|İYUK|AATUHK)\s*(?:madde\s*)?\.?\s*(\d+)/gi;
+    const currentArticles = Array.from(currentMessage.matchAll(articlePattern)).map(m => `${m[1].toUpperCase()}_${m[2]}`);
+    const previousArticles = Array.from(lastUserQuestion.matchAll(articlePattern)).map(m => `${m[1].toUpperCase()}_${m[2]}`);
+
+    if (currentArticles.length > 0 && previousArticles.length > 0) {
+      // Both have article references - check if they're different
+      const hasDifferentArticle = currentArticles.some(curr => !previousArticles.includes(curr));
+      if (hasDifferentArticle) {
+        console.log(`🎯 ARTICLE ISOLATION: Current=[${currentArticles.join(', ')}] vs Previous=[${previousArticles.join(', ')}] - NOT a follow-up`);
+        return { isFollowUp: false, enhancedQuery: currentMessage, contextInfo: '' };
+      }
+    }
+
+    // If current question has article reference but previous didn't, not a follow-up
+    if (currentArticles.length > 0 && previousArticles.length === 0) {
+      console.log(`🎯 ARTICLE ISOLATION: Current has article ref [${currentArticles.join(', ')}], previous didn't - NOT a follow-up`);
+      return { isFollowUp: false, enhancedQuery: currentMessage, contextInfo: '' };
+    }
+
     // Create enhanced query that combines previous context with current question
     // This helps semantic search find relevant documents
     const enhancedQuery = `${lastUserQuestion} ${currentMessage}`;
@@ -2675,8 +2698,9 @@ FORMAT:
       console.log(`📊 [SOURCE_LIMITS] formattedSources=${formattedSources.length}, minSourcesToShow=${minSourcesToShow}, maxSourcesToShow=${maxSourcesToShow}, threshold=${sourceThreshold}`);
       console.log(`📊 [SOURCE_LIMITS] DB values: ragSettings.minResults=${settingsMap.get('ragSettings.minResults')}, ragSettings.maxResults=${settingsMap.get('ragSettings.maxResults')}, ragSettings.minSourcesToShow=${settingsMap.get('ragSettings.minSourcesToShow')}`);
 
-      // Step 1: Add hierarchy weight and combined score to all sources
-      const sourcesWithScores = formattedSources.map(source => {
+      // Step 1: Add hierarchy weight, combined score, AND original index to all sources
+      // IMPORTANT: Track _originalIndex for citation remapping after sorting
+      const sourcesWithScores = formattedSources.map((source, originalIndex) => {
         // Get source type from multiple possible fields
         const rawSourceType = (
           source.source_type ||
@@ -2721,7 +2745,8 @@ FORMAT:
           ...source,
           _hierarchyWeight: hierarchyWeight,
           _similarityScore: similarityScore,
-          _combinedScore: combinedScore
+          _combinedScore: combinedScore,
+          _originalIndex: originalIndex + 1  // 1-indexed (matches LLM citation [1], [2], etc.)
         };
       });
 
@@ -2746,11 +2771,27 @@ FORMAT:
       console.log(`📊 [SOURCES] Total=${formattedSources.length}, AboveThreshold(${(sourceThreshold * 100).toFixed(0)}%)=${sourcesAboveThreshold.length}, Showing=${rankedSources.length} (min=${minSourcesToShow}, max=${maxSourcesToShow})`);
       rankedSources.forEach((s, i) => {
         const detectedType = s.sourceTable || s.category || s.source_type || 'unknown';
-        console.log(`   ${i + 1}. ${detectedType} (weight=${s._hierarchyWeight}, combined=${(s._combinedScore * 100).toFixed(1)}%): ${s.title?.substring(0, 40)}...`);
+        console.log(`   ${i + 1}. ${detectedType} (weight=${s._hierarchyWeight}, combined=${(s._combinedScore * 100).toFixed(1)}%, orig=[${s._originalIndex}]): ${s.title?.substring(0, 40)}...`);
       });
 
       // Replace formattedSources with ranked/limited version for FOUND responses
       const limitedSources = rankedSources;
+
+      // ═══════════════════════════════════════════════════════════════
+      // CITATION REMAPPING: Build mapping from original [X] to new [Y]
+      // When sources are re-sorted, LLM's [3] might become display [1]
+      // ═══════════════════════════════════════════════════════════════
+      const citationRemap: Map<number, number> = new Map();
+      limitedSources.forEach((source, newIndex) => {
+        const originalIndex = source._originalIndex;
+        citationRemap.set(originalIndex, newIndex + 1); // New display index (1-indexed)
+      });
+
+      // Log remapping if any changes
+      const remapEntries = Array.from(citationRemap.entries()).filter(([orig, newIdx]) => orig !== newIdx);
+      if (remapEntries.length > 0) {
+        console.log(`🔄 [CITATION_REMAP] Remapping ${remapEntries.length} citations: ${remapEntries.map(([o, n]) => `[${o}]→[${n}]`).join(', ')}`);
+      }
 
       // 7. Get additional related topics (excluding already shown ones) - DISABLED FOR PERFORMANCE
       // const relatedResultsLimit = parseInt(await settingsService.getSetting('related_results_limit') || '20');
@@ -2797,6 +2838,31 @@ FORMAT:
       // Use limitedSources (ranked and limited by maxSourcesToShow) instead of raw formattedSources
       let finalSources = limitedSources;
       let finalResponse = response.content;
+
+      // ═══════════════════════════════════════════════════════════════
+      // CITATION REMAPPING: Apply mapping to LLM response
+      // This ensures [X] in text matches source [X] in displayed list
+      // ═══════════════════════════════════════════════════════════════
+      if (citationRemap.size > 0) {
+        let remappedCount = 0;
+        finalResponse = finalResponse.replace(/\[(\d+)\]/g, (match, num) => {
+          const originalNum = parseInt(num, 10);
+          const newNum = citationRemap.get(originalNum);
+          if (newNum !== undefined && newNum !== originalNum) {
+            remappedCount++;
+            return `[${newNum}]`;
+          } else if (newNum === undefined) {
+            // Original citation points to a source that was filtered out
+            // Keep as-is but log warning
+            console.warn(`⚠️ [CITATION_REMAP] Citation [${originalNum}] refers to filtered-out source`);
+            return match;
+          }
+          return match;
+        });
+        if (remappedCount > 0) {
+          console.log(`🔄 [CITATION_REMAP] Remapped ${remappedCount} citations in response`);
+        }
+      }
 
       // FIX: Ensure proper markdown formatting and remove hallucinated citations
       finalResponse = this.fixMarkdownAndCitations(finalResponse, limitedSources);
