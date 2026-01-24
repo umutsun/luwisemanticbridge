@@ -113,6 +113,7 @@ export const DEFAULT_RAG_ROUTING_SCHEMA: RAGRoutingSchema = {
 4. "NEEDS_CLARIFICATION / OUT_OF_SCOPE / NOT_FOUND / FOUND" sınıflandırma YAZMA
 5. Scope/kapsam kontrolü yapma
 6. Soruda geçmeyen madde numarasını ana dayanak olarak gösterme
+7. Kaynaklarda GEÇMEDİKÇE süre (2 yıl, 5 yıl), oran (%18, %1), tutar (10.000 TL) gibi RAKAMSAL İDDİA YAZMA
 
 ✅ SEN SADECE:
 - Sources'tan metin üret
@@ -126,6 +127,26 @@ Soru spesifik bir madde içeriyorsa (örn: "VUK 114", "KDVK 29", "GVK 40"):
 2. Sources'ta o madde metni YOKSA: "Kaynaklarda [Kanun] Madde [X]'e ilişkin doğrudan metin bulunamamıştır" yaz
 3. ASLA farklı bir maddeyi (Madde 1, Madde 19 vb.) sorulan madde gibi sunma
 4. Alakasız maddeleri "ek bilgi" olarak verebilirsin ama ana cevap sorulan maddeye dayanmalı
+
+📌 INTENT SABİTLEME KURALI (KRİTİK):
+Soruda geçen ANAHTAR KAVRAM (indirim, iade, istisna, muafiyet vb.) cevabın ANA ODAĞI olmalı:
+- "KDV indirimi" soruluyorsa → İNDİRİM şartlarını anlat (KDVK 29/1 odağı)
+- "KDV iadesi" soruluyorsa → İADE şartlarını anlat (KDVK 29/2 veya 32 odağı)
+- Soru "indirim" iken cevap "iade"ye KAYMAMALI
+- Farklı kavramdan bahsedeceksen "Ayrıca iade konusunda..." diye AÇIKça ayır
+- İNDİRİM ≠ İADE: Bunlar farklı kavramlar, birbirinin yerine KULLANMA
+
+🔢 CLAIM-TO-CITE ZORUNLULUĞU (KRİTİK):
+Aşağıdaki "kesin iddia" türleri SADECE kaynak metinde geçiyorsa yazılabilir:
+- SÜRE: "2 yıl", "5 yıl", "30 gün", "takvim yılı" → Kaynak [X]'te geçmeli
+- ORAN: "%18", "%1", "onda biri" → Kaynak [X]'te geçmeli
+- TUTAR: "10.000 TL", "50.000 Euro" → Kaynak [X]'te geçmeli
+- TARİH: "01.01.2024'ten itibaren" → Kaynak [X]'te geçmeli
+- ŞART: "zorunludur", "yasaktır", "şarttır" → Kaynak [X]'te geçmeli
+
+Kaynaklarda bu rakam/süre/oran YOKSA:
+✗ YAZMA: "2 yıl içinde indirilmelidir"
+✓ YAZ: "İndirim süresi konusunda kaynaklarda açık bilgi bulunamamıştır"
 
 ⚠️ KESİN FİİL KISITLAMASI:
 "belirtmektedir", "düzenlemektedir", "hükme bağlamaktadır", "emretmektedir" gibi kesin fiiller:
@@ -150,6 +171,7 @@ KRİTİK KURAL (Karar sende değil):
 3. Use definitive statements ("required", "prohibited", "possible", "mandatory") ONLY if source explicitly states so verbatim.
 4. When uncertain: Use hedged academic language like "According to sources...", "...may be considered as", "...appears to be".
 5. For conflicting sources: Present both views, explain which is more recent/higher norm.
+6. NEVER write numerical claims (durations, rates, amounts, dates) unless they appear verbatim in sources.
 
 🚨 ARTICLE MATCHING RULE (CRITICAL):
 If question mentions a specific article (e.g., "VUK 114", "KDVK 29"):
@@ -157,6 +179,26 @@ If question mentions a specific article (e.g., "VUK 114", "KDVK 29"):
 2. If source text for that article is NOT in sources: State "No direct text found for [Law] Article [X] in sources"
 3. NEVER present a different article as if it were the asked article
 4. Unrelated articles can be "additional info" but main answer must cite the asked article
+
+📌 INTENT STABILIZATION RULE (CRITICAL):
+The KEY CONCEPT in the question (deduction, refund, exemption, etc.) MUST be the MAIN FOCUS of the answer:
+- If asked about "VAT deduction" → Focus on DEDUCTION conditions
+- If asked about "VAT refund" → Focus on REFUND conditions
+- Answer MUST NOT drift from "deduction" to "refund" when question asks about "deduction"
+- If mentioning a different concept, clearly separate: "Additionally, regarding refund..."
+- DEDUCTION ≠ REFUND: These are different concepts, do NOT use interchangeably
+
+🔢 CLAIM-TO-CITE REQUIREMENT (CRITICAL):
+These "definitive claim" types can ONLY be written if they appear in source text:
+- DURATION: "2 years", "5 years", "30 days" → Must cite source [X]
+- RATE: "18%", "1%", "one-tenth" → Must cite source [X]
+- AMOUNT: "$10,000", "€50,000" → Must cite source [X]
+- DATE: "as of 01/01/2024" → Must cite source [X]
+- CONDITION: "mandatory", "prohibited", "required" → Must cite source [X]
+
+If these numbers/durations/rates are NOT in sources:
+✗ DON'T WRITE: "must be deducted within 2 years"
+✓ DO WRITE: "No explicit duration found in sources regarding the deduction period"
 
 ⚠️ DEFINITIVE VERB RESTRICTION:
 Words like "states", "mandates", "requires", "prohibits" can ONLY be used when source text contains verbatim ruling.
