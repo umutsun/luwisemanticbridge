@@ -553,7 +553,7 @@ export class SettingsService {
       },
       anthropic: {
         apiKey: process.env.ANTHROPIC_API_KEY || '',
-        model: process.env.ANTHROPIC_MODEL || 'claude-3-5-sonnet-20241022'
+        model: process.env.ANTHROPIC_MODEL || 'claude-sonnet-4-5-20250929'  // Claude 3.5 Sonnet retired Oct 28, 2025
       },
       google: {
         apiKey: process.env.GOOGLE_API_KEY || '',

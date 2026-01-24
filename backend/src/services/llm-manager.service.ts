@@ -227,15 +227,24 @@ export class LLMManager {
         }
       }
 
-      // FORCE UPDATE: Always replace deprecated Claude model
-      if (this.actualModel === 'claude-3-sonnet-20240229') {
-        console.warn(' FORCE UPDATING deprecated Claude model claude-3-sonnet-20240229 to claude-3-5-sonnet-20241022');
-        this.actualModel = 'claude-3-5-sonnet-20241022';
+      // FORCE UPDATE: Always replace deprecated/retired Claude models
+      // NOTE: Claude 3.5 Sonnet was RETIRED by Anthropic on October 28, 2025
+      // We must use Claude Sonnet 4.5 (claude-sonnet-4-5-20250929) now
+      const DEPRECATED_CLAUDE_MODELS = [
+        'claude-3-sonnet-20240229',
+        'claude-3-5-sonnet-20241022',
+        'claude-3-5-sonnet',
+        'claude-3-sonnet'
+      ];
+
+      if (DEPRECATED_CLAUDE_MODELS.includes(this.actualModel)) {
+        console.warn(` FORCE UPDATING retired Claude model ${this.actualModel} to claude-sonnet-4-5-20250929`);
+        this.actualModel = 'claude-sonnet-4-5-20250929';
 
         // Update the provider configuration
         if (this.providers.has('claude')) {
           const claudeProvider = this.providers.get('claude')!;
-          claudeProvider.model = 'claude-3-5-sonnet-20241022';
+          claudeProvider.model = 'claude-sonnet-4-5-20250929';
           // Re-initialize if already initialized
           if (claudeProvider.isInitialized) {
             claudeProvider.isInitialized = false;
@@ -247,21 +256,21 @@ export class LLMManager {
         try {
           await this.pool.query(
             'UPDATE chatbot_settings SET setting_value = $1 WHERE setting_key = $2',
-            ['anthropic/claude-3-5-sonnet-20241022', 'llmSettings.activeChatModel']
+            ['anthropic/claude-sonnet-4-5-20250929', 'llmSettings.activeChatModel']
           );
-          console.log(' Updated active chat model in database');
+          await this.pool.query(
+            'UPDATE settings SET value = $1 WHERE key = $2',
+            ['anthropic/claude-sonnet-4-5-20250929', 'activeChatModel']
+          );
+          console.log(' Updated active chat model in database to Claude Sonnet 4.5');
         } catch (error) {
           console.warn('️ Failed to update database setting:', error);
         }
       }
       // Map common model names to their actual API names
-      else if (this.actualModel === 'claude-3-5-sonnet' || this.actualModel === 'claude-3-5-sonnet-20241022') {
-        // Use latest Claude 3.5 Sonnet model
-        this.actualModel = 'claude-3-5-sonnet-20241022';
-      } else if (this.actualModel === 'claude-3-sonnet') {
-        // Map deprecated model to latest version
-        console.warn('️ Deprecated Claude model detected, upgrading to claude-3-5-sonnet-20241022');
-        this.actualModel = 'claude-3-5-sonnet-20241022';
+      else if (this.actualModel === 'claude-sonnet-4-5' || this.actualModel === 'claude-sonnet-4.5') {
+        // Use latest Claude Sonnet 4.5 model with exact snapshot ID
+        this.actualModel = 'claude-sonnet-4-5-20250929';
       } else if (this.actualModel === 'claude-3-opus') {
         this.actualModel = 'claude-3-opus-20240229';
       } else if (this.actualModel === 'deepseek-chat') {
@@ -286,9 +295,16 @@ export class LLMManager {
       if (claudeApiKey) {
         // CRITICAL FIX: Only use this.actualModel if Claude is the active provider
         // Otherwise use the Claude-specific model from settings, or a sensible default
-        const claudeModel = (this.defaultProvider === 'claude' && this.actualModel)
+        // NOTE: Claude 3.5 Sonnet RETIRED Oct 28, 2025 - use Claude Sonnet 4.5
+        let claudeModel = (this.defaultProvider === 'claude' && this.actualModel)
           ? this.actualModel
-          : settings['llmSettings.claudeModel'] || 'claude-3-5-sonnet-20241022';
+          : settings['llmSettings.claudeModel'] || 'claude-sonnet-4-5-20250929';
+
+        // Fix any remaining deprecated model references
+        if (claudeModel.includes('claude-3-5-sonnet') || claudeModel.includes('claude-3-sonnet')) {
+          console.warn(` Fixing deprecated Claude model in settings: ${claudeModel} -> claude-sonnet-4-5-20250929`);
+          claudeModel = 'claude-sonnet-4-5-20250929';
+        }
 
         this.updateProviderSettings('claude', {
           apiKey: claudeApiKey,
@@ -1309,26 +1325,40 @@ export class LLMManager {
   }
 
   /**
-   * EMERGENCY FIX: Immediately check and fix deprecated Claude model
+   * EMERGENCY FIX: Immediately check and fix deprecated/retired Claude models
+   * NOTE: Claude 3.5 Sonnet was RETIRED by Anthropic on October 28, 2025
    */
   private async fixClaudeModel(): Promise<void> {
     try {
-      // Check if we're using the deprecated model
-      if (this.actualModel === 'claude-3-sonnet-20240229' ||
-          this.defaultProvider === 'claude' && this.providers.get('claude')?.model === 'claude-3-sonnet-20240229') {
-        
-        console.warn(' EMERGENCY: Detected deprecated Claude model, fixing immediately...');
-        
+      const claudeProvider = this.providers.get('claude');
+      const currentModel = claudeProvider?.model || this.actualModel;
+
+      // List of all retired/deprecated Claude models
+      const RETIRED_MODELS = [
+        'claude-3-sonnet-20240229',
+        'claude-3-5-sonnet-20241022',
+        'claude-3-5-sonnet',
+        'claude-3-sonnet'
+      ];
+
+      // Check if we're using any retired model
+      const isRetiredModel = RETIRED_MODELS.some(m =>
+        currentModel?.includes(m) || this.actualModel?.includes(m)
+      );
+
+      if (isRetiredModel) {
+        console.warn(` EMERGENCY: Detected retired Claude model "${currentModel}", upgrading to Claude Sonnet 4.5...`);
+
         // Update to the new model
-        const newModel = 'claude-3-5-sonnet-20241022';
+        const newModel = 'claude-sonnet-4-5-20250929';
         this.actualModel = newModel;
-        
+
         // Update provider settings
         this.updateProviderSettings('claude', {
           model: newModel,
-          apiKey: this.providers.get('claude')?.apiKey
+          apiKey: claudeProvider?.apiKey
         });
-        
+
         // Fix in database immediately
         try {
           await this.pool.query(
@@ -1341,7 +1371,7 @@ export class LLMManager {
             [`anthropic/${newModel}`, 'activeChatModel']
           );
 
-          console.log(' EMERGENCY: Fixed Claude model in database');
+          console.log(` EMERGENCY: Upgraded Claude model to ${newModel} in database`);
         } catch (dbError) {
           console.error(' EMERGENCY: Failed to fix Claude model in database:', dbError);
         }

@@ -9,11 +9,14 @@ const router = Router();
 const llmManager = LLMManager.getInstance();
 
 // Model pricing per 1M tokens (input/output) in USD
+// NOTE: Claude 3.5 Sonnet was RETIRED by Anthropic on October 28, 2025
 const MODEL_PRICING: Record<string, Record<string, { input: number; output: number }>> = {
   anthropic: {
-    'claude-3-5-sonnet-20241022': { input: 3, output: 15 },
-    'claude-3-opus-20240229': { input: 15, output: 75 },
-    'claude-3-sonnet-20240229': { input: 3, output: 15 },
+    'claude-sonnet-4-5-20250929': { input: 3, output: 15 },  // Claude Sonnet 4.5
+    'claude-opus-4-20250514': { input: 15, output: 75 },     // Claude Opus 4
+    'claude-3-5-sonnet-20241022': { input: 3, output: 15 },  // RETIRED - kept for backwards compat
+    'claude-3-opus-20240229': { input: 15, output: 75 },     // RETIRED
+    'claude-3-sonnet-20240229': { input: 3, output: 15 },    // RETIRED
     'claude-3-haiku-20240307': { input: 0.25, output: 1.25 },
   },
   openai: {
@@ -146,7 +149,8 @@ router.post('/test/:provider', async (req: Request, res: Response) => {
       case 'anthropic':
         try {
           const anthropic = new Anthropic({ apiKey });
-          const testModel = model || 'claude-3-5-sonnet-20241022';
+          // NOTE: Claude 3.5 Sonnet RETIRED Oct 28, 2025 - use Claude Sonnet 4.5
+          const testModel = model || 'claude-sonnet-4-5-20250929';
 
           const response = await anthropic.messages.create({
             model: testModel,
@@ -798,7 +802,7 @@ router.get('/models/:provider', async (req: Request, res: Response) => {
 
     const models = {
       openai: ['gpt-4o', 'gpt-4o-mini', 'gpt-4-turbo', 'gpt-3.5-turbo'],
-      anthropic: ['claude-3-5-sonnet-20241022', 'claude-3-opus-20240229', 'claude-3-sonnet-20240229', 'claude-3-haiku-20240307'],
+      anthropic: ['claude-sonnet-4-5-20250929', 'claude-opus-4-20250514', 'claude-haiku-4-5-20251001'],  // Claude 4.x series (3.x RETIRED)
       google: ['gemini-2.0-flash-exp', 'gemini-1.5-flash', 'gemini-1.5-pro', 'gemini-pro'],
       deepseek: ['deepseek-chat', 'deepseek-coder'],
       deepl: ['deepl-free', 'deepl-pro'],

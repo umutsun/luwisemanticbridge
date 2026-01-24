@@ -705,7 +705,8 @@ PROHIBITED:
     const settingsMap = new Map(settingsResult.rows.map(r => [r.key, r.value]));
 
     const responseLanguage = settingsMap.get('response_language') || 'tr';
-    const activeModel = settingsMap.get('llmSettings.activeChatModel') || 'anthropic/claude-3-5-sonnet-20241022';
+    // NOTE: Claude 3.5 Sonnet RETIRED by Anthropic Oct 28, 2025 - use Claude Sonnet 4.5
+    const activeModel = settingsMap.get('llmSettings.activeChatModel') || 'anthropic/claude-sonnet-4-5-20250929';
 
     // PDF + RAG hybrid mode settings
     const enableRagWithPdf = settingsMap.get('ragSettings.pdfEnableRag') === 'true';
@@ -1245,7 +1246,8 @@ ${questionLabel}: ${message}`;
         '0.005'
       );
       const responseLanguage = settingsMap.get('response_language') || 'tr';
-      const activeModel = settingsMap.get('llmSettings.activeChatModel') || 'anthropic/claude-3-5-sonnet-20241022';
+      // NOTE: Claude 3.5 Sonnet RETIRED by Anthropic Oct 28, 2025 - use Claude Sonnet 4.5
+    const activeModel = settingsMap.get('llmSettings.activeChatModel') || 'anthropic/claude-sonnet-4-5-20250929';
       const lowConfidenceThreshold = parseFloat(
         settingsMap.get('ragSettings.lowConfidenceThreshold') ||
         settingsMap.get('lowConfidenceThreshold') ||

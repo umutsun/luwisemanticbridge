@@ -364,7 +364,7 @@ async function initializeDefaultSettings(pool: Pool, envVars: any, llmProvider: 
     },
     anthropic: {
       apiKey: llmProvider === 'claude' ? llmApiKey : '',
-      model: 'claude-3-5-sonnet-20241022',
+      model: 'claude-sonnet-4-5-20250929',  // Claude 3.5 Sonnet retired Oct 28, 2025
       maxTokens: 4096
     },
     deepseek: {
@@ -386,7 +386,7 @@ async function initializeDefaultSettings(pool: Pool, envVars: any, llmProvider: 
       llmKnowledgeWeight: 0.3,
       streamResponse: true,
       systemPrompt: 'Sen yapay zeka destekli bir asistansınız. Kullanıcıya yardımcı olmak için en iyi şekilde çaba gösterin.',
-      activeChatModel: llmProvider === 'openai' ? 'gpt-4-turbo-preview' : llmProvider === 'claude' ? 'claude-3-5-sonnet-20241022' : 'gemini-pro',
+      activeChatModel: llmProvider === 'openai' ? 'gpt-4-turbo-preview' : llmProvider === 'claude' ? 'claude-sonnet-4-5-20250929' : 'gemini-pro',
       activeEmbeddingModel: 'text-embedding-3-small',
       responseStyle: 'professional',
       language: 'tr',

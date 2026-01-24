@@ -330,7 +330,8 @@ router.get('/', cacheMiddleware, async (req: Request, res: Response) => {
       // CRITICAL: NO dynamic defaults - return what's in database OR use environment variables
       // Frontend/User MUST configure the model in Settings UI
       if (!config.llmSettings?.activeChatModel) {
-        const envModel = process.env.LLM_MODEL || 'anthropic/claude-3-5-sonnet-20241022';
+        // NOTE: Claude 3.5 Sonnet was RETIRED by Anthropic on October 28, 2025 - use Claude Sonnet 4.5
+        const envModel = process.env.LLM_MODEL || 'anthropic/claude-sonnet-4-5-20250929';
         console.warn('️ [Settings] No activeChatModel found in database, using environment variable:', envModel);
         config.llmSettings = config.llmSettings || {};
         config.llmSettings.activeChatModel = envModel;
