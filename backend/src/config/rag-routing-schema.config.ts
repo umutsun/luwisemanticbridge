@@ -143,10 +143,14 @@ Aşağıdaki "kesin iddia" türleri SADECE kaynak metinde geçiyorsa yazılabili
 - TUTAR: "10.000 TL", "50.000 Euro" → Kaynak [X]'te geçmeli
 - TARİH: "01.01.2024'ten itibaren" → Kaynak [X]'te geçmeli
 - ŞART: "zorunludur", "yasaktır", "şarttır" → Kaynak [X]'te geçmeli
+- PROSEDÜR: "başvuru yapılmalı", "hak kaybı", "süre içinde" → Kaynak [X]'te geçmeli
+- SONUÇ: "kaybedilir", "düşer", "sona erer" → Kaynak [X]'te geçmeli
 
-Kaynaklarda bu rakam/süre/oran YOKSA:
+Kaynaklarda bu rakam/süre/prosedür YOKSA:
 ✗ YAZMA: "2 yıl içinde indirilmelidir"
-✓ YAZ: "İndirim süresi konusunda kaynaklarda açık bilgi bulunamamıştır"
+✗ YAZMA: "aksi takdirde hak kaybedilir"
+✗ YAZMA: "belirli süre içinde başvuru yapılmazsa..."
+✓ YAZ: "İndirim süresi ve prosedürü konusunda kaynaklarda açık bilgi bulunamamıştır"
 
 ⚠️ KESİN FİİL KISITLAMASI:
 "belirtmektedir", "düzenlemektedir", "hükme bağlamaktadır", "emretmektedir" gibi kesin fiiller:

@@ -1818,22 +1818,35 @@ class SemanticSearchService:
         "indirim": {
             # When asking about "indirim", heavily penalize these iade-specific patterns
             "hard_negative": [
+                # İade kavramları
                 "nakden iade",
                 "mahsup yoluyla iade",
                 "iade edilir",
                 "iade talep",
                 "iade hakkı",
                 "geri ödeme",
-                "29/2",  # KDVK 29/2 is about refund, not deduction
+                # KDVK 29/2 references (iade fıkrası)
+                "29/2",
                 "29 uncu maddesinin 2",
                 "29. maddesinin 2",
                 "ikinci fıkra",
                 "2. fıkra",
                 "2 nci fıkra",
-                "%51",  # Public ownership threshold - only relevant for refund
+                # Kamu istisnaları (iade bağlamı)
+                "%51",
                 "kamuya ait",
+                # Tevkifat (alakasız - farklı konu)
+                "tevkifat",
+                "tevkifat oranı",
+                "tevkifat uygulaması",
+                "kdv tevkifatı",
+                "kısmi tevkifat",
+                "tam tevkifat",
+                # İhracat/özel matrah (iade bağlamı)
+                "ihracat istisnası",
+                "özel matrah",
             ],
-            "hard_penalty": -0.5  # Heavy penalty for iade content in indirim query
+            "hard_penalty": -0.5  # Heavy penalty for off-topic content in indirim query
         },
         "iade": {
             # When asking about "iade", heavily penalize these indirim-only patterns
@@ -1845,6 +1858,9 @@ class SemanticSearchService:
                 "29 uncu maddesinin 1",
                 "birinci fıkra",
                 "1. fıkra",
+                # Tevkifat (alakasız - farklı konu)
+                "tevkifat",
+                "tevkifat oranı",
             ],
             "hard_penalty": -0.5
         }
