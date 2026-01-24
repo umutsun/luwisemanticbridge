@@ -2873,7 +2873,7 @@ FORMAT:
       // FIX: Ensure proper markdown formatting and remove hallucinated citations
       finalResponse = this.fixMarkdownAndCitations(finalResponse, limitedSources);
 
-      // 🛡️ PROSEDÜR CLAIM SANITIZER v8: forbidden+no-citation = REMOVE (no fallback)
+      // 🛡️ PROSEDÜR CLAIM SANITIZER v9: critical claims verified in ALL sentences
       finalResponse = this.sanitizeProsedurClaims(finalResponse, limitedSources, domainConfig.sanitizerConfig, domainConfig.lawCodes);
 
       if (isRefusalResponse) {
@@ -3565,11 +3565,74 @@ FORMAT:
     };
 
     // ═══════════════════════════════════════════════════════════════
-    // CITATION VERIFICATION v7 - STRICT Claim-Source Matching
+    // CRITICAL CLAIM DETECTION v9 - Detects temporal, date, %, article claims
+    // Returns array of detected claims (empty if no critical claims)
+    // Used to identify sentences that MUST have verified citations
+    // ═══════════════════════════════════════════════════════════════
+    const detectCriticalClaims = (sentence: string): Array<{ type: string; value: string }> => {
+      const claimConfig = sanitizerConfig.criticalClaimConfig || {
+        verifyTemporalClaims: true,
+        verifyDateClaims: true,
+        verifyPercentageClaims: true,
+        verifyArticleClaims: true,
+        genericClaimThreshold: 0.7
+      };
+      const temporalUnits = sanitizerConfig.temporalUnits || ['yıl', 'ay', 'gün', 'hafta'];
+      const schemaLawCodes = lawCodes || [];
+
+      const claims: Array<{ type: string; value: string }> = [];
+      let match;
+
+      // 1. Temporal claims: "10 yıl", "5 yıldır"
+      if (claimConfig.verifyTemporalClaims && temporalUnits.length > 0) {
+        const unitsWithSuffixes = temporalUnits.map(unit => {
+          const suffix = /[aıou]/.test(unit) ? 'd[ıi]r' : 'd[üui]r';
+          return `${unit}(?:${suffix})?`;
+        }).join('|');
+        const temporalPattern = new RegExp(`(\\d+)\\s*(${unitsWithSuffixes})`, 'gi');
+        while ((match = temporalPattern.exec(sentence)) !== null) {
+          const num = match[1];
+          const rawUnit = match[2].toLowerCase().replace(/d[ıiüu]r$/i, '');
+          claims.push({ type: 'temporal', value: `${num} ${rawUnit}` });
+        }
+      }
+
+      // 2. Date ordinals: "26'sı", "ayın 15'i"
+      if (claimConfig.verifyDateClaims) {
+        const datePattern = /(\d+)[''ıiuü](?:n[aeiıoöuü]|s[ıi])/gi;
+        while ((match = datePattern.exec(sentence)) !== null) {
+          claims.push({ type: 'date', value: match[1] });
+        }
+      }
+
+      // 3. Percentages: "%18", "yüzde 20"
+      if (claimConfig.verifyPercentageClaims) {
+        const percentPattern = /%\s*(\d+)|yüzde\s*(\d+)/gi;
+        while ((match = percentPattern.exec(sentence)) !== null) {
+          const num = match[1] || match[2];
+          claims.push({ type: 'percentage', value: `%${num}` });
+        }
+      }
+
+      // 4. Article references: "VUK 227", "KDVK 29"
+      if (claimConfig.verifyArticleClaims && schemaLawCodes.length > 0) {
+        const lawCodesPattern = schemaLawCodes.join('|');
+        const articlePattern = new RegExp(`\\b(${lawCodesPattern})\\s*(?:madde\\s*)?(\\d+)`, 'gi');
+        while ((match = articlePattern.exec(sentence)) !== null) {
+          claims.push({ type: 'article', value: `${match[1].toUpperCase()} ${match[2]}` });
+        }
+      }
+
+      return claims;
+    };
+
+    // ═══════════════════════════════════════════════════════════════
+    // CITATION VERIFICATION v9 - STRICT Claim-Source Matching
     // Key insight: Having [X] is NOT enough. The cited source must
     // contain the SPECIFIC claim, not just generic keywords.
     //
     // v7: ALL PATTERNS ARE NOW SCHEMA-DRIVEN (NO HARDCODING)
+    // v9: detectCriticalClaims extracted for reuse in no-citation branch
     // - temporalUnits from sanitizerConfig.temporalUnits
     // - lawCodes from schema's lawCodeConfig
     // - criticalClaimConfig controls which types to verify
@@ -3599,17 +3662,26 @@ FORMAT:
       const criticalClaims: Array<{ type: string; value: string; pattern: RegExp }> = [];
       let match;
 
-      // 1. Numeric + temporal: "10 yıl", "5 gün" (using schema's temporalUnits)
+      // 1. Numeric + temporal: "10 yıl", "5 gün", "5 yıldır" (using schema's temporalUnits)
+      // v9: Added Turkish suffixes: -dır/-dir/-dur/-dür/-tır/-tir (e.g., yıldır, aydır, gündür)
       if (claimConfig.verifyTemporalClaims && temporalUnits.length > 0) {
-        const unitsPattern = temporalUnits.join('|');
-        const temporalPattern = new RegExp(`(\\d+)\\s*(${unitsPattern})`, 'gi');
+        // Build pattern with optional Turkish suffixes
+        // yıl → yıl(?:dır|d[ıi]r)?  |  ay → ay(?:dır|d[ıi]r)?  |  gün → gün(?:dür|d[üu]r)?
+        const unitsWithSuffixes = temporalUnits.map(unit => {
+          // Turkish vowel harmony: back vowels (a,ı,o,u) → dır, front vowels (e,i,ö,ü) → dir
+          const suffix = /[aıou]/.test(unit) ? 'd[ıi]r' : 'd[üui]r';
+          return `${unit}(?:${suffix})?`;
+        }).join('|');
+        const temporalPattern = new RegExp(`(\\d+)\\s*(${unitsWithSuffixes})`, 'gi');
         while ((match = temporalPattern.exec(sentence)) !== null) {
           const num = match[1];
-          const unit = match[2].toLowerCase();
+          // Normalize unit: remove suffix (yıldır → yıl)
+          const rawUnit = match[2].toLowerCase().replace(/d[ıiüu]r$/i, '');
           criticalClaims.push({
             type: 'temporal',
-            value: `${num} ${unit}`,
-            pattern: new RegExp(`${num}\\s*${unit}`, 'i')
+            value: `${num} ${rawUnit}`,
+            // Pattern should match both "5 yıl" and "5 yıldır" in source
+            pattern: new RegExp(`${num}\\s*${rawUnit}`, 'i')
           });
         }
       }
@@ -3734,35 +3806,35 @@ FORMAT:
     };
 
     // ═══════════════════════════════════════════════════════════════
-    // PROCESS EACH SENTENCE (v5 - Citation Verification)
+    // PROCESS EACH SENTENCE (v9 - Universal Critical Claim Verification)
+    //
+    // Key insight for v9: Critical claims (temporal, date, %, article) must be
+    // verified REGARDLESS of whether sentence matches a forbidden pattern.
+    //
+    // Flow:
+    // 1. Extract citations from sentence
+    // 2. If citations exist → verify with verifyCitationSupport
+    // 3. If no citations:
+    //    a. Check for critical claims → REMOVE if found (need citation)
+    //    b. Check for forbidden pattern → REMOVE if found (v8 rule)
+    //    c. Neither → KEEP
     // ═══════════════════════════════════════════════════════════════
     for (const sentence of sentences) {
       const trimmedSentence = sentence.trim();
       if (!trimmedSentence) continue;
 
-      // Check if sentence contains any forbidden pattern
-      const matchedPattern = forbiddenPatterns.find(p => p.test(trimmedSentence));
-
-      if (!matchedPattern) {
-        // No forbidden pattern → keep sentence
-        processedSentences.push(trimmedSentence);
-        continue;
-      }
-
-      // ═══════════════════════════════════════════════════════════════
-      // STRICT GROUNDING CHECK (v5) - Citation Verification
-      // Having [X] is NOT enough - the cited source must support the claim
-      // ═══════════════════════════════════════════════════════════════
-
+      // PHASE 1: Extract citations
       const citationNums = extractCitations(trimmedSentence);
       const hasCitations = citationNums.length > 0;
 
+      // ═══════════════════════════════════════════════════════════════
+      // PHASE 2: CITATION EXISTS → Verify claim-source alignment
+      // v9: This applies to ALL sentences with citations (not just forbidden)
+      // ═══════════════════════════════════════════════════════════════
       if (hasCitations) {
-        // Has citation → VERIFY it actually supports the claim
         const verification = verifyCitationSupport(trimmedSentence, citationNums);
 
         if (verification.verified) {
-          // Citation verified → keep sentence
           processedSentences.push(trimmedSentence);
           keptWithGroundingCount++;
           if (sanitizerConfig.logRemovals) {
@@ -3780,21 +3852,39 @@ FORMAT:
       }
 
       // ═══════════════════════════════════════════════════════════════
-      // NO CITATION + FORBIDDEN PATTERN = REMOVE (v8 - No second chances)
-      // If sentence matched a normative/procedural pattern but has no citation,
-      // it MUST be removed. No generic grounding fallback allowed.
-      // This prevents "atıfsız normatif" sentences from slipping through.
+      // PHASE 3: NO CITATION → Check for critical claims or forbidden patterns
+      // v9: Critical claims without citations are removed (can't trust them)
+      // v8: Forbidden patterns without citations are removed (normative rule)
       // ═══════════════════════════════════════════════════════════════
 
-      // Log the removal with detailed reason
-      removedCount++;
-      if (sanitizerConfig.logRemovals) {
-        const claims = extractClaims(trimmedSentence);
-        console.log(`[SANITIZER] REMOVED (forbidden+no-citation): "${trimmedSentence.substring(0, 80)}..."`);
-        console.log(`   Forbidden pattern matched: ${matchedPattern.source}`);
-        console.log(`   No citation present - normative claim requires citation to survive`);
-        console.log(`   Extracted claims for reference: [${claims.join(', ')}]`);
+      // Check 3a: Critical claims without citation → REMOVE
+      const criticalClaims = detectCriticalClaims(trimmedSentence);
+      if (criticalClaims.length > 0) {
+        removedCount++;
+        if (sanitizerConfig.logRemovals) {
+          console.log(`[SANITIZER] REMOVED (critical-no-citation): "${trimmedSentence.substring(0, 80)}..."`);
+          console.log(`   Critical claims found: [${criticalClaims.map(c => `${c.type}:${c.value}`).join(', ')}]`);
+          console.log(`   No citation present - critical claims require verified citation`);
+        }
+        continue;
       }
+
+      // Check 3b: Forbidden pattern without citation → REMOVE (v8 rule)
+      const matchedPattern = forbiddenPatterns.find(p => p.test(trimmedSentence));
+      if (matchedPattern) {
+        removedCount++;
+        if (sanitizerConfig.logRemovals) {
+          const claims = extractClaims(trimmedSentence);
+          console.log(`[SANITIZER] REMOVED (forbidden+no-citation): "${trimmedSentence.substring(0, 80)}..."`);
+          console.log(`   Forbidden pattern matched: ${matchedPattern.source}`);
+          console.log(`   No citation present - normative claim requires citation to survive`);
+          console.log(`   Extracted claims for reference: [${claims.join(', ')}]`);
+        }
+        continue;
+      }
+
+      // Check 3c: No critical claims, no forbidden pattern → KEEP
+      processedSentences.push(trimmedSentence);
     }
 
     // ═══════════════════════════════════════════════════════════════
@@ -3811,7 +3901,7 @@ FORMAT:
 
     // Log summary
     if (removedCount > 0 || keptWithGroundingCount > 0) {
-      console.log(`[SANITIZER v8] Summary: removed=${removedCount}, kept=${keptWithGroundingCount}, sources=${sources.length}`);
+      console.log(`[SANITIZER v9] Summary: removed=${removedCount}, kept=${keptWithGroundingCount}, sources=${sources.length}`);
     }
 
     return result.trim();
