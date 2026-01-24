@@ -328,6 +328,7 @@ PROHIBITED:
     keyTerms: string[];
     authorityLevels: Record<string, number>;
     sanitizerConfig?: SanitizerConfig;
+    lawCodes?: string[];
   }> {
     try {
       const config = await dataSchemaService.loadConfig();
@@ -342,6 +343,10 @@ PROHIBITED:
 
       // Get sanitizer config from Schema llmConfig (domain-specific)
       const sanitizerConfig = llmConfig?.sanitizerConfig as SanitizerConfig | undefined;
+
+      // Get law codes from Schema llmConfig.lawCodeConfig (for claim verification)
+      const lawCodeConfig = llmConfig?.lawCodeConfig;
+      const lawCodes = lawCodeConfig?.lawCodes ? Object.keys(lawCodeConfig.lawCodes) : undefined;
 
       // Get authority levels from RAG Settings (NOT from schema - single source of truth)
       // This uses ragSettings.sourceTypeHierarchy which is configured via UI
@@ -367,10 +372,11 @@ PROHIBITED:
         console.log(`   Import a domain config JSON via Settings > Schema > JSON Import`);
       } else {
         const sanitizerStatus = sanitizerConfig?.enabled ? 'enabled' : 'disabled/default';
-        console.log(`📋 [DOMAIN_CONFIG] Loaded: ${topicEntities.length} entities, ${keyTerms.length} terms, ${Object.keys(authorityLevels).length} authority levels, sanitizer=${sanitizerStatus}`);
+        const lawCodeStatus = lawCodes ? lawCodes.join(', ') : 'not configured';
+        console.log(`📋 [DOMAIN_CONFIG] Loaded: ${topicEntities.length} entities, ${keyTerms.length} terms, ${Object.keys(authorityLevels).length} authority levels, sanitizer=${sanitizerStatus}, lawCodes=[${lawCodeStatus}]`);
       }
 
-      return { topicEntities, keyTerms, authorityLevels, sanitizerConfig };
+      return { topicEntities, keyTerms, authorityLevels, sanitizerConfig, lawCodes };
     } catch (error) {
       console.error('[DOMAIN_CONFIG] Failed to load config:', error);
       return { topicEntities: [], keyTerms: [], authorityLevels: {} };
@@ -2867,8 +2873,8 @@ FORMAT:
       // FIX: Ensure proper markdown formatting and remove hallucinated citations
       finalResponse = this.fixMarkdownAndCitations(finalResponse, limitedSources);
 
-      // 🛡️ PROSEDÜR CLAIM SANITIZER v3: Schema-driven ungrounded claim removal
-      finalResponse = this.sanitizeProsedurClaims(finalResponse, limitedSources, domainConfig.sanitizerConfig);
+      // 🛡️ PROSEDÜR CLAIM SANITIZER v7: Schema-driven strict verification
+      finalResponse = this.sanitizeProsedurClaims(finalResponse, limitedSources, domainConfig.sanitizerConfig, domainConfig.lawCodes);
 
       if (isRefusalResponse) {
         // 🎯 REFUSAL TYPE DETECTION: Gate-based vs Prompt-based
@@ -3463,11 +3469,13 @@ FORMAT:
    * @param response - LLM response text
    * @param sources - Source objects for grounding check
    * @param config - Optional sanitizer config from schema (uses DEFAULT_SANITIZER_CONFIG if not provided)
+   * @param lawCodes - Optional law codes from schema's lawCodeConfig (e.g., ['VUK', 'GVK', 'KDVK'])
    */
   private sanitizeProsedurClaims(
     response: string,
     sources: any[],
-    config?: SanitizerConfig
+    config?: SanitizerConfig,
+    lawCodes?: string[]
   ): string {
     // Use provided config or fall back to defaults
     const sanitizerConfig = config || DEFAULT_SANITIZER_CONFIG;
@@ -3561,67 +3569,90 @@ FORMAT:
     // Key insight: Having [X] is NOT enough. The cited source must
     // contain the SPECIFIC claim, not just generic keywords.
     //
-    // Numeric claims (10 yıl, 26'sı) require EXACT number + context
-    // Temporal claims require both number AND time unit together
+    // v7: ALL PATTERNS ARE NOW SCHEMA-DRIVEN (NO HARDCODING)
+    // - temporalUnits from sanitizerConfig.temporalUnits
+    // - lawCodes from schema's lawCodeConfig
+    // - criticalClaimConfig controls which types to verify
     // ═══════════════════════════════════════════════════════════════
     const verifyCitationSupport = (sentence: string, citationNums: number[]): { verified: boolean; reason: string } => {
       if (citationNums.length === 0) {
         return { verified: false, reason: 'no_citation' };
       }
 
+      // Get config values (with sensible defaults)
+      const claimConfig = sanitizerConfig.criticalClaimConfig || {
+        verifyTemporalClaims: true,
+        verifyDateClaims: true,
+        verifyPercentageClaims: true,
+        verifyArticleClaims: true,
+        genericClaimThreshold: 0.7
+      };
+      const temporalUnits = sanitizerConfig.temporalUnits || ['yıl', 'ay', 'gün', 'hafta'];
+      const schemaLawCodes = lawCodes || []; // From getDomainConfig -> lawCodeConfig.lawCodes
+
       const sentenceLower = sentence.toLowerCase();
 
       // ═══════════════════════════════════════════════════════════════
       // EXTRACT CRITICAL CLAIMS - These MUST appear in source
-      // Critical = numeric, temporal, specific procedural
+      // All patterns are now dynamic from schema config
       // ═══════════════════════════════════════════════════════════════
       const criticalClaims: Array<{ type: string; value: string; pattern: RegExp }> = [];
-
-      // 1. Numeric + temporal: "10 yıl", "5 gün", "26'sı" etc.
-      const temporalPattern = /(\d+)\s*(yıl|ay|gün|hafta)/gi;
       let match;
-      while ((match = temporalPattern.exec(sentence)) !== null) {
-        const num = match[1];
-        const unit = match[2].toLowerCase();
-        criticalClaims.push({
-          type: 'temporal',
-          value: `${num} ${unit}`,
-          pattern: new RegExp(`${num}\\s*${unit}`, 'i')
-        });
+
+      // 1. Numeric + temporal: "10 yıl", "5 gün" (using schema's temporalUnits)
+      if (claimConfig.verifyTemporalClaims && temporalUnits.length > 0) {
+        const unitsPattern = temporalUnits.join('|');
+        const temporalPattern = new RegExp(`(\\d+)\\s*(${unitsPattern})`, 'gi');
+        while ((match = temporalPattern.exec(sentence)) !== null) {
+          const num = match[1];
+          const unit = match[2].toLowerCase();
+          criticalClaims.push({
+            type: 'temporal',
+            value: `${num} ${unit}`,
+            pattern: new RegExp(`${num}\\s*${unit}`, 'i')
+          });
+        }
       }
 
       // 2. Date ordinals: "26'sı", "ayın 15'i" etc.
-      const datePattern = /(\d+)[''ıiuü](?:n[aeiıoöuü]|s[ıi])/gi;
-      while ((match = datePattern.exec(sentence)) !== null) {
-        const num = match[1];
-        criticalClaims.push({
-          type: 'date',
-          value: num,
-          pattern: new RegExp(`${num}`, 'i')
-        });
+      if (claimConfig.verifyDateClaims) {
+        const datePattern = /(\d+)[''ıiuü](?:n[aeiıoöuü]|s[ıi])/gi;
+        while ((match = datePattern.exec(sentence)) !== null) {
+          const num = match[1];
+          criticalClaims.push({
+            type: 'date',
+            value: num,
+            pattern: new RegExp(`${num}`, 'i')
+          });
+        }
       }
 
       // 3. Percentages: "%18", "yüzde 20" etc.
-      const percentPattern = /%\s*(\d+)|yüzde\s*(\d+)/gi;
-      while ((match = percentPattern.exec(sentence)) !== null) {
-        const num = match[1] || match[2];
-        criticalClaims.push({
-          type: 'percentage',
-          value: `%${num}`,
-          pattern: new RegExp(`%\\s*${num}|yüzde\\s*${num}`, 'i')
-        });
+      if (claimConfig.verifyPercentageClaims) {
+        const percentPattern = /%\s*(\d+)|yüzde\s*(\d+)/gi;
+        while ((match = percentPattern.exec(sentence)) !== null) {
+          const num = match[1] || match[2];
+          criticalClaims.push({
+            type: 'percentage',
+            value: `%${num}`,
+            pattern: new RegExp(`%\\s*${num}|yüzde\\s*${num}`, 'i')
+          });
+        }
       }
 
-      // 4. Article references: "VUK 227", "KDVK 29" etc.
-      const articlePattern = /\b(VUK|GVK|KVK|KDVK|ÖTVK|MTV|DVK)\s*(?:madde\s*)?(\d+)/gi;
-      while ((match = articlePattern.exec(sentence)) !== null) {
-        const law = match[1].toUpperCase();
-        const article = match[2];
-        criticalClaims.push({
-          type: 'article',
-          value: `${law} ${article}`,
-          pattern: new RegExp(`${law}[^\\d]*${article}|madde\\s*${article}`, 'i')
-        });
+      // 4. Article references: "VUK 227", "KDVK 29" (using schema's lawCodes)
+      if (claimConfig.verifyArticleClaims && schemaLawCodes.length > 0) {
+        const lawCodesPattern = schemaLawCodes.join('|');
+        const articlePattern = new RegExp(`\\b(${lawCodesPattern})\\s*(?:madde\\s*)?(\\d+)`, 'gi');
+        while ((match = articlePattern.exec(sentence)) !== null) {
+          const law = match[1].toUpperCase();
+          const article = match[2];
+          criticalClaims.push({
+            type: 'article',
+            value: `${law} ${article}`,
+            pattern: new RegExp(`${law}[^\\d]*${article}|madde\\s*${article}`, 'i')
+          });
+        }
       }
 
       // If no critical claims, check for generic keywords (fallback)
@@ -3632,7 +3663,8 @@ FORMAT:
           return { verified: true, reason: 'no_claims_to_verify' };
         }
 
-        // For generic claims, use original 70% threshold
+        // For generic claims, use configurable threshold
+        const threshold = claimConfig.genericClaimThreshold;
         for (const citNum of citationNums) {
           const sourceContent = sourceIndex.get(citNum);
           if (!sourceContent) continue;
@@ -3640,8 +3672,7 @@ FORMAT:
           const supported = genericClaims.filter(claim => sourceContent.includes(claim.toLowerCase()));
           const supportRatio = supported.length / genericClaims.length;
 
-          // v7: Raised threshold from 50% to 70%
-          if (supportRatio >= 0.7) {
+          if (supportRatio >= threshold) {
             return {
               verified: true,
               reason: `generic_claims_verified_in_[${citNum}]: ${supported.length}/${genericClaims.length} (${Math.round(supportRatio * 100)}%)`
@@ -3651,7 +3682,7 @@ FORMAT:
 
         return {
           verified: false,
-          reason: `generic_claims_not_verified: [${genericClaims.join(', ')}] <70% in cited sources`
+          reason: `generic_claims_not_verified: [${genericClaims.join(', ')}] <${Math.round(threshold * 100)}% in cited sources`
         };
       }
 

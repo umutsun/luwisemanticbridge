@@ -242,6 +242,23 @@ export interface SanitizerPattern {
 }
 
 /**
+ * Critical Claim Configuration for citation verification
+ * Defines what types of claims require strict source matching
+ */
+export interface CriticalClaimConfig {
+  /** Enable/disable temporal claim verification (10 yıl, 5 gün) */
+  verifyTemporalClaims: boolean;
+  /** Enable/disable date ordinal verification (26'sı, 15'i) */
+  verifyDateClaims: boolean;
+  /** Enable/disable percentage verification (%18, yüzde 20) */
+  verifyPercentageClaims: boolean;
+  /** Enable/disable article reference verification (VUK 227, KDVK 29) */
+  verifyArticleClaims: boolean;
+  /** Threshold for generic claim verification (0.0-1.0, default 0.7) */
+  genericClaimThreshold: number;
+}
+
+/**
  * Sanitizer Configuration for schema-driven claim filtering
  * Controls which patterns trigger grounding checks and removal
  */
@@ -271,6 +288,18 @@ export interface SanitizerConfig {
    * Whether to log removed sentences (for debugging)
    */
   logRemovals: boolean;
+
+  /**
+   * Temporal units for claim extraction (e.g., yıl, ay, gün, hafta)
+   * Used to identify temporal claims like "10 yıl", "5 gün"
+   */
+  temporalUnits?: string[];
+
+  /**
+   * Critical claim configuration - controls strict citation verification
+   * If not provided, uses sensible defaults
+   */
+  criticalClaimConfig?: CriticalClaimConfig;
 }
 
 /**
@@ -471,7 +500,24 @@ export const DEFAULT_SANITIZER_CONFIG: SanitizerConfig = {
     'beyanname', 'bildirim', 'başvuru', 'tebliğ', 'ihbar',
     // Obligation/penalty terms - for consequence claims
     'ceza', 'usulsüzlük', 'gecikme', 'faiz', 'özel', 'usulsuzlük'
-  ]
+  ],
+
+  // ═══════════════════════════════════════════════════════════════
+  // TEMPORAL UNITS - for claim extraction (e.g., "10 yıl", "5 gün")
+  // ═══════════════════════════════════════════════════════════════
+  temporalUnits: ['yıl', 'ay', 'gün', 'hafta', 'saat'],
+
+  // ═══════════════════════════════════════════════════════════════
+  // CRITICAL CLAIM CONFIG - controls strict citation verification
+  // All critical claims must be found in cited source (100% match)
+  // ═══════════════════════════════════════════════════════════════
+  criticalClaimConfig: {
+    verifyTemporalClaims: true,   // "10 yıl", "5 gün" must be in source
+    verifyDateClaims: true,       // "26'sı", "ayın 15'i" must be in source
+    verifyPercentageClaims: true, // "%18", "yüzde 20" must be in source
+    verifyArticleClaims: true,    // "VUK 227" must be in source
+    genericClaimThreshold: 0.7    // 70% of generic claims must be in source
+  }
 };
 
 /**

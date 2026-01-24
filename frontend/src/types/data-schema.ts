@@ -62,6 +62,23 @@ export interface SanitizerPattern {
 }
 
 /**
+ * Critical Claim Configuration for citation verification
+ * Defines what types of claims require strict source matching
+ */
+export interface CriticalClaimConfig {
+  /** Enable/disable temporal claim verification (10 yıl, 5 gün) */
+  verifyTemporalClaims: boolean;
+  /** Enable/disable date ordinal verification (26'sı, 15'i) */
+  verifyDateClaims: boolean;
+  /** Enable/disable percentage verification (%18, yüzde 20) */
+  verifyPercentageClaims: boolean;
+  /** Enable/disable article reference verification (VUK 227, KDVK 29) */
+  verifyArticleClaims: boolean;
+  /** Threshold for generic claim verification (0.0-1.0, default 0.7) */
+  genericClaimThreshold: number;
+}
+
+/**
  * Sanitizer Configuration for schema-driven claim filtering
  * Controls which patterns trigger grounding checks and removal
  */
@@ -76,6 +93,10 @@ export interface SanitizerConfig {
   minGroundedKeywords: number;
   /** Log removed sentences for debugging */
   logRemovals: boolean;
+  /** Temporal units for claim extraction (e.g., yıl, ay, gün, hafta) */
+  temporalUnits?: string[];
+  /** Critical claim configuration - controls strict citation verification */
+  criticalClaimConfig?: CriticalClaimConfig;
 }
 
 // LLM Configuration
@@ -207,7 +228,17 @@ export const DEFAULT_SANITIZER_CONFIG: SanitizerConfig = {
     'beyanname', 'bildirim', 'başvuru',
     // Obligation/penalty terms - for consequence claims
     'ceza', 'usulsüzlük', 'gecikme', 'faiz'
-  ]
+  ],
+  // v7: Temporal units for dynamic claim extraction
+  temporalUnits: ['yıl', 'ay', 'gün', 'hafta', 'saat'],
+  // v7: Critical claim verification config
+  criticalClaimConfig: {
+    verifyTemporalClaims: true,
+    verifyDateClaims: true,
+    verifyPercentageClaims: true,
+    verifyArticleClaims: true,
+    genericClaimThreshold: 0.7
+  }
 };
 
 // Default LLM config
