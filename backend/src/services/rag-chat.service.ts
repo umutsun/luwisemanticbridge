@@ -3443,40 +3443,103 @@ FORMAT:
     console.log(`[SANITIZER] Loaded ${forbiddenPatterns.length} patterns from schema`);
 
     // ═══════════════════════════════════════════════════════════════
-    // CITATION DETECTION - Check if sentence has [X] citation
+    // BUILD SOURCE INDEX - Map citation numbers to source content
     // ═══════════════════════════════════════════════════════════════
-    const hasCitation = (sentence: string): boolean => {
-      // Match [1], [2], [3], etc.
-      return /\[\d+\]/.test(sentence);
+    const sourceIndex: Map<number, string> = new Map();
+    sources.forEach((s, idx) => {
+      const content = `${s.content || ''} ${s.excerpt || ''} ${s.title || ''}`.toLowerCase();
+      sourceIndex.set(idx + 1, content); // Citations are 1-indexed
+    });
+
+    // ═══════════════════════════════════════════════════════════════
+    // CITATION EXTRACTION - Get [X] numbers from sentence
+    // ═══════════════════════════════════════════════════════════════
+    const extractCitations = (sentence: string): number[] => {
+      const matches = sentence.match(/\[(\d+)\]/g) || [];
+      return matches.map(m => parseInt(m.replace(/[\[\]]/g, ''), 10));
     };
 
     // ═══════════════════════════════════════════════════════════════
-    // GROUNDING KEYWORDS - From schema config
-    // Only used for secondary validation, primary is citation check
+    // CLAIM EXTRACTION - Extract key claims from sentence
+    // These are what we verify against cited sources
     // ═══════════════════════════════════════════════════════════════
-    const schemaKeywords = sanitizerConfig.groundingKeywords || [];
-
-    const extractGroundingKeywords = (sentence: string): string[] => {
-      const keywords: string[] = [];
+    const extractClaims = (sentence: string): string[] => {
+      const claims: string[] = [];
       const sentenceLower = sentence.toLowerCase();
 
-      // Check schema-defined keywords (must be whole word match)
-      for (const kw of schemaKeywords) {
-        const kwLower = kw.toLowerCase();
-        // Use word boundary check to avoid partial matches
-        const wordBoundaryRegex = new RegExp(`\\b${kwLower.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i');
-        if (wordBoundaryRegex.test(sentenceLower)) {
-          keywords.push(kwLower);
+      // Extract numeric values (dates, durations, percentages)
+      const numbers = sentence.match(/\d+/g) || [];
+      claims.push(...numbers);
+
+      // Extract Turkish number words
+      const turkishNumbers = ['bir', 'iki', 'üç', 'dört', 'beş', 'altı', 'yedi', 'sekiz', 'dokuz', 'on',
+        'yirmi', 'otuz', 'kırk', 'elli', 'altmış', 'yetmiş', 'seksen', 'doksan', 'yüz'];
+      for (const num of turkishNumbers) {
+        if (sentenceLower.includes(num)) claims.push(num);
+      }
+
+      // Extract key normative/procedural terms that MUST be in source
+      const keyTerms = ['zorunlu', 'şart', 'mecbur', 'yükümlü', 'ibraz', 'muhafaza', 'saklama',
+        'beyanname', 'bildirim', 'süre', 'gün', 'ay', 'yıl'];
+      for (const term of keyTerms) {
+        if (sentenceLower.includes(term)) claims.push(term);
+      }
+
+      return [...new Set(claims)]; // Dedupe
+    };
+
+    // ═══════════════════════════════════════════════════════════════
+    // CITATION VERIFICATION - Check if claims exist in cited source
+    // This is the key anti-laundering check
+    // ═══════════════════════════════════════════════════════════════
+    const verifyCitationSupport = (sentence: string, citationNums: number[]): { verified: boolean; reason: string } => {
+      if (citationNums.length === 0) {
+        return { verified: false, reason: 'no_citation' };
+      }
+
+      const claims = extractClaims(sentence);
+      if (claims.length === 0) {
+        // No specific claims to verify → trust the citation
+        return { verified: true, reason: 'no_claims_to_verify' };
+      }
+
+      // Check each cited source for claim support
+      let foundSupport = false;
+      let supportingSource = -1;
+      let matchedClaims: string[] = [];
+
+      for (const citNum of citationNums) {
+        const sourceContent = sourceIndex.get(citNum);
+        if (!sourceContent) continue;
+
+        // Count how many claims appear in this source
+        const supported = claims.filter(claim => sourceContent.includes(claim.toLowerCase()));
+
+        // Require at least 50% of claims to be supported
+        const supportRatio = supported.length / claims.length;
+        if (supportRatio >= 0.5) {
+          foundSupport = true;
+          supportingSource = citNum;
+          matchedClaims = supported;
+          break;
         }
       }
 
-      return keywords;
+      if (foundSupport) {
+        return {
+          verified: true,
+          reason: `claims_verified_in_[${supportingSource}]: [${matchedClaims.join(', ')}]`
+        };
+      } else {
+        return {
+          verified: false,
+          reason: `citation_laundering: claims [${claims.join(', ')}] not found in cited sources [${citationNums.join(', ')}]`
+        };
+      }
     };
 
-    const minGroundedKeywords = sanitizerConfig.minGroundedKeywords || 1;
-
     // ═══════════════════════════════════════════════════════════════
-    // PROCESS EACH SENTENCE
+    // PROCESS EACH SENTENCE (v5 - Citation Verification)
     // ═══════════════════════════════════════════════════════════════
     for (const sentence of sentences) {
       const trimmedSentence = sentence.trim();
@@ -3492,49 +3555,60 @@ FORMAT:
       }
 
       // ═══════════════════════════════════════════════════════════════
-      // STRICT GROUNDING CHECK (v4)
-      // Sentence has forbidden pattern → check if properly cited
+      // STRICT GROUNDING CHECK (v5) - Citation Verification
+      // Having [X] is NOT enough - the cited source must support the claim
       // ═══════════════════════════════════════════════════════════════
 
-      // PRIMARY CHECK: Does sentence have a citation [X]?
-      const sentenceHasCitation = hasCitation(trimmedSentence);
+      const citationNums = extractCitations(trimmedSentence);
+      const hasCitations = citationNums.length > 0;
 
-      if (sentenceHasCitation) {
-        // Has citation → keep (citation validates the claim)
-        processedSentences.push(trimmedSentence);
-        keptWithGroundingCount++;
+      if (hasCitations) {
+        // Has citation → VERIFY it actually supports the claim
+        const verification = verifyCitationSupport(trimmedSentence, citationNums);
+
+        if (verification.verified) {
+          // Citation verified → keep sentence
+          processedSentences.push(trimmedSentence);
+          keptWithGroundingCount++;
+          if (sanitizerConfig.logRemovals) {
+            console.log(`[SANITIZER] KEPT (verified): "${trimmedSentence.substring(0, 60)}..." - ${verification.reason}`);
+          }
+        } else {
+          // CITATION LAUNDERING DETECTED → REMOVE
+          removedCount++;
+          if (sanitizerConfig.logRemovals) {
+            console.log(`[SANITIZER] REMOVED (laundering): "${trimmedSentence.substring(0, 80)}..."`);
+            console.log(`   ${verification.reason}`);
+          }
+        }
         continue;
       }
 
-      // SECONDARY CHECK: Grounding keywords in source corpus
-      const groundingKeywords = extractGroundingKeywords(trimmedSentence);
-      const groundedKeywords = groundingKeywords.filter(kw => {
-        // More strict: check if keyword appears as whole word in source
-        const kwRegex = new RegExp(`\\b${kw.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i');
-        return kwRegex.test(sourceCorpus);
-      });
+      // NO CITATION → Check grounding in full corpus
+      const claims = extractClaims(trimmedSentence);
+      const groundedClaims = claims.filter(claim => sourceCorpus.includes(claim.toLowerCase()));
 
-      // Require at least minGroundedKeywords AND the exact phrase start must exist
-      const phraseStart = trimmedSentence.toLowerCase().substring(0, 40).replace(/[^\wığüşöçİĞÜŞÖÇ\s]/g, '');
+      // Stricter: require 70% of claims grounded AND exact phrase match
+      const phraseStart = trimmedSentence.toLowerCase().substring(0, 50).replace(/[^\wığüşöçİĞÜŞÖÇ\s]/g, '');
       const exactPhraseInSource = sourceCorpus.includes(phraseStart);
+      const groundingRatio = claims.length > 0 ? groundedClaims.length / claims.length : 0;
 
-      const isGrounded = groundedKeywords.length >= minGroundedKeywords && exactPhraseInSource;
+      const isGrounded = groundingRatio >= 0.7 && exactPhraseInSource;
 
       if (isGrounded) {
-        // Grounded by keywords + phrase match → keep but log
         processedSentences.push(trimmedSentence);
         keptWithGroundingCount++;
         if (sanitizerConfig.logRemovals) {
-          console.log(`[SANITIZER] KEPT (grounded): "${trimmedSentence.substring(0, 60)}..." - keywords: [${groundedKeywords.join(', ')}]`);
+          console.log(`[SANITIZER] KEPT (corpus): "${trimmedSentence.substring(0, 60)}..." - grounded: [${groundedClaims.join(', ')}]`);
         }
       } else {
-        // NOT grounded and NO citation → REMOVE sentence entirely
+        // NOT grounded and NO valid citation → REMOVE
         removedCount++;
         if (sanitizerConfig.logRemovals) {
-          console.log(`[SANITIZER] REMOVED: "${trimmedSentence.substring(0, 80)}..."`);
-          console.log(`   Pattern matched: ${matchedPattern.source}`);
-          console.log(`   Keywords found: [${groundingKeywords.join(', ')}], grounded: [${groundedKeywords.join(', ')}]`);
-          console.log(`   Has citation: ${sentenceHasCitation}, phrase in source: ${exactPhraseInSource}`);
+          console.log(`[SANITIZER] REMOVED (ungrounded): "${trimmedSentence.substring(0, 80)}..."`);
+          console.log(`   Pattern: ${matchedPattern.source}`);
+          console.log(`   Claims: [${claims.join(', ')}], grounded: [${groundedClaims.join(', ')}] (${(groundingRatio * 100).toFixed(0)}%)`);
+          console.log(`   Phrase in corpus: ${exactPhraseInSource}`);
         }
       }
     }
@@ -3553,7 +3627,7 @@ FORMAT:
 
     // Log summary
     if (removedCount > 0 || keptWithGroundingCount > 0) {
-      console.log(`[SANITIZER] Summary: removed=${removedCount}, kept_with_grounding=${keptWithGroundingCount}, min_keywords=${minGroundedKeywords}`);
+      console.log(`[SANITIZER v5] Summary: removed=${removedCount}, kept=${keptWithGroundingCount}, sources=${sources.length}`);
     }
 
     return result.trim();
