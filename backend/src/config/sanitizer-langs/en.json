@@ -1,0 +1,128 @@
+{
+  "code": "en",
+  "name": "English",
+  "description": "English legal/business domain sanitizer patterns",
+
+  "temporalUnits": ["year", "month", "day", "week", "hour"],
+
+  "temporalSuffixes": {
+    "description": "English has no verb suffix changes for temporal claims",
+    "pattern": "s?"
+  },
+
+  "datePatterns": {
+    "ordinal": "(\\d+)(?:st|nd|rd|th)",
+    "description": "English date ordinals: 1st, 2nd, 3rd, 4th, 26th"
+  },
+
+  "percentagePatterns": {
+    "symbol": "(\\d+)\\s*%",
+    "word": "(\\d+)\\s*percent",
+    "description": "English percentage: 18%, 20 percent"
+  },
+
+  "forbiddenPatterns": [
+    {
+      "id": "norm-1",
+      "category": "normative",
+      "pattern": "(?:is|are)\\s+required(?:\\s+to)?(?=[.,;\\s]|$)",
+      "description": "Is/are required (to)"
+    },
+    {
+      "id": "norm-2",
+      "category": "normative",
+      "pattern": "must\\s+be(?=[.,;\\s]|$)",
+      "description": "Must be"
+    },
+    {
+      "id": "norm-3",
+      "category": "normative",
+      "pattern": "(?:is|are)\\s+mandatory(?=[.,;\\s]|$)",
+      "description": "Is/are mandatory"
+    },
+    {
+      "id": "norm-4",
+      "category": "normative",
+      "pattern": "(?:is|are)\\s+obligated(?:\\s+to)?(?=[.,;\\s]|$)",
+      "description": "Is/are obligated"
+    },
+    {
+      "id": "norm-5",
+      "category": "normative",
+      "pattern": "shall\\s+(?:be|have|provide)(?=[.,;\\s]|$)",
+      "description": "Shall be/have/provide"
+    },
+    {
+      "id": "modal-1",
+      "category": "modal",
+      "pattern": "should\\s+be\\s+(?:provided|submitted|filed)(?=[.,;\\s]|$)",
+      "description": "Should be provided/submitted"
+    },
+    {
+      "id": "modal-2",
+      "category": "modal",
+      "pattern": "needs\\s+to\\s+be(?=[.,;\\s]|$)",
+      "description": "Needs to be"
+    },
+    {
+      "id": "modal-3",
+      "category": "modal",
+      "pattern": "(?:is|are)\\s+essential(?=[.,;\\s]|$)",
+      "description": "Is/are essential"
+    },
+    {
+      "id": "cons-1",
+      "category": "consequence",
+      "pattern": "otherwise(?=[.,;\\s]|$)",
+      "description": "Otherwise"
+    },
+    {
+      "id": "cons-2",
+      "category": "consequence",
+      "pattern": "failure\\s+to\\s+(?:comply|submit|file)",
+      "description": "Failure to comply/submit"
+    },
+    {
+      "id": "cons-3",
+      "category": "consequence",
+      "pattern": "(?:will|may)\\s+(?:result|lead)\\s+(?:in|to)",
+      "description": "Will/may result in"
+    },
+    {
+      "id": "cons-4",
+      "category": "consequence",
+      "pattern": "(?:penalties|fines)\\s+(?:will|may)\\s+(?:apply|be)",
+      "description": "Penalties/fines will apply"
+    },
+    {
+      "id": "warn-1",
+      "category": "modal",
+      "pattern": "(?:do\\s+not|don't)\\s+forget(?=[.,;\\s]|$)",
+      "description": "Do not forget"
+    },
+    {
+      "id": "warn-2",
+      "category": "modal",
+      "pattern": "(?:it\\s+is|it's)\\s+important\\s+to(?=[.,;\\s]|$)",
+      "description": "It is important to"
+    },
+    {
+      "id": "warn-3",
+      "category": "modal",
+      "pattern": "(?:is|are)\\s+recommended(?=[.,;\\s]|$)",
+      "description": "Is/are recommended"
+    }
+  ],
+
+  "groundingKeywords": [
+    "invoice", "receipt", "document", "form", "application",
+    "contract", "agreement", "report", "statement",
+    "section", "article", "clause", "law", "regulation", "act",
+    "tax", "vat", "withholding", "exemption", "deduction",
+    "assessment", "collection", "refund", "credit",
+    "period", "day", "month", "year", "date", "deadline", "term",
+    "retention", "storage", "filing", "archive",
+    "return", "declaration", "notice", "submission",
+    "penalty", "fine", "interest", "violation"
+  ]
+}

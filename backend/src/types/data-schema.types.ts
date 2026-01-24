@@ -267,14 +267,32 @@ export interface SanitizerConfig {
   enabled: boolean;
 
   /**
+   * Language code for sanitizer patterns (ISO 639-1)
+   * Supported: 'tr' (Turkish), 'en' (English)
+   * If set and useLanguagePack is true, loads patterns from language pack
+   * Default: 'tr' (Turkish for first customers)
+   */
+  language?: string;
+
+  /**
+   * Whether to use language pack for patterns
+   * If true, loads forbiddenPatterns, groundingKeywords, temporalUnits from language pack
+   * Custom patterns in this config will override language pack patterns
+   * Default: false (backward compatible)
+   */
+  useLanguagePack?: boolean;
+
+  /**
    * Forbidden patterns - sentences matching these are checked for grounding
    * If not grounded in sources, entire sentence is removed
+   * If useLanguagePack is true, these are merged with language pack patterns
    */
   forbiddenPatterns: SanitizerPattern[];
 
   /**
    * Grounding keywords to extract from sentences for source validation
    * These terms must appear in source corpus for claim to be considered grounded
+   * If useLanguagePack is true, these are merged with language pack keywords
    */
   groundingKeywords: string[];
 
@@ -292,6 +310,7 @@ export interface SanitizerConfig {
   /**
    * Temporal units for claim extraction (e.g., yıl, ay, gün, hafta)
    * Used to identify temporal claims like "10 yıl", "5 gün"
+   * If useLanguagePack is true and not provided, loaded from language pack
    */
   temporalUnits?: string[];
 

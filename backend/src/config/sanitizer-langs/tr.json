@@ -1,0 +1,123 @@
+{
+  "code": "tr",
+  "name": "Türkçe",
+  "description": "Turkish legal/tax domain sanitizer patterns",
+
+  "temporalUnits": ["yıl", "ay", "gün", "hafta", "saat"],
+
+  "temporalSuffixes": {
+    "description": "Turkish verb suffix patterns for temporal claims (vowel harmony)",
+    "backVowels": "d[ıi]r",
+    "frontVowels": "d[üu]r"
+  },
+
+  "datePatterns": {
+    "ordinal": "(\\d+)[''ıiuü](?:n[aeiıoöuü]|s[ıi])",
+    "description": "Turkish date ordinals: 26'sı, ayın 15'i"
+  },
+
+  "percentagePatterns": {
+    "symbol": "%\\s*(\\d+)",
+    "word": "yüzde\\s*(\\d+)",
+    "description": "Turkish percentage: %18, yüzde 20"
+  },
+
+  "forbiddenPatterns": [
+    {
+      "id": "norm-1",
+      "category": "normative",
+      "pattern": "gerek(?:mektedir|ir|iyor|lidir|tirmektedir|tirir)(?:ler)?(?=[.,;\\s]|$)",
+      "description": "Gerekmektedir varyantları"
+    },
+    {
+      "id": "norm-2",
+      "category": "normative",
+      "pattern": "zorunlu(?:dur|luktur)?(?:lar)?(?=[.,;\\s]|$)",
+      "description": "Zorunludur"
+    },
+    {
+      "id": "norm-3",
+      "category": "normative",
+      "pattern": "zorundadır(?:lar|s[ıi]n[ıi]z)?(?=[.,;\\s]|$)",
+      "description": "Zorundadır + çekimler"
+    },
+    {
+      "id": "norm-4",
+      "category": "normative",
+      "pattern": "mecbur(?:dur|idir|iyet)?(?:lar)?(?=[.,;\\s]|$)",
+      "description": "Mecburdur/mecburiyet"
+    },
+    {
+      "id": "norm-5",
+      "category": "normative",
+      "pattern": "şart(?:tır)?(?:lar)?(?=[.,;\\s]|$)",
+      "description": "Şarttır"
+    },
+    {
+      "id": "norm-6",
+      "category": "normative",
+      "pattern": "yükümlü(?:dür)?(?:ler)?(?=[.,;\\s]|$)",
+      "description": "Yükümlüdür"
+    },
+    {
+      "id": "modal-1",
+      "category": "modal",
+      "pattern": "verilmelidir(?:ler)?(?=[.,;\\s]|$)",
+      "description": "Verilmelidir"
+    },
+    {
+      "id": "modal-2",
+      "category": "modal",
+      "pattern": "yapılmalıdır(?:lar)?(?=[.,;\\s]|$)",
+      "description": "Yapılmalıdır"
+    },
+    {
+      "id": "modal-3",
+      "category": "modal",
+      "pattern": "edilmelidir(?:ler)?(?=[.,;\\s]|$)",
+      "description": "Edilmelidir"
+    },
+    {
+      "id": "modal-4",
+      "category": "modal",
+      "pattern": "saklanmalıdır(?:ler)?(?=[.,;\\s]|$)",
+      "description": "Saklanmalıdır"
+    },
+    {
+      "id": "cons-1",
+      "category": "consequence",
+      "pattern": "aksi\\s+(?:takdirde|halde|durumda)",
+      "description": "Aksi takdirde/halde"
+    },
+    {
+      "id": "cons-2",
+      "category": "consequence",
+      "pattern": "(?:hak|indirim|iade)\\s+kayb",
+      "description": "Hak/indirim kaybı"
+    },
+    {
+      "id": "warn-1",
+      "category": "modal",
+      "pattern": "unutulmamalıdır",
+      "description": "Unutulmamalıdır"
+    },
+    {
+      "id": "warn-2",
+      "category": "modal",
+      "pattern": "dikkat\\s+edilmelidir",
+      "description": "Dikkat edilmelidir"
+    }
+  ],
+
+  "groundingKeywords": [
+    "fatura", "makbuz", "fiş", "belge", "form", "dilekçe",
+    "sözleşme", "protokol", "tutanak", "rapor",
+    "madde", "fıkra", "bent", "kanun", "yönetmelik", "tebliğ",
+    "matrah", "vergi", "kdv", "stopaj", "tevkifat",
+    "tahakkuk", "tahsil", "iade", "indirim", "mahsup",
+    "süre", "gün", "ay", "yıl", "tarih", "vade", "dönem",
+    "saklama", "muhafaza", "ibraz", "arşiv",
+    "beyanname", "bildirim", "başvuru",
+    "ceza", "usulsüzlük", "gecikme", "faiz"
+  ]
+}

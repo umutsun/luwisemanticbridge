@@ -85,6 +85,10 @@ export interface CriticalClaimConfig {
 export interface SanitizerConfig {
   /** Whether sanitizer is enabled */
   enabled: boolean;
+  /** Language code (ISO 639-1): 'tr', 'en', etc. Default: 'tr' */
+  language?: string;
+  /** Whether to use language pack for patterns */
+  useLanguagePack?: boolean;
   /** Forbidden patterns - sentences matching are checked for grounding */
   forbiddenPatterns: SanitizerPattern[];
   /** Keywords to extract for source validation */

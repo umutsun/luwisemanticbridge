@@ -6,9 +6,10 @@ import pool from '../config/database';
 import { redis } from '../config/redis';
 import dotenv from 'dotenv';
 import { TIMEOUTS } from '../config';
-import { TopicEntity, LLMConfig, SanitizerConfig, DEFAULT_SANITIZER_CONFIG } from '../types/data-schema.types';
+import { TopicEntity, LLMConfig, SanitizerConfig, DEFAULT_SANITIZER_CONFIG, SanitizerPattern } from '../types/data-schema.types';
 import { RAGRoutingSchema, RAGResponseType } from '../types/settings.types';
 import { DEFAULT_RAG_ROUTING_SCHEMA, getRAGRoutingSchema } from '../config/rag-routing-schema.config';
+import { getSanitizerLangPack, buildTemporalPattern, buildDatePattern, buildPercentagePattern, SanitizerLangPack } from '../config/sanitizer-langs';
 
 // Settings service interface
 interface SettingsService {
@@ -3486,6 +3487,43 @@ FORMAT:
       return response;
     }
 
+    // ═══════════════════════════════════════════════════════════════
+    // LANGUAGE PACK INTEGRATION (v10 - Multi-language support)
+    // If useLanguagePack is enabled, load patterns from language pack
+    // Custom patterns in config override/extend language pack patterns
+    // ═══════════════════════════════════════════════════════════════
+    let langPack: SanitizerLangPack | null = null;
+    let effectiveForbiddenPatterns: SanitizerPattern[] = sanitizerConfig.forbiddenPatterns || [];
+    let effectiveGroundingKeywords: string[] = sanitizerConfig.groundingKeywords || [];
+    let effectiveTemporalUnits: string[] = sanitizerConfig.temporalUnits || [];
+
+    if (sanitizerConfig.useLanguagePack) {
+      const langCode = sanitizerConfig.language || 'tr';
+      langPack = getSanitizerLangPack(langCode);
+      console.log(`[SANITIZER] Loaded language pack: ${langPack.name} (${langPack.code})`);
+
+      // Merge language pack patterns with custom patterns (custom patterns take precedence by ID)
+      const customPatternIds = new Set(sanitizerConfig.forbiddenPatterns?.map(p => p.id) || []);
+      const langPackPatterns = langPack.forbiddenPatterns
+        .filter(p => !customPatternIds.has(p.id))
+        .map(p => ({ ...p, enabled: true }));
+      effectiveForbiddenPatterns = [...langPackPatterns, ...(sanitizerConfig.forbiddenPatterns || [])];
+
+      // Merge grounding keywords (union)
+      const keywordSet = new Set([
+        ...langPack.groundingKeywords,
+        ...(sanitizerConfig.groundingKeywords || [])
+      ]);
+      effectiveGroundingKeywords = Array.from(keywordSet);
+
+      // Use language pack temporal units if not provided in config
+      effectiveTemporalUnits = sanitizerConfig.temporalUnits?.length
+        ? sanitizerConfig.temporalUnits
+        : langPack.temporalUnits;
+
+      console.log(`[SANITIZER] Merged: ${effectiveForbiddenPatterns.length} patterns, ${effectiveGroundingKeywords.length} keywords, ${effectiveTemporalUnits.length} temporal units`);
+    }
+
     // Build source content corpus for grounding check (lowercase, normalized)
     const sourceCorpus = sources
       .map(s => `${s.content || ''} ${s.excerpt || ''} ${s.title || ''}`.toLowerCase())
@@ -3500,9 +3538,9 @@ FORMAT:
     let keptWithGroundingCount = 0;
 
     // ═══════════════════════════════════════════════════════════════
-    // BUILD FORBIDDEN PATTERNS FROM SCHEMA CONFIG
+    // BUILD FORBIDDEN PATTERNS FROM SCHEMA/LANGUAGE PACK
     // ═══════════════════════════════════════════════════════════════
-    const forbiddenPatterns: RegExp[] = sanitizerConfig.forbiddenPatterns
+    const forbiddenPatterns: RegExp[] = effectiveForbiddenPatterns
       .filter(p => p.enabled)
       .map(p => {
         try {
@@ -3514,7 +3552,7 @@ FORMAT:
       })
       .filter((p): p is RegExp => p !== null);
 
-    console.log(`[SANITIZER] Loaded ${forbiddenPatterns.length} patterns from schema`);
+    console.log(`[SANITIZER] Loaded ${forbiddenPatterns.length} patterns (lang: ${sanitizerConfig.language || 'tr'})`);
 
     // ═══════════════════════════════════════════════════════════════
     // BUILD SOURCE INDEX - Map citation numbers to source content
@@ -3565,9 +3603,9 @@ FORMAT:
     };
 
     // ═══════════════════════════════════════════════════════════════
-    // CRITICAL CLAIM DETECTION v9 - Detects temporal, date, %, article claims
+    // CRITICAL CLAIM DETECTION v10 - Language-aware pattern detection
     // Returns array of detected claims (empty if no critical claims)
-    // Used to identify sentences that MUST have verified citations
+    // Uses language pack for date/percentage patterns when available
     // ═══════════════════════════════════════════════════════════════
     const detectCriticalClaims = (sentence: string): Array<{ type: string; value: string }> => {
       const claimConfig = sanitizerConfig.criticalClaimConfig || {
@@ -3577,44 +3615,62 @@ FORMAT:
         verifyArticleClaims: true,
         genericClaimThreshold: 0.7
       };
-      const temporalUnits = sanitizerConfig.temporalUnits || ['yıl', 'ay', 'gün', 'hafta'];
       const schemaLawCodes = lawCodes || [];
 
       const claims: Array<{ type: string; value: string }> = [];
       let match;
 
-      // 1. Temporal claims: "10 yıl", "5 yıldır"
-      if (claimConfig.verifyTemporalClaims && temporalUnits.length > 0) {
-        const unitsWithSuffixes = temporalUnits.map(unit => {
-          const suffix = /[aıou]/.test(unit) ? 'd[ıi]r' : 'd[üui]r';
-          return `${unit}(?:${suffix})?`;
-        }).join('|');
-        const temporalPattern = new RegExp(`(\\d+)\\s*(${unitsWithSuffixes})`, 'gi');
+      // 1. Temporal claims - Use language pack pattern if available
+      if (claimConfig.verifyTemporalClaims && effectiveTemporalUnits.length > 0) {
+        let temporalPattern: RegExp;
+        if (langPack) {
+          temporalPattern = buildTemporalPattern(langPack);
+        } else {
+          // Fallback: Turkish pattern
+          const unitsWithSuffixes = effectiveTemporalUnits.map(unit => {
+            const suffix = /[aıou]/.test(unit) ? 'd[ıi]r' : 'd[üui]r';
+            return `${unit}(?:${suffix})?`;
+          }).join('|');
+          temporalPattern = new RegExp(`(\\d+)\\s*(${unitsWithSuffixes})`, 'gi');
+        }
         while ((match = temporalPattern.exec(sentence)) !== null) {
           const num = match[1];
-          const rawUnit = match[2].toLowerCase().replace(/d[ıiüu]r$/i, '');
+          // Normalize unit: remove suffix
+          const rawUnit = match[2].toLowerCase().replace(/d[ıiüu]r$/i, '').replace(/s$/i, '');
           claims.push({ type: 'temporal', value: `${num} ${rawUnit}` });
         }
       }
 
-      // 2. Date ordinals: "26'sı", "ayın 15'i"
+      // 2. Date ordinals - Use language pack pattern if available
       if (claimConfig.verifyDateClaims) {
-        const datePattern = /(\d+)[''ıiuü](?:n[aeiıoöuü]|s[ıi])/gi;
+        let datePattern: RegExp;
+        if (langPack) {
+          datePattern = buildDatePattern(langPack);
+        } else {
+          // Fallback: Turkish date ordinals
+          datePattern = /(\d+)[''ıiuü](?:n[aeiıoöuü]|s[ıi])/gi;
+        }
         while ((match = datePattern.exec(sentence)) !== null) {
           claims.push({ type: 'date', value: match[1] });
         }
       }
 
-      // 3. Percentages: "%18", "yüzde 20"
+      // 3. Percentages - Use language pack pattern if available
       if (claimConfig.verifyPercentageClaims) {
-        const percentPattern = /%\s*(\d+)|yüzde\s*(\d+)/gi;
+        let percentPattern: RegExp;
+        if (langPack) {
+          percentPattern = buildPercentagePattern(langPack);
+        } else {
+          // Fallback: Turkish/universal percentage
+          percentPattern = /%\s*(\d+)|yüzde\s*(\d+)/gi;
+        }
         while ((match = percentPattern.exec(sentence)) !== null) {
           const num = match[1] || match[2];
           claims.push({ type: 'percentage', value: `%${num}` });
         }
       }
 
-      // 4. Article references: "VUK 227", "KDVK 29"
+      // 4. Article references - Schema-driven (not language-specific)
       if (claimConfig.verifyArticleClaims && schemaLawCodes.length > 0) {
         const lawCodesPattern = schemaLawCodes.join('|');
         const articlePattern = new RegExp(`\\b(${lawCodesPattern})\\s*(?:madde\\s*)?(\\d+)`, 'gi');
@@ -3627,15 +3683,14 @@ FORMAT:
     };
 
     // ═══════════════════════════════════════════════════════════════
-    // CITATION VERIFICATION v9 - STRICT Claim-Source Matching
+    // CITATION VERIFICATION v10 - Language-aware Claim-Source Matching
     // Key insight: Having [X] is NOT enough. The cited source must
     // contain the SPECIFIC claim, not just generic keywords.
     //
-    // v7: ALL PATTERNS ARE NOW SCHEMA-DRIVEN (NO HARDCODING)
-    // v9: detectCriticalClaims extracted for reuse in no-citation branch
-    // - temporalUnits from sanitizerConfig.temporalUnits
-    // - lawCodes from schema's lawCodeConfig
-    // - criticalClaimConfig controls which types to verify
+    // v10: Multi-language support via language packs
+    // - Uses effectiveTemporalUnits from language pack or config
+    // - Uses langPack patterns for dates/percentages when available
+    // - lawCodes from schema's lawCodeConfig (not language-specific)
     // ═══════════════════════════════════════════════════════════════
     const verifyCitationSupport = (sentence: string, citationNums: number[]): { verified: boolean; reason: string } => {
       if (citationNums.length === 0) {
@@ -3650,45 +3705,52 @@ FORMAT:
         verifyArticleClaims: true,
         genericClaimThreshold: 0.7
       };
-      const temporalUnits = sanitizerConfig.temporalUnits || ['yıl', 'ay', 'gün', 'hafta'];
       const schemaLawCodes = lawCodes || []; // From getDomainConfig -> lawCodeConfig.lawCodes
 
       const sentenceLower = sentence.toLowerCase();
 
       // ═══════════════════════════════════════════════════════════════
-      // EXTRACT CRITICAL CLAIMS - These MUST appear in source
-      // All patterns are now dynamic from schema config
+      // EXTRACT CRITICAL CLAIMS - Language-aware pattern extraction
+      // Uses language pack for temporal/date/percentage patterns
       // ═══════════════════════════════════════════════════════════════
       const criticalClaims: Array<{ type: string; value: string; pattern: RegExp }> = [];
       let match;
 
-      // 1. Numeric + temporal: "10 yıl", "5 gün", "5 yıldır" (using schema's temporalUnits)
-      // v9: Added Turkish suffixes: -dır/-dir/-dur/-dür/-tır/-tir (e.g., yıldır, aydır, gündür)
-      if (claimConfig.verifyTemporalClaims && temporalUnits.length > 0) {
-        // Build pattern with optional Turkish suffixes
-        // yıl → yıl(?:dır|d[ıi]r)?  |  ay → ay(?:dır|d[ıi]r)?  |  gün → gün(?:dür|d[üu]r)?
-        const unitsWithSuffixes = temporalUnits.map(unit => {
-          // Turkish vowel harmony: back vowels (a,ı,o,u) → dır, front vowels (e,i,ö,ü) → dir
-          const suffix = /[aıou]/.test(unit) ? 'd[ıi]r' : 'd[üui]r';
-          return `${unit}(?:${suffix})?`;
-        }).join('|');
-        const temporalPattern = new RegExp(`(\\d+)\\s*(${unitsWithSuffixes})`, 'gi');
+      // 1. Temporal claims - Use language pack or effective config
+      if (claimConfig.verifyTemporalClaims && effectiveTemporalUnits.length > 0) {
+        let temporalPattern: RegExp;
+        if (langPack) {
+          temporalPattern = buildTemporalPattern(langPack);
+        } else {
+          // Fallback: Turkish vowel harmony pattern
+          const unitsWithSuffixes = effectiveTemporalUnits.map(unit => {
+            const suffix = /[aıou]/.test(unit) ? 'd[ıi]r' : 'd[üui]r';
+            return `${unit}(?:${suffix})?`;
+          }).join('|');
+          temporalPattern = new RegExp(`(\\d+)\\s*(${unitsWithSuffixes})`, 'gi');
+        }
         while ((match = temporalPattern.exec(sentence)) !== null) {
           const num = match[1];
-          // Normalize unit: remove suffix (yıldır → yıl)
-          const rawUnit = match[2].toLowerCase().replace(/d[ıiüu]r$/i, '');
+          // Normalize unit: remove suffixes (yıldır → yıl, years → year)
+          const rawUnit = match[2].toLowerCase().replace(/d[ıiüu]r$/i, '').replace(/s$/i, '');
           criticalClaims.push({
             type: 'temporal',
             value: `${num} ${rawUnit}`,
-            // Pattern should match both "5 yıl" and "5 yıldır" in source
+            // Pattern should match both with and without suffix in source
             pattern: new RegExp(`${num}\\s*${rawUnit}`, 'i')
           });
         }
       }
 
-      // 2. Date ordinals: "26'sı", "ayın 15'i" etc.
+      // 2. Date ordinals - Use language pack or fallback
       if (claimConfig.verifyDateClaims) {
-        const datePattern = /(\d+)[''ıiuü](?:n[aeiıoöuü]|s[ıi])/gi;
+        let datePattern: RegExp;
+        if (langPack) {
+          datePattern = buildDatePattern(langPack);
+        } else {
+          // Fallback: Turkish date ordinals
+          datePattern = /(\d+)[''ıiuü](?:n[aeiıoöuü]|s[ıi])/gi;
+        }
         while ((match = datePattern.exec(sentence)) !== null) {
           const num = match[1];
           criticalClaims.push({
@@ -3699,20 +3761,26 @@ FORMAT:
         }
       }
 
-      // 3. Percentages: "%18", "yüzde 20" etc.
+      // 3. Percentages - Use language pack or fallback
       if (claimConfig.verifyPercentageClaims) {
-        const percentPattern = /%\s*(\d+)|yüzde\s*(\d+)/gi;
+        let percentPattern: RegExp;
+        if (langPack) {
+          percentPattern = buildPercentagePattern(langPack);
+        } else {
+          // Fallback: Turkish/universal percentage
+          percentPattern = /%\s*(\d+)|yüzde\s*(\d+)/gi;
+        }
         while ((match = percentPattern.exec(sentence)) !== null) {
           const num = match[1] || match[2];
           criticalClaims.push({
             type: 'percentage',
             value: `%${num}`,
-            pattern: new RegExp(`%\\s*${num}|yüzde\\s*${num}`, 'i')
+            pattern: new RegExp(`%\\s*${num}|${num}\\s*%|yüzde\\s*${num}|${num}\\s*percent`, 'i')
           });
         }
       }
 
-      // 4. Article references: "VUK 227", "KDVK 29" (using schema's lawCodes)
+      // 4. Article references - Schema-driven (not language-specific)
       if (claimConfig.verifyArticleClaims && schemaLawCodes.length > 0) {
         const lawCodesPattern = schemaLawCodes.join('|');
         const articlePattern = new RegExp(`\\b(${lawCodesPattern})\\s*(?:madde\\s*)?(\\d+)`, 'gi');
