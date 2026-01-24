@@ -3557,51 +3557,147 @@ FORMAT:
     };
 
     // ═══════════════════════════════════════════════════════════════
-    // CITATION VERIFICATION - Check if claims exist in cited source
-    // This is the key anti-laundering check
+    // CITATION VERIFICATION v7 - STRICT Claim-Source Matching
+    // Key insight: Having [X] is NOT enough. The cited source must
+    // contain the SPECIFIC claim, not just generic keywords.
+    //
+    // Numeric claims (10 yıl, 26'sı) require EXACT number + context
+    // Temporal claims require both number AND time unit together
     // ═══════════════════════════════════════════════════════════════
     const verifyCitationSupport = (sentence: string, citationNums: number[]): { verified: boolean; reason: string } => {
       if (citationNums.length === 0) {
         return { verified: false, reason: 'no_citation' };
       }
 
-      const claims = extractClaims(sentence);
-      if (claims.length === 0) {
-        // No specific claims to verify → trust the citation
-        return { verified: true, reason: 'no_claims_to_verify' };
+      const sentenceLower = sentence.toLowerCase();
+
+      // ═══════════════════════════════════════════════════════════════
+      // EXTRACT CRITICAL CLAIMS - These MUST appear in source
+      // Critical = numeric, temporal, specific procedural
+      // ═══════════════════════════════════════════════════════════════
+      const criticalClaims: Array<{ type: string; value: string; pattern: RegExp }> = [];
+
+      // 1. Numeric + temporal: "10 yıl", "5 gün", "26'sı" etc.
+      const temporalPattern = /(\d+)\s*(yıl|ay|gün|hafta)/gi;
+      let match;
+      while ((match = temporalPattern.exec(sentence)) !== null) {
+        const num = match[1];
+        const unit = match[2].toLowerCase();
+        criticalClaims.push({
+          type: 'temporal',
+          value: `${num} ${unit}`,
+          pattern: new RegExp(`${num}\\s*${unit}`, 'i')
+        });
       }
 
-      // Check each cited source for claim support
-      let foundSupport = false;
-      let supportingSource = -1;
-      let matchedClaims: string[] = [];
+      // 2. Date ordinals: "26'sı", "ayın 15'i" etc.
+      const datePattern = /(\d+)[''ıiuü](?:n[aeiıoöuü]|s[ıi])/gi;
+      while ((match = datePattern.exec(sentence)) !== null) {
+        const num = match[1];
+        criticalClaims.push({
+          type: 'date',
+          value: num,
+          pattern: new RegExp(`${num}`, 'i')
+        });
+      }
+
+      // 3. Percentages: "%18", "yüzde 20" etc.
+      const percentPattern = /%\s*(\d+)|yüzde\s*(\d+)/gi;
+      while ((match = percentPattern.exec(sentence)) !== null) {
+        const num = match[1] || match[2];
+        criticalClaims.push({
+          type: 'percentage',
+          value: `%${num}`,
+          pattern: new RegExp(`%\\s*${num}|yüzde\\s*${num}`, 'i')
+        });
+      }
+
+      // 4. Article references: "VUK 227", "KDVK 29" etc.
+      const articlePattern = /\b(VUK|GVK|KVK|KDVK|ÖTVK|MTV|DVK)\s*(?:madde\s*)?(\d+)/gi;
+      while ((match = articlePattern.exec(sentence)) !== null) {
+        const law = match[1].toUpperCase();
+        const article = match[2];
+        criticalClaims.push({
+          type: 'article',
+          value: `${law} ${article}`,
+          pattern: new RegExp(`${law}[^\\d]*${article}|madde\\s*${article}`, 'i')
+        });
+      }
+
+      // If no critical claims, check for generic keywords (fallback)
+      if (criticalClaims.length === 0) {
+        const genericClaims = extractClaims(sentence);
+        if (genericClaims.length === 0) {
+          // No claims at all → trust the citation
+          return { verified: true, reason: 'no_claims_to_verify' };
+        }
+
+        // For generic claims, use original 70% threshold
+        for (const citNum of citationNums) {
+          const sourceContent = sourceIndex.get(citNum);
+          if (!sourceContent) continue;
+
+          const supported = genericClaims.filter(claim => sourceContent.includes(claim.toLowerCase()));
+          const supportRatio = supported.length / genericClaims.length;
+
+          // v7: Raised threshold from 50% to 70%
+          if (supportRatio >= 0.7) {
+            return {
+              verified: true,
+              reason: `generic_claims_verified_in_[${citNum}]: ${supported.length}/${genericClaims.length} (${Math.round(supportRatio * 100)}%)`
+            };
+          }
+        }
+
+        return {
+          verified: false,
+          reason: `generic_claims_not_verified: [${genericClaims.join(', ')}] <70% in cited sources`
+        };
+      }
+
+      // ═══════════════════════════════════════════════════════════════
+      // STRICT VERIFICATION: Critical claims MUST exist in source
+      // ═══════════════════════════════════════════════════════════════
+      let bestMatch = { citNum: -1, matched: 0, total: criticalClaims.length, details: [] as string[] };
 
       for (const citNum of citationNums) {
         const sourceContent = sourceIndex.get(citNum);
         if (!sourceContent) continue;
 
-        // Count how many claims appear in this source
-        const supported = claims.filter(claim => sourceContent.includes(claim.toLowerCase()));
+        const matchedClaims: string[] = [];
+        for (const claim of criticalClaims) {
+          if (claim.pattern.test(sourceContent)) {
+            matchedClaims.push(claim.value);
+          }
+        }
 
-        // Require at least 50% of claims to be supported
-        const supportRatio = supported.length / claims.length;
-        if (supportRatio >= 0.5) {
-          foundSupport = true;
-          supportingSource = citNum;
-          matchedClaims = supported;
-          break;
+        if (matchedClaims.length > bestMatch.matched) {
+          bestMatch = {
+            citNum,
+            matched: matchedClaims.length,
+            total: criticalClaims.length,
+            details: matchedClaims
+          };
         }
       }
 
-      if (foundSupport) {
+      // v7: ALL critical claims must be verified (100% threshold for critical)
+      // This is the key anti-laundering fix
+      if (bestMatch.matched === bestMatch.total && bestMatch.total > 0) {
         return {
           verified: true,
-          reason: `claims_verified_in_[${supportingSource}]: [${matchedClaims.join(', ')}]`
+          reason: `critical_claims_verified_in_[${bestMatch.citNum}]: [${bestMatch.details.join(', ')}]`
+        };
+      } else if (bestMatch.matched > 0) {
+        // Partial match - still FAIL but log what was found
+        return {
+          verified: false,
+          reason: `citation_laundering: only ${bestMatch.matched}/${bestMatch.total} critical claims found. Missing: [${criticalClaims.filter(c => !bestMatch.details.includes(c.value)).map(c => c.value).join(', ')}]`
         };
       } else {
         return {
           verified: false,
-          reason: `citation_laundering: claims [${claims.join(', ')}] not found in cited sources [${citationNums.join(', ')}]`
+          reason: `citation_laundering: 0/${bestMatch.total} critical claims [${criticalClaims.map(c => c.value).join(', ')}] found in [${citationNums.join(', ')}]`
         };
       }
     };

@@ -352,16 +352,17 @@ export const DEFAULT_SANITIZER_CONFIG: SanitizerConfig = {
 
   forbiddenPatterns: [
     // ═══════════════════════════════════════════════════════════════
-    // NORMATIVE VERBS (zorunluluk ifadeleri)
+    // NORMATIVE VERBS (zorunluluk ifadeleri) - v7: Turkish conjugations
     // Word boundary: (?=[.,;\\s]|$) matches punctuation, space, or end of string
+    // Conjugation suffixes: -lar/-ler (plural), -sınız/-siniz (formal), -ız/-iz (we)
     // ═══════════════════════════════════════════════════════════════
-    { id: 'norm-1', category: 'normative', pattern: 'gerek(?:mektedir|ir|iyor|lidir|tirmektedir|tirir)(?=[.,;\\s]|$)', description: 'Gerekmektedir varyantları', enabled: true },
-    { id: 'norm-2', category: 'normative', pattern: 'zorunlu(?:dur|luktur)?(?=[.,;\\s]|$)', description: 'Zorunludur', enabled: true },
-    { id: 'norm-3', category: 'normative', pattern: 'zorundadır(?=[.,;\\s]|$)', description: 'Zorundadır', enabled: true },
-    { id: 'norm-4', category: 'normative', pattern: 'mecbur(?:dur|idir|iyet)?(?=[.,;\\s]|$)', description: 'Mecburdur/mecburiyet', enabled: true },
-    { id: 'norm-5', category: 'normative', pattern: 'şart(?:tır)?(?=[.,;\\s]|$)', description: 'Şarttır', enabled: true },
-    { id: 'norm-6', category: 'normative', pattern: 'esas(?:tır)?(?=[.,;\\s]|$)', description: 'Esastır', enabled: true },
-    { id: 'norm-7', category: 'normative', pattern: 'yükümlü(?:dür)?(?=[.,;\\s]|$)', description: 'Yükümlüdür', enabled: true },
+    { id: 'norm-1', category: 'normative', pattern: 'gerek(?:mektedir|ir|iyor|lidir|tirmektedir|tirir)(?:ler)?(?=[.,;\\s]|$)', description: 'Gerekmektedir varyantları', enabled: true },
+    { id: 'norm-2', category: 'normative', pattern: 'zorunlu(?:dur|luktur)?(?:lar)?(?=[.,;\\s]|$)', description: 'Zorunludur', enabled: true },
+    { id: 'norm-3', category: 'normative', pattern: 'zorundadır(?:lar|s[ıi]n[ıi]z)?(?=[.,;\\s]|$)', description: 'Zorundadır + çekimler', enabled: true },
+    { id: 'norm-4', category: 'normative', pattern: 'mecbur(?:dur|idir|iyet)?(?:lar)?(?=[.,;\\s]|$)', description: 'Mecburdur/mecburiyet', enabled: true },
+    { id: 'norm-5', category: 'normative', pattern: 'şart(?:tır)?(?:lar)?(?=[.,;\\s]|$)', description: 'Şarttır', enabled: true },
+    { id: 'norm-6', category: 'normative', pattern: 'esas(?:tır)?(?:lar)?(?=[.,;\\s]|$)', description: 'Esastır', enabled: true },
+    { id: 'norm-7', category: 'normative', pattern: 'yükümlü(?:dür)?(?:ler)?(?=[.,;\\s]|$)', description: 'Yükümlüdür', enabled: true },
     { id: 'norm-8', category: 'normative', pattern: 'yükümlülü(?:k|ğü)(?=[.,;\\s]|$)', description: 'Yükümlülük', enabled: true },
     { id: 'norm-9', category: 'normative', pattern: 'uyulmas[ıi]\\s+gerek', description: 'Uyulması gerekir', enabled: true },
     { id: 'norm-10', category: 'normative', pattern: 'uygulanmas[ıi]\\s+gerek', description: 'Uygulanması gerekir', enabled: true },
@@ -424,18 +425,19 @@ export const DEFAULT_SANITIZER_CONFIG: SanitizerConfig = {
     { id: 'dur-7', category: 'duration', pattern: 'ay[ıi]n\\s+(?:\\d+|yirmi|otuz)[^\\[]*(?:\\.|,|;|$)', description: 'Ayın X günü (atıfsız)', enabled: true },
 
     // ═══════════════════════════════════════════════════════════════
-    // MODAL IMPERATIVES (modal zorunluluklar)
+    // MODAL IMPERATIVES (modal zorunluluklar) - v7: Turkish conjugations
+    // -malıdır/-melidir can have plural -lar/-ler suffix
     // ═══════════════════════════════════════════════════════════════
-    { id: 'modal-1', category: 'modal', pattern: 'verilmelidir(?=[.,;\\s]|$)', description: 'Verilmelidir', enabled: true },
-    { id: 'modal-2', category: 'modal', pattern: 'yapılmalıdır(?=[.,;\\s]|$)', description: 'Yapılmalıdır', enabled: true },
-    { id: 'modal-3', category: 'modal', pattern: 'sunulmalıdır(?=[.,;\\s]|$)', description: 'Sunulmalıdır', enabled: true },
-    { id: 'modal-4', category: 'modal', pattern: 'ödenmelidir(?=[.,;\\s]|$)', description: 'Ödenmelidir', enabled: true },
-    { id: 'modal-5', category: 'modal', pattern: 'incelenmelidir(?=[.,;\\s]|$)', description: 'İncelenmelidir', enabled: true },
-    { id: 'modal-6', category: 'modal', pattern: 'bulundurulmalıdır(?=[.,;\\s]|$)', description: 'Bulundurulmalıdır', enabled: true },
-    { id: 'modal-7', category: 'modal', pattern: 'tutulmalıdır(?=[.,;\\s]|$)', description: 'Tutulmalıdır', enabled: true },
-    { id: 'modal-8', category: 'modal', pattern: 'alınmalıdır(?=[.,;\\s]|$)', description: 'Alınmalıdır', enabled: true },
-    { id: 'modal-9', category: 'modal', pattern: 'edilmelidir(?=[.,;\\s]|$)', description: 'Edilmelidir', enabled: true },
-    { id: 'modal-10', category: 'modal', pattern: 'sağlanmalıdır(?=[.,;\\s]|$)', description: 'Sağlanmalıdır', enabled: true },
+    { id: 'modal-1', category: 'modal', pattern: 'verilmelidir(?:ler)?(?=[.,;\\s]|$)', description: 'Verilmelidir', enabled: true },
+    { id: 'modal-2', category: 'modal', pattern: 'yapılmalıdır(?:lar)?(?=[.,;\\s]|$)', description: 'Yapılmalıdır', enabled: true },
+    { id: 'modal-3', category: 'modal', pattern: 'sunulmalıdır(?:lar)?(?=[.,;\\s]|$)', description: 'Sunulmalıdır', enabled: true },
+    { id: 'modal-4', category: 'modal', pattern: 'ödenmelidir(?:ler)?(?=[.,;\\s]|$)', description: 'Ödenmelidir', enabled: true },
+    { id: 'modal-5', category: 'modal', pattern: 'incelenmelidir(?:ler)?(?=[.,;\\s]|$)', description: 'İncelenmelidir', enabled: true },
+    { id: 'modal-6', category: 'modal', pattern: 'bulundurulmalıdır(?:lar)?(?=[.,;\\s]|$)', description: 'Bulundurulmalıdır', enabled: true },
+    { id: 'modal-7', category: 'modal', pattern: 'tutulmalıdır(?:lar)?(?=[.,;\\s]|$)', description: 'Tutulmalıdır', enabled: true },
+    { id: 'modal-8', category: 'modal', pattern: 'alınmalıdır(?:lar)?(?=[.,;\\s]|$)', description: 'Alınmalıdır', enabled: true },
+    { id: 'modal-9', category: 'modal', pattern: 'edilmelidir(?:ler)?(?=[.,;\\s]|$)', description: 'Edilmelidir', enabled: true },
+    { id: 'modal-10', category: 'modal', pattern: 'sağlanmalıdır(?:lar)?(?=[.,;\\s]|$)', description: 'Sağlanmalıdır', enabled: true },
 
     // ═══════════════════════════════════════════════════════════════
     // NUMERIC CLAIMS (rakamsal iddialar) - MUST have citation
