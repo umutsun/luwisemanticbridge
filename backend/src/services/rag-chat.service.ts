@@ -2796,6 +2796,9 @@ FORMAT:
       // FIX: Ensure proper markdown formatting and remove hallucinated citations
       finalResponse = this.fixMarkdownAndCitations(finalResponse, limitedSources);
 
+      // 🛡️ PROSEDÜR CLAIM SANITIZER: Soften ungrounded claims (regex-based, ~1ms)
+      finalResponse = this.sanitizeProsedurClaims(finalResponse, limitedSources);
+
       if (isRefusalResponse) {
         // 🎯 REFUSAL TYPE DETECTION: Gate-based vs Prompt-based
         // Gate-based: Evidence Gate blocked due to low scores (correct behavior)
@@ -3372,6 +3375,137 @@ FORMAT:
     }
 
     return fixed;
+  }
+
+  /**
+   * 🛡️ PROSEDÜR CLAIM SANITIZER
+   * Post-processes LLM output to soften ungrounded procedural claims.
+   * Replaces definitive verbs with hedged alternatives when source evidence is weak.
+   *
+   * Performance: ~1-2ms (regex-based, no LLM call)
+   *
+   * Target patterns:
+   * - "X gerekmektedir" → "X olarak değerlendirilebilir"
+   * - "Y zorunludur" → "Y önerilebilir"
+   * - "Z şarttır" → "Z önem taşımaktadır"
+   * - "aksi takdirde W" → removes or softens
+   */
+  private sanitizeProsedurClaims(response: string, sources: any[]): string {
+    let sanitized = response;
+
+    // Track changes for logging
+    let changeCount = 0;
+
+    // ═══════════════════════════════════════════════════════════════
+    // PATTERN 1: Definitive verb endings → Soften to "değerlendirilebilir"
+    // ═══════════════════════════════════════════════════════════════
+    const definitivePatterns: Array<{ pattern: RegExp; replacement: string }> = [
+      // "X gerekmektedir" → "X olarak değerlendirilebilir"
+      { pattern: /(\S+)\s+gerekmektedir/gi, replacement: '$1 olarak değerlendirilebilir' },
+      { pattern: /(\S+)\s+gerekir/gi, replacement: '$1 önerilebilir' },
+      { pattern: /(\S+)\s+gereklidir/gi, replacement: '$1 önem taşımaktadır' },
+
+      // "X zorunludur" → "X önerilmektedir"
+      { pattern: /(\S+)\s+zorunludur/gi, replacement: '$1 önerilmektedir' },
+      { pattern: /(\S+)\s+mecburidir/gi, replacement: '$1 önerilmektedir' },
+
+      // "X şarttır" → "X önem taşımaktadır"
+      { pattern: /(\S+)\s+şarttır/gi, replacement: '$1 önem taşımaktadır' },
+      { pattern: /(\S+)\s+esastır/gi, replacement: '$1 dikkate alınmalıdır' },
+
+      // "ibraz edilmesi gerekmektedir" → "ibraz edilmesi önerilmektedir"
+      { pattern: /ibraz edilmesi gerekmektedir/gi, replacement: 'ibraz edilmesi önerilmektedir' },
+      { pattern: /saklanması gerekmektedir/gi, replacement: 'saklanması tavsiye edilmektedir' },
+      { pattern: /belgelenmesi gerekmektedir/gi, replacement: 'belgelenmesi önerilmektedir' },
+
+      // "beyanname verilmelidir" → "beyanname verilmesi gerekebilir"
+      { pattern: /verilmelidir/gi, replacement: 'verilmesi gerekebilir' },
+      { pattern: /bildirilmelidir/gi, replacement: 'bildirilmesi gerekebilir' },
+      { pattern: /başvurulmalıdır/gi, replacement: 'başvuru yapılması düşünülebilir' },
+
+      // "dikkat edilmelidir" → "dikkat edilmesi önerilir"
+      { pattern: /dikkat edilmelidir/gi, replacement: 'dikkat edilmesi önerilir' },
+      { pattern: /gözetilmelidir/gi, replacement: 'gözetilmesi önerilir' },
+      { pattern: /incelenmelidir/gi, replacement: 'incelenmesi faydalı olabilir' },
+      { pattern: /titizlikle incelenmesi gerekmektedir/gi, replacement: 'detaylı incelenmesi önerilir' },
+    ];
+
+    for (const { pattern, replacement } of definitivePatterns) {
+      const before = sanitized;
+      sanitized = sanitized.replace(pattern, replacement);
+      if (before !== sanitized) changeCount++;
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // PATTERN 2: "aksi takdirde" / "aksi halde" consequences → Remove or soften
+    // These imply negative outcomes without source backing
+    // ═══════════════════════════════════════════════════════════════
+    const consequencePatterns = [
+      // "aksi takdirde hak kaybedilir" → remove entire phrase
+      /aksi\s+takdirde\s+[^.;,]+(?:kaybedilir|düşer|sona erer|uygulanmaz)[^.;,]*/gi,
+      /aksi\s+halde\s+[^.;,]+(?:kaybedilir|düşer|sona erer|uygulanmaz)[^.;,]*/gi,
+      // Generic "aksi takdirde..." warnings
+      /[,;]?\s*aksi\s+takdirde[^.;]+/gi,
+      /[,;]?\s*aksi\s+halde[^.;]+/gi,
+    ];
+
+    for (const pattern of consequencePatterns) {
+      const before = sanitized;
+      sanitized = sanitized.replace(pattern, '');
+      if (before !== sanitized) changeCount++;
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // PATTERN 3: "unutulmamalıdır" / "ihmal edilmemelidir" warnings → Soften
+    // ═══════════════════════════════════════════════════════════════
+    const warningPatterns: Array<{ pattern: RegExp; replacement: string }> = [
+      { pattern: /unutulmamalıdır/gi, replacement: 'dikkate alınabilir' },
+      { pattern: /ihmal edilmemelidir/gi, replacement: 'göz önünde bulundurulabilir' },
+      { pattern: /göz ardı edilmemelidir/gi, replacement: 'değerlendirilebilir' },
+      { pattern: /atlanmamalıdır/gi, replacement: 'dikkate alınabilir' },
+    ];
+
+    for (const { pattern, replacement } of warningPatterns) {
+      const before = sanitized;
+      sanitized = sanitized.replace(pattern, replacement);
+      if (before !== sanitized) changeCount++;
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // PATTERN 4: Ungrounded duration claims → Flag or soften
+    // "belirli süre içinde" without source backing
+    // ═══════════════════════════════════════════════════════════════
+    const durationPatterns: Array<{ pattern: RegExp; replacement: string }> = [
+      // "belirli süre içinde" → "süre koşulları değerlendirilerek"
+      { pattern: /belirli süre içinde/gi, replacement: 'ilgili süre koşulları değerlendirilerek' },
+      { pattern: /süre içerisinde/gi, replacement: 'süre koşulları çerçevesinde' },
+      // Remove ungrounded "X yıl içinde" if not cited
+      // (Keep if followed by citation like [1])
+      { pattern: /(\d+)\s+yıl\s+içinde(?!\s*\[\d+\])/gi, replacement: 'ilgili süre içinde' },
+    ];
+
+    for (const { pattern, replacement } of durationPatterns) {
+      const before = sanitized;
+      sanitized = sanitized.replace(pattern, replacement);
+      if (before !== sanitized) changeCount++;
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // PATTERN 5: Clean up artifacts from removals
+    // ═══════════════════════════════════════════════════════════════
+    // Remove double spaces
+    sanitized = sanitized.replace(/\s{2,}/g, ' ');
+    // Remove orphaned punctuation
+    sanitized = sanitized.replace(/\s+([,;])/g, '$1');
+    sanitized = sanitized.replace(/([,;])\s*([,;])/g, '$1');
+    // Clean multiple newlines
+    sanitized = sanitized.replace(/\n{3,}/g, '\n\n');
+
+    if (changeCount > 0) {
+      console.log(`[SANITIZER] Softened ${changeCount} prosedür claim(s) in response`);
+    }
+
+    return sanitized.trim();
   }
 
 
