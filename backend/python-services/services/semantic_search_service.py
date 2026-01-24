@@ -3226,29 +3226,45 @@ class SemanticSearchService:
 
                     # ===== LAW CHUNKS =====
                     if source_table == "vergilex_mevzuat_kanunlar_chunks":
-                        # For law chunks - strict filtering
-                        if not exact_match_found:
-                            # 🚫 Critical: No exact match means ALL law chunks are wrong articles
-                            return False
-
-                        # Exact match found - only keep the matching article
                         law_name = metadata.get("law_name", "")
                         article_num = str(metadata.get("article_number", ""))
 
-                        is_target = (
-                            article_num == str(target_article) and
-                            (target_law.upper() in law_name.upper() or
-                             self._law_name_to_code(law_name) == target_law)
+                        # Check if this chunk is for the target law
+                        is_target_law = (
+                            target_law.upper() in law_name.upper() or
+                            self._law_name_to_code(law_name) == target_law
                         )
-                        return is_target
+
+                        if is_target_law:
+                            # Same law - only keep if correct article number
+                            is_target_article = article_num == str(target_article)
+                            if not is_target_article:
+                                logger.debug(f"🚫 Filtering wrong article: {law_name} Madde {article_num} (target: {target_article})")
+                                return False
+                            return True  # Keep - correct law and article
+                        else:
+                            # Different law - keep (might be relevant context)
+                            return True
 
                     # ===== SECONDARY SOURCES (özelge, makale, sirküler, etc.) =====
-                    # V2 FIX: Also filter secondary sources that cite WRONG articles
-                    if not exact_match_found:
-                        # When target article NOT found, filter secondary sources that
-                        # mention OTHER articles of the same law (to prevent wrong citations)
-                        if check_content_for_wrong_article(content, target_law, target_article):
-                            return False  # Remove - mentions wrong article of target law
+                    # V3 FIX: Less aggressive filtering - only remove if source explicitly
+                    # cites a DIFFERENT article of the SAME law in its title or metadata
+                    title = (result.get("title", "") or "").upper()
+
+                    # Check if title explicitly mentions a WRONG article
+                    import re
+                    law_variations = [target_law] + (self.LAW_CODES.get(target_law, []))
+
+                    for law_var in law_variations:
+                        # Pattern: "VUK 359" or "VUK Madde 359" in title
+                        title_article_pattern = rf'{re.escape(law_var.upper())}\s*(?:MADDE\s*)?(\d+)'
+                        title_match = re.search(title_article_pattern, title)
+                        if title_match:
+                            title_article = title_match.group(1)
+                            if title_article != str(target_article):
+                                logger.debug(f"🚫 Filtering source with wrong article in title: {title[:50]}... ({law_var} {title_article} vs target {target_article})")
+                                return False  # Title explicitly about wrong article
+                            break  # Title mentions correct article
 
                     return True  # Keep secondary source
 
@@ -3257,10 +3273,10 @@ class SemanticSearchService:
                 removed_count = filtered_count - len(scored_results)
 
                 if removed_count > 0:
-                    if exact_match_found:
-                        logger.info(f"🎯 Article filter: removed {removed_count} non-matching chunks, keeping {len(scored_results)} results")
-                    else:
-                        logger.warning(f"⚠️ Article filter: {target_law} Madde {target_article} NOT FOUND - removed {removed_count} wrong-article chunks to prevent wrong citations")
+                    logger.info(f"🎯 Article filter v3: removed {removed_count} wrong-article sources, keeping {len(scored_results)} results for {target_law} Madde {target_article}")
+
+                if not exact_match_found and len(scored_results) > 0:
+                    logger.info(f"ℹ️ Exact article text not in DB, using {len(scored_results)} related sources (özelge, makale, etc.)")
 
             final_results = scored_results[:limit]
 
@@ -3313,6 +3329,11 @@ class SemanticSearchService:
                     "wrong_match_count": penalty_stats.get("article_wrong_count", 0) if article_anchoring_enabled else None,
                     # Intent info for sub-clause routing (e.g., indirim vs iade)
                     "intent": article_query.get("intent") if article_query else None,
+                    # LLM context hint for better responses
+                    "llm_hint": (
+                        f"Kullanıcı {article_query['law_code']} Madde {article_query['article_number']} hakkında sormuş. "
+                        f"{'Madde metni kaynaklar arasında mevcut.' if penalty_stats.get('article_exact_count', 0) > 0 else 'Madde metninin kendisi veritabanında bulunamadı, ancak ilgili özelge/makale/içtihat kaynakları mevcut. Bu kaynaklara dayanarak bilgi ver.'}"
+                    ) if article_anchoring_enabled and article_query else None
                 } if article_anchoring_enabled else None,
                 "prompt_context": {
                     "conversation_tone": prompt_settings.conversation_tone,
