@@ -9,7 +9,7 @@ import { TIMEOUTS } from '../config';
 import { TopicEntity, LLMConfig, SanitizerConfig, DEFAULT_SANITIZER_CONFIG, SanitizerPattern } from '../types/data-schema.types';
 import { RAGRoutingSchema, RAGResponseType } from '../types/settings.types';
 import { DEFAULT_RAG_ROUTING_SCHEMA, getRAGRoutingSchema } from '../config/rag-routing-schema.config';
-import { getSanitizerLangPack, buildTemporalPattern, buildDatePattern, buildPercentagePattern, SanitizerLangPack } from '../config/sanitizer-langs';
+import { getSanitizerLangPack, buildTemporalPattern, buildDatePattern, buildPercentagePattern, SanitizerLangPack, normalizeNumberWords, buildNumberMatchPattern } from '../config/sanitizer-langs';
 
 // Settings service interface
 interface SettingsService {
@@ -3621,6 +3621,7 @@ FORMAT:
       let match;
 
       // 1. Temporal claims - Use language pack pattern if available
+      // v11: Also detect Turkish number word + temporal unit (beş yıl, on gün)
       if (claimConfig.verifyTemporalClaims && effectiveTemporalUnits.length > 0) {
         let temporalPattern: RegExp;
         if (langPack) {
@@ -3639,9 +3640,36 @@ FORMAT:
           const rawUnit = match[2].toLowerCase().replace(/d[ıiüu]r$/i, '').replace(/s$/i, '');
           claims.push({ type: 'temporal', value: `${num} ${rawUnit}` });
         }
+
+        // v11: Also detect Turkish number word + temporal unit (beş yıl, on gün, yirmi ay)
+        if (langPack?.numberWords?.cardinals) {
+          const cardinals = langPack.numberWords.cardinals;
+          const cardinalWords = Object.keys(cardinals).sort((a, b) => b.length - a.length);
+          // Build pattern: (number word) + (temporal unit)
+          const unitsPattern = effectiveTemporalUnits.map(unit => {
+            const suffix = /[aıou]/.test(unit) ? 'd[ıi]r' : 'd[üui]r';
+            return `${unit}(?:${suffix})?`;
+          }).join('|');
+          const numberWordsPattern = cardinalWords.map(w => w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|');
+          const wordTemporalPattern = new RegExp(`\\b(${numberWordsPattern})\\s*(${unitsPattern})\\b`, 'gi');
+
+          while ((match = wordTemporalPattern.exec(sentence)) !== null) {
+            const wordNum = match[1].toLowerCase().replace(/\s+/g, '');
+            const digit = cardinals[wordNum];
+            const rawUnit = match[2].toLowerCase().replace(/d[ıiüu]r$/i, '').replace(/s$/i, '');
+            if (digit !== undefined) {
+              // Avoid duplicates
+              const claimValue = `${digit} ${rawUnit}`;
+              if (!claims.some(c => c.type === 'temporal' && c.value === claimValue)) {
+                claims.push({ type: 'temporal', value: claimValue });
+              }
+            }
+          }
+        }
       }
 
       // 2. Date ordinals - Use language pack pattern if available
+      // v11: Also detect Turkish number words (yirmidördüncü → 24)
       if (claimConfig.verifyDateClaims) {
         let datePattern: RegExp;
         if (langPack) {
@@ -3652,6 +3680,34 @@ FORMAT:
         }
         while ((match = datePattern.exec(sentence)) !== null) {
           claims.push({ type: 'date', value: match[1] });
+        }
+
+        // v11: Also detect Turkish ordinal words (yirmidördüncü, yirmi dördüncü, etc.)
+        if (langPack?.numberWords?.ordinals) {
+          const ordinals = langPack.numberWords.ordinals;
+          // Build pattern for all ordinal words
+          const ordinalWords = Object.keys(ordinals).sort((a, b) => b.length - a.length);
+          // Also add spaced compound forms
+          const allForms: string[] = [];
+          for (const word of ordinalWords) {
+            allForms.push(word);
+            // Add spaced form for compound numbers (yirmidördüncü → yirmi dördüncü)
+            const spacedForm = word.replace(/^(on|yirmi|otuz)/, '$1 ');
+            if (spacedForm !== word) {
+              allForms.push(spacedForm);
+            }
+          }
+          const ordinalPattern = new RegExp(`\\b(${allForms.map(w => w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|')})\\b`, 'gi');
+          while ((match = ordinalPattern.exec(sentence)) !== null) {
+            const word = match[1].toLowerCase().replace(/\s+/g, '');
+            const digit = ordinals[word];
+            if (digit !== undefined) {
+              // Avoid duplicates if digit form was already detected
+              if (!claims.some(c => c.type === 'date' && c.value === digit.toString())) {
+                claims.push({ type: 'date', value: digit.toString() });
+              }
+            }
+          }
         }
       }
 
@@ -3717,6 +3773,7 @@ FORMAT:
       let match;
 
       // 1. Temporal claims - Use language pack or effective config
+      // v11: Also detect Turkish number word + temporal unit (beş yıl, on gün)
       if (claimConfig.verifyTemporalClaims && effectiveTemporalUnits.length > 0) {
         let temporalPattern: RegExp;
         if (langPack) {
@@ -3740,9 +3797,39 @@ FORMAT:
             pattern: new RegExp(`${num}\\s*${rawUnit}`, 'i')
           });
         }
+
+        // v11: Also detect Turkish number word + temporal unit (beş yıl, on gün, yirmi ay)
+        if (langPack?.numberWords?.cardinals) {
+          const cardinals = langPack.numberWords.cardinals;
+          const cardinalWords = Object.keys(cardinals).sort((a, b) => b.length - a.length);
+          const unitsPattern = effectiveTemporalUnits.map(unit => {
+            const suffix = /[aıou]/.test(unit) ? 'd[ıi]r' : 'd[üui]r';
+            return `${unit}(?:${suffix})?`;
+          }).join('|');
+          const numberWordsPattern = cardinalWords.map(w => w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|');
+          const wordTemporalPattern = new RegExp(`\\b(${numberWordsPattern})\\s*(${unitsPattern})\\b`, 'gi');
+
+          while ((match = wordTemporalPattern.exec(sentence)) !== null) {
+            const wordNum = match[1].toLowerCase().replace(/\s+/g, '');
+            const digit = cardinals[wordNum];
+            const rawUnit = match[2].toLowerCase().replace(/d[ıiüu]r$/i, '').replace(/s$/i, '');
+            if (digit !== undefined) {
+              // Avoid duplicates
+              const claimValue = `${digit} ${rawUnit}`;
+              if (!criticalClaims.some(c => c.type === 'temporal' && c.value === claimValue)) {
+                criticalClaims.push({
+                  type: 'temporal',
+                  value: claimValue,
+                  pattern: new RegExp(`${digit}\\s*${rawUnit}`, 'i')
+                });
+              }
+            }
+          }
+        }
       }
 
       // 2. Date ordinals - Use language pack or fallback
+      // v11: Also detect Turkish ordinal words (yirmidördüncü → 24)
       if (claimConfig.verifyDateClaims) {
         let datePattern: RegExp;
         if (langPack) {
@@ -3758,6 +3845,37 @@ FORMAT:
             value: num,
             pattern: new RegExp(`${num}`, 'i')
           });
+        }
+
+        // v11: Also detect Turkish ordinal words (yirmidördüncü, yirmi dördüncü)
+        if (langPack?.numberWords?.ordinals) {
+          const ordinals = langPack.numberWords.ordinals;
+          const ordinalWords = Object.keys(ordinals).sort((a, b) => b.length - a.length);
+          // Also add spaced compound forms
+          const allForms: string[] = [];
+          for (const word of ordinalWords) {
+            allForms.push(word);
+            const spacedForm = word.replace(/^(on|yirmi|otuz)/, '$1 ');
+            if (spacedForm !== word) {
+              allForms.push(spacedForm);
+            }
+          }
+          const ordinalPattern = new RegExp(`\\b(${allForms.map(w => w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|')})\\b`, 'gi');
+
+          while ((match = ordinalPattern.exec(sentence)) !== null) {
+            const word = match[1].toLowerCase().replace(/\s+/g, '');
+            const digit = ordinals[word];
+            if (digit !== undefined) {
+              // Avoid duplicates
+              if (!criticalClaims.some(c => c.type === 'date' && c.value === digit.toString())) {
+                criticalClaims.push({
+                  type: 'date',
+                  value: digit.toString(),
+                  pattern: new RegExp(`${digit}`, 'i')
+                });
+              }
+            }
+          }
         }
       }
 
@@ -3828,17 +3946,36 @@ FORMAT:
 
       // ═══════════════════════════════════════════════════════════════
       // STRICT VERIFICATION: Critical claims MUST exist in source
+      // v11: Number word normalization for Turkish (24 ↔ yirmidördüncü)
       // ═══════════════════════════════════════════════════════════════
       let bestMatch = { citNum: -1, matched: 0, total: criticalClaims.length, details: [] as string[] };
+
+      // Determine language for normalization
+      const effectiveLangCode = langPack?.code || 'tr';
 
       for (const citNum of citationNums) {
         const sourceContent = sourceIndex.get(citNum);
         if (!sourceContent) continue;
 
+        // v11: Normalize source content (convert word forms to digits)
+        // This allows "yirmidördüncü" in source to match "24" in claim
+        const normalizedSource = normalizeNumberWords(sourceContent, effectiveLangCode);
+
         const matchedClaims: string[] = [];
         for (const claim of criticalClaims) {
-          if (claim.pattern.test(sourceContent)) {
+          // First try original source, then normalized source
+          if (claim.pattern.test(sourceContent) || claim.pattern.test(normalizedSource)) {
             matchedClaims.push(claim.value);
+          } else if (claim.type === 'date' || claim.type === 'temporal') {
+            // v11: For date/temporal claims, also try enhanced number pattern
+            // This catches cases like "24" claim matching "yirmidördüncü" source
+            const numValue = parseInt(claim.value.replace(/[^\d]/g, ''), 10);
+            if (!isNaN(numValue)) {
+              const enhancedPattern = buildNumberMatchPattern(numValue, effectiveLangCode);
+              if (enhancedPattern.test(sourceContent)) {
+                matchedClaims.push(claim.value);
+              }
+            }
           }
         }
 

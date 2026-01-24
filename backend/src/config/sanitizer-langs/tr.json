@@ -119,5 +119,30 @@
     "saklama", "muhafaza", "ibraz", "arşiv",
     "beyanname", "bildirim", "başvuru",
     "ceza", "usulsüzlük", "gecikme", "faiz"
-  ]
+  ],
+
+  "numberWords": {
+    "description": "Turkish number word ↔ digit mappings for claim verification",
+    "cardinals": {
+      "bir": 1, "iki": 2, "üç": 3, "dört": 4, "beş": 5,
+      "altı": 6, "yedi": 7, "sekiz": 8, "dokuz": 9, "on": 10,
+      "onbir": 11, "oniki": 12, "onüç": 13, "ondört": 14, "onbeş": 15,
+      "onaltı": 16, "onyedi": 17, "onsekiz": 18, "ondokuz": 19, "yirmi": 20,
+      "yirmibir": 21, "yirmiiki": 22, "yirmiüç": 23, "yirmidört": 24, "yirmibeş": 25,
+      "yirmialtı": 26, "yirmiyedi": 27, "yirmisekiz": 28, "yirmidokuz": 29, "otuz": 30,
+      "otuzbir": 31, "kırk": 40, "elli": 50, "altmış": 60, "yetmiş": 70,
+      "seksen": 80, "doksan": 90, "yüz": 100
+    },
+    "ordinals": {
+      "birinci": 1, "ikinci": 2, "üçüncü": 3, "dördüncü": 4, "beşinci": 5,
+      "altıncı": 6, "yedinci": 7, "sekizinci": 8, "dokuzuncu": 9, "onuncu": 10,
+      "onbirinci": 11, "onikinci": 12, "onüçüncü": 13, "ondördüncü": 14, "onbeşinci": 15,
+      "onaltıncı": 16, "onyedinci": 17, "onsekizinci": 18, "ondokuzuncu": 19, "yirminci": 20,
+      "yirmibirinci": 21, "yirmiikinci": 22, "yirmiüçüncü": 23, "yirmidördüncü": 24, "yirmibeşinci": 25,
+      "yirmialtıncı": 26, "yirmiyedinci": 27, "yirmisekizinci": 28, "yirmidokuzuncu": 29, "otuzuncu": 30,
+      "otuzbirinci": 31
+    },
+    "compoundPattern": "(?:on|yirmi|otuz)\\s+(?:bir|iki|üç|dört|beş|altı|yedi|sekiz|dokuz)",
+    "ordinalSuffix": "(?:[iıuü]nc[iıuü])"
+  }
 }
