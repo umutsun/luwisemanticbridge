@@ -194,10 +194,19 @@ export const DEFAULT_SANITIZER_CONFIG: SanitizerConfig = {
     { id: 'modal-3', category: 'modal', pattern: 'edilmelidir(?=[.,;\\s]|$)', description: 'Edilmelidir', enabled: true },
   ],
   // Grounding keywords - these should NOT overlap with forbidden patterns
+  // v6: Added temporal/procedural terms for claim verification
   groundingKeywords: [
     'fatura', 'makbuz', 'belge', 'form', 'dilekçe',
     'madde', 'fıkra', 'kanun', 'yönetmelik', 'tebliğ',
-    'matrah', 'vergi', 'kdv', 'stopaj', 'tevkifat'
+    'matrah', 'vergi', 'kdv', 'stopaj', 'tevkifat',
+    // Temporal terms - for duration/deadline claim verification
+    'süre', 'gün', 'ay', 'yıl', 'tarih', 'vade', 'dönem',
+    // Storage/retention terms - for document retention claims
+    'saklama', 'muhafaza', 'ibraz', 'arşiv',
+    // Declaration/notification terms - for deadline claims
+    'beyanname', 'bildirim', 'başvuru',
+    // Obligation/penalty terms - for consequence claims
+    'ceza', 'usulsüzlük', 'gecikme', 'faiz'
   ]
 };
 

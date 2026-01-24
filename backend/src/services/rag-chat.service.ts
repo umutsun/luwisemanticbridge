@@ -3528,27 +3528,29 @@ FORMAT:
     // ═══════════════════════════════════════════════════════════════
     // CLAIM EXTRACTION - Extract key claims from sentence
     // These are what we verify against cited sources
+    // v6: Uses schema's groundingKeywords instead of hardcoded terms
     // ═══════════════════════════════════════════════════════════════
     const extractClaims = (sentence: string): string[] => {
       const claims: string[] = [];
       const sentenceLower = sentence.toLowerCase();
 
       // Extract numeric values (dates, durations, percentages)
+      // CRITICAL for claim verification: "10 yıl" must have "10" in source
       const numbers = sentence.match(/\d+/g) || [];
       claims.push(...numbers);
 
-      // Extract Turkish number words
+      // Extract Turkish number words (universal, not domain-specific)
       const turkishNumbers = ['bir', 'iki', 'üç', 'dört', 'beş', 'altı', 'yedi', 'sekiz', 'dokuz', 'on',
         'yirmi', 'otuz', 'kırk', 'elli', 'altmış', 'yetmiş', 'seksen', 'doksan', 'yüz'];
       for (const num of turkishNumbers) {
         if (sentenceLower.includes(num)) claims.push(num);
       }
 
-      // Extract key normative/procedural terms that MUST be in source
-      const keyTerms = ['zorunlu', 'şart', 'mecbur', 'yükümlü', 'ibraz', 'muhafaza', 'saklama',
-        'beyanname', 'bildirim', 'süre', 'gün', 'ay', 'yıl'];
-      for (const term of keyTerms) {
-        if (sentenceLower.includes(term)) claims.push(term);
+      // Extract key terms FROM SCHEMA CONFIG (domain-specific, no hardcoding)
+      // These are grounding keywords that MUST appear in source to verify a claim
+      const schemaKeyTerms = sanitizerConfig.groundingKeywords || [];
+      for (const term of schemaKeyTerms) {
+        if (sentenceLower.includes(term.toLowerCase())) claims.push(term.toLowerCase());
       }
 
       return [...new Set(claims)]; // Dedupe

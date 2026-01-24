@@ -449,6 +449,7 @@ export const DEFAULT_SANITIZER_CONFIG: SanitizerConfig = {
   // GROUNDING KEYWORDS
   // These keywords are checked in source corpus to validate claims
   // IMPORTANT: These should NOT overlap with forbidden pattern words
+  // v6: Added temporal/procedural terms for claim verification
   // ═══════════════════════════════════════════════════════════════
   groundingKeywords: [
     // Document types (specific nouns that indicate grounded content)
@@ -459,7 +460,15 @@ export const DEFAULT_SANITIZER_CONFIG: SanitizerConfig = {
     // Tax terms (specific nouns)
     'matrah', 'vergi', 'kdv', 'stopaj', 'tevkifat', 'istisna', 'muafiyet',
     // Process terms (specific actions that can be verified)
-    'tahakkuk', 'tahsil', 'iade', 'indirim', 'mahsup'
+    'tahakkuk', 'tahsil', 'iade', 'indirim', 'mahsup',
+    // Temporal terms - CRITICAL for duration/deadline claim verification
+    'süre', 'gün', 'ay', 'yıl', 'tarih', 'vade', 'dönem', 'takvim',
+    // Storage/retention terms - for document retention claims
+    'saklama', 'muhafaza', 'ibraz', 'arşiv', 'dosya',
+    // Declaration/notification terms - for deadline claims
+    'beyanname', 'bildirim', 'başvuru', 'tebliğ', 'ihbar',
+    // Obligation/penalty terms - for consequence claims
+    'ceza', 'usulsüzlük', 'gecikme', 'faiz', 'özel', 'usulsuzlük'
   ]
 };
 
