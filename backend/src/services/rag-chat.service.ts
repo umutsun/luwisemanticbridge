@@ -6,7 +6,7 @@ import pool from '../config/database';
 import { redis } from '../config/redis';
 import dotenv from 'dotenv';
 import { TIMEOUTS } from '../config';
-import { TopicEntity, LLMConfig } from '../types/data-schema.types';
+import { TopicEntity, LLMConfig, SanitizerConfig, DEFAULT_SANITIZER_CONFIG } from '../types/data-schema.types';
 import { RAGRoutingSchema, RAGResponseType } from '../types/settings.types';
 import { DEFAULT_RAG_ROUTING_SCHEMA, getRAGRoutingSchema } from '../config/rag-routing-schema.config';
 
@@ -327,6 +327,7 @@ PROHIBITED:
     topicEntities: TopicEntity[];
     keyTerms: string[];
     authorityLevels: Record<string, number>;
+    sanitizerConfig?: SanitizerConfig;
   }> {
     try {
       const config = await dataSchemaService.loadConfig();
@@ -338,6 +339,9 @@ PROHIBITED:
 
       // Get key terms from Schema llmConfig (domain-specific)
       const keyTerms = llmConfig?.keyTerms || [];
+
+      // Get sanitizer config from Schema llmConfig (domain-specific)
+      const sanitizerConfig = llmConfig?.sanitizerConfig as SanitizerConfig | undefined;
 
       // Get authority levels from RAG Settings (NOT from schema - single source of truth)
       // This uses ragSettings.sourceTypeHierarchy which is configured via UI
@@ -362,10 +366,11 @@ PROHIBITED:
         console.log(`⚠️ [DOMAIN_CONFIG] No domain config in DB!`);
         console.log(`   Import a domain config JSON via Settings > Schema > JSON Import`);
       } else {
-        console.log(`📋 [DOMAIN_CONFIG] Loaded: ${topicEntities.length} entities, ${keyTerms.length} terms, ${Object.keys(authorityLevels).length} authority levels (from RAG Settings)`);
+        const sanitizerStatus = sanitizerConfig?.enabled ? 'enabled' : 'disabled/default';
+        console.log(`📋 [DOMAIN_CONFIG] Loaded: ${topicEntities.length} entities, ${keyTerms.length} terms, ${Object.keys(authorityLevels).length} authority levels, sanitizer=${sanitizerStatus}`);
       }
 
-      return { topicEntities, keyTerms, authorityLevels };
+      return { topicEntities, keyTerms, authorityLevels, sanitizerConfig };
     } catch (error) {
       console.error('[DOMAIN_CONFIG] Failed to load config:', error);
       return { topicEntities: [], keyTerms: [], authorityLevels: {} };
@@ -2796,8 +2801,8 @@ FORMAT:
       // FIX: Ensure proper markdown formatting and remove hallucinated citations
       finalResponse = this.fixMarkdownAndCitations(finalResponse, limitedSources);
 
-      // 🛡️ PROSEDÜR CLAIM SANITIZER: Soften ungrounded claims (regex-based, ~1ms)
-      finalResponse = this.sanitizeProsedurClaims(finalResponse, limitedSources);
+      // 🛡️ PROSEDÜR CLAIM SANITIZER v3: Schema-driven ungrounded claim removal
+      finalResponse = this.sanitizeProsedurClaims(finalResponse, limitedSources, domainConfig.sanitizerConfig);
 
       if (isRefusalResponse) {
         // 🎯 REFUSAL TYPE DETECTION: Gate-based vs Prompt-based
@@ -3378,17 +3383,35 @@ FORMAT:
   }
 
   /**
-   * 🛡️ PROSEDÜR CLAIM SANITIZER v2 - "GROUNDED DEĞİLSE KALDIR"
+   * 🛡️ PROSEDÜR CLAIM SANITIZER v3 - SCHEMA-DRIVEN
    *
    * Post-processes LLM output to REMOVE (not soften) ungrounded procedural claims.
-   * If a claim contains normative verbs (gerekmektedir, zorunludur, şarttır, etc.)
-   * and the source chunks don't contain supporting evidence, the ENTIRE SENTENCE is removed.
+   * If a claim contains normative verbs and source chunks don't support it, sentence is removed.
    *
-   * Philosophy: "Soften" approach masks hallucinations. "Remove" approach is honest.
+   * v3: Patterns and keywords are now loaded from schema.llmConfig.sanitizerConfig
+   * This enables domain-specific configuration without code changes.
    *
+   * Philosophy: "Soften" masks hallucinations. "Remove" is honest.
    * Performance: ~2-5ms (regex + source check, no LLM call)
+   *
+   * @param response - LLM response text
+   * @param sources - Source objects for grounding check
+   * @param config - Optional sanitizer config from schema (uses DEFAULT_SANITIZER_CONFIG if not provided)
    */
-  private sanitizeProsedurClaims(response: string, sources: any[]): string {
+  private sanitizeProsedurClaims(
+    response: string,
+    sources: any[],
+    config?: SanitizerConfig
+  ): string {
+    // Use provided config or fall back to defaults
+    const sanitizerConfig = config || DEFAULT_SANITIZER_CONFIG;
+
+    // Check if sanitizer is enabled
+    if (!sanitizerConfig.enabled) {
+      console.log('[SANITIZER] Disabled via schema config');
+      return response;
+    }
+
     // Build source content corpus for grounding check (lowercase, normalized)
     const sourceCorpus = sources
       .map(s => `${s.content || ''} ${s.excerpt || ''} ${s.title || ''}`.toLowerCase())
@@ -3403,81 +3426,54 @@ FORMAT:
     let keptWithGroundingCount = 0;
 
     // ═══════════════════════════════════════════════════════════════
-    // FORBIDDEN PATTERNS - If detected AND not grounded → REMOVE SENTENCE
+    // BUILD FORBIDDEN PATTERNS FROM SCHEMA CONFIG
     // ═══════════════════════════════════════════════════════════════
-    const forbiddenPatterns = [
-      // Normative verbs (all variants)
-      /gerek(?:mektedir|ir|iyor|lidir|tirmektedir|tirir)[.,;]?/i,
-      /zorunlu(?:dur)?[.,;]?/i,
-      /mecbur(?:idir|i)?[.,;]?/i,
-      /şart(?:tır|ı)?[.,;]?/i,
-      /esas(?:tır)?[.,;]?/i,
+    const forbiddenPatterns: RegExp[] = sanitizerConfig.forbiddenPatterns
+      .filter(p => p.enabled)
+      .map(p => {
+        try {
+          return new RegExp(p.pattern, 'i');
+        } catch (e) {
+          console.warn(`[SANITIZER] Invalid regex pattern: ${p.pattern}`, e);
+          return null;
+        }
+      })
+      .filter((p): p is RegExp => p !== null);
 
-      // Procedural imperatives
-      /ibraz(?:ı|edilmesi|edilmeli)[^.]*(?:gerek|zorunlu|şart)/i,
-      /saklan(?:ması|malı)[^.]*(?:gerek|zorunlu)/i,
-      /muhafaza(?:sı|edilmesi)[^.]*(?:gerek|zorunlu)/i,
-      /belge(?:lenmesi|lemesi)[^.]*(?:gerek|zorunlu)/i,
-      /sunul(?:ması|malı)[^.]*(?:gerek|zorunlu)/i,
-      /beyan(?:name)?\s+veril(?:mesi|melidir)/i,
-      /bildiril(?:mesi|melidir)/i,
-      /başvur(?:ulmalıdır|u\s+yapılmalı)/i,
-
-      // Consequence warnings
-      /aksi\s+(?:takdirde|halde)/i,
-      /(?:hak|indirim|iade)\s+kayb(?:edilir|ı)/i,
-      /düşer[.,;]?/i,
-      /sona\s+erer/i,
-      /uygulan(?:a)?maz/i,
-
-      // Ungrounded warnings
-      /unutulmamalıdır/i,
-      /ihmal\s+edilmemelidir/i,
-      /göz\s+ardı\s+edilmemelidir/i,
-      /dikkat\s+edilmelidir/i,
-      /gözetilmelidir/i,
-      /atlanmamalıdır/i,
-      /titizlikle\s+incelenmesi/i,
-
-      // Duration/deadline claims (without citation)
-      /belirli\s+süre\s+içinde/i,
-      /süre\s+(?:içerisinde|içinde|koşul)/i,
-      /\d+\s+(?:yıl|ay|gün)\s+içinde(?!\s*\[\d+\])/i,  // Keep if cited [X]
-      /takvim\s+yılı\s+içinde/i,
-
-      // Modal imperatives
-      /verilmelidir/i,
-      /yapılmalıdır/i,
-      /sunulmalıdır/i,
-      /ödenmeli/i,
-      /incelenmelidir/i,
-    ];
+    console.log(`[SANITIZER] Loaded ${forbiddenPatterns.length} patterns from schema`);
 
     // ═══════════════════════════════════════════════════════════════
-    // GROUNDING KEYWORDS - Extract from forbidden pattern to check in sources
+    // CITATION DETECTION - Check if sentence has [X] citation
     // ═══════════════════════════════════════════════════════════════
+    const hasCitation = (sentence: string): boolean => {
+      // Match [1], [2], [3], etc.
+      return /\[\d+\]/.test(sentence);
+    };
+
+    // ═══════════════════════════════════════════════════════════════
+    // GROUNDING KEYWORDS - From schema config
+    // Only used for secondary validation, primary is citation check
+    // ═══════════════════════════════════════════════════════════════
+    const schemaKeywords = sanitizerConfig.groundingKeywords || [];
+
     const extractGroundingKeywords = (sentence: string): string[] => {
       const keywords: string[] = [];
+      const sentenceLower = sentence.toLowerCase();
 
-      // Extract key terms that should appear in sources
-      const termPatterns = [
-        /ibraz/gi, /saklama|muhafaza/gi, /belgeleme/gi, /sunulma/gi,
-        /beyanname/gi, /bildirim/gi, /başvuru/gi,
-        /zorunlu/gi, /şart/gi, /mecbur/gi,
-        /süre/gi, /takvim\s*yılı/gi,
-        /hak\s*kayb/gi, /düşer/gi,
-        /(\d+)\s*(yıl|ay|gün)/gi,
-      ];
-
-      for (const pattern of termPatterns) {
-        const matches = sentence.match(pattern);
-        if (matches) {
-          keywords.push(...matches.map(m => m.toLowerCase().trim()));
+      // Check schema-defined keywords (must be whole word match)
+      for (const kw of schemaKeywords) {
+        const kwLower = kw.toLowerCase();
+        // Use word boundary check to avoid partial matches
+        const wordBoundaryRegex = new RegExp(`\\b${kwLower.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i');
+        if (wordBoundaryRegex.test(sentenceLower)) {
+          keywords.push(kwLower);
         }
       }
 
       return keywords;
     };
+
+    const minGroundedKeywords = sanitizerConfig.minGroundedKeywords || 1;
 
     // ═══════════════════════════════════════════════════════════════
     // PROCESS EACH SENTENCE
@@ -3487,34 +3483,59 @@ FORMAT:
       if (!trimmedSentence) continue;
 
       // Check if sentence contains any forbidden pattern
-      const hasForbiddenPattern = forbiddenPatterns.some(p => p.test(trimmedSentence));
+      const matchedPattern = forbiddenPatterns.find(p => p.test(trimmedSentence));
 
-      if (!hasForbiddenPattern) {
+      if (!matchedPattern) {
         // No forbidden pattern → keep sentence
         processedSentences.push(trimmedSentence);
         continue;
       }
 
-      // Sentence has forbidden pattern → check if grounded in sources
-      const groundingKeywords = extractGroundingKeywords(trimmedSentence);
+      // ═══════════════════════════════════════════════════════════════
+      // STRICT GROUNDING CHECK (v4)
+      // Sentence has forbidden pattern → check if properly cited
+      // ═══════════════════════════════════════════════════════════════
 
-      // Grounding check: At least 2 keywords must appear in source corpus
-      // OR the exact phrase must appear
-      const groundedKeywords = groundingKeywords.filter(kw =>
-        sourceCorpus.includes(kw.toLowerCase())
-      );
+      // PRIMARY CHECK: Does sentence have a citation [X]?
+      const sentenceHasCitation = hasCitation(trimmedSentence);
 
-      const isGrounded = groundedKeywords.length >= 2 ||
-        sourceCorpus.includes(trimmedSentence.toLowerCase().substring(0, 50));
-
-      if (isGrounded) {
-        // Grounded in sources → keep but log
+      if (sentenceHasCitation) {
+        // Has citation → keep (citation validates the claim)
         processedSentences.push(trimmedSentence);
         keptWithGroundingCount++;
+        continue;
+      }
+
+      // SECONDARY CHECK: Grounding keywords in source corpus
+      const groundingKeywords = extractGroundingKeywords(trimmedSentence);
+      const groundedKeywords = groundingKeywords.filter(kw => {
+        // More strict: check if keyword appears as whole word in source
+        const kwRegex = new RegExp(`\\b${kw.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i');
+        return kwRegex.test(sourceCorpus);
+      });
+
+      // Require at least minGroundedKeywords AND the exact phrase start must exist
+      const phraseStart = trimmedSentence.toLowerCase().substring(0, 40).replace(/[^\wığüşöçİĞÜŞÖÇ\s]/g, '');
+      const exactPhraseInSource = sourceCorpus.includes(phraseStart);
+
+      const isGrounded = groundedKeywords.length >= minGroundedKeywords && exactPhraseInSource;
+
+      if (isGrounded) {
+        // Grounded by keywords + phrase match → keep but log
+        processedSentences.push(trimmedSentence);
+        keptWithGroundingCount++;
+        if (sanitizerConfig.logRemovals) {
+          console.log(`[SANITIZER] KEPT (grounded): "${trimmedSentence.substring(0, 60)}..." - keywords: [${groundedKeywords.join(', ')}]`);
+        }
       } else {
-        // NOT grounded → REMOVE sentence entirely
+        // NOT grounded and NO citation → REMOVE sentence entirely
         removedCount++;
-        console.log(`[SANITIZER] REMOVED ungrounded: "${trimmedSentence.substring(0, 80)}..."`);
+        if (sanitizerConfig.logRemovals) {
+          console.log(`[SANITIZER] REMOVED: "${trimmedSentence.substring(0, 80)}..."`);
+          console.log(`   Pattern matched: ${matchedPattern.source}`);
+          console.log(`   Keywords found: [${groundingKeywords.join(', ')}], grounded: [${groundedKeywords.join(', ')}]`);
+          console.log(`   Has citation: ${sentenceHasCitation}, phrase in source: ${exactPhraseInSource}`);
+        }
       }
     }
 
@@ -3532,7 +3553,7 @@ FORMAT:
 
     // Log summary
     if (removedCount > 0 || keptWithGroundingCount > 0) {
-      console.log(`[SANITIZER] Summary: removed=${removedCount}, kept_with_grounding=${keptWithGroundingCount}`);
+      console.log(`[SANITIZER] Summary: removed=${removedCount}, kept_with_grounding=${keptWithGroundingCount}, min_keywords=${minGroundedKeywords}`);
     }
 
     return result.trim();

@@ -44,6 +44,40 @@ export interface LawCodeConfig {
   lawCodePatterns?: Array<{ pattern: string; code: string }>;
 }
 
+/**
+ * Sanitizer Pattern for claim filtering
+ * Used by RAG post-processor to identify ungrounded claims
+ */
+export interface SanitizerPattern {
+  /** Unique identifier */
+  id: string;
+  /** Pattern category */
+  category: 'normative' | 'procedural' | 'consequence' | 'duration' | 'modal' | 'custom';
+  /** Regex pattern as string */
+  pattern: string;
+  /** Human-readable description */
+  description: string;
+  /** Whether pattern is active */
+  enabled: boolean;
+}
+
+/**
+ * Sanitizer Configuration for schema-driven claim filtering
+ * Controls which patterns trigger grounding checks and removal
+ */
+export interface SanitizerConfig {
+  /** Whether sanitizer is enabled */
+  enabled: boolean;
+  /** Forbidden patterns - sentences matching are checked for grounding */
+  forbiddenPatterns: SanitizerPattern[];
+  /** Keywords to extract for source validation */
+  groundingKeywords: string[];
+  /** Minimum grounded keywords to keep sentence (default: 2) */
+  minGroundedKeywords: number;
+  /** Log removed sentences for debugging */
+  logRemovals: boolean;
+}
+
 // LLM Configuration
 export interface LLMConfig {
   analyzePrompt?: string;
@@ -55,6 +89,8 @@ export interface LLMConfig {
   searchContext?: string;
   /** Law code configuration for article anchoring */
   lawCodeConfig?: LawCodeConfig;
+  /** Sanitizer configuration for filtering ungrounded claims */
+  sanitizerConfig?: SanitizerConfig;
 }
 
 // Ana Data Schema yapısı
@@ -134,6 +170,37 @@ export const EMPTY_FIELD: Omit<SchemaField, 'key'> = {
   showInTags: false
 };
 
+// Default Sanitizer config (Turkish legal/tax patterns)
+// NOTE: This is a subset for UI display. Full config is in backend data-schema.types.ts
+export const DEFAULT_SANITIZER_CONFIG: SanitizerConfig = {
+  enabled: true,
+  minGroundedKeywords: 1,  // Stricter filtering
+  logRemovals: true,
+  forbiddenPatterns: [
+    // Normative verbs - using lookahead for word boundary
+    { id: 'norm-1', category: 'normative', pattern: 'gerek(?:mektedir|ir|iyor|lidir)(?=[.,;\\s]|$)', description: 'Gerekmektedir', enabled: true },
+    { id: 'norm-2', category: 'normative', pattern: 'zorunlu(?:dur)?(?=[.,;\\s]|$)', description: 'Zorunludur', enabled: true },
+    { id: 'norm-3', category: 'normative', pattern: 'zorundadır(?=[.,;\\s]|$)', description: 'Zorundadır', enabled: true },
+    { id: 'norm-4', category: 'normative', pattern: 'yükümlü(?:dür)?(?=[.,;\\s]|$)', description: 'Yükümlüdür', enabled: true },
+    { id: 'norm-5', category: 'normative', pattern: 'şart(?:tır)?(?=[.,;\\s]|$)', description: 'Şarttır', enabled: true },
+    // Consequence warnings
+    { id: 'cons-1', category: 'consequence', pattern: 'aksi\\s+(?:takdirde|halde|durumda)', description: 'Aksi takdirde', enabled: true },
+    { id: 'cons-2', category: 'consequence', pattern: '(?:hak|indirim|iade)\\s+kayb', description: 'Hak kaybı', enabled: true },
+    // Duration claims - must have citation
+    { id: 'dur-1', category: 'duration', pattern: '\\d+\\s+(?:yıl|ay|gün)\\s+(?:içinde|süre)(?!\\s*\\[\\d+\\])', description: 'Süre iddiası (atıfsız)', enabled: true },
+    // Modal imperatives
+    { id: 'modal-1', category: 'modal', pattern: 'yapılmalıdır(?=[.,;\\s]|$)', description: 'Yapılmalıdır', enabled: true },
+    { id: 'modal-2', category: 'modal', pattern: 'verilmelidir(?=[.,;\\s]|$)', description: 'Verilmelidir', enabled: true },
+    { id: 'modal-3', category: 'modal', pattern: 'edilmelidir(?=[.,;\\s]|$)', description: 'Edilmelidir', enabled: true },
+  ],
+  // Grounding keywords - these should NOT overlap with forbidden patterns
+  groundingKeywords: [
+    'fatura', 'makbuz', 'belge', 'form', 'dilekçe',
+    'madde', 'fıkra', 'kanun', 'yönetmelik', 'tebliğ',
+    'matrah', 'vergi', 'kdv', 'stopaj', 'tevkifat'
+  ]
+};
+
 // Default LLM config
 export const DEFAULT_LLM_CONFIG: LLMConfig = {
   analyzePrompt: 'Bu belgeyi analiz et ve önemli bilgileri çıkar.',
@@ -142,5 +209,6 @@ export const DEFAULT_LLM_CONFIG: LLMConfig = {
   embeddingPrefix: 'Doküman: ',
   transformRules: 'Metin içindeki anahtar bilgileri çıkar.',
   questionGenerator: 'Bu belgenin içeriği hakkında sorular öner.',
-  searchContext: 'Genel doküman arama'
+  searchContext: 'Genel doküman arama',
+  sanitizerConfig: DEFAULT_SANITIZER_CONFIG
 };

@@ -225,6 +225,55 @@ export interface LawCodeConfig {
 }
 
 /**
+ * Sanitizer Pattern for claim filtering
+ * Used by RAG post-processor to identify ungrounded claims
+ */
+export interface SanitizerPattern {
+  /** Unique identifier */
+  id: string;
+  /** Pattern category: normative, procedural, consequence, duration, modal */
+  category: 'normative' | 'procedural' | 'consequence' | 'duration' | 'modal' | 'custom';
+  /** Regex pattern as string */
+  pattern: string;
+  /** Human-readable description */
+  description: string;
+  /** Whether pattern is active */
+  enabled: boolean;
+}
+
+/**
+ * Sanitizer Configuration for schema-driven claim filtering
+ * Controls which patterns trigger grounding checks and removal
+ */
+export interface SanitizerConfig {
+  /** Whether sanitizer is enabled for this schema */
+  enabled: boolean;
+
+  /**
+   * Forbidden patterns - sentences matching these are checked for grounding
+   * If not grounded in sources, entire sentence is removed
+   */
+  forbiddenPatterns: SanitizerPattern[];
+
+  /**
+   * Grounding keywords to extract from sentences for source validation
+   * These terms must appear in source corpus for claim to be considered grounded
+   */
+  groundingKeywords: string[];
+
+  /**
+   * Minimum grounded keywords required to keep a sentence
+   * Default: 2 (at least 2 keywords must appear in sources)
+   */
+  minGroundedKeywords: number;
+
+  /**
+   * Whether to log removed sentences (for debugging)
+   */
+  logRemovals: boolean;
+}
+
+/**
  * LLM Configuration for schema-aware processing
  * Used across all LLM-powered features: analyze, chatbot, embedding, transform
  */
@@ -272,6 +321,13 @@ export interface LLMConfig {
    * Multi-tenant: Each schema can have its own law configurations
    */
   lawCodeConfig?: LawCodeConfig;
+
+  /**
+   * Sanitizer configuration for filtering ungrounded claims
+   * Controls which patterns trigger grounding checks and removal
+   * Multi-tenant: Each schema can have its own sanitizer rules
+   */
+  sanitizerConfig?: SanitizerConfig;
 }
 
 /**
@@ -286,6 +342,128 @@ export type LLMProcessType =
   | 'search';
 
 /**
+ * Default Sanitizer Config with Turkish legal/tax patterns
+ * Updated based on test failures - comprehensive pattern coverage
+ */
+export const DEFAULT_SANITIZER_CONFIG: SanitizerConfig = {
+  enabled: true,
+  minGroundedKeywords: 1,  // Lowered to 1 - stricter filtering
+  logRemovals: true,
+
+  forbiddenPatterns: [
+    // ═══════════════════════════════════════════════════════════════
+    // NORMATIVE VERBS (zorunluluk ifadeleri)
+    // Word boundary: (?=[.,;\\s]|$) matches punctuation, space, or end of string
+    // ═══════════════════════════════════════════════════════════════
+    { id: 'norm-1', category: 'normative', pattern: 'gerek(?:mektedir|ir|iyor|lidir|tirmektedir|tirir)(?=[.,;\\s]|$)', description: 'Gerekmektedir varyantları', enabled: true },
+    { id: 'norm-2', category: 'normative', pattern: 'zorunlu(?:dur|luktur)?(?=[.,;\\s]|$)', description: 'Zorunludur', enabled: true },
+    { id: 'norm-3', category: 'normative', pattern: 'zorundadır(?=[.,;\\s]|$)', description: 'Zorundadır', enabled: true },
+    { id: 'norm-4', category: 'normative', pattern: 'mecbur(?:dur|idir|iyet)?(?=[.,;\\s]|$)', description: 'Mecburdur/mecburiyet', enabled: true },
+    { id: 'norm-5', category: 'normative', pattern: 'şart(?:tır)?(?=[.,;\\s]|$)', description: 'Şarttır', enabled: true },
+    { id: 'norm-6', category: 'normative', pattern: 'esas(?:tır)?(?=[.,;\\s]|$)', description: 'Esastır', enabled: true },
+    { id: 'norm-7', category: 'normative', pattern: 'yükümlü(?:dür)?(?=[.,;\\s]|$)', description: 'Yükümlüdür', enabled: true },
+    { id: 'norm-8', category: 'normative', pattern: 'yükümlülü(?:k|ğü)(?=[.,;\\s]|$)', description: 'Yükümlülük', enabled: true },
+    { id: 'norm-9', category: 'normative', pattern: 'uyulmas[ıi]\\s+gerek', description: 'Uyulması gerekir', enabled: true },
+    { id: 'norm-10', category: 'normative', pattern: 'uygulanmas[ıi]\\s+gerek', description: 'Uygulanması gerekir', enabled: true },
+    { id: 'norm-11', category: 'normative', pattern: 'bulunmas[ıi]\\s+gerek', description: 'Bulunması gerekir', enabled: true },
+    { id: 'norm-12', category: 'normative', pattern: 'edilmes[ıi]\\s+gerek', description: 'Edilmesi gerekir', enabled: true },
+
+    // ═══════════════════════════════════════════════════════════════
+    // PROCEDURAL IMPERATIVES (prosedür iddiaları)
+    // ═══════════════════════════════════════════════════════════════
+    { id: 'proc-1', category: 'procedural', pattern: 'ibraz(?:ı|\\s+edilmesi|\\s+edilmeli)', description: 'İbraz edilmesi', enabled: true },
+    { id: 'proc-2', category: 'procedural', pattern: 'saklan(?:ması|malı)', description: 'Saklanması', enabled: true },
+    { id: 'proc-3', category: 'procedural', pattern: 'muhafaza(?:sı|\\s+edilmesi)', description: 'Muhafaza edilmesi', enabled: true },
+    { id: 'proc-4', category: 'procedural', pattern: 'belge(?:lenmesi|lemesi)', description: 'Belgelenmesi', enabled: true },
+    { id: 'proc-5', category: 'procedural', pattern: 'sunul(?:ması|malı)', description: 'Sunulması', enabled: true },
+    { id: 'proc-6', category: 'procedural', pattern: 'beyan(?:name)?\\s+veril(?:mesi|melidir)', description: 'Beyanname verilmesi', enabled: true },
+    { id: 'proc-7', category: 'procedural', pattern: 'bildiril(?:mesi|melidir)', description: 'Bildirilmesi', enabled: true },
+    { id: 'proc-8', category: 'procedural', pattern: 'başvur(?:ulmalıdır|u\\s+yapılmalı)', description: 'Başvurulması', enabled: true },
+    { id: 'proc-9', category: 'procedural', pattern: 'düzenlen(?:mesi|melidir)', description: 'Düzenlenmesi', enabled: true },
+    { id: 'proc-10', category: 'procedural', pattern: 'ödenmesi\\s+gerek', description: 'Ödenmesi gerekir', enabled: true },
+
+    // ═══════════════════════════════════════════════════════════════
+    // CONSEQUENCE WARNINGS (sonuç/ceza uyarıları)
+    // ═══════════════════════════════════════════════════════════════
+    { id: 'cons-1', category: 'consequence', pattern: 'aksi\\s+(?:takdirde|halde|durumda)', description: 'Aksi takdirde/halde', enabled: true },
+    { id: 'cons-2', category: 'consequence', pattern: '(?:hak|indirim|iade)\\s+kayb', description: 'Hak/indirim kaybı', enabled: true },
+    { id: 'cons-3', category: 'consequence', pattern: 'düşer(?=[.,;\\s]|$)', description: 'Düşer', enabled: true },
+    { id: 'cons-4', category: 'consequence', pattern: 'sona\\s+erer', description: 'Sona erer', enabled: true },
+    { id: 'cons-5', category: 'consequence', pattern: 'uygulan(?:a)?maz', description: 'Uygulanamaz', enabled: true },
+    { id: 'cons-6', category: 'consequence', pattern: 'uyulmamas[ıi]\\s+(?:halinde|durumunda)', description: 'Uyulmaması halinde', enabled: true },
+    { id: 'cons-7', category: 'consequence', pattern: 'ceza[ilğ]*\\s+yapt[ıi]r[ıi]m', description: 'Cezai yaptırım', enabled: true },
+    { id: 'cons-8', category: 'consequence', pattern: 'ceza\\s+(?:söz\\s+konusu|uygulan)', description: 'Ceza uygulanır', enabled: true },
+    { id: 'cons-9', category: 'consequence', pattern: 'usulsüzlük\\s+ceza', description: 'Usulsüzlük cezası', enabled: true },
+    { id: 'cons-10', category: 'consequence', pattern: 'idari\\s+para\\s+ceza', description: 'İdari para cezası', enabled: true },
+    { id: 'cons-11', category: 'consequence', pattern: 'vergi\\s+ziya[ıi]', description: 'Vergi ziyaı', enabled: true },
+    { id: 'cons-12', category: 'consequence', pattern: 'gecikme\\s+(?:faiz|zam)', description: 'Gecikme faizi/zammı', enabled: true },
+
+    // ═══════════════════════════════════════════════════════════════
+    // UNGROUNDED WARNINGS (dayanaksız genel uyarılar)
+    // ═══════════════════════════════════════════════════════════════
+    { id: 'warn-1', category: 'modal', pattern: 'unutulmamalıdır', description: 'Unutulmamalıdır', enabled: true },
+    { id: 'warn-2', category: 'modal', pattern: 'ihmal\\s+edilmemelidir', description: 'İhmal edilmemelidir', enabled: true },
+    { id: 'warn-3', category: 'modal', pattern: 'göz\\s+ardı\\s+edilmemelidir', description: 'Göz ardı edilmemelidir', enabled: true },
+    { id: 'warn-4', category: 'modal', pattern: 'dikkat\\s+edilmelidir', description: 'Dikkat edilmelidir', enabled: true },
+    { id: 'warn-5', category: 'modal', pattern: 'gözetilmelidir', description: 'Gözetilmelidir', enabled: true },
+    { id: 'warn-6', category: 'modal', pattern: 'atlanmamalıdır', description: 'Atlanmamalıdır', enabled: true },
+    { id: 'warn-7', category: 'modal', pattern: 'titizlikle\\s+(?:incelenmesi|uyulması)', description: 'Titizlikle incelenmesi', enabled: true },
+    { id: 'warn-8', category: 'modal', pattern: 'önem\\s+(?:taşı|arz\\s+et)', description: 'Önem taşır/arz eder', enabled: true },
+    { id: 'warn-9', category: 'modal', pattern: 'önerilmektedir', description: 'Önerilmektedir', enabled: true },
+    { id: 'warn-10', category: 'modal', pattern: 'tavsiye\\s+edilmektedir', description: 'Tavsiye edilmektedir', enabled: true },
+
+    // ═══════════════════════════════════════════════════════════════
+    // DURATION/DEADLINE CLAIMS (süre iddiaları) - MUST have citation
+    // ═══════════════════════════════════════════════════════════════
+    { id: 'dur-1', category: 'duration', pattern: 'belirli\\s+(?:bir\\s+)?süre', description: 'Belirli süre', enabled: true },
+    { id: 'dur-2', category: 'duration', pattern: 'süre\\s+(?:içerisinde|içinde|boyunca)', description: 'Süre içinde/boyunca', enabled: true },
+    { id: 'dur-3', category: 'duration', pattern: '\\d+\\s+(?:yıl|ay|gün|hafta)\\s+(?:içinde|süre|boyunca)(?!\\s*\\[\\d+\\])', description: 'X yıl/ay/gün içinde (atıfsız)', enabled: true },
+    { id: 'dur-4', category: 'duration', pattern: 'takvim\\s+yılı', description: 'Takvim yılı', enabled: true },
+    { id: 'dur-5', category: 'duration', pattern: '(?:bir|iki|üç|dört|beş|altı|yedi|sekiz|dokuz|on)\\s+yıl(?!\\s*\\[\\d+\\])', description: 'Yazıyla yıl (atıfsız)', enabled: true },
+    { id: 'dur-6', category: 'duration', pattern: '(?:bir|iki|üç|dört|beş|altı|yedi|sekiz|dokuz|on|onbeş|otuz)\\s+(?:ay|gün)(?!\\s*\\[\\d+\\])', description: 'Yazıyla ay/gün (atıfsız)', enabled: true },
+    { id: 'dur-7', category: 'duration', pattern: 'ay[ıi]n\\s+(?:\\d+|yirmi|otuz)[^\\[]*(?:\\.|,|;|$)', description: 'Ayın X günü (atıfsız)', enabled: true },
+
+    // ═══════════════════════════════════════════════════════════════
+    // MODAL IMPERATIVES (modal zorunluluklar)
+    // ═══════════════════════════════════════════════════════════════
+    { id: 'modal-1', category: 'modal', pattern: 'verilmelidir(?=[.,;\\s]|$)', description: 'Verilmelidir', enabled: true },
+    { id: 'modal-2', category: 'modal', pattern: 'yapılmalıdır(?=[.,;\\s]|$)', description: 'Yapılmalıdır', enabled: true },
+    { id: 'modal-3', category: 'modal', pattern: 'sunulmalıdır(?=[.,;\\s]|$)', description: 'Sunulmalıdır', enabled: true },
+    { id: 'modal-4', category: 'modal', pattern: 'ödenmelidir(?=[.,;\\s]|$)', description: 'Ödenmelidir', enabled: true },
+    { id: 'modal-5', category: 'modal', pattern: 'incelenmelidir(?=[.,;\\s]|$)', description: 'İncelenmelidir', enabled: true },
+    { id: 'modal-6', category: 'modal', pattern: 'bulundurulmalıdır(?=[.,;\\s]|$)', description: 'Bulundurulmalıdır', enabled: true },
+    { id: 'modal-7', category: 'modal', pattern: 'tutulmalıdır(?=[.,;\\s]|$)', description: 'Tutulmalıdır', enabled: true },
+    { id: 'modal-8', category: 'modal', pattern: 'alınmalıdır(?=[.,;\\s]|$)', description: 'Alınmalıdır', enabled: true },
+    { id: 'modal-9', category: 'modal', pattern: 'edilmelidir(?=[.,;\\s]|$)', description: 'Edilmelidir', enabled: true },
+    { id: 'modal-10', category: 'modal', pattern: 'sağlanmalıdır(?=[.,;\\s]|$)', description: 'Sağlanmalıdır', enabled: true },
+
+    // ═══════════════════════════════════════════════════════════════
+    // NUMERIC CLAIMS (rakamsal iddialar) - MUST have citation
+    // ═══════════════════════════════════════════════════════════════
+    { id: 'num-1', category: 'custom', pattern: '%\\s*\\d+(?!\\s*\\[\\d+\\])', description: 'Yüzde oranı (atıfsız)', enabled: true },
+    { id: 'num-2', category: 'custom', pattern: '\\d+[.,]\\d+\\s*(?:TL|lira|euro|dolar)(?!\\s*\\[\\d+\\])', description: 'Para tutarı (atıfsız)', enabled: true },
+    { id: 'num-3', category: 'custom', pattern: '\\d{2}[./]\\d{2}[./]\\d{4}(?!\\s*\\[\\d+\\])', description: 'Tarih formatı (atıfsız)', enabled: true },
+  ],
+
+  // ═══════════════════════════════════════════════════════════════
+  // GROUNDING KEYWORDS
+  // These keywords are checked in source corpus to validate claims
+  // IMPORTANT: These should NOT overlap with forbidden pattern words
+  // ═══════════════════════════════════════════════════════════════
+  groundingKeywords: [
+    // Document types (specific nouns that indicate grounded content)
+    'fatura', 'makbuz', 'fiş', 'belge', 'form', 'dilekçe',
+    'sözleşme', 'protokol', 'tutanak', 'rapor', 'resmi yazı',
+    // Legal document numbers (indicate specific references)
+    'madde', 'fıkra', 'bent', 'kanun', 'yönetmelik', 'tebliğ',
+    // Tax terms (specific nouns)
+    'matrah', 'vergi', 'kdv', 'stopaj', 'tevkifat', 'istisna', 'muafiyet',
+    // Process terms (specific actions that can be verified)
+    'tahakkuk', 'tahsil', 'iade', 'indirim', 'mahsup'
+  ]
+};
+
+/**
  * Default LLM config for fallback
  */
 export const DEFAULT_LLM_CONFIG: LLMConfig = {
@@ -295,7 +473,8 @@ export const DEFAULT_LLM_CONFIG: LLMConfig = {
   embeddingPrefix: 'Doküman: ',
   transformRules: 'Metin içindeki anahtar bilgileri çıkar.',
   questionGenerator: 'Bu belgenin içeriği hakkında kullanıcının ilgilenebileceği sorular öner.',
-  searchContext: 'Genel doküman arama'
+  searchContext: 'Genel doküman arama',
+  sanitizerConfig: DEFAULT_SANITIZER_CONFIG
 };
 
 // Varsayılan schema örnekleri
