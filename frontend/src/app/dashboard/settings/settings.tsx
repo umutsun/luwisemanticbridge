@@ -2510,7 +2510,8 @@ function RAGSettings() {
     enableDocumentEmbeddings: false,// Don't include uploaded docs
     enableScrapeEmbeddings: false,  // Don't include scraped content
     unifiedEmbeddingsPriority: 8,   // High priority for database content
-    strictMode: true                // Strict RAG mode - DEFAULT ON for legal platforms
+    strictMode: true,               // Strict RAG mode - DEFAULT ON for legal platforms
+    streamingEnabled: true          // Enable streaming mode for chat responses
   };
 
   // Load source tables for table priorities
@@ -2827,6 +2828,20 @@ function RAGSettings() {
                     </AlertDescription>
                   </Alert>
                 )}
+
+                {/* Streaming Mode Toggle */}
+                <div className="flex items-center justify-between p-3 border rounded-lg bg-muted/30">
+                  <div className="space-y-0.5">
+                    <Label className="text-sm font-medium">Streaming Modu</Label>
+                    <p className="text-xs text-muted-foreground">
+                      Yanıtları kelime kelime göster. Kapalıyken tek seferde yüklenir.
+                    </p>
+                  </div>
+                  <Switch
+                    checked={tempRAGConfig?.ragSettings?.streamingEnabled ?? DEFAULT_RAG_SETTINGS.streamingEnabled}
+                    onCheckedChange={(checked) => updateRAGSetting('streamingEnabled', checked)}
+                  />
+                </div>
               </div>
             </div>
 

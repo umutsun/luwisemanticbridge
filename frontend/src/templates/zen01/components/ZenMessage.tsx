@@ -690,6 +690,15 @@ export const ZenMessage: React.FC<ZenMessageProps> = ({
           )}
         </div>
 
+        {/* Sources Fetch Failed Warning */}
+        {!isUser && message.sourcesFetchFailed && !message.isStreaming && (
+          <div className="zen01-sources-warning mt-3 p-2 rounded-lg bg-amber-500/10 border border-amber-500/20">
+            <span className="text-xs text-amber-600 dark:text-amber-400">
+              ⚠️ Atıflar yüklenemedi. Lütfen sayfayı yenileyip tekrar deneyin.
+            </span>
+          </div>
+        )}
+
         {/* Sources Section - Enhanced Citations */}
         {!isUser && message.sources && message.sources.length > 0 && !message.isStreaming && (
           <div className="zen01-sources mt-3">

@@ -72,6 +72,8 @@ export interface ZenMessage {
   startTime?: number;
   tokens?: ZenTokens;
   fastMode?: boolean;
+  /** Flag indicating sources fetch failed after retries (streaming mode) */
+  sourcesFetchFailed?: boolean;
 }
 
 // Chatbot Settings Interface
@@ -125,6 +127,8 @@ export interface ZenRagSettings {
   similarityThreshold: number;
   minSourcesToShow?: number;
   maxSourcesToShow?: number;
+  /** Enable streaming mode for chat responses */
+  streamingEnabled?: boolean;
 }
 
 // LLM Settings Interface

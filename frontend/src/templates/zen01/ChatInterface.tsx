@@ -575,7 +575,7 @@ export default function ChatInterface() {
           systemPrompt,
           enableSemanticAnalysis: true,
           trackUserInsights: true,
-          stream: true,
+          stream: ragSettings.streamingEnabled !== false, // Default true, can be disabled via settings
           // RAG settings for source retrieval
           ragSettings: {
             minResults: ragSettings.minResults,
@@ -657,38 +657,78 @@ export default function ChatInterface() {
           tokens?: ZenMessageType['tokens'];
           usage?: ZenMessageType['tokens'];
           fastMode?: boolean;
+          conversationId?: string;
         } = {};
-        try {
-          const finalResponse = await fetch(getEndpoint('chat', 'send'), {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'Authorization': `Bearer ${token}`,
-            },
-            body: JSON.stringify({
-              message: messageContent,
-              conversationId: conversationId,
-              model: chatbotSettings.activeChatModel,
-              temperature,
-              maxTokens,
-              systemPrompt,
-              enableSemanticAnalysis: true,
-              trackUserInsights: true,
-              stream: false,
-              // RAG settings for source retrieval
-              ragSettings: {
-                minResults: ragSettings.minResults,
-                maxResults: ragSettings.maxResults,
-                similarityThreshold: ragSettings.similarityThreshold,
-                minSourcesToShow: ragSettings.minSourcesToShow
+
+        // Fetch sources with retry mechanism (streaming mode fix)
+        const fetchSourcesWithRetry = async (retries = 2): Promise<typeof finalData> => {
+          for (let attempt = 1; attempt <= retries; attempt++) {
+            try {
+              console.log(`[Streaming] Fetching sources (attempt ${attempt}/${retries})...`);
+              const startTime = Date.now();
+
+              const finalResponse = await fetch(getEndpoint('chat', 'send'), {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                  'Authorization': `Bearer ${token}`,
+                },
+                body: JSON.stringify({
+                  message: messageContent,
+                  conversationId: conversationId,
+                  model: chatbotSettings.activeChatModel,
+                  temperature,
+                  maxTokens,
+                  systemPrompt,
+                  enableSemanticAnalysis: true,
+                  trackUserInsights: true,
+                  stream: false,
+                  ragSettings: {
+                    minResults: ragSettings.minResults,
+                    maxResults: ragSettings.maxResults,
+                    similarityThreshold: ragSettings.similarityThreshold,
+                    minSourcesToShow: ragSettings.minSourcesToShow
+                  }
+                }),
+              });
+
+              const elapsed = Date.now() - startTime;
+              console.log(`[Streaming] Sources fetch response: status=${finalResponse.status}, ok=${finalResponse.ok}, elapsed=${elapsed}ms`);
+
+              if (finalResponse.ok) {
+                const data = await finalResponse.json();
+                console.log(`[Streaming] Sources fetched successfully: ${data.sources?.length || 0} sources`);
+                return data;
+              } else {
+                console.warn(`[Streaming] Sources fetch failed: HTTP ${finalResponse.status} ${finalResponse.statusText}`);
+                if (attempt < retries) {
+                  console.log(`[Streaming] Retrying in 500ms...`);
+                  await new Promise(r => setTimeout(r, 500));
+                }
               }
-            }),
-          });
-          if (finalResponse.ok) {
-            finalData = await finalResponse.json();
+            } catch (error) {
+              console.error(`[Streaming] Sources fetch error (attempt ${attempt}):`, error);
+              if (attempt < retries) {
+                console.log(`[Streaming] Retrying in 500ms...`);
+                await new Promise(r => setTimeout(r, 500));
+              }
+            }
           }
-        } catch (error) {
-          console.error('Failed to get final data:', error);
+          console.error('[Streaming] All retry attempts failed for sources fetch');
+          return {};
+        };
+
+        finalData = await fetchSourcesWithRetry(2);
+
+        // Check if sources fetch failed (empty finalData means all retries failed)
+        const sourcesFetchFailed = !finalData.sources && !finalData.fastMode && Object.keys(finalData).length === 0;
+        if (sourcesFetchFailed) {
+          console.warn('[Streaming] Sources could not be loaded - showing warning to user');
+        }
+
+        // Save conversation ID if returned
+        if (finalData.conversationId && !conversationId) {
+          setConversationId(finalData.conversationId);
         }
 
         setMessages(prev => prev.map(msg =>
@@ -702,7 +742,8 @@ export default function ChatInterface() {
               context: finalData.context,
               responseTime: msg.startTime ? Date.now() - msg.startTime : undefined,
               tokens: finalData.tokens || finalData.usage,
-              fastMode: finalData.fastMode
+              fastMode: finalData.fastMode,
+              sourcesFetchFailed // Flag for UI to show warning
             }
             : msg
         ));
