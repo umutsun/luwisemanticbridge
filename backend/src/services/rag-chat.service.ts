@@ -1510,6 +1510,13 @@ ${questionLabel}: ${message}`;
       }
       timings.search = Date.now() - startSearch;
 
+      // 🎯 Article Query: Get article anchoring metadata from search
+      // Used to show warnings when target article not found in database
+      const articleQuery = semanticSearch.getLastArticleQuery();
+      if (articleQuery?.detected) {
+        console.log(`[RAG] 🎯 Article query detected: ${articleQuery.law_code} Madde ${articleQuery.article_number}, exact_match=${articleQuery.exact_match_found}`);
+      }
+
       // 🎯 KEYWORD BOOST: Boost results with exact query term matches
       // This helps surface relevant özelge/tebliğ when embedding similarity is close
       const queryTerms = searchQuery.toLowerCase().split(/\s+/).filter(t => t.length > 2);
@@ -3003,6 +3010,15 @@ FORMAT:
         strictMode: settingsMap.get('ragSettings.strictMode') === 'true',
         usage: response.usage, // Token usage from LLM
         refusalDetected: isRefusalResponse, // Flag for debugging
+        // 🎯 Article anchoring metadata for chat interface
+        articleQuery: articleQuery ? {
+          detected: articleQuery.detected,
+          lawCode: articleQuery.law_code,
+          articleNumber: articleQuery.article_number,
+          exactMatchFound: articleQuery.exact_match_found,
+          exactMatchCount: articleQuery.exact_match_count,
+          wrongMatchCount: articleQuery.wrong_match_count
+        } : null,
         _debug: debugInfo // 📊 Debug field for regression testing
       };
     } catch (error) {
@@ -3961,21 +3977,42 @@ FORMAT:
         // This allows "yirmidördüncü" in source to match "24" in claim
         const normalizedSource = normalizeNumberWords(sourceContent, effectiveLangCode);
 
+        // v12 DEBUG: Log normalization for date claims
+        if (sanitizerConfig.logRemovals && criticalClaims.some(c => c.type === 'date')) {
+          console.log(`[CLAIM-VERIFY] Citation [${citNum}] checking ${criticalClaims.length} claims`);
+          console.log(`   Source excerpt: "${sourceContent.substring(0, 150)}..."`);
+          console.log(`   Normalized excerpt: "${normalizedSource.substring(0, 150)}..."`);
+        }
+
         const matchedClaims: string[] = [];
         for (const claim of criticalClaims) {
           // First try original source, then normalized source
-          if (claim.pattern.test(sourceContent) || claim.pattern.test(normalizedSource)) {
+          const originalMatch = claim.pattern.test(sourceContent);
+          const normalizedMatch = claim.pattern.test(normalizedSource);
+
+          if (originalMatch || normalizedMatch) {
             matchedClaims.push(claim.value);
+            if (sanitizerConfig.logRemovals) {
+              console.log(`   [CLAIM-VERIFY] ✓ ${claim.type}:${claim.value} found (original:${originalMatch}, normalized:${normalizedMatch})`);
+            }
           } else if (claim.type === 'date' || claim.type === 'temporal') {
             // v11: For date/temporal claims, also try enhanced number pattern
             // This catches cases like "24" claim matching "yirmidördüncü" source
             const numValue = parseInt(claim.value.replace(/[^\d]/g, ''), 10);
             if (!isNaN(numValue)) {
               const enhancedPattern = buildNumberMatchPattern(numValue, effectiveLangCode);
-              if (enhancedPattern.test(sourceContent)) {
+              const enhancedMatch = enhancedPattern.test(sourceContent);
+              if (enhancedMatch) {
                 matchedClaims.push(claim.value);
+                if (sanitizerConfig.logRemovals) {
+                  console.log(`   [CLAIM-VERIFY] ✓ ${claim.type}:${claim.value} found via enhanced pattern (${enhancedPattern.source})`);
+                }
+              } else if (sanitizerConfig.logRemovals) {
+                console.log(`   [CLAIM-VERIFY] ✗ ${claim.type}:${claim.value} NOT found. Pattern: ${claim.pattern.source}, Enhanced: ${enhancedPattern.source}`);
               }
             }
+          } else if (sanitizerConfig.logRemovals) {
+            console.log(`   [CLAIM-VERIFY] ✗ ${claim.type}:${claim.value} NOT found. Pattern: ${claim.pattern.source}`);
           }
         }
 

@@ -12,8 +12,8 @@
   },
 
   "datePatterns": {
-    "ordinal": "(\\d+)[''ıiuü](?:n[aeiıoöuü]|s[ıi])",
-    "description": "Turkish date ordinals: 26'sı, ayın 15'i"
+    "ordinal": "(\\d+)[''][ıiuüsSnN]?[a-zğüşıöçA-ZĞÜŞİÖÇ]*",
+    "description": "Turkish date ordinals: 24'ü, 24'üne, 24'ünde, 26'sı, 26'sına, ayın 15'i"
   },
 
   "percentagePatterns": {
