@@ -2910,6 +2910,10 @@ FORMAT:
       // FIX: Ensure proper markdown formatting and remove hallucinated citations
       finalResponse = this.fixMarkdownAndCitations(finalResponse, limitedSources);
 
+      // 🔧 v12 FIX: Auto-add citations to date claims before sanitizer removes them
+      // This fixes the issue where model writes dates but forgets citations
+      finalResponse = this.autoFixDateCitations(finalResponse, limitedSources, responseLanguage);
+
       // 🔍 DEBUG v12: Log response BEFORE sanitizer to diagnose date extraction issues
       // Looking for "24" or "yirmidördüncü" in raw model output
       const beforeSanitizer = finalResponse;
@@ -3518,6 +3522,99 @@ FORMAT:
     }
 
     return fixed;
+  }
+
+  /**
+   * 🔧 AUTO-FIX DATE CITATIONS v12
+   *
+   * Automatically adds citations to sentences containing date claims but no citations.
+   * This prevents sanitizer from removing valid date information when model forgets to cite.
+   *
+   * Flow:
+   * 1. Split response into sentences
+   * 2. For each sentence with date pattern but no citation:
+   *    a. Extract the date value (e.g., "24" from "24'üne" or "yirmidördüncü")
+   *    b. Search sources for that date (digit or word form)
+   *    c. If found, append citation [n] to the sentence
+   * 3. Rejoin sentences
+   *
+   * @param response - LLM response text
+   * @param sources - Source objects to search for dates
+   * @param language - Response language ('tr' or 'en')
+   */
+  private autoFixDateCitations(response: string, sources: any[], language: string = 'tr'): string {
+    if (!response || !sources.length) return response;
+
+    // Get language pack for number word normalization
+    const langPack = getSanitizerLangPack(language);
+
+    // Date patterns to detect
+    const digitDatePattern = /(\d+)['''][ıiuüsSnN]?[a-zğüşıöçA-ZĞÜŞİÖÇ]*/gi;
+    const wordDatePattern = langPack?.numberWords?.ordinals
+      ? new RegExp(`\\b(${Object.keys(langPack.numberWords.ordinals).sort((a, b) => b.length - a.length).map(w => w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|')})\\b`, 'gi')
+      : null;
+
+    // Citation pattern
+    const hasCitation = /\[\d+\]/;
+
+    // Split into sentences
+    const sentences = response.split(/(?<=[.!?])\s+/);
+    let fixCount = 0;
+
+    const fixedSentences = sentences.map(sentence => {
+      // Skip if already has citation
+      if (hasCitation.test(sentence)) return sentence;
+
+      // Check for digit date (24'üne, 26'sına)
+      let dateMatch = sentence.match(digitDatePattern);
+      let dateValue: number | null = null;
+
+      if (dateMatch) {
+        dateValue = parseInt(dateMatch[0].replace(/[^\d]/g, ''), 10);
+      } else if (wordDatePattern) {
+        // Check for word date (yirmidördüncü)
+        const wordMatch = sentence.match(wordDatePattern);
+        if (wordMatch && langPack?.numberWords?.ordinals) {
+          const normalizedWord = wordMatch[0].toLowerCase().replace(/\s+/g, '');
+          dateValue = langPack.numberWords.ordinals[normalizedWord] || null;
+        }
+      }
+
+      // No date found, return as-is
+      if (!dateValue) return sentence;
+
+      // Search sources for this date
+      for (let i = 0; i < sources.length; i++) {
+        const sourceText = (sources[i].content || sources[i].excerpt || '').toLowerCase();
+
+        // Check for digit form
+        const hasDigitForm = sourceText.includes(dateValue.toString());
+
+        // Check for word form using normalization
+        const normalizedSource = normalizeNumberWords(sourceText, language);
+        const hasWordForm = normalizedSource.includes(dateValue.toString());
+
+        if (hasDigitForm || hasWordForm) {
+          // Found matching source - add citation
+          const citationNum = i + 1;
+          const trimmed = sentence.trimEnd();
+          const punctuation = trimmed.match(/[.!?]$/) ? '' : '.';
+          const fixed = `${trimmed}${punctuation} [${citationNum}]`;
+          fixCount++;
+          console.log(`[DATE-AUTOFIX] Added citation [${citationNum}] for date "${dateValue}" in: "${sentence.substring(0, 50)}..."`);
+          return fixed;
+        }
+      }
+
+      // Date not found in any source - return as-is (sanitizer will remove if appropriate)
+      return sentence;
+    });
+
+    if (fixCount > 0) {
+      console.log(`[DATE-AUTOFIX] Auto-fixed ${fixCount} sentences with date claims`);
+    }
+
+    return fixedSentences.join(' ');
   }
 
   /**
