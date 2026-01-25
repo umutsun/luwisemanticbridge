@@ -2145,6 +2145,22 @@ FORMAT:
       console.log(` System prompt length: ${systemPrompt?.length || 0} chars`);
       console.log(` Response language: ${responseLanguage}`);
 
+      // 🔍 DEBUG v12: Log CONTEXT sent to LLM (check if "yirmidördüncü" is in sources)
+      if (message.toLowerCase().includes('kaç') || message.toLowerCase().includes('beyanname')) {
+        console.log(`[DEBUG-v12] ═══════════════════════════════════════════════════`);
+        console.log(`[DEBUG-v12] CONTEXT SENT TO LLM (searching for date info):`);
+        console.log(`[DEBUG-v12] Context contains "yirmidört": ${/yirmidört/i.test(enhancedContext)}`);
+        console.log(`[DEBUG-v12] Context contains "24": ${enhancedContext.includes('24')}`);
+        // Find and log the sentence containing the date
+        const dateMatch = enhancedContext.match(/[^.]*(?:yirmidört|24)[^.]*/i);
+        if (dateMatch) {
+          console.log(`[DEBUG-v12] DATE SENTENCE IN CONTEXT: "${dateMatch[0].trim()}"`);
+        } else {
+          console.log(`[DEBUG-v12] ⚠️ NO DATE FOUND IN CONTEXT!`);
+        }
+        console.log(`[DEBUG-v12] ═══════════════════════════════════════════════════`);
+      }
+
       // Extract provider from active model
       const providerFromModel = this.extractProviderFromModel(activeModel);
       console.log(`⏱️ Pre-LLM timings: settings=${timings.settings}ms, history=${timings.history}ms, search=${timings.search}ms`);
@@ -2163,6 +2179,19 @@ FORMAT:
       timings.llm = Date.now() - startLLM;
       timings.total = Date.now() - startTotal;
       console.log(`⏱️ LLM response in ${timings.llm}ms | TOTAL: ${timings.total}ms (settings: ${timings.settings}, history: ${timings.history}, search: ${timings.search}, llm: ${timings.llm})`);
+
+      // 🔍 DEBUG v12: Log RAW LLM output IMMEDIATELY
+      if (message.toLowerCase().includes('kaç') || message.toLowerCase().includes('beyanname')) {
+        console.log(`[DEBUG-v12] ═══════════════════════════════════════════════════`);
+        console.log(`[DEBUG-v12] QUERY: "${message}"`);
+        console.log(`[DEBUG-v12] RAW LLM OUTPUT (first 800 chars):`);
+        console.log(`[DEBUG-v12] ${response.content.substring(0, 800)}`);
+        console.log(`[DEBUG-v12] ───────────────────────────────────────────────────`);
+        console.log(`[DEBUG-v12] Contains "24": ${response.content.includes('24')}`);
+        console.log(`[DEBUG-v12] Contains "yirmidört": ${/yirmidört/i.test(response.content)}`);
+        console.log(`[DEBUG-v12] Contains citation [1]: ${response.content.includes('[1]')}`);
+        console.log(`[DEBUG-v12] ═══════════════════════════════════════════════════`);
+      }
 
       // Clean response content - remove section headings that LLM might add despite instructions
       response.content = this.stripSectionHeadings(response.content, settingsMap);
