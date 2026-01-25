@@ -85,6 +85,18 @@ export class SemanticSearchService {
   // 🔧 NEW: Ranking formula weights (configurable via settings)
   // Default: 70% semantic similarity + 30% source hierarchy
   private semanticWeight: number = 0.70;
+
+  // 🎯 Article Query Metadata (from Python service)
+  // Stores the last search's article query info for chat interface
+  private lastArticleQuery: {
+    detected: boolean;
+    law_code?: string;
+    article_number?: string;
+    exact_match_found?: boolean;
+    exact_match_count?: number;
+    wrong_match_count?: number;
+    filter_action?: string;
+  } | null = null;
   private hierarchyWeight: number = 0.30;
 
   // Python semantic search settings
@@ -107,6 +119,21 @@ export class SemanticSearchService {
     console.log('[SemanticSearch] Force refreshing source table weights...');
     this.lastWeightsRefresh = 0; // Force refresh
     await this.loadSourceTableWeights();
+  }
+
+  /**
+   * Get the article query metadata from the last search
+   * Used by chat interface to show warnings when target article not found
+   */
+  getLastArticleQuery(): typeof this.lastArticleQuery {
+    return this.lastArticleQuery;
+  }
+
+  /**
+   * Clear the article query metadata (call before new unrelated search)
+   */
+  clearArticleQuery(): void {
+    this.lastArticleQuery = null;
   }
 
   /**
@@ -1134,6 +1161,25 @@ export class SemanticSearchService {
             limit,
             useCache: true
           });
+
+          // 🎯 Store article query metadata from Python service
+          // This is used by chat interface to show warnings when target article not found
+          if (pythonResult.article_query) {
+            this.lastArticleQuery = {
+              detected: pythonResult.article_query.detected,
+              law_code: pythonResult.article_query.law_code,
+              article_number: pythonResult.article_query.article_number,
+              exact_match_found: pythonResult.article_query.exact_match_found,
+              exact_match_count: pythonResult.article_query.exact_match_count,
+              wrong_match_count: pythonResult.article_query.wrong_match_count,
+              filter_action: pythonResult.article_query.filter_action
+            };
+            if (this.lastArticleQuery.detected) {
+              console.log(`[SemanticSearch] 🎯 Article anchoring: ${this.lastArticleQuery.law_code} Madde ${this.lastArticleQuery.article_number}, exact_match=${this.lastArticleQuery.exact_match_found}`);
+            }
+          } else {
+            this.lastArticleQuery = null;
+          }
 
           if (pythonResult.success && pythonResult.results.length > 0) {
             const elapsedMs = Date.now() - startTime;
