@@ -2881,8 +2881,28 @@ FORMAT:
       // FIX: Ensure proper markdown formatting and remove hallucinated citations
       finalResponse = this.fixMarkdownAndCitations(finalResponse, limitedSources);
 
+      // 🔍 DEBUG v12: Log response BEFORE sanitizer to diagnose date extraction issues
+      // Looking for "24" or "yirmidördüncü" in raw model output
+      const beforeSanitizer = finalResponse;
+      const has24Before = /24|yirmidört/i.test(beforeSanitizer);
+      if (message.toLowerCase().includes('kaç') || message.toLowerCase().includes('deadline') || message.toLowerCase().includes('beyanname')) {
+        console.log(`[DEBUG-v12] BEFORE SANITIZER - contains 24/yirmidört: ${has24Before}`);
+        console.log(`[DEBUG-v12] Raw excerpt (first 500 chars): ${beforeSanitizer.substring(0, 500)}`);
+      }
+
       // 🛡️ PROSEDÜR CLAIM SANITIZER v9: critical claims verified in ALL sentences
       finalResponse = this.sanitizeProsedurClaims(finalResponse, limitedSources, domainConfig.sanitizerConfig, domainConfig.lawCodes);
+
+      // 🔍 DEBUG v12: Log response AFTER sanitizer
+      const has24After = /24|yirmidört/i.test(finalResponse);
+      if (message.toLowerCase().includes('kaç') || message.toLowerCase().includes('deadline') || message.toLowerCase().includes('beyanname')) {
+        console.log(`[DEBUG-v12] AFTER SANITIZER - contains 24/yirmidört: ${has24After}`);
+        if (has24Before && !has24After) {
+          console.log(`[DEBUG-v12] ⚠️ SANITIZER REMOVED DATE! Check logs above for REMOVED entries`);
+        } else if (!has24Before) {
+          console.log(`[DEBUG-v12] ❌ MODEL NEVER WROTE DATE - issue is model behavior, not sanitizer`);
+        }
+      }
 
       if (isRefusalResponse) {
         // 🎯 REFUSAL TYPE DETECTION: Gate-based vs Prompt-based
