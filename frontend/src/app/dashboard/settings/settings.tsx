@@ -2656,6 +2656,11 @@ function RAGSettings() {
         suggestionQuestions: tempChatbotConfig?.chatbot?.suggestionQuestions,
         enableSuggestions: tempChatbotConfig?.chatbot?.enableSuggestions,
         autoGenerateSuggestions: tempChatbotConfig?.chatbot?.autoGenerateSuggestions,
+        // Suggestion cards settings
+        maxSuggestionCards: tempChatbotConfig?.chatbot?.maxSuggestionCards ?? 4,
+        customSuggestions: tempChatbotConfig?.chatbot?.customSuggestions || '',
+        // Follow-up questions
+        maxFollowUpQuestions: tempChatbotConfig?.chatbot?.maxFollowUpQuestions ?? 3,
         maxResponseLength: tempChatbotConfig?.chatbot?.maxResponseLength,
         maxQuestionLength: tempChatbotConfig?.chatbot?.maxQuestionLength,
         questionTemplate: tempChatbotConfig?.chatbot?.questionTemplate,
@@ -2950,6 +2955,7 @@ function RAGSettings() {
                     onCheckedChange={(checked) => updateRAGSetting('enableSourceQuestionGeneration', checked)}
                   />
                 </div>
+
               </div>
             </div>
 

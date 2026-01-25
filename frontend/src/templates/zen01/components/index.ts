@@ -10,3 +10,4 @@ export { ZenInput } from './ZenInput';
 export { SchemaRenderer } from './SchemaRenderer';
 export { SlashCommandAutocomplete } from './SlashCommandAutocomplete';
 export { TranslationBadge } from './TranslationBadge';
+export { ZenHistoryPanel } from './ZenHistoryPanel';

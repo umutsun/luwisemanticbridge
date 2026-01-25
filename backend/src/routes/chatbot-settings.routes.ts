@@ -95,7 +95,10 @@ router.get('/settings', async (req: Request, res: Response) => {
       enableSuggestions: chatbotData.enableSuggestions !== undefined ? chatbotData.enableSuggestions : true,
       // Suggestion Cards count (1-10)
       maxSuggestionCards: chatbotData.maxSuggestionCards || 4,
+      customSuggestions: chatbotData.customSuggestions || '',
       autoGenerateSuggestions: chatbotData.autoGenerateSuggestions !== undefined ? chatbotData.autoGenerateSuggestions : true,
+      // Follow-up questions
+      maxFollowUpQuestions: chatbotData.maxFollowUpQuestions || 3,
       maxResponseLength: chatbotData.maxResponseLength || 1000,
       maxQuestionLength: chatbotData.maxQuestionLength || 500,
       questionTemplate: chatbotData.questionTemplate || 'Yaptığımız konuşmaya göre, şunu da merak ediyor olabilirsiniz: {question}',

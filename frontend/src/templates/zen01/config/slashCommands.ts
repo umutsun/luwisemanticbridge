@@ -6,12 +6,13 @@
 import type { SlashCommand } from '../types';
 
 export const SLASH_COMMANDS: SlashCommand[] = [
+  // Translation commands
   {
     id: 'translate-en',
     trigger: '/en',
     label: 'English',
     description: 'Translate to English',
-    icon: '\uD83C\uDDEC\uD83C\uDDE7',
+    icon: '🇬🇧',
     category: 'translation',
     targetLanguage: 'en'
   },
@@ -20,7 +21,7 @@ export const SLASH_COMMANDS: SlashCommand[] = [
     trigger: '/tr',
     label: 'Türkçe',
     description: 'Türkçe\'ye çevir',
-    icon: '\uD83C\uDDF9\uD83C\uDDF7',
+    icon: '🇹🇷',
     category: 'translation',
     targetLanguage: 'tr'
   },
@@ -29,9 +30,26 @@ export const SLASH_COMMANDS: SlashCommand[] = [
     trigger: '/de',
     label: 'Deutsch',
     description: 'Auf Deutsch übersetzen',
-    icon: '\uD83C\uDDE9\uD83C\uDDEA',
+    icon: '🇩🇪',
     category: 'translation',
     targetLanguage: 'de'
+  },
+  // Navigation commands
+  {
+    id: 'history',
+    trigger: '/history',
+    label: 'Geçmiş',
+    description: 'Konuşma geçmişini göster',
+    icon: '📜',
+    category: 'navigation'
+  },
+  {
+    id: 'new',
+    trigger: '/new',
+    label: 'Yeni',
+    description: 'Yeni konuşma başlat',
+    icon: '✨',
+    category: 'navigation'
   }
 ];
 

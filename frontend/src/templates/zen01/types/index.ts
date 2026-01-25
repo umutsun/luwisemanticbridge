@@ -215,11 +215,11 @@ export interface ZenMessageProps {
 // Slash Command Types
 export interface SlashCommand {
   id: string;
-  trigger: string;       // '/en', '/tr', '/de'
-  label: string;         // 'English', 'Türkçe'
-  description: string;   // 'Translate to English'
-  icon: string;          // Flag emoji
-  category: 'translation' | 'utility';
+  trigger: string;       // '/en', '/tr', '/de', '/history'
+  label: string;         // 'English', 'Türkçe', 'Geçmiş'
+  description: string;   // 'Translate to English', 'Konuşma geçmişini göster'
+  icon: string;          // Flag emoji or icon
+  category: 'translation' | 'navigation' | 'utility';
   targetLanguage?: string;
 }
 

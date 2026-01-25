@@ -3,4 +3,5 @@
  */
 
 export { useZenTheme } from './useZenTheme';
-export type { } from '../types';
+export { useConversationHistory } from './useConversationHistory';
+export type { Conversation, ConversationFull, ConversationMessage } from './useConversationHistory';

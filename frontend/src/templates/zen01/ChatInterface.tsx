@@ -20,8 +20,8 @@ import './styles/zen01.css';
 import { useTheme } from '@/hooks/useTheme';
 
 // Import Zen01 components
-import { ZenHeader, ZenWelcome, ZenMessage, ZenInput } from './components';
-import { useZenTheme } from './hooks';
+import { ZenHeader, ZenWelcome, ZenMessage, ZenInput, ZenHistoryPanel } from './components';
+import { useZenTheme, useConversationHistory } from './hooks';
 import type {
   ZenMessage as ZenMessageType,
   ZenChatbotSettings,
@@ -165,6 +165,16 @@ export default function ChatInterface() {
   // Translation state - tracks translations per message
   const [messageTranslations, setMessageTranslations] = useState<Map<string, MessageTranslation>>(new Map());
   const [isTranslating, setIsTranslating] = useState(false);
+
+  // History panel state
+  const [isHistoryOpen, setIsHistoryOpen] = useState(false);
+  const {
+    conversations,
+    isLoading: isHistoryLoading,
+    fetchConversations,
+    loadConversation,
+    deleteConversation
+  } = useConversationHistory();
 
   // Toast for notifications
   const { toast } = useToast();
@@ -823,8 +833,21 @@ export default function ChatInterface() {
     [chatbotSettings.enableSourceQuestionGeneration, inputText, setInputText]
   );
 
-  // Handle slash commands (translation, etc.)
+  // Handle slash commands (translation, navigation, etc.)
   const handleSlashCommand = async (command: SlashCommand) => {
+    console.log('[SlashCommand] Triggered:', command);
+
+    // Handle navigation commands
+    if (command.category === 'navigation') {
+      if (command.id === 'history') {
+        await fetchConversations();
+        setIsHistoryOpen(true);
+      } else if (command.id === 'new') {
+        handleNewConversation();
+      }
+      return;
+    }
+
     if (command.category === 'translation') {
       // Find last assistant message
       const lastAssistantMsg = [...messages].reverse().find(m => m.role === 'assistant');
@@ -833,6 +856,16 @@ export default function ChatInterface() {
         toast({
           title: 'Çeviri yapılamadı',
           description: 'Çevrilecek mesaj bulunamadı',
+          variant: 'destructive'
+        });
+        return;
+      }
+
+      // Check for token
+      if (!token) {
+        toast({
+          title: 'Çeviri yapılamadı',
+          description: 'Oturum bulunamadı, lütfen tekrar giriş yapın',
           variant: 'destructive'
         });
         return;
@@ -856,8 +889,10 @@ export default function ChatInterface() {
       // Call translation API
       try {
         setIsTranslating(true);
+        const translateUrl = getEndpoint('chat', 'translate');
+        console.log('[SlashCommand] Calling translate API:', translateUrl);
 
-        const response = await fetch(getEndpoint('chat', 'translate'), {
+        const response = await fetch(translateUrl, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -869,11 +904,16 @@ export default function ChatInterface() {
           })
         });
 
+        console.log('[SlashCommand] Response status:', response.status);
+
         if (!response.ok) {
-          throw new Error('Translation failed');
+          const errorText = await response.text();
+          console.error('[SlashCommand] Translation error:', errorText);
+          throw new Error(`Translation failed: ${response.status}`);
         }
 
         const data = await response.json();
+        console.log('[SlashCommand] Translation success:', data);
 
         // Store translation
         setMessageTranslations(prev => {
@@ -920,6 +960,81 @@ export default function ChatInterface() {
     }
   };
 
+  // Start a new conversation
+  const handleNewConversation = () => {
+    setMessages([]);
+    setMessageTranslations(new Map());
+    setConversationId(undefined);
+    setShowSuggestions(chatbotSettings.enableSuggestions);
+    setIsHistoryOpen(false);
+
+    // Refresh suggestions
+    if (typeof window !== 'undefined') {
+      fetchSuggestedQuestions().then(questions => {
+        setSuggestedQuestions(questions);
+      });
+    }
+
+    toast({
+      title: 'Yeni konuşma',
+      description: 'Yeni bir konuşma başlatıldı'
+    });
+  };
+
+  // Select and load a conversation from history
+  const handleSelectConversation = async (id: string) => {
+    const conversation = await loadConversation(id);
+    if (conversation) {
+      // Transform database messages to ZenMessage format
+      const transformedMessages: ZenMessageType[] = conversation.messages.map(msg => ({
+        id: msg.id,
+        role: msg.role as 'user' | 'assistant',
+        content: msg.content,
+        timestamp: new Date(msg.created_at),
+        sources: (msg.sources || []) as ZenSource[],
+        isFromSource: false
+      }));
+
+      setMessages(transformedMessages);
+      setConversationId(id);
+      setMessageTranslations(new Map());
+      setShowSuggestions(false);
+      setIsHistoryOpen(false);
+
+      toast({
+        title: 'Konuşma yüklendi',
+        description: `${conversation.title || 'Adsız konuşma'}`
+      });
+    } else {
+      toast({
+        title: 'Yükleme başarısız',
+        description: 'Konuşma yüklenemedi',
+        variant: 'destructive'
+      });
+    }
+  };
+
+  // Delete a conversation from history
+  const handleDeleteConversation = async (id: string) => {
+    const success = await deleteConversation(id);
+    if (success) {
+      // If we deleted the current conversation, start fresh
+      if (conversationId === id) {
+        handleNewConversation();
+      }
+      toast({
+        title: 'Konuşma silindi',
+        description: 'Konuşma başarıyla silindi'
+      });
+    } else {
+      toast({
+        title: 'Silme başarısız',
+        description: 'Konuşma silinemedi',
+        variant: 'destructive'
+      });
+    }
+  };
+
   const clearChat = () => {
     setMessages([]);
     setMessageTranslations(new Map()); // Clear translations too
@@ -944,6 +1059,18 @@ export default function ChatInterface() {
       >
         {/* Particles Background */}
         <ParticlesBackground variant={isDark ? 'dark' : 'light'} />
+
+        {/* History Panel */}
+        <ZenHistoryPanel
+          isOpen={isHistoryOpen}
+          onClose={() => setIsHistoryOpen(false)}
+          conversations={conversations}
+          isLoading={isHistoryLoading}
+          currentConversationId={conversationId}
+          onSelectConversation={handleSelectConversation}
+          onNewConversation={handleNewConversation}
+          onDeleteConversation={handleDeleteConversation}
+        />
 
         {/* Header */}
         <ZenHeader
