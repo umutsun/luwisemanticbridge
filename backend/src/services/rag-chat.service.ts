@@ -2294,10 +2294,11 @@ FORMAT:
       // Clean response content - remove section headings that LLM might add despite instructions
       response.content = this.stripSectionHeadings(response.content, settingsMap);
 
-      // 🕐 v12.4 FIX: DEADLINE INTENT HANDLER (AGGRESSIVE)
+      // 🕐 v12.7 FIX: DEADLINE INTENT HANDLER (AGGRESSIVE)
       // For deadline questions, ALWAYS check if response has correct deadline
       const postProcDeadlineIntent = this.detectDeadlineIntent(message);
-      console.log(`[v12.4-DEBUG] Deadline intent check: query="${message.substring(0, 50)}", intent=${postProcDeadlineIntent}`);
+      let deadlineFixApplied = false; // Track if we applied deadline fix to skip SHORT_RESPONSE
+      console.log(`[v12.7-DEBUG] Deadline intent check: query="${message.substring(0, 50)}", intent=${postProcDeadlineIntent}`);
 
       if (postProcDeadlineIntent) {
         // Check if response already has the correct deadline
@@ -2306,20 +2307,25 @@ FORMAT:
                                     (postProcDeadlineIntent === 'beyanname' && /yirmidördüncü/i.test(response.content)) ||
                                     (postProcDeadlineIntent === 'odeme' && /yirmialtıncı/i.test(response.content));
 
-        console.log(`[v12.4-DEBUG] Expected day=${expectedDay}, hasCorrectDeadline=${hasCorrectDeadline}`);
+        console.log(`[v12.7-DEBUG] Expected day=${expectedDay}, hasCorrectDeadline=${hasCorrectDeadline}`);
 
         if (!hasCorrectDeadline) {
           // Force extract deadline from sources
           const extractedDeadline = this.extractDeadlineFromSources(searchResults, postProcDeadlineIntent);
-          console.log(`[v12.4-DEBUG] Extracted deadline:`, extractedDeadline);
+          console.log(`[v12.7-DEBUG] Extracted deadline:`, extractedDeadline);
 
           if (extractedDeadline) {
             const forcedAnswer = this.generateDeadlineAnswer(extractedDeadline, postProcDeadlineIntent, responseLanguage);
             if (forcedAnswer) {
               console.log(`🛡️ DEADLINE_FORCE_FIX: Replacing response with correct deadline (day=${extractedDeadline.day})`);
               response.content = forcedAnswer;
+              deadlineFixApplied = true;
             }
           }
+        } else {
+          // Response already has correct deadline, mark it to skip enrichment
+          deadlineFixApplied = true;
+          console.log(`[v12.7-DEBUG] Response already has correct deadline ${expectedDay}, skipping enrichment`);
         }
       }
 
@@ -2479,9 +2485,10 @@ FORMAT:
 
       // 🛡️ P1: MINIMUM RESPONSE LENGTH VALIDATOR
       // Ensure responses are not too short (excluding greetings and simple acknowledgments)
+      // v12.7: Skip enrichment for deadline responses - they're intentionally concise
       const minResponseLength = 100; // Minimum characters for substantive responses
       const isSubstantiveQuery = message.length > 20 && !/(merhaba|selam|teşekkür|sağol)/i.test(message);
-      if (isSubstantiveQuery && response.content.length < minResponseLength && searchResults.length > 0) {
+      if (isSubstantiveQuery && response.content.length < minResponseLength && searchResults.length > 0 && !deadlineFixApplied) {
         console.log(`🛡️ SHORT_RESPONSE: Response too short (${response.content.length} chars), attempting to enrich`);
         // Try to add context from top source
         const topSource = searchResults[0];
@@ -2496,6 +2503,8 @@ FORMAT:
             console.log(`🛡️ SHORT_RESPONSE: Enriched to ${response.content.length} chars`);
           }
         }
+      } else if (deadlineFixApplied) {
+        console.log(`[v12.7-DEBUG] SHORT_RESPONSE skipped for deadline query (deadlineFixApplied=true)`);
       }
 
       // 🛡️ v12.6: ARTICLE FORMAT VALIDATOR for scenario queries
@@ -4328,33 +4337,57 @@ FORMAT:
   }
 
   /**
-   * 🛡️ v12.6: Check if query is a scenario/case question (Murat senaryoları)
+   * 🛡️ v12.7: Check if query is a scenario/case question (Murat senaryoları)
    * Scenarios require full article format with multiple sections
    */
   private isScenarioQuery(query: string): boolean {
     const queryLower = query.toLowerCase();
 
-    // Length check - scenarios are usually long
-    if (query.length < 100) return false;
+    // v12.7: Lowered threshold from 100 to 80 for MURAT-2/3 scenarios
+    if (query.length < 80) return false;
 
-    // Scenario indicators
+    // Scenario indicators - comprehensive patterns for complex tax questions
     const scenarioPatterns = [
+      // Company/entity references
       /firmam[ıi]z/i,
       /şirketimiz/i,
       /müşterimiz/i,
+      /mükellef/i,
+
+      // Question patterns
       /durumu nedir/i,
       /ne yapmal[ıi]/i,
       /nas[ıi]l\s+(?:değerlendiri|yorumlan)/i,
+      /nas[ıi]l\s+hareket/i,
+
+      // Legal/tax context
       /vergisel\s+(?:durum|sonuç)/i,
       /mevzuat\s+açısından/i,
       /hukuki\s+(?:durum|değerlendirme)/i,
       /yapılması\s+gereken/i,
       /uygulama\s+(?:nasıl|şekli)/i,
+
+      // v12.7: MURAT-2/3 patterns
+      /uzlaşma/i,
+      /indirim\s+(?:talep|iste|hakkı)/i,
+      /izaha\s+davet/i,
+      /ceza\s+(?:indirim|kalkma|affı)/i,
+      /pişmanlık/i,
+      /vergi\s+(?:ziyaı|kaçakçılığı|suçu)/i,
+      /ödeme\s+emri/i,
+      /haciz/i,
+
+      // Generic scenario markers
       /senaryo/i,
-      /örnek\s+olay/i
+      /örnek\s+olay/i,
+      /durum[u]?\s+şu/i,
+      /şöyle\s+bir\s+durum/i
     ];
 
-    return scenarioPatterns.some(pattern => pattern.test(queryLower));
+    const isScenario = scenarioPatterns.some(pattern => pattern.test(queryLower));
+    console.log(`[v12.7-DEBUG] isScenarioQuery: query.length=${query.length}, isScenario=${isScenario}`);
+
+    return isScenario;
   }
 
   /**
