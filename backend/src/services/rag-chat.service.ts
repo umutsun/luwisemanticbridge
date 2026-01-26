@@ -1562,6 +1562,104 @@ ${questionLabel}: ${message}`;
         };
       });
 
+      // 🎯 P0: INTENT-BASED ARTICLE BOOST
+      // Detect deadline intent and boost relevant articles (m.41 for beyanname, m.46 for ödeme)
+      const deadlineIntent = this.detectDeadlineIntent(searchQuery);
+      if (deadlineIntent) {
+        const intentArticles: Record<string, string[]> = {
+          'beyanname': ['madde 41', 'm.41', 'm. 41', 'madde41'],
+          'odeme': ['madde 46', 'm.46', 'm. 46', 'madde46']
+        };
+        const targetArticles = intentArticles[deadlineIntent] || [];
+
+        allResults = allResults.map(result => {
+          const title = (result.title || '').toLowerCase();
+          const content = (result.content || result.text || result.excerpt || '').toLowerCase();
+          const currentScore = result.score || 0;
+
+          // Check if result contains the target article
+          const hasTargetArticle = targetArticles.some(art =>
+            title.includes(art) || content.includes(art)
+          );
+
+          if (hasTargetArticle) {
+            const intentBoost = 25; // Strong boost for intent-matched articles
+            const newScore = Math.min(currentScore + intentBoost, 100);
+            console.log(`🎯 INTENT_BOOST (${deadlineIntent}): "${title.substring(0, 40)}..." +${intentBoost}% (${currentScore.toFixed(1)} -> ${newScore.toFixed(1)})`);
+            return {
+              ...result,
+              score: newScore,
+              _intentBoost: intentBoost,
+              _intentMatched: deadlineIntent
+            };
+          }
+
+          return result;
+        });
+
+        // Re-sort after intent boost
+        allResults.sort((a, b) => (b.score || 0) - (a.score || 0));
+        console.log(`🎯 INTENT_BOOST: Applied ${deadlineIntent} boost, top result now: "${(allResults[0]?.title || '').substring(0, 50)}..."`);
+      }
+
+      // 🛡️ P0: WRONG ARTICLE PREVENTION
+      // If user asked for a specific article (e.g., "KDVK m.46") but exact match not found,
+      // demote results that contain DIFFERENT article numbers from the same law
+      if (articleQuery?.detected && !articleQuery.exact_match_found) {
+        const targetLaw = (articleQuery.law_code || '').toLowerCase();
+        const targetArticle = articleQuery.article_number;
+
+        console.log(`🛡️ WRONG_ARTICLE_PREVENTION: Target=${targetLaw} m.${targetArticle}, exact_match=false`);
+
+        allResults = allResults.map(result => {
+          const title = (result.title || '').toLowerCase();
+          const content = (result.content || result.text || result.excerpt || '').toLowerCase();
+          const combined = title + ' ' + content;
+
+          // Check if this result mentions the same law but different article
+          const lawPatterns: Record<string, RegExp> = {
+            'kdvk': /kdvk|katma\s*değer/i,
+            'vuk': /vuk|vergi\s*usul/i,
+            'gvk': /gvk|gelir\s*vergisi/i,
+            'kvk': /kvk|kurumlar\s*vergisi/i
+          };
+
+          const lawPattern = lawPatterns[targetLaw];
+          if (!lawPattern) return result; // Unknown law, don't filter
+
+          const mentionsTargetLaw = lawPattern.test(combined);
+          if (!mentionsTargetLaw) return result; // Different law, keep as-is
+
+          // Extract article numbers from this result
+          const articleMatches = combined.match(/madde\s*(\d+)|m\.?\s*(\d+)/gi) || [];
+          const mentionedArticles = articleMatches.map(m => {
+            const num = m.match(/\d+/);
+            return num ? parseInt(num[0]) : 0;
+          }).filter(n => n > 0);
+
+          // If result mentions different article from same law, demote it heavily
+          const hasWrongArticle = mentionedArticles.length > 0 &&
+                                   !mentionedArticles.includes(targetArticle);
+
+          if (hasWrongArticle) {
+            const penalty = -30; // Heavy penalty for wrong article
+            const currentScore = result.score || 0;
+            const newScore = Math.max(currentScore + penalty, 0);
+            console.log(`🛡️ WRONG_ARTICLE_PENALTY: "${title.substring(0, 40)}..." has m.${mentionedArticles.join(',')} instead of m.${targetArticle}, ${penalty}%`);
+            return {
+              ...result,
+              score: newScore,
+              _wrongArticlePenalty: penalty
+            };
+          }
+
+          return result;
+        });
+
+        // Re-sort after penalty
+        allResults.sort((a, b) => (b.score || 0) - (a.score || 0));
+      }
+
       // Sort by similarity score with optional source type priority
       const sourceTypePriorityEnabled = settingsMap.get('ragSettings.sourceTypePriorityEnabled') !== 'false';
       let sourceTypePriority: string[] = [];
@@ -2204,6 +2302,38 @@ FORMAT:
       // 🛡️ v12 FIX: Contradiction Protection - detect false "no date" claims
       // If LLM says "no date in sources" but sources actually have deadline info, force correction
       response.content = this.fixDateContradiction(response.content, searchResults, message, responseLanguage);
+
+      // 🛡️ P0: ARTICLE NOT FOUND RESPONSE
+      // If user asked for specific article (e.g., VUK 376) but it's not in DB, give explicit response
+      if (articleQuery?.detected && !articleQuery.exact_match_found && articleQuery.exact_match_count === 0) {
+        const notFoundResponse = this.generateArticleNotFoundResponse(
+          articleQuery.law_code,
+          articleQuery.article_number,
+          responseLanguage
+        );
+        if (notFoundResponse && response.content.length < 200) {
+          console.log(`🛡️ ARTICLE_NOT_FOUND: ${articleQuery.law_code} m.${articleQuery.article_number} not in DB, using fallback response`);
+          response.content = notFoundResponse;
+        }
+      }
+
+      // 🛡️ P1: MINIMUM RESPONSE LENGTH VALIDATOR
+      // Ensure responses are not too short (excluding greetings and simple acknowledgments)
+      const minResponseLength = 100; // Minimum characters for substantive responses
+      const isSubstantiveQuery = message.length > 20 && !/(merhaba|selam|teşekkür|sağol)/i.test(message);
+      if (isSubstantiveQuery && response.content.length < minResponseLength && searchResults.length > 0) {
+        console.log(`🛡️ SHORT_RESPONSE: Response too short (${response.content.length} chars), attempting to enrich`);
+        // Try to add context from top source
+        const topSource = searchResults[0];
+        if (topSource) {
+          const sourceExcerpt = (topSource.content || topSource.excerpt || '').substring(0, 300);
+          const enrichedResponse = `${response.content}\n\nİlgili kaynak bilgisi: ${sourceExcerpt}... [1]`;
+          if (enrichedResponse.length > response.content.length) {
+            response.content = enrichedResponse;
+            console.log(`🛡️ SHORT_RESPONSE: Enriched to ${response.content.length} chars`);
+          }
+        }
+      }
 
       // Strip citation markers when disableCitationText is enabled AND strict mode is OFF
       // In strict mode, we NEED the [Kaynak X] references for source verification
@@ -3900,6 +4030,48 @@ FORMAT:
       28: 'i'
     };
     return suffixes[day] || 'i';
+  }
+
+  /**
+   * 🛡️ P1: Generate "Article Not Found" Response
+   * When user asks for a specific article that doesn't exist in the database
+   */
+  private generateArticleNotFoundResponse(
+    lawCode: string,
+    articleNumber: number,
+    language: string = 'tr'
+  ): string {
+    const lawNames: Record<string, string> = {
+      'VUK': 'Vergi Usul Kanunu',
+      'GVK': 'Gelir Vergisi Kanunu',
+      'KDVK': 'Katma Değer Vergisi Kanunu',
+      'KVK': 'Kurumlar Vergisi Kanunu',
+      'AATUHK': 'Amme Alacaklarının Tahsil Usulü Hakkında Kanun'
+    };
+
+    const lawName = lawNames[lawCode?.toUpperCase()] || lawCode;
+
+    if (language === 'tr') {
+      return `⚠️ **${lawCode} Madde ${articleNumber} Bulunamadı**
+
+Aradığınız **${lawName} Madde ${articleNumber}** metnine veritabanımızda ulaşılamadı.
+
+**Olası nedenler:**
+- Bu madde numarası mevcut olmayabilir
+- Madde numarası yanlış girilmiş olabilir
+- Bu madde henüz veritabanımıza eklenmemiş olabilir
+
+**Öneriler:**
+- Madde numarasını kontrol edin
+- Resmi Gazete veya mevzuat.gov.tr üzerinden kontrol edebilirsiniz
+- Farklı bir madde numarası ile tekrar deneyebilirsiniz`;
+    } else {
+      return `⚠️ **${lawCode} Article ${articleNumber} Not Found**
+
+The requested **${lawName} Article ${articleNumber}** could not be found in our database.
+
+Please verify the article number or check official sources.`;
+    }
   }
 
   /**
