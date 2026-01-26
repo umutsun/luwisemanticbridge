@@ -2294,13 +2294,37 @@ FORMAT:
       // Clean response content - remove section headings that LLM might add despite instructions
       response.content = this.stripSectionHeadings(response.content, settingsMap);
 
-      // 🕐 v12 FIX: Deadline Intent Handler - fix header-only responses for deadline questions
-      // If response is mostly header (Konu:) with little content, and sources have deadline info,
-      // generate a direct fallback answer
-      response.content = this.fixDeadlineHeaderOnly(response.content, searchResults, message, responseLanguage);
+      // 🕐 v12.4 FIX: DEADLINE INTENT HANDLER (AGGRESSIVE)
+      // For deadline questions, ALWAYS check if response has correct deadline
+      const postProcDeadlineIntent = this.detectDeadlineIntent(message);
+      console.log(`[v12.4-DEBUG] Deadline intent check: query="${message.substring(0, 50)}", intent=${postProcDeadlineIntent}`);
 
-      // 🛡️ v12 FIX: Contradiction Protection - detect false "no date" claims
-      // If LLM says "no date in sources" but sources actually have deadline info, force correction
+      if (postProcDeadlineIntent) {
+        // Check if response already has the correct deadline
+        const expectedDay = postProcDeadlineIntent === 'odeme' ? 26 : 24;
+        const hasCorrectDeadline = response.content.includes(String(expectedDay)) ||
+                                    (postProcDeadlineIntent === 'beyanname' && /yirmidördüncü/i.test(response.content)) ||
+                                    (postProcDeadlineIntent === 'odeme' && /yirmialtıncı/i.test(response.content));
+
+        console.log(`[v12.4-DEBUG] Expected day=${expectedDay}, hasCorrectDeadline=${hasCorrectDeadline}`);
+
+        if (!hasCorrectDeadline) {
+          // Force extract deadline from sources
+          const extractedDeadline = this.extractDeadlineFromSources(searchResults, postProcDeadlineIntent);
+          console.log(`[v12.4-DEBUG] Extracted deadline:`, extractedDeadline);
+
+          if (extractedDeadline) {
+            const forcedAnswer = this.generateDeadlineAnswer(extractedDeadline, postProcDeadlineIntent, responseLanguage);
+            if (forcedAnswer) {
+              console.log(`🛡️ DEADLINE_FORCE_FIX: Replacing response with correct deadline (day=${extractedDeadline.day})`);
+              response.content = forcedAnswer;
+            }
+          }
+        }
+      }
+
+      // Legacy fixes (still useful as fallback)
+      response.content = this.fixDeadlineHeaderOnly(response.content, searchResults, message, responseLanguage);
       response.content = this.fixDateContradiction(response.content, searchResults, message, responseLanguage);
 
       // 🛡️ P0: ARTICLE NOT FOUND RESPONSE
@@ -2314,6 +2338,50 @@ FORMAT:
         if (notFoundResponse && response.content.length < 200) {
           console.log(`🛡️ ARTICLE_NOT_FOUND: ${articleQuery.law_code} m.${articleQuery.article_number} not in DB, using fallback response`);
           response.content = notFoundResponse;
+        }
+      }
+
+      // 🛡️ v12.4: "BULUNAMADI" FILLER DETECTION
+      // LLM often says "kaynaklarda bulunamadı" even when sources HAVE the content!
+      // Detect this and replace with actual source content
+      const fillerPatterns = [
+        /kaynak(lar)?da\s+(buluna|yer\s+al)ma(dı|maktadır)/gi,
+        /kanun\s+metni.*buluna?ma(dı|maktadır)/gi,
+        /içeriği\s+hakkında.*bilgi\s+verilememektedir/gi,
+        /spesifik\s+içeriği.*sağlanamamaktadır/gi,
+        /doğrudan\s+bir\s+açıklama\s+yapmam\s+mümkün\s+değil/gi,
+        /kesin\s+bilgi\s+sağlanamamaktadır/gi
+      ];
+
+      const hasFillerContent = fillerPatterns.some(pattern => {
+        pattern.lastIndex = 0;
+        return pattern.test(response.content);
+      });
+
+      if (hasFillerContent && searchResults.length > 0) {
+        console.log(`🛡️ FILLER_RESPONSE_FIX: Detected "bulunamadı" filler, replacing with source content`);
+
+        // Check if this is an article query
+        const articleMatch = message.match(/(vuk|gvk|kdvk|kvk|aatuhk)\s*(?:madde\s*)?(\d+)/i);
+        const topSource = searchResults[0];
+
+        if (topSource) {
+          const sourceContent = (topSource.content || topSource.excerpt || '')
+            .replace(/<[^>]*>/g, '')
+            .replace(/\s+/g, ' ')
+            .trim()
+            .substring(0, 800);
+
+          if (sourceContent.length > 100) {
+            if (articleMatch) {
+              const lawCode = articleMatch[1].toUpperCase();
+              const articleNum = articleMatch[2];
+              response.content = `**${lawCode} Madde ${articleNum}**\n\n${sourceContent}...\n\n[1]`;
+            } else {
+              response.content = `${sourceContent}...\n\n[1]`;
+            }
+            console.log(`🛡️ FILLER_RESPONSE_FIX: Replaced filler with ${response.content.length} chars of actual content`);
+          }
         }
       }
 
