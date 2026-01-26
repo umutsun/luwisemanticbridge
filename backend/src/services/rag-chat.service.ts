@@ -2334,7 +2334,41 @@ Bu soru karmaşık bir vergisel senaryo içermektedir. Yanıtını AŞAĞIDAKİ 
       let deadlineHardcodedApplied = false; // v12.14: Track hardcoded fallback to skip sanitizer
       console.log(`[v12.8-DEBUG] Deadline intent check: query="${message.substring(0, 50)}", intent=${postProcDeadlineIntent}`);
 
-      if (postProcDeadlineIntent) {
+      // v12.15: Check for WRONG DATE verification questions FIRST
+      // E.g., "KDV beyannamesi 26'sına kadar verilir mi?" → should correct to 24
+      const wrongDateCheck = this.detectWrongDateVerification(message);
+      if (wrongDateCheck) {
+        console.log(`🛡️ [v12.15] WRONG_DATE_CORRECTION: User mentioned ${wrongDateCheck.wrongDate}, correct is ${wrongDateCheck.correctDate}`);
+
+        const { intent, wrongDate, correctDate } = wrongDateCheck;
+        const correctWord = correctDate === 24 ? 'yirmidördüncü' : correctDate === 26 ? 'yirmialtıncı' : String(correctDate);
+        const article = intent === 'beyanname' ? 'KDVK madde 41' : 'KDVK madde 46';
+        const subject = intent === 'beyanname' ? 'KDV beyannamesi' : 'KDV ödemesi';
+        const action = intent === 'beyanname' ? 'verilir' : 'yapılır';
+
+        response.content = `Hayır, ${subject} ayın ${wrongDate}'${this.getSuffix(wrongDate)} kadar değil, **${correctDate}'${this.getSuffix(correctDate)} (${correctWord} günü) akşamına kadar** ${action} (${article}) [1].`;
+
+        deadlineFixApplied = true;
+        deadlineHardcodedApplied = true;
+      }
+      // v12.15: Handle AMBIGUOUS questions by providing BOTH deadlines
+      else if (postProcDeadlineIntent === 'ambiguous') {
+        console.log(`🛡️ [v12.15] AMBIGUOUS_HANDLER: Providing both beyanname and ödeme deadlines`);
+
+        // Generate response with both deadlines
+        response.content = `KDV'de iki farklı son tarih bulunmaktadır:
+
+**Beyanname (Bildirim):** KDV beyannamesi, vergilendirme dönemini takip eden ayın 24'ü (yirmidördüncü günü) akşamına kadar ilgili vergi dairesine verilmelidir (KDVK madde 41) [1].
+
+**Ödeme:** KDV, takip eden ayın 26'sı (yirmialtıncı günü) akşamına kadar ödenmelidir (KDVK madde 46) [1].
+
+Beyanname için mi yoksa ödeme için mi soruyorsunuz?`;
+
+        deadlineFixApplied = true;
+        deadlineHardcodedApplied = true; // Skip sanitizer for this response
+      }
+      // Handle specific beyanname or odeme intent
+      else if (postProcDeadlineIntent === 'beyanname' || postProcDeadlineIntent === 'odeme') {
         const expectedDay = postProcDeadlineIntent === 'odeme' ? 26 : 24;
 
         // v12.8: ALWAYS extract and apply deadline fix for deterministic responses
@@ -2372,11 +2406,14 @@ Bu soru karmaşık bir vergisel senaryo içermektedir. Yanıtını AŞAĞIDAKİ 
             const intent = this.DEADLINE_INTENTS[postProcDeadlineIntent];
             const deadlineStr = `takip eden ayın ${fallback.day}'${this.getSuffix(fallback.day)} (${fallback.word} günü) akşamına kadar`;
 
-            // v12.13 FIX: Add [1] citation to satisfy sanitizer (date claim needs citation)
+            // v12.15 FIX: Clear separation between article ref and citation to prevent m.41[1] → m.4[1] rendering issue
+            // Format: "... (KDVK madde 41) [1]." - using "madde" instead of "m." for clarity
+            const articleFull = fallback.article.replace('m.', 'madde '); // "KDVK m.41" → "KDVK madde 41"
+
             if (postProcDeadlineIntent === 'odeme') {
-              response.content = `${intent.subject}, ${deadlineStr} ${intent.action} (${fallback.article}) [1].`;
+              response.content = `${intent.subject}, ${deadlineStr} ${intent.action} (${articleFull}) [1].`;
             } else {
-              response.content = `${intent.subject}, vergilendirme dönemini ${deadlineStr} ilgili vergi dairesine ${intent.action} (${fallback.article}) [1].`;
+              response.content = `${intent.subject}, vergilendirme dönemini ${deadlineStr} ilgili vergi dairesine ${intent.action} (${articleFull}) [1].`;
             }
             console.log(`🛡️ DEADLINE_HARDCODED: Forced response with day=${fallback.day} (with citation)`);
             deadlineHardcodedApplied = true; // v12.14: Flag to skip sanitizer
@@ -4052,7 +4089,12 @@ Bu soru karmaşık bir vergisel senaryo içermektedir. Yanıtını AŞAĞIDAKİ 
       subject: 'KDV beyannamesi'
     },
     odeme: {
-      keywords: ['ödeme', 'ödenir', 'ödemesi', 'yatırılır', 'yatırma'],
+      // v12.15: Expanded keywords to catch more ödeme variants
+      keywords: [
+        'ödeme', 'ödenir', 'ödemesi', 'ödemesini', 'ödenmesi', 'öden',
+        'yatırılır', 'yatırma', 'yatırılma', 'yatır',
+        'ödeyeceğ', 'ödeye', 'ödeniyor', 'ödenmekte'
+      ],
       articles: ['madde 46', 'm.46', 'm. 46'],
       action: 'ödenmelidir',
       subject: 'KDV'
@@ -4121,32 +4163,141 @@ Bu soru karmaşık bir vergisel senaryo içermektedir. Yanıtını AŞAĞIDAKİ 
   }
 
   /**
-   * Detect deadline intent type from query
+   * v12.15: Detect verification questions with WRONG dates
+   * E.g., "KDV beyannamesi 26'sına kadar verilir mi?" → should correct to 24
+   * Returns the wrong date mentioned and the correct date for the intent
    */
-  private detectDeadlineIntent(query: string): 'beyanname' | 'odeme' | null {
+  private detectWrongDateVerification(query: string): {
+    intent: 'beyanname' | 'odeme';
+    wrongDate: number;
+    correctDate: number;
+  } | null {
+    const queryLower = query.toLowerCase();
+
+    // Check if it's a verification question (mi/mı/mu/mü at the end or "verilir mi", "ödenir mi")
+    const isVerificationQuestion = /\b(mi|mı|mu|mü)\b\s*\??$/i.test(query) ||
+                                   /(verilir|ödenir|yapılır|yatırılır)\s*(mi|mı|mu|mü)/i.test(query);
+
+    if (!isVerificationQuestion) return null;
+
+    // Check for beyanname context
+    const isBeyanname = /beyanname|beyan|bildirim|verilir/i.test(query);
+    const isOdeme = /ödeme|öde[nm]|yatır/i.test(query);
+
+    // Extract the date mentioned in the question
+    const dateMatch = query.match(/(\d+)[''']?\s*(ın|in|ün|un|sın|sin|sına|sine|ına|ine)/i) ||
+                      query.match(/(\d+)\s*gün/i);
+
+    if (!dateMatch) return null;
+
+    const mentionedDate = parseInt(dateMatch[1]);
+
+    // Determine the correct date based on intent
+    if (isBeyanname && !isOdeme) {
+      const correctDate = 24;
+      if (mentionedDate !== correctDate && [21, 26, 28].includes(mentionedDate)) {
+        return { intent: 'beyanname', wrongDate: mentionedDate, correctDate };
+      }
+    } else if (isOdeme && !isBeyanname) {
+      const correctDate = 26;
+      if (mentionedDate !== correctDate && [21, 24, 28].includes(mentionedDate)) {
+        return { intent: 'odeme', wrongDate: mentionedDate, correctDate };
+      }
+    }
+
+    return null;
+  }
+
+  /**
+   * Detect deadline intent type from query
+   * v12.15 FIX: Added KDV scope check to prevent other tax types from triggering KDV fallback
+   * v12.15 FIX: Added 'ambiguous' return for questions that need clarification
+   */
+  private detectDeadlineIntent(query: string): 'beyanname' | 'odeme' | 'ambiguous' | null {
     const queryLower = query.toLowerCase();
 
     // Generic deadline question indicators
     const isDeadlineQuestion = [
       'kaçına kadar', 'ne zamana kadar', 'ne zaman', 'süre',
-      'son tarih', 'deadline', 'teslim'
+      'son tarih', 'deadline', 'teslim', 'son gün'
     ].some(kw => queryLower.includes(kw));
 
     if (!isDeadlineQuestion) return null;
 
+    // 🛡️ v12.15 SCOPE CHECK: This handler is ONLY for KDV questions
+    // Check if query mentions KDV explicitly
+    const isKdvQuestion = queryLower.includes('kdv') ||
+                          queryLower.includes('katma değer') ||
+                          queryLower.includes('kdvk');
+
+    // Check for OTHER tax types that should NOT trigger KDV handler
+    const otherTaxKeywords = [
+      'damga', 'damga vergisi',     // Damga Vergisi
+      'gelir vergisi', 'gvk',       // Gelir Vergisi
+      'kurumlar', 'kurumlar vergisi', 'kvk', // Kurumlar Vergisi
+      'emlak', 'emlak vergisi',     // Emlak Vergisi
+      'motorlu taşıt', 'mtv',       // MTV
+      'ötv', 'özel tüketim',        // ÖTV
+      'veraset', 'intikal',         // Veraset ve İntikal Vergisi
+      'stopaj', 'tevkifat',         // Stopaj (unless with KDV context)
+      'muhtasar'                    // Muhtasar beyanname
+    ];
+
+    const isOtherTaxQuestion = otherTaxKeywords.some(kw => queryLower.includes(kw));
+
+    // If it's another tax type question (not KDV), don't apply KDV handler
+    if (isOtherTaxQuestion && !isKdvQuestion) {
+      console.log(`🛡️ [v12.15] SCOPE_CHECK: Other tax detected (not KDV), skipping deadline handler`);
+      return null;
+    }
+
+    // v12.15: Detect AMBIGUOUS questions that ask about both or compare 24/26
+    const ambiguousPatterns = [
+      /24\s*(mı?|mi|mu|mü)?\s*(yoksa|veya)?\s*26/i,    // "24 mü 26 mı?"
+      /26\s*(mı?|mi|mu|mü)?\s*(yoksa|veya)?\s*24/i,    // "26 mı 24 mü?"
+      /beyanname\s*(mı?|mi)?\s*(yoksa|veya)?\s*ödeme/i, // "beyanname mi ödeme mi?"
+      /ödeme\s*(mi|mı)?\s*(yoksa|veya)?\s*beyanname/i,  // "ödeme mi beyanname mi?"
+      /son\s*gün\s*ne\s*zaman/i                          // "son gün ne zaman?" (too generic)
+    ];
+
+    const isAmbiguousQuestion = ambiguousPatterns.some(pattern => pattern.test(queryLower));
+
+    // If ambiguous AND doesn't have explicit beyanname/ödeme keyword, return 'ambiguous'
+    const hasExplicitBeyanname = ['beyanname', 'beyan', 'bildirim'].some(kw => queryLower.includes(kw));
+    const hasExplicitOdeme = ['ödeme', 'ödenir', 'ödemesi', 'yatırılır'].some(kw => queryLower.includes(kw));
+
+    if (isKdvQuestion && isAmbiguousQuestion && !hasExplicitBeyanname && !hasExplicitOdeme) {
+      console.log(`🛡️ [v12.15] AMBIGUOUS_QUESTION: KDV deadline question without specific intent`);
+      return 'ambiguous';
+    }
+
     // Check for ödeme (payment) intent first (more specific)
+    // v12.15: Also check for explicit "ödeme" in KDV context
     const isOdeme = this.DEADLINE_INTENTS.odeme.keywords.some(kw => queryLower.includes(kw)) ||
                     this.DEADLINE_INTENTS.odeme.articles.some(art => queryLower.includes(art));
-    if (isOdeme) return 'odeme';
+
+    // v12.15: For KDV questions, check if it's asking about payment specifically
+    if (isKdvQuestion && isOdeme) return 'odeme';
 
     // Check for beyanname (declaration) intent
+    // v12.15: Only match if KDV is mentioned OR specific KDV articles mentioned
     const isBeyanname = this.DEADLINE_INTENTS.beyanname.keywords.some(kw => queryLower.includes(kw)) ||
                         this.DEADLINE_INTENTS.beyanname.articles.some(art => queryLower.includes(art));
-    if (isBeyanname) return 'beyanname';
 
-    // Default to beyanname for generic KDV deadline questions
-    if (queryLower.includes('kdv')) return 'beyanname';
+    // v12.15: For beyanname, require KDV context to avoid matching other beyan types
+    if (isKdvQuestion && isBeyanname) return 'beyanname';
 
+    // If only articles mentioned without KDV keyword, still match (m.41, m.46 are KDV specific)
+    if (this.DEADLINE_INTENTS.odeme.articles.some(art => queryLower.includes(art))) return 'odeme';
+    if (this.DEADLINE_INTENTS.beyanname.articles.some(art => queryLower.includes(art))) return 'beyanname';
+
+    // For generic KDV questions without explicit intent, return ambiguous to provide both answers
+    if (isKdvQuestion && !hasExplicitBeyanname && !hasExplicitOdeme) {
+      console.log(`🛡️ [v12.15] AMBIGUOUS_QUESTION: Generic KDV deadline question, providing both answers`);
+      return 'ambiguous';
+    }
+
+    // No KDV context found - don't apply KDV deadline handler
     return null;
   }
 
@@ -4298,8 +4449,10 @@ Bu soru karmaşık bir vergisel senaryo içermektedir. Yanıtını AŞAĞIDAKİ 
     // Format deadline string
     const deadlineStr = `takip eden ayın ${day}'${this.getSuffix(day)} (${word} günü) akşamına kadar`;
 
-    // Build article reference if available
-    const articleSuffix = articleRef ? ` (${articleRef})` : '';
+    // v12.15 FIX: Build article reference with "madde" instead of "m." to prevent rendering issues
+    // "KDVK m.41" → "KDVK madde 41" for clearer separation from citation
+    const articleFull = articleRef ? articleRef.replace(/m\.(\d+)/g, 'madde $1') : '';
+    const articleSuffix = articleFull ? ` (${articleFull})` : '';
 
     if (language === 'tr') {
       if (intentType === 'odeme') {
@@ -4328,12 +4481,15 @@ Bu soru karmaşık bir vergisel senaryo içermektedir. Yanıtını AŞAĞIDAKİ 
    * Get Turkish suffix for day number
    */
   private getSuffix(day: number): string {
-    // Turkish vowel harmony for numbers
+    // Turkish vowel harmony for numbers (extended for v12.15 verification questions)
     const suffixes: Record<number, string> = {
-      21: 'i',
-      24: 'ü',
-      26: 'sı',
-      28: 'i'
+      1: 'i', 2: 'si', 3: 'ü', 4: 'ü', 5: 'i',
+      6: 'sı', 7: 'si', 8: 'i', 9: 'u', 10: 'u',
+      11: 'i', 12: 'si', 13: 'ü', 14: 'ü', 15: 'i',
+      16: 'sı', 17: 'si', 18: 'i', 19: 'u', 20: 'si',
+      21: 'i', 22: 'si', 23: 'ü', 24: 'ü', 25: 'i',
+      26: 'sı', 27: 'si', 28: 'i', 29: 'u', 30: 'u',
+      31: 'i'
     };
     return suffixes[day] || 'i';
   }
