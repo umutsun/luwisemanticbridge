@@ -2906,9 +2906,18 @@ Bu soru karmaşık bir vergisel senaryo içermektedir. Yanıtını AŞAĞIDAKİ 
         // D) FOUND: Apply format enforcement ONLY for found responses
         // Pass original message for verdict question detection
         // Determine format type from schema - 'article' if articleSections configured
-        const formatType = (routingSchema.routes.FOUND.format.articleSections &&
-                          routingSchema.routes.FOUND.format.articleSections.length > 0)
-                          ? 'article' : 'legacy';
+        // v12.10 FIX: SKIP article format for DEADLINE queries (causes content truncation)
+        const isDeadlineQuery = this.detectDeadlineIntent(message) !== null;
+        const hasArticleSections = routingSchema.routes.FOUND.format.articleSections &&
+                                   routingSchema.routes.FOUND.format.articleSections.length > 0;
+
+        // Use 'legacy' format for deadline queries to preserve full response
+        const formatType = (hasArticleSections && !isDeadlineQuery) ? 'article' : 'legacy';
+
+        if (isDeadlineQuery) {
+          console.log(`🛡️ [v12.10] DEADLINE_FORMAT_SKIP: Using legacy format for deadline query (preserves content)`);
+        }
+
         response.content = this.enforceResponseFormat(
           response.content,
           searchResults,
@@ -3012,9 +3021,16 @@ Bu soru karmaşık bir vergisel senaryo içermektedir. Yanıtını AŞAĞIDAKİ 
         } else {
           // FOUND: Apply format enforcement only for found responses
           // Pass original message for verdict question detection
-          const formatType = (routingSchema.routes.FOUND.format.articleSections &&
-                            routingSchema.routes.FOUND.format.articleSections.length > 0)
-                            ? 'article' : 'legacy';
+          // v12.10 FIX: SKIP article format for DEADLINE queries (causes content truncation)
+          const isDeadlineQueryFast = this.detectDeadlineIntent(message) !== null;
+          const hasArticleSectionsFast = routingSchema.routes.FOUND.format.articleSections &&
+                                         routingSchema.routes.FOUND.format.articleSections.length > 0;
+          const formatType = (hasArticleSectionsFast && !isDeadlineQueryFast) ? 'article' : 'legacy';
+
+          if (isDeadlineQueryFast) {
+            console.log(`🛡️ [v12.10] DEADLINE_FORMAT_SKIP (fast): Using legacy format for deadline query`);
+          }
+
           fastModeResponse = this.enforceResponseFormat(response.content, searchResults, responseLanguage, message, formatType, routingSchema);
         }
 
@@ -5590,13 +5606,21 @@ Please verify the article number or check official sources.`;
       }
 
       // Add assessment with citation references preserved
-      if (assessmentContent && assessmentSection) {
-        const label = assessmentSection.backendLabel || 'DEGERLENDIRME:';
+      // v12.10 FIX: Always add assessment content even if assessmentSection not in schema
+      if (assessmentContent) {
+        const label = assessmentSection?.backendLabel || 'DEGERLENDIRME:';
         formattedResponse += `${label}\n${assessmentContent}`;
       }
 
       console.log('[FORMAT] Parsed sections - Konu: ' + (konuContent ? 'found' : 'missing') +
-                  ', Assessment: ' + (assessmentContent ? 'found' : 'missing'));
+                  ', Assessment: ' + (assessmentContent ? `found (${assessmentContent.length} chars)` : 'missing'));
+
+      // v12.10 FIX: If formattedResponse is too short, return original result to preserve content
+      const MIN_FORMATTED_LENGTH = 200;
+      if (formattedResponse.trim().length < MIN_FORMATTED_LENGTH && result.trim().length > formattedResponse.trim().length) {
+        console.log(`[FORMAT] ⚠️ Formatted response too short (${formattedResponse.length} chars), using original (${result.length} chars)`);
+        return result.trim();
+      }
 
       return formattedResponse.trim() || result.trim();
     }
