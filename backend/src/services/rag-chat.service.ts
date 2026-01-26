@@ -2357,9 +2357,29 @@ Bu soru karmaşık bir vergisel senaryo içermektedir. Yanıtını AŞAĞIDAKİ 
             deadlineFixApplied = true;
           }
         } else {
-          // No deadline found in sources - keep LLM response but mark as deadline query
-          console.log(`⚠️ DEADLINE_NOT_FOUND: No deadline in sources, keeping LLM response`);
-          deadlineFixApplied = true; // Still skip enrichment
+          // v12.12 FIX: No deadline found in sources - use HARDCODED FALLBACK
+          // This is a known, factual answer - better than LLM hallucination
+          console.log(`🛡️ [v12.12] DEADLINE_HARDCODED_FALLBACK: No deadline in sources, using known correct answer`);
+
+          const hardcodedDeadlines: Record<string, { day: number; word: string; article: string }> = {
+            'beyanname': { day: 24, word: 'yirmidördüncü', article: 'KDVK m.41' },
+            'odeme': { day: 26, word: 'yirmialtıncı', article: 'KDVK m.46' }
+          };
+
+          const fallback = hardcodedDeadlines[postProcDeadlineIntent];
+          if (fallback) {
+            const intent = this.DEADLINE_INTENTS[postProcDeadlineIntent];
+            const deadlineStr = `takip eden ayın ${fallback.day}'${this.getSuffix(fallback.day)} (${fallback.word} günü) akşamına kadar`;
+
+            if (postProcDeadlineIntent === 'odeme') {
+              response.content = `${intent.subject}, ${deadlineStr} ${intent.action} (${fallback.article}).`;
+            } else {
+              response.content = `${intent.subject}, vergilendirme dönemini ${deadlineStr} ilgili vergi dairesine ${intent.action} (${fallback.article}).`;
+            }
+            console.log(`🛡️ DEADLINE_HARDCODED: Forced response with day=${fallback.day}`);
+          }
+
+          deadlineFixApplied = true;
         }
       }
 
