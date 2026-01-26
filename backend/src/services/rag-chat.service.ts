@@ -2317,6 +2317,70 @@ FORMAT:
         }
       }
 
+      // 🛡️ v12.3: GENERAL HEADER-ONLY FIX
+      // If response is just a title/header (like "Vergi Usul Kanunu Madde 114") with no content,
+      // extract content from sources
+      const contentWithoutCitations = response.content.replace(/\[\d+\]/g, '').trim();
+      const isHeaderOnly = contentWithoutCitations.length < 80 &&
+                           searchResults.length > 0 &&
+                           message.length > 15;
+
+      if (isHeaderOnly) {
+        console.log(`🛡️ HEADER_ONLY_FIX: Response too short (${contentWithoutCitations.length} chars), extracting from sources`);
+
+        // Check if this is an article query (VUK 114, KDVK 41, etc.)
+        const articleMatch = message.match(/(vuk|gvk|kdvk|kvk|aatuhk)\s*(?:madde\s*)?(\d+)/i);
+
+        // Find best source to extract content from
+        const topSource = searchResults[0];
+        if (topSource) {
+          const sourceContent = (topSource.content || topSource.excerpt || '').trim();
+
+          // Clean up source content (remove HTML tags, excessive whitespace)
+          const cleanContent = sourceContent
+            .replace(/<[^>]*>/g, '')
+            .replace(/\s+/g, ' ')
+            .substring(0, 600);
+
+          if (cleanContent.length > 100) {
+            // Generate proper response with source content
+            let enhancedResponse = '';
+
+            if (articleMatch) {
+              // Article query - format nicely
+              const lawCode = articleMatch[1].toUpperCase();
+              const articleNum = articleMatch[2];
+              enhancedResponse = `**${lawCode} Madde ${articleNum}**\n\n${cleanContent}...\n\n[1]`;
+            } else {
+              // General query - use clean content
+              enhancedResponse = `${cleanContent}...\n\n[1]`;
+            }
+
+            response.content = enhancedResponse;
+            console.log(`🛡️ HEADER_ONLY_FIX: Enhanced response to ${response.content.length} chars`);
+          }
+        }
+      }
+
+      // 🛡️ v12.3: EMPTY RESPONSE FIX
+      // If response is ONLY citation markers like "[1]" with no actual content
+      const citationOnlyPattern = /^\s*\[?\d+\]?\s*$/;
+      if (citationOnlyPattern.test(response.content) && searchResults.length > 0) {
+        console.log(`🛡️ EMPTY_RESPONSE_FIX: Response is citation-only, extracting from sources`);
+
+        const topSource = searchResults[0];
+        const sourceContent = (topSource.content || topSource.excerpt || '')
+          .replace(/<[^>]*>/g, '')
+          .replace(/\s+/g, ' ')
+          .trim()
+          .substring(0, 500);
+
+        if (sourceContent.length > 50) {
+          response.content = `${sourceContent}...\n\n[1]`;
+          console.log(`🛡️ EMPTY_RESPONSE_FIX: Replaced with source content (${response.content.length} chars)`);
+        }
+      }
+
       // 🛡️ P1: MINIMUM RESPONSE LENGTH VALIDATOR
       // Ensure responses are not too short (excluding greetings and simple acknowledgments)
       const minResponseLength = 100; // Minimum characters for substantive responses
@@ -2326,8 +2390,11 @@ FORMAT:
         // Try to add context from top source
         const topSource = searchResults[0];
         if (topSource) {
-          const sourceExcerpt = (topSource.content || topSource.excerpt || '').substring(0, 300);
-          const enrichedResponse = `${response.content}\n\nİlgili kaynak bilgisi: ${sourceExcerpt}... [1]`;
+          const sourceExcerpt = (topSource.content || topSource.excerpt || '')
+            .replace(/<[^>]*>/g, '')
+            .replace(/\s+/g, ' ')
+            .substring(0, 400);
+          const enrichedResponse = `${response.content}\n\n${sourceExcerpt}... [1]`;
           if (enrichedResponse.length > response.content.length) {
             response.content = enrichedResponse;
             console.log(`🛡️ SHORT_RESPONSE: Enriched to ${response.content.length} chars`);
@@ -3908,6 +3975,7 @@ FORMAT:
 
   /**
    * Extract deadline info from sources based on intent type
+   * v12.3 FIX: Now collects ALL candidates and returns the BEST one based on intent
    */
   private extractDeadlineFromSources(
     sources: any[],
@@ -3915,14 +3983,29 @@ FORMAT:
   ): { day: number; word: string; sourceIndex: number; articleRef: string } | null {
     const intent = this.DEADLINE_INTENTS[intentType];
 
+    // 🎯 INTENT-SPECIFIC TARGET DAYS
+    // beyanname: prefer 24 (genel mükellef), fallback 21 (tevkifat)
+    // odeme: prefer 26, fallback 24
+    const targetDays: Record<string, number[]> = {
+      'beyanname': [24, 21], // 24 first (genel), then 21 (tevkifat)
+      'odeme': [26, 24]      // 26 first (ödeme), then 24 (fallback)
+    };
+    const preferredDays = targetDays[intentType] || [24, 26, 21];
+
     // Build deadline token patterns
     const tokenPatterns = Object.entries(this.DEADLINE_TOKENS).map(([word, info]) => ({
       pattern: new RegExp(`${word}\\s+(günü?)?\\s*(akşam[ıi]na)?\\s*(kadar)?`, 'gi'),
       ...info
     }));
 
-    // Also check for digit patterns
-    const digitPattern = /(\d+)[''']?\s*(inci|ıncı|üncü|uncu|nci|ncı|ncü|ncu)?\s*(günü?)/gi;
+    // Collect ALL deadline candidates from all sources
+    const candidates: Array<{
+      day: number;
+      word: string;
+      sourceIndex: number;
+      articleRef: string;
+      score: number;
+    }> = [];
 
     for (let i = 0; i < sources.length; i++) {
       const sourceContent = (sources[i].content || sources[i].excerpt || '').toLowerCase();
@@ -3933,49 +4016,74 @@ FORMAT:
         sourceContent.includes(art) || sourceTitle.includes(art)
       );
 
-      // Prefer sources that match the article reference
-      const priorityBonus = matchesArticle ? 1000 : 0;
+      // Determine article reference
+      let articleRef = '';
+      if (sourceContent.includes('madde 41') || sourceTitle.includes('m.41')) articleRef = 'KDVK m.41';
+      else if (sourceContent.includes('madde 46') || sourceTitle.includes('m.46')) articleRef = 'KDVK m.46';
 
       // Check Turkish word tokens
       for (const tokenInfo of tokenPatterns) {
         tokenInfo.pattern.lastIndex = 0;
         if (tokenInfo.pattern.test(sourceContent)) {
-          console.log(`[DEADLINE-EXTRACT] Found "${tokenInfo.word}" (day ${tokenInfo.day}) in source [${i + 1}]`);
+          // Calculate score based on intent match
+          let score = 0;
+          if (matchesArticle) score += 100; // Article match bonus
+          const dayPriority = preferredDays.indexOf(tokenInfo.day);
+          if (dayPriority === 0) score += 50;      // First preferred day
+          else if (dayPriority === 1) score += 25; // Second preferred day
+          else if (dayPriority >= 0) score += 10;  // In preferred list
+          // Penalize wrong days for intent
+          if (intentType === 'odeme' && tokenInfo.day === 21) score -= 50; // 21 is wrong for ödeme
+          if (intentType === 'beyanname' && tokenInfo.day === 26) score -= 50; // 26 is wrong for beyanname
 
-          // Determine article reference
-          let articleRef = '';
-          if (sourceContent.includes('madde 41') || sourceTitle.includes('m.41')) articleRef = 'KDVK m.41';
-          else if (sourceContent.includes('madde 46') || sourceTitle.includes('m.46')) articleRef = 'KDVK m.46';
-
-          return {
+          candidates.push({
             day: tokenInfo.day,
             word: tokenInfo.word,
             sourceIndex: i + 1,
-            articleRef
-          };
+            articleRef,
+            score
+          });
+          console.log(`[DEADLINE-EXTRACT] Candidate: "${tokenInfo.word}" (day ${tokenInfo.day}) in source [${i + 1}], score=${score}`);
         }
       }
 
       // Check digit patterns
-      digitPattern.lastIndex = 0;
-      const digitMatch = digitPattern.exec(sourceContent);
-      if (digitMatch) {
+      const digitPattern = /(\d+)[''']?\s*(inci|ıncı|üncü|uncu|nci|ncı|ncü|ncu)?\s*(günü?)/gi;
+      let digitMatch;
+      while ((digitMatch = digitPattern.exec(sourceContent)) !== null) {
         const day = parseInt(digitMatch[1]);
         if ([21, 24, 26, 28].includes(day)) {
           const wordEntry = Object.entries(this.DEADLINE_TOKENS).find(([_, info]) => info.day === day);
           const word = wordEntry ? wordEntry[1].word : `${day}`;
 
-          let articleRef = '';
-          if (sourceContent.includes('madde 41') || sourceTitle.includes('m.41')) articleRef = 'KDVK m.41';
-          else if (sourceContent.includes('madde 46') || sourceTitle.includes('m.46')) articleRef = 'KDVK m.46';
+          let score = 0;
+          if (matchesArticle) score += 100;
+          const dayPriority = preferredDays.indexOf(day);
+          if (dayPriority === 0) score += 50;
+          else if (dayPriority === 1) score += 25;
+          else if (dayPriority >= 0) score += 10;
+          if (intentType === 'odeme' && day === 21) score -= 50;
+          if (intentType === 'beyanname' && day === 26) score -= 50;
 
-          console.log(`[DEADLINE-EXTRACT] Found day ${day} (digit form) in source [${i + 1}]`);
-          return { day, word, sourceIndex: i + 1, articleRef };
+          candidates.push({ day, word, sourceIndex: i + 1, articleRef, score });
+          console.log(`[DEADLINE-EXTRACT] Candidate: day ${day} (digit) in source [${i + 1}], score=${score}`);
         }
       }
     }
 
-    return null;
+    if (candidates.length === 0) return null;
+
+    // Sort by score descending and return the best candidate
+    candidates.sort((a, b) => b.score - a.score);
+    const best = candidates[0];
+    console.log(`[DEADLINE-EXTRACT] Selected BEST: day=${best.day}, score=${best.score}, source=[${best.sourceIndex}]`);
+
+    return {
+      day: best.day,
+      word: best.word,
+      sourceIndex: best.sourceIndex,
+      articleRef: best.articleRef
+    };
   }
 
   /**
