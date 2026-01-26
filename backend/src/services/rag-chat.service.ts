@@ -3238,10 +3238,20 @@ Bu soru karmaşık bir vergisel senaryo içermektedir. Yanıtını AŞAĞIDAKİ 
       }
 
       const responseTextLower = response.content.toLowerCase();
-      const isRefusalResponse = refusalPatterns.some(pattern => {
-        const regex = new RegExp(pattern, 'i');
-        return regex.test(responseTextLower);
-      });
+
+      // v12.11 FIX: Skip refusal detection for deadline queries
+      // Deadline responses may contain "bulunamadı" in context but still have correct date
+      const isDeadlineQueryRefusal = this.detectDeadlineIntent(message) !== null;
+      const isRefusalResponse = isDeadlineQueryRefusal
+        ? false  // Skip refusal for deadline queries
+        : refusalPatterns.some(pattern => {
+            const regex = new RegExp(pattern, 'i');
+            return regex.test(responseTextLower);
+          });
+
+      if (isDeadlineQueryRefusal) {
+        console.log(`🛡️ [v12.11] DEADLINE_REFUSAL_SKIP: Skipping refusal detection for deadline query`);
+      }
 
       // If refusal detected, apply configured policies
       // Use limitedSources (ranked and limited by maxSourcesToShow) instead of raw formattedSources
