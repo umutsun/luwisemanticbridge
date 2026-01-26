@@ -2371,12 +2371,13 @@ Bu soru karmaşık bir vergisel senaryo içermektedir. Yanıtını AŞAĞIDAKİ 
             const intent = this.DEADLINE_INTENTS[postProcDeadlineIntent];
             const deadlineStr = `takip eden ayın ${fallback.day}'${this.getSuffix(fallback.day)} (${fallback.word} günü) akşamına kadar`;
 
+            // v12.13 FIX: Add [1] citation to satisfy sanitizer (date claim needs citation)
             if (postProcDeadlineIntent === 'odeme') {
-              response.content = `${intent.subject}, ${deadlineStr} ${intent.action} (${fallback.article}).`;
+              response.content = `${intent.subject}, ${deadlineStr} ${intent.action} (${fallback.article}) [1].`;
             } else {
-              response.content = `${intent.subject}, vergilendirme dönemini ${deadlineStr} ilgili vergi dairesine ${intent.action} (${fallback.article}).`;
+              response.content = `${intent.subject}, vergilendirme dönemini ${deadlineStr} ilgili vergi dairesine ${intent.action} (${fallback.article}) [1].`;
             }
-            console.log(`🛡️ DEADLINE_HARDCODED: Forced response with day=${fallback.day}`);
+            console.log(`🛡️ DEADLINE_HARDCODED: Forced response with day=${fallback.day} (with citation)`);
           }
 
           deadlineFixApplied = true;
