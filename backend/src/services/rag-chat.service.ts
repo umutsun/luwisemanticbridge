@@ -2331,6 +2331,7 @@ Bu soru karmaşık bir vergisel senaryo içermektedir. Yanıtını AŞAĞIDAKİ 
       // Don't trust LLM - it's non-deterministic and may include wrong dates
       const postProcDeadlineIntent = this.detectDeadlineIntent(message);
       let deadlineFixApplied = false; // Track if we applied deadline fix to skip SHORT_RESPONSE
+      let deadlineHardcodedApplied = false; // v12.14: Track hardcoded fallback to skip sanitizer
       console.log(`[v12.8-DEBUG] Deadline intent check: query="${message.substring(0, 50)}", intent=${postProcDeadlineIntent}`);
 
       if (postProcDeadlineIntent) {
@@ -2378,6 +2379,7 @@ Bu soru karmaşık bir vergisel senaryo içermektedir. Yanıtını AŞAĞIDAKİ 
               response.content = `${intent.subject}, vergilendirme dönemini ${deadlineStr} ilgili vergi dairesine ${intent.action} (${fallback.article}) [1].`;
             }
             console.log(`🛡️ DEADLINE_HARDCODED: Forced response with day=${fallback.day} (with citation)`);
+            deadlineHardcodedApplied = true; // v12.14: Flag to skip sanitizer
           }
 
           deadlineFixApplied = true;
@@ -3321,7 +3323,12 @@ Bu soru karmaşık bir vergisel senaryo içermektedir. Yanıtını AŞAĞIDAKİ 
       }
 
       // 🛡️ PROSEDÜR CLAIM SANITIZER v9: critical claims verified in ALL sentences
-      finalResponse = this.sanitizeProsedurClaims(finalResponse, limitedSources, domainConfig.sanitizerConfig, domainConfig.lawCodes);
+      // v12.14 FIX: Skip sanitizer for hardcoded deadline responses (known correct values, not hallucinations)
+      if (deadlineHardcodedApplied) {
+        console.log(`🛡️ [v12.14] DEADLINE_SANITIZER_BYPASS: Skipping sanitizer for hardcoded deadline response`);
+      } else {
+        finalResponse = this.sanitizeProsedurClaims(finalResponse, limitedSources, domainConfig.sanitizerConfig, domainConfig.lawCodes);
+      }
 
       // 🔍 DEBUG v12: Log response AFTER sanitizer
       const has24After = /24|yirmidört/i.test(finalResponse);
