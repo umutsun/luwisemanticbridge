@@ -2361,12 +2361,28 @@ FORMAT:
       if (hasFillerContent && searchResults.length > 0) {
         console.log(`🛡️ FILLER_RESPONSE_FIX: Detected "bulunamadı" filler, replacing with source content`);
 
-        // Check if this is an article query
+        // Check if this is an article query (VUK 114, KDVK 41, etc.)
         const articleMatch = message.match(/(vuk|gvk|kdvk|kvk|aatuhk)\s*(?:madde\s*)?(\d+)/i);
-        const topSource = searchResults[0];
 
-        if (topSource) {
-          const sourceContent = (topSource.content || topSource.excerpt || '')
+        let bestSource: any = null;
+        let bestSourceIndex = 1;
+
+        if (articleMatch) {
+          // For article queries, find the source that actually contains this article
+          const lawCode = articleMatch[1].toUpperCase();
+          const articleNum = articleMatch[2];
+          const result = this.findRelevantSourceForArticle(searchResults, lawCode, articleNum);
+          bestSource = result.source;
+          bestSourceIndex = result.index;
+          console.log(`🛡️ FILLER_RESPONSE_FIX: Article query ${lawCode} ${articleNum}, found matching source at [${bestSourceIndex}]`);
+        } else {
+          // For non-article queries, use top source
+          bestSource = searchResults[0];
+          bestSourceIndex = 1;
+        }
+
+        if (bestSource) {
+          const sourceContent = (bestSource.content || bestSource.excerpt || '')
             .replace(/<[^>]*>/g, '')
             .replace(/\s+/g, ' ')
             .trim()
@@ -2376,11 +2392,11 @@ FORMAT:
             if (articleMatch) {
               const lawCode = articleMatch[1].toUpperCase();
               const articleNum = articleMatch[2];
-              response.content = `**${lawCode} Madde ${articleNum}**\n\n${sourceContent}...\n\n[1]`;
+              response.content = `**${lawCode} Madde ${articleNum}**\n\n${sourceContent}...\n\n[${bestSourceIndex}]`;
             } else {
-              response.content = `${sourceContent}...\n\n[1]`;
+              response.content = `${sourceContent}...\n\n[${bestSourceIndex}]`;
             }
-            console.log(`🛡️ FILLER_RESPONSE_FIX: Replaced filler with ${response.content.length} chars of actual content`);
+            console.log(`🛡️ FILLER_RESPONSE_FIX: Replaced filler with ${response.content.length} chars from source [${bestSourceIndex}]`);
           }
         }
       }
@@ -2397,12 +2413,24 @@ FORMAT:
         console.log(`🛡️ HEADER_ONLY_FIX: Response too short (${contentWithoutCitations.length} chars), extracting from sources`);
 
         // Check if this is an article query (VUK 114, KDVK 41, etc.)
-        const articleMatch = message.match(/(vuk|gvk|kdvk|kvk|aatuhk)\s*(?:madde\s*)?(\d+)/i);
+        const headerArticleMatch = message.match(/(vuk|gvk|kdvk|kvk|aatuhk)\s*(?:madde\s*)?(\d+)/i);
 
-        // Find best source to extract content from
-        const topSource = searchResults[0];
-        if (topSource) {
-          const sourceContent = (topSource.content || topSource.excerpt || '').trim();
+        let headerBestSource: any = null;
+        let headerSourceIndex = 1;
+
+        if (headerArticleMatch) {
+          // For article queries, find the source that contains this article
+          const lawCode = headerArticleMatch[1].toUpperCase();
+          const articleNum = headerArticleMatch[2];
+          const result = this.findRelevantSourceForArticle(searchResults, lawCode, articleNum);
+          headerBestSource = result.source;
+          headerSourceIndex = result.index;
+        } else {
+          headerBestSource = searchResults[0];
+        }
+
+        if (headerBestSource) {
+          const sourceContent = (headerBestSource.content || headerBestSource.excerpt || '').trim();
 
           // Clean up source content (remove HTML tags, excessive whitespace)
           const cleanContent = sourceContent
@@ -2414,18 +2442,18 @@ FORMAT:
             // Generate proper response with source content
             let enhancedResponse = '';
 
-            if (articleMatch) {
+            if (headerArticleMatch) {
               // Article query - format nicely
-              const lawCode = articleMatch[1].toUpperCase();
-              const articleNum = articleMatch[2];
-              enhancedResponse = `**${lawCode} Madde ${articleNum}**\n\n${cleanContent}...\n\n[1]`;
+              const lawCode = headerArticleMatch[1].toUpperCase();
+              const articleNum = headerArticleMatch[2];
+              enhancedResponse = `**${lawCode} Madde ${articleNum}**\n\n${cleanContent}...\n\n[${headerSourceIndex}]`;
             } else {
               // General query - use clean content
-              enhancedResponse = `${cleanContent}...\n\n[1]`;
+              enhancedResponse = `${cleanContent}...\n\n[${headerSourceIndex}]`;
             }
 
             response.content = enhancedResponse;
-            console.log(`🛡️ HEADER_ONLY_FIX: Enhanced response to ${response.content.length} chars`);
+            console.log(`🛡️ HEADER_ONLY_FIX: Enhanced response to ${response.content.length} chars from source [${headerSourceIndex}]`);
           }
         }
       }
@@ -4206,6 +4234,93 @@ FORMAT:
       28: 'i'
     };
     return suffixes[day] || 'i';
+  }
+
+  /**
+   * 🛡️ v12.5: Find the most relevant source for a specific article query
+   * Searches through all sources to find the one that contains the target article
+   *
+   * @param sources - Array of search results
+   * @param lawCode - Law code (VUK, GVK, KDVK, etc.)
+   * @param articleNum - Article number as string
+   * @returns Object with source and its 1-based index
+   */
+  private findRelevantSourceForArticle(
+    sources: any[],
+    lawCode: string,
+    articleNum: string
+  ): { source: any; index: number } {
+    const lawCodeLower = lawCode.toLowerCase();
+    const articleNumber = parseInt(articleNum);
+
+    // Build patterns to match the article
+    const articlePatterns = [
+      new RegExp(`madde\\s*${articleNum}\\b`, 'i'),
+      new RegExp(`m\\.?\\s*${articleNum}\\b`, 'i'),
+      new RegExp(`${lawCodeLower}.*madde\\s*${articleNum}`, 'i'),
+      new RegExp(`${lawCodeLower}.*m\\.?\\s*${articleNum}`, 'i')
+    ];
+
+    // Law name patterns for matching source titles/content
+    const lawPatterns: Record<string, RegExp> = {
+      'vuk': /vergi\s*usul|vuk/i,
+      'gvk': /gelir\s*vergisi|gvk/i,
+      'kdvk': /katma\s*değer|kdvk/i,
+      'kvk': /kurumlar\s*vergisi|kvk/i,
+      'aatuhk': /amme\s*alacak|aatuhk/i
+    };
+
+    const lawPattern = lawPatterns[lawCodeLower];
+
+    // Score each source
+    const scoredSources = sources.map((source, idx) => {
+      const title = (source.title || source.source_name || '').toLowerCase();
+      const content = (source.content || source.excerpt || '').toLowerCase();
+      const combined = title + ' ' + content;
+
+      let score = 0;
+
+      // Check if source mentions the target law
+      if (lawPattern && lawPattern.test(combined)) {
+        score += 20;
+      }
+
+      // Check if source contains the article number
+      for (const pattern of articlePatterns) {
+        if (pattern.test(combined)) {
+          score += 50;
+          break;
+        }
+      }
+
+      // Extra points if title contains the article reference
+      if (articlePatterns.some(p => p.test(title))) {
+        score += 30;
+      }
+
+      // Check for "kanun" or official document indicators
+      if (/kanun|yasa|madde\s+\d+/i.test(title)) {
+        score += 10;
+      }
+
+      return { source, index: idx + 1, score };
+    });
+
+    // Sort by score descending
+    scoredSources.sort((a, b) => b.score - a.score);
+
+    // Log the scoring for debugging
+    if (scoredSources.length > 0) {
+      console.log(`[ARTICLE_SOURCE_FINDER] ${lawCode} m.${articleNum}: Best match at [${scoredSources[0].index}] with score ${scoredSources[0].score}`);
+      if (scoredSources[0].score === 0) {
+        console.log(`[ARTICLE_SOURCE_FINDER] WARNING: No good match found, using top result by default`);
+      }
+    }
+
+    // Return best match, or first source as fallback
+    return scoredSources.length > 0
+      ? { source: scoredSources[0].source, index: scoredSources[0].index }
+      : { source: sources[0], index: 1 };
   }
 
   /**
