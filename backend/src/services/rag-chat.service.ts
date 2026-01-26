@@ -3925,30 +3925,51 @@ FORMAT:
     const intentType = this.detectDeadlineIntent(query);
     if (!intentType) return response;
 
-    // Detect contradiction phrases in response (expanded list)
+    // Detect contradiction phrases in response (EXPANDED - catches "bulunmamaktadır" etc.)
     const contradictionPhrases = [
-      /kaynak(lar)?da\s*(belirli\s+bir\s+)?tarih\s*(yer\s+)?alma(maktadır|mıyor)/gi,
-      /tarih\s*(bilgisi\s+)?bula(madım|mamadım|namadı)/gi,
-      /net\s+(bir\s+)?tarih\s+(yok|belirtilmemiş|verilmemiş)/gi,
-      /kesin\s+(bir\s+)?tarih\s*(yok|belirtilmemiş|belli\s+değil)/gi,
+      // "kaynaklarda tarih yok/almamaktadır/bulunmamaktadır" variants
+      /kaynak(lar)?da\s*(doğrudan\s+)?(belirli\s+bir\s+)?tarih\s*(bilgisi\s+)?(yer\s+)?(alma|bulunma)(maktadır|mıyor|dı)/gi,
+      /kaynak(lar)?da\s*(doğrudan\s+)?(bir\s+)?tarih\s+(yok|belirtilmemiş|verilmemiş|mevcut\s+değil)/gi,
+      // "tarih bulamadım/yok" variants
+      /tarih\s*(bilgisi\s+)?bula(madım|mamadım|namadı|nmadı)/gi,
+      /net\s+(bir\s+)?tarih\s+(yok|belirtilmemiş|verilmemiş|bulunmamaktadır)/gi,
+      /kesin\s+(bir\s+)?tarih\s*(yok|belirtilmemiş|belli\s+değil|verilmemiş)/gi,
+      /spesifik\s+(bir\s+)?tarih\s*(yok|belirtilmemiş|bulunmamaktadır)/gi,
+      // "doğrudan tarih yok" - common LLM escape pattern
+      /doğrudan\s+(bir\s+)?tarih\s*(bilgisi\s+)?(yok|bulunmamaktadır|verilmemiş|mevcut\s+değil)/gi,
+      // Other variants
       /tarih\s+veril(me)?miş/gi,
-      /spesifik\s+(bir\s+)?tarih\s*(yok|belirtilmemiş)/gi,
       /tarih\s+bilgisi\s+mevcut\s+değil/gi,
       /belirli\s+bir\s+gün\s+belirtilmemiş/gi,
-      /tam\s+tarih\s+yok/gi
+      /tam\s+tarih\s+yok/gi,
+      // "net bilgi yok" - another common escape
+      /net\s+(bir\s+)?bilgi\s+(yok|bulunmamaktadır|mevcut\s+değil)/gi
     ];
 
     const hasContradiction = contradictionPhrases.some(pattern => {
       pattern.lastIndex = 0;
-      return pattern.test(response);
+      const matches = pattern.test(response);
+      if (matches) {
+        console.log(`[CONTRADICTION-FIX] Pattern matched: ${pattern.source}`);
+      }
+      return matches;
     });
+
+    // Check if response has deadline but WITHOUT citation (LLM using own knowledge)
+    const hasDeadlineWithoutCitation = this.responseContainsDeadline(response) &&
+                                        !/\[\d+\]/.test(response);
 
     // Also check if response is missing the deadline completely for deadline questions
     const hasMissingDeadline = !this.responseContainsDeadline(response);
 
-    if (!hasContradiction && !hasMissingDeadline) return response;
+    // RULE: For deadline questions, we need deadline WITH citation from sources
+    const needsFix = hasContradiction || hasMissingDeadline || hasDeadlineWithoutCitation;
 
-    const reason = hasContradiction ? '"no date" claim' : 'missing deadline token';
+    if (!needsFix) return response;
+
+    const reason = hasContradiction ? '"no date" claim' :
+                   hasDeadlineWithoutCitation ? 'deadline without citation' :
+                   'missing deadline token';
     console.log(`[CONTRADICTION-FIX] Detected ${reason} for ${intentType} question, checking sources...`);
 
     // Use the unified deadline extractor
