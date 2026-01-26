@@ -529,6 +529,14 @@ function LLMSettings() {
         return merged;
       });
 
+      // v12.15: Dispatch settings update event for real-time ChatInterface refresh
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('settingsUpdated', {
+          detail: { category: 'llm', settings: llmSettingsToSave }
+        }));
+        debug.log('📡 [SETTINGS SAVE] Dispatched settingsUpdated event: llm');
+      }
+
       toast({
         title: "Success",
         description: "LLM and Translation settings saved successfully",
@@ -2712,6 +2720,18 @@ function RAGSettings() {
 
       setRagConfig(tempRAGConfig);
       setChatbotConfig(tempChatbotConfig);
+
+      // v12.15: Dispatch settings update events for real-time ChatInterface refresh
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('settingsUpdated', {
+          detail: { category: 'rag', settings: tempRAGConfig }
+        }));
+        window.dispatchEvent(new CustomEvent('settingsUpdated', {
+          detail: { category: 'chatbot', settings: chatbotPayload }
+        }));
+        debug.log('📡 [RAG SETTINGS SAVE] Dispatched settingsUpdated events: rag, chatbot');
+      }
+
       toast({
         title: "Success",
         description: "Settings saved successfully",
@@ -4839,6 +4859,15 @@ function PromptsSettings() {
     try {
       await updateSettingsCategory('prompts', tempConfig);
       setPromptsConfig(tempConfig);
+
+      // v12.15: Dispatch settings update event for real-time ChatInterface refresh
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('settingsUpdated', {
+          detail: { category: 'prompts', settings: tempConfig }
+        }));
+        console.log('📡 [PROMPTS SAVE] Dispatched settingsUpdated event: prompts');
+      }
+
       toast({
         title: "Success",
         description: "Prompts saved successfully",

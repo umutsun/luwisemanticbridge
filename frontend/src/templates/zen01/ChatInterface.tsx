@@ -389,15 +389,16 @@ export default function ChatInterface() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Listen for settings updates (e.g., when RAG settings are changed in admin panel)
+  // Listen for settings updates - handles all 4 categories: rag, chatbot, llm, prompts
+  // v12.15: Enhanced to support real-time updates from Settings panel
   useEffect(() => {
-    const handleSettingsUpdate = async (event: CustomEvent<{ category: string; settings: any }>) => {
-      const { category } = event.detail;
+    const handleSettingsUpdate = async (event: CustomEvent<{ category: string; settings?: any }>) => {
+      const { category, settings } = event.detail;
+      console.log(`[ChatInterface] 🔄 Settings update received: category=${category}`);
 
-      // Only refresh RAG settings when RAG category is updated
-      if (category === 'rag') {
-        console.log('[ChatInterface] 🔄 RAG settings updated, refreshing...');
-        try {
+      try {
+        // RAG Settings refresh
+        if (category === 'rag') {
           const ragRes = await fetch('/api/v2/settings?category=rag');
           if (ragRes.ok) {
             const ragData = await ragRes.json();
@@ -412,9 +413,91 @@ export default function ChatInterface() {
             setRagSettings(newRagSettings);
             console.log('[ChatInterface] ✅ RAG settings refreshed:', newRagSettings);
           }
-        } catch (error) {
-          console.error('[ChatInterface] Failed to refresh RAG settings:', error);
         }
+
+        // Chatbot Settings refresh (UI, feature toggles)
+        if (category === 'chatbot') {
+          const chatbotRes = await fetch('/api/v2/chatbot/settings');
+          if (chatbotRes.ok) {
+            const chatbotData = await chatbotRes.json();
+            // Also fetch RAG settings for feature toggles that are stored there
+            const ragRes = await fetch('/api/v2/settings?category=rag');
+            const ragData = ragRes.ok ? await ragRes.json() : {};
+
+            setChatbotSettings(prev => ({
+              ...prev,
+              title: chatbotData.title || prev.title,
+              subtitle: chatbotData.subtitle || prev.subtitle,
+              logoUrl: chatbotData.logoUrl || prev.logoUrl,
+              placeholder: chatbotData.placeholder || prev.placeholder,
+              primaryColor: chatbotData.primaryColor || prev.primaryColor,
+              enableSuggestions: chatbotData.enableSuggestions ?? prev.enableSuggestions,
+              maxSuggestionCards: chatbotData.maxSuggestionCards || prev.maxSuggestionCards,
+              welcomeMessage: chatbotData.welcomeMessage || prev.welcomeMessage,
+              greeting: chatbotData.greeting || prev.greeting,
+              enableSourceClick: chatbotData.enableSourceClick ?? prev.enableSourceClick,
+              enableSourceQuestionGeneration: ragData.ragSettings?.enableSourceQuestionGeneration ?? chatbotData.enableSourceQuestionGeneration ?? prev.enableSourceQuestionGeneration,
+              enableKeywordHighlighting: chatbotData.enableKeywordHighlighting ?? prev.enableKeywordHighlighting,
+              enablePdfUpload: chatbotData.enablePdfUpload ?? prev.enablePdfUpload,
+              enableVoiceInput: chatbotData.enableVoiceInput ?? prev.enableVoiceInput,
+              enableVoiceOutput: chatbotData.enableVoiceOutput ?? prev.enableVoiceOutput,
+              responseSchemaId: chatbotData.responseSchemaId || prev.responseSchemaId
+            }));
+            console.log('[ChatInterface] ✅ Chatbot settings refreshed');
+          }
+        }
+
+        // LLM Settings refresh (model, temperature, maxTokens)
+        if (category === 'llm') {
+          const llmRes = await fetch('/api/v2/settings?category=llm');
+          if (llmRes.ok) {
+            const llmData = await llmRes.json();
+            const newLlmSettings: ZenLlmSettings = {
+              temperature: llmData.llmSettings?.temperature || 0.7,
+              maxTokens: llmData.llmSettings?.maxTokens || 2048
+            };
+            setLlmSettings(newLlmSettings);
+            // Also update activeChatModel in chatbotSettings
+            if (llmData.llmSettings?.activeChatModel) {
+              setChatbotSettings(prev => ({
+                ...prev,
+                activeChatModel: llmData.llmSettings.activeChatModel
+              }));
+            }
+            console.log('[ChatInterface] ✅ LLM settings refreshed:', newLlmSettings);
+          }
+        }
+
+        // Prompts refresh (active system prompt)
+        if (category === 'prompts') {
+          const promptsRes = await fetch('/api/v2/settings?category=prompts');
+          if (promptsRes.ok) {
+            const promptsData = await promptsRes.json();
+            let promptsList = promptsData.prompts?.list || [];
+            if (typeof promptsList === 'string') {
+              try {
+                promptsList = JSON.parse(promptsList);
+              } catch (e) {
+                promptsList = [];
+              }
+            }
+            const activePromptObj = Array.isArray(promptsList)
+              ? promptsList.find((p: { isActive?: boolean }) => p.isActive === true)
+              : null;
+
+            if (activePromptObj) {
+              setActivePrompt({
+                content: activePromptObj.systemPrompt || '',
+                temperature: parseFloat(activePromptObj.temperature || '0.7'),
+                maxTokens: parseInt(activePromptObj.maxTokens || '2048'),
+                tone: activePromptObj.conversationTone || 'professional'
+              });
+              console.log('[ChatInterface] ✅ Active prompt refreshed:', activePromptObj.name);
+            }
+          }
+        }
+      } catch (error) {
+        console.error(`[ChatInterface] Failed to refresh ${category} settings:`, error);
       }
     };
 
