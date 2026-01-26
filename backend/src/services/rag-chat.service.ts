@@ -2294,38 +2294,40 @@ FORMAT:
       // Clean response content - remove section headings that LLM might add despite instructions
       response.content = this.stripSectionHeadings(response.content, settingsMap);
 
-      // 🕐 v12.7 FIX: DEADLINE INTENT HANDLER (AGGRESSIVE)
-      // For deadline questions, ALWAYS check if response has correct deadline
+      // 🕐 v12.8 FIX: DEADLINE INTENT HANDLER (DETERMINISTIC)
+      // For deadline questions, ALWAYS replace with our extracted answer for consistency
+      // Don't trust LLM - it's non-deterministic and may include wrong dates
       const postProcDeadlineIntent = this.detectDeadlineIntent(message);
       let deadlineFixApplied = false; // Track if we applied deadline fix to skip SHORT_RESPONSE
-      console.log(`[v12.7-DEBUG] Deadline intent check: query="${message.substring(0, 50)}", intent=${postProcDeadlineIntent}`);
+      console.log(`[v12.8-DEBUG] Deadline intent check: query="${message.substring(0, 50)}", intent=${postProcDeadlineIntent}`);
 
       if (postProcDeadlineIntent) {
-        // Check if response already has the correct deadline
         const expectedDay = postProcDeadlineIntent === 'odeme' ? 26 : 24;
-        const hasCorrectDeadline = response.content.includes(String(expectedDay)) ||
-                                    (postProcDeadlineIntent === 'beyanname' && /yirmidördüncü/i.test(response.content)) ||
-                                    (postProcDeadlineIntent === 'odeme' && /yirmialtıncı/i.test(response.content));
 
-        console.log(`[v12.7-DEBUG] Expected day=${expectedDay}, hasCorrectDeadline=${hasCorrectDeadline}`);
+        // v12.8: ALWAYS extract and apply deadline fix for deterministic responses
+        // LLM is non-deterministic, so we force our answer regardless of what it returned
+        const extractedDeadline = this.extractDeadlineFromSources(searchResults, postProcDeadlineIntent);
+        console.log(`[v12.8-DEBUG] Expected day=${expectedDay}, extracted:`, extractedDeadline);
 
-        if (!hasCorrectDeadline) {
-          // Force extract deadline from sources
-          const extractedDeadline = this.extractDeadlineFromSources(searchResults, postProcDeadlineIntent);
-          console.log(`[v12.7-DEBUG] Extracted deadline:`, extractedDeadline);
-
-          if (extractedDeadline) {
-            const forcedAnswer = this.generateDeadlineAnswer(extractedDeadline, postProcDeadlineIntent, responseLanguage);
-            if (forcedAnswer) {
-              console.log(`🛡️ DEADLINE_FORCE_FIX: Replacing response with correct deadline (day=${extractedDeadline.day})`);
-              response.content = forcedAnswer;
-              deadlineFixApplied = true;
-            }
+        if (extractedDeadline && extractedDeadline.day === expectedDay) {
+          const forcedAnswer = this.generateDeadlineAnswer(extractedDeadline, postProcDeadlineIntent, responseLanguage);
+          if (forcedAnswer) {
+            console.log(`🛡️ DEADLINE_FORCE_FIX: Forcing deterministic response (day=${extractedDeadline.day})`);
+            response.content = forcedAnswer;
+            deadlineFixApplied = true;
+          }
+        } else if (extractedDeadline) {
+          // Extracted a deadline but not the expected one - still use it but log warning
+          console.log(`⚠️ DEADLINE_MISMATCH: Expected ${expectedDay}, got ${extractedDeadline.day} - using extracted`);
+          const forcedAnswer = this.generateDeadlineAnswer(extractedDeadline, postProcDeadlineIntent, responseLanguage);
+          if (forcedAnswer) {
+            response.content = forcedAnswer;
+            deadlineFixApplied = true;
           }
         } else {
-          // Response already has correct deadline, mark it to skip enrichment
-          deadlineFixApplied = true;
-          console.log(`[v12.7-DEBUG] Response already has correct deadline ${expectedDay}, skipping enrichment`);
+          // No deadline found in sources - keep LLM response but mark as deadline query
+          console.log(`⚠️ DEADLINE_NOT_FOUND: No deadline in sources, keeping LLM response`);
+          deadlineFixApplied = true; // Still skip enrichment
         }
       }
 
@@ -4346,48 +4348,57 @@ FORMAT:
     // v12.7: Lowered threshold from 100 to 80 for MURAT-2/3 scenarios
     if (query.length < 80) return false;
 
-    // Scenario indicators - comprehensive patterns for complex tax questions
-    const scenarioPatterns = [
+    // v12.8: Scenario indicators with labels for debugging
+    const scenarioPatterns: Array<{ pattern: RegExp; label: string }> = [
       // Company/entity references
-      /firmam[ıi]z/i,
-      /şirketimiz/i,
-      /müşterimiz/i,
-      /mükellef/i,
+      { pattern: /firmam[ıi]z/i, label: 'firmamız' },
+      { pattern: /şirketimiz/i, label: 'şirketimiz' },
+      { pattern: /müşterimiz/i, label: 'müşterimiz' },
+      { pattern: /mükellef/i, label: 'mükellef' },
 
       // Question patterns
-      /durumu nedir/i,
-      /ne yapmal[ıi]/i,
-      /nas[ıi]l\s+(?:değerlendiri|yorumlan)/i,
-      /nas[ıi]l\s+hareket/i,
+      { pattern: /durumu nedir/i, label: 'durumu nedir' },
+      { pattern: /ne yapmal[ıi]/i, label: 'ne yapmalı' },
+      { pattern: /nas[ıi]l\s+(?:değerlendiri|yorumlan)/i, label: 'nasıl değerlendirilir' },
+      { pattern: /nas[ıi]l\s+hareket/i, label: 'nasıl hareket' },
 
       // Legal/tax context
-      /vergisel\s+(?:durum|sonuç)/i,
-      /mevzuat\s+açısından/i,
-      /hukuki\s+(?:durum|değerlendirme)/i,
-      /yapılması\s+gereken/i,
-      /uygulama\s+(?:nasıl|şekli)/i,
+      { pattern: /vergisel\s+(?:durum|sonuç)/i, label: 'vergisel durum' },
+      { pattern: /mevzuat\s+açısından/i, label: 'mevzuat açısından' },
+      { pattern: /hukuki\s+(?:durum|değerlendirme)/i, label: 'hukuki durum' },
+      { pattern: /yapılması\s+gereken/i, label: 'yapılması gereken' },
+      { pattern: /uygulama\s+(?:nasıl|şekli)/i, label: 'uygulama nasıl' },
 
-      // v12.7: MURAT-2/3 patterns
-      /uzlaşma/i,
-      /indirim\s+(?:talep|iste|hakkı)/i,
-      /izaha\s+davet/i,
-      /ceza\s+(?:indirim|kalkma|affı)/i,
-      /pişmanlık/i,
-      /vergi\s+(?:ziyaı|kaçakçılığı|suçu)/i,
-      /ödeme\s+emri/i,
-      /haciz/i,
+      // v12.8: MURAT-2/3 patterns (fixed regex)
+      { pattern: /uzlaşma/i, label: 'uzlaşma' },
+      { pattern: /indirim\s*(?:talep|iste|hakkı|oranı)/i, label: 'indirim talep' },
+      { pattern: /izaha?\s*davet/i, label: 'izaha davet' },  // Fixed: \s* instead of \s+
+      { pattern: /ceza\s*(?:indirim|kalkma|affı|kes)/i, label: 'ceza indirim' },
+      { pattern: /pişmanlık/i, label: 'pişmanlık' },
+      { pattern: /vergi\s*(?:ziya[ıi]|kaçakçılı|suç)/i, label: 'vergi ziyaı' },
+      { pattern: /ödeme\s*emri/i, label: 'ödeme emri' },
+      { pattern: /haciz/i, label: 'haciz' },
+      { pattern: /şekil\s*şart/i, label: 'şekil şart' },  // Added for MURAT-3
+      { pattern: /usulsüzlük/i, label: 'usulsüzlük' },
+      { pattern: /tarhiyat/i, label: 'tarhiyat' },
 
       // Generic scenario markers
-      /senaryo/i,
-      /örnek\s+olay/i,
-      /durum[u]?\s+şu/i,
-      /şöyle\s+bir\s+durum/i
+      { pattern: /senaryo/i, label: 'senaryo' },
+      { pattern: /örnek\s+olay/i, label: 'örnek olay' },
+      { pattern: /durum[u]?\s+şu/i, label: 'durumu şu' },
+      { pattern: /şöyle\s+bir\s+durum/i, label: 'şöyle bir durum' }
     ];
 
-    const isScenario = scenarioPatterns.some(pattern => pattern.test(queryLower));
-    console.log(`[v12.7-DEBUG] isScenarioQuery: query.length=${query.length}, isScenario=${isScenario}`);
+    // Find matching pattern
+    const matchedPattern = scenarioPatterns.find(p => p.pattern.test(queryLower));
 
-    return isScenario;
+    if (matchedPattern) {
+      console.log(`[v12.8-DEBUG] SCENARIO_DETECT: query.length=${query.length}, matched="${matchedPattern.label}"`);
+      return true;
+    }
+
+    console.log(`[v12.8-DEBUG] isScenarioQuery: query.length=${query.length}, NO MATCH`);
+    return false;
   }
 
   /**
