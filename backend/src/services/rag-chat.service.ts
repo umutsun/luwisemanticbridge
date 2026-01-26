@@ -2196,6 +2196,15 @@ FORMAT:
       // Clean response content - remove section headings that LLM might add despite instructions
       response.content = this.stripSectionHeadings(response.content, settingsMap);
 
+      // 🕐 v12 FIX: Deadline Intent Handler - fix header-only responses for deadline questions
+      // If response is mostly header (Konu:) with little content, and sources have deadline info,
+      // generate a direct fallback answer
+      response.content = this.fixDeadlineHeaderOnly(response.content, searchResults, message, responseLanguage);
+
+      // 🛡️ v12 FIX: Contradiction Protection - detect false "no date" claims
+      // If LLM says "no date in sources" but sources actually have deadline info, force correction
+      response.content = this.fixDateContradiction(response.content, searchResults, message, responseLanguage);
+
       // Strip citation markers when disableCitationText is enabled AND strict mode is OFF
       // In strict mode, we NEED the [Kaynak X] references for source verification
       if (disableCitationText && !strictRagMode) {
@@ -3615,6 +3624,350 @@ FORMAT:
     }
 
     return fixedSentences.join(' ');
+  }
+
+  /**
+   * 🕐 DEADLINE HEADER-ONLY FIX v12
+   *
+   * Fixes responses where model only generates header (Konu:) without actual content.
+   * This happens with deadline questions where the model gets stuck in format mode.
+   *
+   * Detection:
+   * - Question contains deadline keywords (kaçına kadar, ne zamana kadar, etc.)
+   * - Response is too short or only contains headers
+   * - Sources contain deadline information (yirmidördüncü, 24, 21, 26, etc.)
+   *
+   * Fix:
+   * - Extract deadline info directly from sources
+   * - Generate simple, direct answer with citation
+   *
+   * @param response - LLM response text
+   * @param sources - Source objects
+   * @param query - Original user query
+   * @param language - Response language
+   */
+  /**
+   * 🎯 DEADLINE INTENT TYPES - Dynamic detection
+   */
+  private readonly DEADLINE_INTENTS = {
+    beyanname: {
+      keywords: ['beyanname', 'verilir', 'verilme', 'beyan', 'bildirim'],
+      articles: ['madde 41', 'm.41', 'm. 41'],
+      action: 'verilmelidir',
+      subject: 'KDV beyannamesi'
+    },
+    odeme: {
+      keywords: ['ödeme', 'ödenir', 'ödemesi', 'yatırılır', 'yatırma'],
+      articles: ['madde 46', 'm.46', 'm. 46'],
+      action: 'ödenmelidir',
+      subject: 'KDV'
+    }
+  };
+
+  /**
+   * 🎯 DEADLINE TOKEN MAP - Turkish ordinal numbers for days
+   */
+  private readonly DEADLINE_TOKENS: Record<string, { day: number; word: string }> = {
+    'yirmibirinci': { day: 21, word: 'yirmibirinci' },
+    'yirmidördüncü': { day: 24, word: 'yirmidördüncü' },
+    'yirmialtıncı': { day: 26, word: 'yirmialtıncı' },
+    'yirmisekizinci': { day: 28, word: 'yirmisekizinci' }
+  };
+
+  private fixDeadlineHeaderOnly(
+    response: string,
+    sources: any[],
+    query: string,
+    language: string = 'tr'
+  ): string {
+    // 1. Detect deadline intent type (beyanname vs ödeme)
+    const intentType = this.detectDeadlineIntent(query);
+    if (!intentType) return response;
+
+    // 2. Check if response is header-only, too short, or missing the deadline token
+    const contentWithoutHeaders = response
+      .replace(/\*\*Konu:\*\*[^\n]*/gi, '')
+      .replace(/\*\*Anahtar Terimler:\*\*[^\n]*/gi, '')
+      .replace(/\*\*Dayanaklar:\*\*[\s\S]*?(?=\*\*|$)/gi, '')
+      .replace(/\*\*Değerlendirme:\*\*/gi, '')
+      .trim();
+
+    // Check if response contains any deadline token (21, 24, 26 or Turkish words)
+    const hasDeadlineInResponse = this.responseContainsDeadline(response);
+    const isHeaderOnly = contentWithoutHeaders.length < 100;
+    const needsFix = isHeaderOnly || !hasDeadlineInResponse;
+
+    if (!needsFix) return response;
+
+    console.log(`[DEADLINE-FIX] ${isHeaderOnly ? 'Header-only' : 'Missing deadline token'} detected for ${intentType} question`);
+
+    // 3. Search sources for deadline info matching the intent
+    const deadlineInfo = this.extractDeadlineFromSources(sources, intentType);
+
+    if (!deadlineInfo) {
+      console.log(`[DEADLINE-FIX] No deadline info found in sources for ${intentType}`);
+      return response;
+    }
+
+    // 4. Generate direct answer based on intent type
+    const directAnswer = this.generateDeadlineAnswer(deadlineInfo, intentType, language);
+
+    if (directAnswer) {
+      console.log(`[DEADLINE-FIX] Generated ${intentType} answer: day=${deadlineInfo.day}, source=[${deadlineInfo.sourceIndex}]`);
+      // Prepend to existing response or replace if too short
+      if (contentWithoutHeaders.length < 30) {
+        return directAnswer;
+      } else {
+        return directAnswer + '\n\n' + response;
+      }
+    }
+
+    return response;
+  }
+
+  /**
+   * Detect deadline intent type from query
+   */
+  private detectDeadlineIntent(query: string): 'beyanname' | 'odeme' | null {
+    const queryLower = query.toLowerCase();
+
+    // Generic deadline question indicators
+    const isDeadlineQuestion = [
+      'kaçına kadar', 'ne zamana kadar', 'ne zaman', 'süre',
+      'son tarih', 'deadline', 'teslim'
+    ].some(kw => queryLower.includes(kw));
+
+    if (!isDeadlineQuestion) return null;
+
+    // Check for ödeme (payment) intent first (more specific)
+    const isOdeme = this.DEADLINE_INTENTS.odeme.keywords.some(kw => queryLower.includes(kw)) ||
+                    this.DEADLINE_INTENTS.odeme.articles.some(art => queryLower.includes(art));
+    if (isOdeme) return 'odeme';
+
+    // Check for beyanname (declaration) intent
+    const isBeyanname = this.DEADLINE_INTENTS.beyanname.keywords.some(kw => queryLower.includes(kw)) ||
+                        this.DEADLINE_INTENTS.beyanname.articles.some(art => queryLower.includes(art));
+    if (isBeyanname) return 'beyanname';
+
+    // Default to beyanname for generic KDV deadline questions
+    if (queryLower.includes('kdv')) return 'beyanname';
+
+    return null;
+  }
+
+  /**
+   * Check if response already contains a deadline token
+   */
+  private responseContainsDeadline(response: string): boolean {
+    const responseLower = response.toLowerCase();
+
+    // Check Turkish word forms
+    for (const token of Object.keys(this.DEADLINE_TOKENS)) {
+      if (responseLower.includes(token)) return true;
+    }
+
+    // Check digit forms (21, 24, 26, etc.)
+    const digitPattern = /\b(21|24|26|28)\b/;
+    if (digitPattern.test(response)) return true;
+
+    // Check "ayın X" pattern
+    if (/ayın\s*\d+/i.test(response)) return true;
+
+    return false;
+  }
+
+  /**
+   * Extract deadline info from sources based on intent type
+   */
+  private extractDeadlineFromSources(
+    sources: any[],
+    intentType: 'beyanname' | 'odeme'
+  ): { day: number; word: string; sourceIndex: number; articleRef: string } | null {
+    const intent = this.DEADLINE_INTENTS[intentType];
+
+    // Build deadline token patterns
+    const tokenPatterns = Object.entries(this.DEADLINE_TOKENS).map(([word, info]) => ({
+      pattern: new RegExp(`${word}\\s+(günü?)?\\s*(akşam[ıi]na)?\\s*(kadar)?`, 'gi'),
+      ...info
+    }));
+
+    // Also check for digit patterns
+    const digitPattern = /(\d+)[''']?\s*(inci|ıncı|üncü|uncu|nci|ncı|ncü|ncu)?\s*(günü?)/gi;
+
+    for (let i = 0; i < sources.length; i++) {
+      const sourceContent = (sources[i].content || sources[i].excerpt || '').toLowerCase();
+      const sourceTitle = (sources[i].title || sources[i].source_name || '').toLowerCase();
+
+      // Check if source matches the expected article for this intent
+      const matchesArticle = intent.articles.some(art =>
+        sourceContent.includes(art) || sourceTitle.includes(art)
+      );
+
+      // Prefer sources that match the article reference
+      const priorityBonus = matchesArticle ? 1000 : 0;
+
+      // Check Turkish word tokens
+      for (const tokenInfo of tokenPatterns) {
+        tokenInfo.pattern.lastIndex = 0;
+        if (tokenInfo.pattern.test(sourceContent)) {
+          console.log(`[DEADLINE-EXTRACT] Found "${tokenInfo.word}" (day ${tokenInfo.day}) in source [${i + 1}]`);
+
+          // Determine article reference
+          let articleRef = '';
+          if (sourceContent.includes('madde 41') || sourceTitle.includes('m.41')) articleRef = 'KDVK m.41';
+          else if (sourceContent.includes('madde 46') || sourceTitle.includes('m.46')) articleRef = 'KDVK m.46';
+
+          return {
+            day: tokenInfo.day,
+            word: tokenInfo.word,
+            sourceIndex: i + 1,
+            articleRef
+          };
+        }
+      }
+
+      // Check digit patterns
+      digitPattern.lastIndex = 0;
+      const digitMatch = digitPattern.exec(sourceContent);
+      if (digitMatch) {
+        const day = parseInt(digitMatch[1]);
+        if ([21, 24, 26, 28].includes(day)) {
+          const wordEntry = Object.entries(this.DEADLINE_TOKENS).find(([_, info]) => info.day === day);
+          const word = wordEntry ? wordEntry[1].word : `${day}`;
+
+          let articleRef = '';
+          if (sourceContent.includes('madde 41') || sourceTitle.includes('m.41')) articleRef = 'KDVK m.41';
+          else if (sourceContent.includes('madde 46') || sourceTitle.includes('m.46')) articleRef = 'KDVK m.46';
+
+          console.log(`[DEADLINE-EXTRACT] Found day ${day} (digit form) in source [${i + 1}]`);
+          return { day, word, sourceIndex: i + 1, articleRef };
+        }
+      }
+    }
+
+    return null;
+  }
+
+  /**
+   * Generate a direct deadline answer based on intent type
+   */
+  private generateDeadlineAnswer(
+    deadlineInfo: { day: number; word: string; sourceIndex: number; articleRef: string },
+    intentType: 'beyanname' | 'odeme',
+    language: string
+  ): string | null {
+    const { day, word, sourceIndex, articleRef } = deadlineInfo;
+    const intent = this.DEADLINE_INTENTS[intentType];
+
+    // Format deadline string
+    const deadlineStr = `takip eden ayın ${day}'${this.getSuffix(day)} (${word} günü) akşamına kadar`;
+
+    // Build article reference if available
+    const articleSuffix = articleRef ? ` (${articleRef})` : '';
+
+    if (language === 'tr') {
+      if (intentType === 'odeme') {
+        return `${intent.subject}, ${deadlineStr} ${intent.action}${articleSuffix} [${sourceIndex}].`;
+      } else {
+        // beyanname
+        let answer = `${intent.subject}, vergilendirme dönemini ${deadlineStr} ilgili vergi dairesine ${intent.action}${articleSuffix} [${sourceIndex}].`;
+
+        // Add withholding agent note if 21st day is involved
+        if (day === 21) {
+          answer = `Vergi kesintisi yapmakla sorumlu olanlar için ${intent.subject.toLowerCase()}, ${deadlineStr} ${intent.action}${articleSuffix} [${sourceIndex}].`;
+        }
+
+        return answer;
+      }
+    } else {
+      if (intentType === 'odeme') {
+        return `VAT must be paid by the ${day}th day of the following month${articleSuffix} [${sourceIndex}].`;
+      } else {
+        return `VAT returns must be submitted by the ${day}th day of the following month${articleSuffix} [${sourceIndex}].`;
+      }
+    }
+  }
+
+  /**
+   * Get Turkish suffix for day number
+   */
+  private getSuffix(day: number): string {
+    // Turkish vowel harmony for numbers
+    const suffixes: Record<number, string> = {
+      21: 'i',
+      24: 'ü',
+      26: 'sı',
+      28: 'i'
+    };
+    return suffixes[day] || 'i';
+  }
+
+  /**
+   * 🛡️ v12 FIX: Contradiction Protection
+   *
+   * Detects when LLM falsely claims "no date in sources" while sources actually have deadline info.
+   * This happens when model uses hedging language like "kaynaklarda belirtilmemiş" but the date IS there.
+   *
+   * RULE: If sources contain a deadline token (21/24/26), "net tarih yok" is FORBIDDEN in response.
+   *
+   * @param response - LLM response text
+   * @param sources - Source objects from search
+   * @param query - Original user query
+   * @param language - Response language
+   */
+  private fixDateContradiction(
+    response: string,
+    sources: any[],
+    query: string,
+    language: string = 'tr'
+  ): string {
+    // Only apply to deadline-related queries
+    const intentType = this.detectDeadlineIntent(query);
+    if (!intentType) return response;
+
+    // Detect contradiction phrases in response (expanded list)
+    const contradictionPhrases = [
+      /kaynak(lar)?da\s*(belirli\s+bir\s+)?tarih\s*(yer\s+)?alma(maktadır|mıyor)/gi,
+      /tarih\s*(bilgisi\s+)?bula(madım|mamadım|namadı)/gi,
+      /net\s+(bir\s+)?tarih\s+(yok|belirtilmemiş|verilmemiş)/gi,
+      /kesin\s+(bir\s+)?tarih\s*(yok|belirtilmemiş|belli\s+değil)/gi,
+      /tarih\s+veril(me)?miş/gi,
+      /spesifik\s+(bir\s+)?tarih\s*(yok|belirtilmemiş)/gi,
+      /tarih\s+bilgisi\s+mevcut\s+değil/gi,
+      /belirli\s+bir\s+gün\s+belirtilmemiş/gi,
+      /tam\s+tarih\s+yok/gi
+    ];
+
+    const hasContradiction = contradictionPhrases.some(pattern => {
+      pattern.lastIndex = 0;
+      return pattern.test(response);
+    });
+
+    // Also check if response is missing the deadline completely for deadline questions
+    const hasMissingDeadline = !this.responseContainsDeadline(response);
+
+    if (!hasContradiction && !hasMissingDeadline) return response;
+
+    const reason = hasContradiction ? '"no date" claim' : 'missing deadline token';
+    console.log(`[CONTRADICTION-FIX] Detected ${reason} for ${intentType} question, checking sources...`);
+
+    // Use the unified deadline extractor
+    const deadlineInfo = this.extractDeadlineFromSources(sources, intentType);
+
+    if (!deadlineInfo) {
+      console.log(`[CONTRADICTION-FIX] No deadline found in sources, keeping original response`);
+      return response;
+    }
+
+    // Generate corrected answer using the unified generator
+    const correctedAnswer = this.generateDeadlineAnswer(deadlineInfo, intentType, language);
+
+    if (correctedAnswer) {
+      console.log(`[CONTRADICTION-FIX] Replacing response with corrected answer: day=${deadlineInfo.day}`);
+      return correctedAnswer;
+    }
+
+    return response;
   }
 
   /**
