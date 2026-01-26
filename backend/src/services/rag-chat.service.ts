@@ -2498,6 +2498,10 @@ FORMAT:
         }
       }
 
+      // 🛡️ v12.6: ARTICLE FORMAT VALIDATOR for scenario queries
+      // Ensures proper sections (ÖZET, DEĞERLENDİRME, SONUÇ) for complex scenario questions
+      response.content = this.ensureArticleFormat(response.content, message);
+
       // Strip citation markers when disableCitationText is enabled AND strict mode is OFF
       // In strict mode, we NEED the [Kaynak X] references for source verification
       if (disableCitationText && !strictRagMode) {
@@ -4321,6 +4325,119 @@ FORMAT:
     return scoredSources.length > 0
       ? { source: scoredSources[0].source, index: scoredSources[0].index }
       : { source: sources[0], index: 1 };
+  }
+
+  /**
+   * 🛡️ v12.6: Check if query is a scenario/case question (Murat senaryoları)
+   * Scenarios require full article format with multiple sections
+   */
+  private isScenarioQuery(query: string): boolean {
+    const queryLower = query.toLowerCase();
+
+    // Length check - scenarios are usually long
+    if (query.length < 100) return false;
+
+    // Scenario indicators
+    const scenarioPatterns = [
+      /firmam[ıi]z/i,
+      /şirketimiz/i,
+      /müşterimiz/i,
+      /durumu nedir/i,
+      /ne yapmal[ıi]/i,
+      /nas[ıi]l\s+(?:değerlendiri|yorumlan)/i,
+      /vergisel\s+(?:durum|sonuç)/i,
+      /mevzuat\s+açısından/i,
+      /hukuki\s+(?:durum|değerlendirme)/i,
+      /yapılması\s+gereken/i,
+      /uygulama\s+(?:nasıl|şekli)/i,
+      /senaryo/i,
+      /örnek\s+olay/i
+    ];
+
+    return scenarioPatterns.some(pattern => pattern.test(queryLower));
+  }
+
+  /**
+   * 🛡️ v12.6: Validate article format has required sections
+   */
+  private validateArticleFormat(response: string): { valid: boolean; missing: string[] } {
+    const requiredSections = [
+      'ÖZET',
+      'DEĞERLENDİRME',
+      'SONUÇ'
+    ];
+
+    const optionalSections = [
+      'VARSAYIMLAR',
+      'MEVZUAT HİYERARŞİSİ',
+      'UYGULAMA ADIMLARI',
+      'RİSKLER'
+    ];
+
+    const responseUpper = response.toUpperCase();
+    const missing: string[] = [];
+
+    // Check required sections
+    for (const section of requiredSections) {
+      if (!responseUpper.includes(section) && !responseUpper.includes(`**${section}**`)) {
+        missing.push(section);
+      }
+    }
+
+    // For full validity, need at least 3 sections total
+    const allSections = [...requiredSections, ...optionalSections];
+    const foundCount = allSections.filter(s =>
+      responseUpper.includes(s) || responseUpper.includes(`**${s}**`)
+    ).length;
+
+    return {
+      valid: missing.length === 0 && foundCount >= 3,
+      missing
+    };
+  }
+
+  /**
+   * 🛡️ v12.6: Ensure article format for scenario queries
+   * Adds missing sections if response doesn't have proper format
+   */
+  private ensureArticleFormat(response: string, query: string): string {
+    if (!this.isScenarioQuery(query)) return response;
+
+    const validation = this.validateArticleFormat(response);
+
+    if (!validation.valid) {
+      console.log(`🛡️ ARTICLE_FORMAT_FIX: Missing sections: ${validation.missing.join(', ')}`);
+
+      let enhanced = response;
+
+      // Add ÖZET if missing
+      if (!response.toUpperCase().includes('ÖZET')) {
+        const summary = response.substring(0, Math.min(response.length, 300)).replace(/\n/g, ' ').trim();
+        enhanced = `**ÖZET:**\n${summary}...\n\n${enhanced}`;
+      }
+
+      // Add DEĞERLENDİRME header if content exists but header missing
+      if (!response.toUpperCase().includes('DEĞERLENDİRME') && response.length > 200) {
+        // Find a good place to insert the header (after ÖZET if exists)
+        const ozetIndex = enhanced.toUpperCase().indexOf('ÖZET');
+        if (ozetIndex >= 0) {
+          const afterOzet = enhanced.indexOf('\n\n', ozetIndex + 10);
+          if (afterOzet > 0) {
+            enhanced = enhanced.substring(0, afterOzet) + '\n\n**DEĞERLENDİRME:**\n' + enhanced.substring(afterOzet + 2);
+          }
+        }
+      }
+
+      // Add SONUÇ if missing
+      if (!response.toUpperCase().includes('SONUÇ')) {
+        enhanced = `${enhanced}\n\n**SONUÇ:**\nYukarıdaki değerlendirmeler ışığında ilgili mevzuat hükümlerinin dikkatli bir şekilde incelenmesi ve gerekirse uzman görüşü alınması önerilir.`;
+      }
+
+      console.log(`🛡️ ARTICLE_FORMAT_FIX: Enhanced response with missing sections`);
+      return enhanced;
+    }
+
+    return response;
   }
 
   /**
