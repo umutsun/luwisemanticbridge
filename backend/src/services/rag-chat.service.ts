@@ -3290,9 +3290,11 @@ Beyanname için mi yoksa ödeme için mi soruyorsunuz?`;
               }
             }
 
-            // Filter: Keep only sources that match target law code OR don't match any law code
+            // Filter: Keep only sources that match target law code OR are truly generic (not law sources)
+            // v12.22 FIX: Also filter out generic "KANUN" sources that don't match target
             const filteredSources = sortedSources.filter(s => {
               const searchText = `${s.content || ''} ${s.title || ''}`;
+              const titleUpper = (s.title || '').toUpperCase();
 
               // Check if source matches target law code
               const matchesTarget = targetPatterns.some(p => p.test(searchText));
@@ -3302,7 +3304,15 @@ Beyanname için mi yoksa ödeme için mi soruyorsunuz?`;
               const matchesOther = excludePatterns.some(p => p.test(searchText));
               if (matchesOther) return false;
 
-              // Generic sources (no specific law code) - keep with lower priority
+              // v12.22: If title contains "KANUN" but didn't match target, it's a non-target law - exclude
+              // This catches omnibus laws like "BAZI KANUNLARDA DEĞİŞİKLİK" (5838, 7440, etc.)
+              const isLawSource = titleUpper.includes('KANUN') || titleUpper.includes('KANUNU');
+              if (isLawSource) {
+                console.log(`🛡️ [v12.22] OMNIBUS_LAW_FILTER: Excluded "${s.title?.substring(0, 50)}..." (law source not matching ${targetLawCode})`);
+                return false;
+              }
+
+              // Generic sources (documents, articles without "KANUN" in title) - keep
               return true;
             });
 
