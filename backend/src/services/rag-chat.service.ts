@@ -2435,9 +2435,11 @@ Beyanname için mi yoksa ödeme için mi soruyorsunuz?`;
         }
       }
 
-      // Legacy fixes (still useful as fallback)
-      response.content = this.fixDeadlineHeaderOnly(response.content, searchResults, message, responseLanguage);
-      response.content = this.fixDateContradiction(response.content, searchResults, message, responseLanguage);
+      // Legacy fixes (still useful as fallback) - v12.19: Skip if deadline already fixed to prevent duplication
+      if (!deadlineFixApplied) {
+        response.content = this.fixDeadlineHeaderOnly(response.content, searchResults, message, responseLanguage);
+        response.content = this.fixDateContradiction(response.content, searchResults, message, responseLanguage);
+      }
 
       // 🛡️ P0: ARTICLE NOT FOUND RESPONSE
       // If user asked for specific article (e.g., VUK 376) but it's not in DB, give explicit response
