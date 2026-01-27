@@ -2393,6 +2393,7 @@ Beyanname için mi yoksa ödeme için mi soruyorsunuz?`;
             console.log(`🛡️ DEADLINE_FORCE_FIX: Forcing deterministic response (day=${extractedDeadline.day})`);
             response.content = forcedAnswer;
             deadlineFixApplied = true;
+            deadlineHardcodedApplied = true; // v12.18: Also skip sanitizer for extracted deadline (known correct value)
           }
         } else if (extractedDeadline && extractedDeadline.day !== expectedDay) {
           // v12.16 FIX: If extracted deadline doesn't match expected, use HARDCODED fallback
