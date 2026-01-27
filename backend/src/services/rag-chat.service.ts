@@ -2383,15 +2383,15 @@ Beyanname için mi yoksa ödeme için mi soruyorsunuz?`;
             response.content = forcedAnswer;
             deadlineFixApplied = true;
           }
-        } else if (extractedDeadline) {
-          // Extracted a deadline but not the expected one - still use it but log warning
-          console.log(`⚠️ DEADLINE_MISMATCH: Expected ${expectedDay}, got ${extractedDeadline.day} - using extracted`);
-          const forcedAnswer = this.generateDeadlineAnswer(extractedDeadline, postProcDeadlineIntent, responseLanguage);
-          if (forcedAnswer) {
-            response.content = forcedAnswer;
-            deadlineFixApplied = true;
-          }
-        } else {
+        } else if (extractedDeadline && extractedDeadline.day !== expectedDay) {
+          // v12.16 FIX: If extracted deadline doesn't match expected, use HARDCODED fallback
+          // Don't trust mismatched extraction - it's likely from wrong source
+          console.log(`⚠️ [v12.16] DEADLINE_MISMATCH: Expected ${expectedDay}, got ${extractedDeadline.day} - using HARDCODED fallback instead`);
+          // Fall through to hardcoded fallback below
+        }
+
+        // v12.16: Use hardcoded fallback if extraction failed OR returned wrong day
+        if (!deadlineFixApplied) {
           // v12.12 FIX: No deadline found in sources - use HARDCODED FALLBACK
           // This is a known, factual answer - better than LLM hallucination
           console.log(`🛡️ [v12.12] DEADLINE_HARDCODED_FALLBACK: No deadline in sources, using known correct answer`);
@@ -4217,10 +4217,17 @@ Beyanname için mi yoksa ödeme için mi soruyorsunuz?`;
     const queryLower = query.toLowerCase();
 
     // Generic deadline question indicators
-    const isDeadlineQuestion = [
+    const hasDeadlineKeyword = [
       'kaçına kadar', 'ne zamana kadar', 'ne zaman', 'süre',
       'son tarih', 'deadline', 'teslim', 'son gün'
     ].some(kw => queryLower.includes(kw));
+
+    // v12.16: Also detect implicit deadline questions that compare 24/26
+    // E.g., "KDV beyanname 24 mü 26 mı?" - no explicit "ne zaman" but clearly asking about deadlines
+    const hasComparisonPattern = /24\s*(mı?|mi|mu|mü)?\s*(yoksa|veya)?\s*26/i.test(queryLower) ||
+                                  /26\s*(mı?|mi|mu|mü)?\s*(yoksa|veya)?\s*24/i.test(queryLower);
+
+    const isDeadlineQuestion = hasDeadlineKeyword || hasComparisonPattern;
 
     if (!isDeadlineQuestion) return null;
 
@@ -4365,10 +4372,31 @@ Beyanname için mi yoksa ödeme için mi soruyorsunuz?`;
         sourceContent.includes(art) || sourceTitle.includes(art)
       );
 
-      // Determine article reference
+      // v12.16 FIX: Robust article reference detection with multiple patterns
+      // Use regex with word boundaries to prevent partial matches (e.g., "madde 4" matching "madde 41")
       let articleRef = '';
-      if (sourceContent.includes('madde 41') || sourceTitle.includes('m.41')) articleRef = 'KDVK m.41';
-      else if (sourceContent.includes('madde 46') || sourceTitle.includes('m.46')) articleRef = 'KDVK m.46';
+      const article41Patterns = [
+        /madde\s*41\b/i,     // "madde 41", "madde41"
+        /m\.\s*41\b/i,       // "m.41", "m. 41"
+        /\bm41\b/i           // "m41"
+      ];
+      const article46Patterns = [
+        /madde\s*46\b/i,     // "madde 46", "madde46"
+        /m\.\s*46\b/i,       // "m.46", "m. 46"
+        /\bm46\b/i           // "m46"
+      ];
+
+      const combinedText = sourceContent + ' ' + sourceTitle;
+      if (article41Patterns.some(p => p.test(combinedText))) {
+        articleRef = 'KDVK m.41';
+      } else if (article46Patterns.some(p => p.test(combinedText))) {
+        articleRef = 'KDVK m.46';
+      }
+      // v12.16: Fallback to intent-based article if extraction fails
+      if (!articleRef) {
+        articleRef = intentType === 'beyanname' ? 'KDVK m.41' : 'KDVK m.46';
+        console.log(`[v12.16] ARTICLE_EXTRACT_FALLBACK: Using intent-based article "${articleRef}" for ${intentType}`);
+      }
 
       // Check Turkish word tokens
       for (const tokenInfo of tokenPatterns) {
@@ -4449,9 +4477,24 @@ Beyanname için mi yoksa ödeme için mi soruyorsunuz?`;
     // Format deadline string
     const deadlineStr = `takip eden ayın ${day}'${this.getSuffix(day)} (${word} günü) akşamına kadar`;
 
+    // v12.16 FIX: ROBUST article reference - ALWAYS use known correct articles for KDV intents
+    // Don't trust extracted articleRef which can be empty or malformed
+    const KDV_ARTICLES: Record<string, string> = {
+      'beyanname': 'KDVK madde 41',
+      'odeme': 'KDVK madde 46'
+    };
+
     // v12.15 FIX: Build article reference with "madde" instead of "m." to prevent rendering issues
-    // "KDVK m.41" → "KDVK madde 41" for clearer separation from citation
-    const articleFull = articleRef ? articleRef.replace(/m\.(\d+)/g, 'madde $1') : '';
+    // v12.16: If extracted articleRef is valid, use it; otherwise fallback to known correct article
+    let articleFull = '';
+    if (articleRef && articleRef.includes('m.')) {
+      articleFull = articleRef.replace(/m\.(\d+)/g, 'madde $1');
+    }
+    // v12.16: Fallback to known correct article if extraction failed or produced invalid result
+    if (!articleFull || !articleFull.includes('madde 4')) {
+      articleFull = KDV_ARTICLES[intentType] || '';
+      console.log(`[v12.16] ARTICLE_FALLBACK: Using hardcoded article "${articleFull}" for ${intentType} (original articleRef: "${articleRef}")`);
+    }
     const articleSuffix = articleFull ? ` (${articleFull})` : '';
 
     if (language === 'tr') {
