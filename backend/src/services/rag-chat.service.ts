@@ -3234,12 +3234,13 @@ Beyanname için mi yoksa ödeme için mi soruyorsunuz?`;
       let sortedSources = sourcesWithScores.sort((a, b) => b._combinedScore - a._combinedScore);
 
       // ═══════════════════════════════════════════════════════════════
-      // v12.16 FIX: CROSS-LAW DOWNRANK for deadline queries (Schema-driven)
+      // v12.17 FIX: CROSS-LAW DOWNRANK for ALL law-specific queries (Schema-driven)
       // When user asks about a specific law (e.g., KDVK), penalize sources from
       // other laws (e.g., DVK) to prevent citation confusion between similar laws
       // Configuration comes from domainConfig.lawCodeConfig (no hardcoding)
+      // NOTE: Removed deadline intent dependency - runs for ANY query with law code
       // ═══════════════════════════════════════════════════════════════
-      if (postProcDeadlineIntent && domainConfig.lawCodeConfig?.lawCodes) {
+      if (domainConfig.lawCodeConfig?.lawCodes) {
         const lawCodes = domainConfig.lawCodeConfig.lawCodes;
         const queryLower = message.toLowerCase();
 
@@ -3250,6 +3251,7 @@ Beyanname için mi yoksa ödeme için mi soruyorsunuz?`;
           const aliasMatches = aliases.some(alias => queryLower.includes(alias.toLowerCase()));
           if (codePattern.test(queryLower) || aliasMatches) {
             targetLawCode = code;
+            console.log(`🎯 [v12.17] LAW_CODE_DETECTED: Query targets ${code} (matched pattern or alias)`);
             break;
           }
         }
@@ -3284,7 +3286,7 @@ Beyanname için mi yoksa ödeme için mi soruyorsunuz?`;
             }).sort((a, b) => b._combinedScore - a._combinedScore);
 
             if (downrankCount > 0) {
-              console.log(`🛡️ [v12.16] CROSS_LAW_DOWNRANK: Penalized ${downrankCount} non-${targetLawCode} sources for ${targetLawCode} query`);
+              console.log(`🛡️ [v12.17] CROSS_LAW_DOWNRANK: Penalized ${downrankCount} non-${targetLawCode} sources for ${targetLawCode} query`);
             }
           }
         }
