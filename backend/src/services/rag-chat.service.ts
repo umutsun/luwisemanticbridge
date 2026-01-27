@@ -2419,13 +2419,13 @@ Beyanname için mi yoksa ödeme için mi soruyorsunuz?`;
             const deadlineStr = `takip eden ayın ${fallback.day}'${this.getSuffix(fallback.day)} (${fallback.word} günü) akşamına kadar`;
 
             // v12.15 FIX: Clear separation between article ref and citation to prevent m.41[1] → m.4[1] rendering issue
-            // Format: "... (KDVK madde 41) [1]." - using "madde" instead of "m." for clarity
+            // v12.20 FIX: Use comma separator instead of parentheses to avoid remarkGfm parsing issues
             const articleFull = fallback.article.replace('m.', 'madde '); // "KDVK m.41" → "KDVK madde 41"
 
             if (postProcDeadlineIntent === 'odeme') {
-              response.content = `${intent.subject}, ${deadlineStr} ${intent.action} (${articleFull}) [1].`;
+              response.content = `${intent.subject}, ${deadlineStr} ${intent.action}, ${articleFull}, [1].`;
             } else {
-              response.content = `${intent.subject}, vergilendirme dönemini ${deadlineStr} ilgili vergi dairesine ${intent.action} (${articleFull}) [1].`;
+              response.content = `${intent.subject}, vergilendirme dönemini ${deadlineStr} ilgili vergi dairesine ${intent.action}, ${articleFull}, [1].`;
             }
             console.log(`🛡️ DEADLINE_HARDCODED: Forced response with day=${fallback.day} (with citation)`);
             deadlineHardcodedApplied = true; // v12.14: Flag to skip sanitizer
@@ -4681,7 +4681,9 @@ Beyanname için mi yoksa ödeme için mi soruyorsunuz?`;
       articleFull = KDV_ARTICLES[intentType] || '';
       console.log(`[v12.16] ARTICLE_FALLBACK: Using hardcoded article "${articleFull}" for ${intentType} (original articleRef: "${articleRef}")`);
     }
-    const articleSuffix = articleFull ? ` (${articleFull})` : '';
+    // v12.20 FIX: Use comma separator instead of parentheses to avoid remarkGfm parsing issues
+    // "(KDVK madde 46) [10]" was being parsed incorrectly, "6)" eaten by markdown
+    const articleSuffix = articleFull ? `, ${articleFull},` : '';
 
     if (language === 'tr') {
       if (intentType === 'odeme') {
