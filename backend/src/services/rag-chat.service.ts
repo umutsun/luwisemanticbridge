@@ -330,6 +330,12 @@ PROHIBITED:
     authorityLevels: Record<string, number>;
     sanitizerConfig?: SanitizerConfig;
     lawCodes?: string[];
+    lawCodeConfig?: {
+      lawCodes?: Record<string, string[]>;
+      lawNumberToCode?: Record<string, string>;
+      lawNameToCode?: Record<string, string>;
+      lawCodePatterns?: Array<{ pattern: string; code: string }>;
+    };
   }> {
     try {
       const config = await dataSchemaService.loadConfig();
@@ -345,8 +351,13 @@ PROHIBITED:
       // Get sanitizer config from Schema llmConfig (domain-specific)
       const sanitizerConfig = llmConfig?.sanitizerConfig as SanitizerConfig | undefined;
 
-      // Get law codes from Schema llmConfig.lawCodeConfig (for claim verification)
-      const lawCodeConfig = llmConfig?.lawCodeConfig;
+      // Get FULL law code config from Schema llmConfig.lawCodeConfig (for v12.16 citation fix)
+      const lawCodeConfig = llmConfig?.lawCodeConfig as {
+        lawCodes?: Record<string, string[]>;
+        lawNumberToCode?: Record<string, string>;
+        lawNameToCode?: Record<string, string>;
+        lawCodePatterns?: Array<{ pattern: string; code: string }>;
+      } | undefined;
       const lawCodes = lawCodeConfig?.lawCodes ? Object.keys(lawCodeConfig.lawCodes) : undefined;
 
       // Get authority levels from RAG Settings (NOT from schema - single source of truth)
@@ -377,7 +388,7 @@ PROHIBITED:
         console.log(`📋 [DOMAIN_CONFIG] Loaded: ${topicEntities.length} entities, ${keyTerms.length} terms, ${Object.keys(authorityLevels).length} authority levels, sanitizer=${sanitizerStatus}, lawCodes=[${lawCodeStatus}]`);
       }
 
-      return { topicEntities, keyTerms, authorityLevels, sanitizerConfig, lawCodes };
+      return { topicEntities, keyTerms, authorityLevels, sanitizerConfig, lawCodes, lawCodeConfig };
     } catch (error) {
       console.error('[DOMAIN_CONFIG] Failed to load config:', error);
       return { topicEntities: [], keyTerms: [], authorityLevels: {} };
@@ -3220,7 +3231,64 @@ Beyanname için mi yoksa ödeme için mi soruyorsunuz?`;
       });
 
       // Step 2: Sort by combined score (hierarchy + similarity)
-      const sortedSources = sourcesWithScores.sort((a, b) => b._combinedScore - a._combinedScore);
+      let sortedSources = sourcesWithScores.sort((a, b) => b._combinedScore - a._combinedScore);
+
+      // ═══════════════════════════════════════════════════════════════
+      // v12.16 FIX: CROSS-LAW DOWNRANK for deadline queries (Schema-driven)
+      // When user asks about a specific law (e.g., KDVK), penalize sources from
+      // other laws (e.g., DVK) to prevent citation confusion between similar laws
+      // Configuration comes from domainConfig.lawCodeConfig (no hardcoding)
+      // ═══════════════════════════════════════════════════════════════
+      if (postProcDeadlineIntent && domainConfig.lawCodeConfig?.lawCodes) {
+        const lawCodes = domainConfig.lawCodeConfig.lawCodes;
+        const queryLower = message.toLowerCase();
+
+        // Detect which law code the user is asking about
+        let targetLawCode: string | null = null;
+        for (const [code, aliases] of Object.entries(lawCodes)) {
+          const codePattern = new RegExp(code.replace(/K$/, ''), 'i'); // KDVK → KDV
+          const aliasMatches = aliases.some(alias => queryLower.includes(alias.toLowerCase()));
+          if (codePattern.test(queryLower) || aliasMatches) {
+            targetLawCode = code;
+            break;
+          }
+        }
+
+        if (targetLawCode) {
+          // Build patterns for OTHER law codes to penalize
+          const excludePatterns: RegExp[] = [];
+          for (const [code, aliases] of Object.entries(lawCodes)) {
+            if (code !== targetLawCode) {
+              // Add code pattern (e.g., DVK, GVK)
+              excludePatterns.push(new RegExp(code, 'i'));
+              // Add alias patterns (e.g., "Damga Vergisi", "Gelir Vergisi")
+              for (const alias of aliases) {
+                if (alias.length > 3) { // Skip short aliases to avoid false matches
+                  excludePatterns.push(new RegExp(alias.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i'));
+                }
+              }
+            }
+          }
+
+          if (excludePatterns.length > 0) {
+            let downrankCount = 0;
+            sortedSources = sortedSources.map(s => {
+              const searchText = `${s.content || ''} ${s.title || ''}`;
+              // Check if source matches any exclude pattern
+              const shouldPenalize = excludePatterns.some(p => p.test(searchText));
+              if (shouldPenalize) {
+                downrankCount++;
+                return { ...s, _combinedScore: s._combinedScore * 0.3 }; // 70% penalty
+              }
+              return s;
+            }).sort((a, b) => b._combinedScore - a._combinedScore);
+
+            if (downrankCount > 0) {
+              console.log(`🛡️ [v12.16] CROSS_LAW_DOWNRANK: Penalized ${downrankCount} non-${targetLawCode} sources for ${targetLawCode} query`);
+            }
+          }
+        }
+      }
 
       // Step 3: Filter by similarity threshold, then apply min/max bounds
       const sourcesAboveThreshold = sortedSources.filter(s => s._similarityScore >= sourceThreshold);
@@ -3322,7 +3390,112 @@ Beyanname için mi yoksa ödeme için mi soruyorsunuz?`;
       // CITATION REMAPPING: Apply mapping to LLM response
       // This ensures [X] in text matches source [X] in displayed list
       // ═══════════════════════════════════════════════════════════════
-      if (citationRemap.size > 0) {
+
+      // v12.16 FIX: For hardcoded deadline responses, find the ACTUAL target law source
+      // instead of blind citation remap which may map [1] to wrong source (e.g., DVK for KDVK)
+      // Configuration comes from domainConfig.lawCodeConfig (no hardcoding)
+      if (deadlineHardcodedApplied && limitedSources.length > 0) {
+        const lawCodeConfig = domainConfig.lawCodeConfig;
+        const queryLower = message.toLowerCase();
+
+        // Detect which law code the user is asking about
+        let targetLawCode: string | null = null;
+        let targetPatterns: RegExp[] = [];
+
+        if (lawCodeConfig?.lawCodes) {
+          for (const [code, aliases] of Object.entries(lawCodeConfig.lawCodes)) {
+            const codePattern = new RegExp(code.replace(/K$/, ''), 'i'); // KDVK → KDV
+            const aliasMatches = aliases.some(alias => queryLower.includes(alias.toLowerCase()));
+            if (codePattern.test(queryLower) || aliasMatches) {
+              targetLawCode = code;
+              // Build patterns from code and aliases
+              targetPatterns.push(new RegExp(code, 'i'));
+              for (const alias of aliases) {
+                if (alias.length > 3) {
+                  targetPatterns.push(new RegExp(alias.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i'));
+                }
+              }
+              // Also add law number pattern if available
+              if (lawCodeConfig.lawNumberToCode) {
+                for (const [num, lawCode] of Object.entries(lawCodeConfig.lawNumberToCode)) {
+                  if (lawCode === code) {
+                    targetPatterns.push(new RegExp(`${num}.*kanun|kanun.*${num}`, 'i'));
+                  }
+                }
+              }
+              break;
+            }
+          }
+        }
+
+        // Fallback to KDVK patterns if no schema config (backward compatibility)
+        if (targetPatterns.length === 0) {
+          targetLawCode = 'KDVK';
+          targetPatterns = [
+            /KDVK|KDV\s*Kanun/i,
+            /3065.*kanun|kanun.*3065/i,
+            /katma\s*de[gğ]er\s*vergisi/i,
+          ];
+          console.log(`⚠️ [v12.16] No lawCodeConfig, using fallback KDVK patterns`);
+        }
+
+        console.log(`🛡️ [v12.16] DEADLINE_CITATION_FIX: Finding ${targetLawCode} source for hardcoded response`);
+
+        // Build exclude patterns for other law codes
+        const excludePatterns: RegExp[] = [];
+        if (lawCodeConfig?.lawCodes && targetLawCode) {
+          for (const [code, aliases] of Object.entries(lawCodeConfig.lawCodes)) {
+            if (code !== targetLawCode) {
+              excludePatterns.push(new RegExp(code, 'i'));
+              for (const alias of aliases) {
+                if (alias.length > 5) { // Only longer aliases to avoid false matches
+                  excludePatterns.push(new RegExp(alias.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i'));
+                }
+              }
+            }
+          }
+        }
+
+        let targetSourceIndex = -1;
+        for (let i = 0; i < limitedSources.length; i++) {
+          const source = limitedSources[i];
+          const searchText = `${source.content || ''} ${source.title || ''} ${source.excerpt || ''}`;
+
+          // Check if source matches target law AND doesn't match excluded laws
+          const matchesTarget = targetPatterns.some(p => p.test(searchText));
+          const matchesExcluded = excludePatterns.length > 0 && excludePatterns.some(p => p.test(searchText));
+
+          if (matchesTarget && !matchesExcluded) {
+            targetSourceIndex = i + 1; // 1-indexed for citation
+            console.log(`🎯 [v12.16] Found ${targetLawCode} source at index [${targetSourceIndex}]: ${source.title?.substring(0, 50)}`);
+            break;
+          }
+        }
+
+        // Fallback: any source matching target (even if also matches excluded)
+        if (targetSourceIndex < 0) {
+          for (let i = 0; i < limitedSources.length; i++) {
+            const source = limitedSources[i];
+            const searchText = `${source.content || ''} ${source.title || ''}`;
+            if (targetPatterns.some(p => p.test(searchText))) {
+              targetSourceIndex = i + 1;
+              console.log(`🎯 [v12.16] Found ${targetLawCode} source (fallback) at index [${targetSourceIndex}]: ${source.title?.substring(0, 50)}`);
+              break;
+            }
+          }
+        }
+
+        if (targetSourceIndex > 0 && targetSourceIndex !== 1) {
+          finalResponse = finalResponse.replace(/\[1\]/g, `[${targetSourceIndex}]`);
+          console.log(`🔄 [v12.16] CITATION_UPDATED: Replaced hardcoded [1] with ${targetLawCode} source [${targetSourceIndex}]`);
+        } else if (targetSourceIndex < 0) {
+          console.warn(`⚠️ [v12.16] No ${targetLawCode} source found in ranked sources - keeping [1] (may be incorrect citation)`);
+        } else {
+          console.log(`✅ [v12.16] ${targetLawCode} source already at [1] - no change needed`);
+        }
+        // Skip normal citation remap for hardcoded responses
+      } else if (citationRemap.size > 0) {
+        // Normal citation remapping for LLM-generated responses
         let remappedCount = 0;
         finalResponse = finalResponse.replace(/\[(\d+)\]/g, (match, num) => {
           const originalNum = parseInt(num, 10);
