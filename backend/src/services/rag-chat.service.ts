@@ -3276,21 +3276,42 @@ Beyanname için mi yoksa ödeme için mi soruyorsunuz?`;
           }
 
           if (excludePatterns.length > 0) {
-            let downrankCount = 0;
-            sortedSources = sortedSources.map(s => {
-              const searchText = `${s.content || ''} ${s.title || ''}`;
-              // Check if source matches any exclude pattern
-              const shouldPenalize = excludePatterns.some(p => p.test(searchText));
-              if (shouldPenalize) {
-                downrankCount++;
-                return { ...s, _combinedScore: s._combinedScore * 0.3 }; // 70% penalty
-              }
-              return s;
-            }).sort((a, b) => b._combinedScore - a._combinedScore);
+            // v12.21 FIX: HARD FILTER - completely remove non-target law sources for strict isolation
+            // Requirement: Top 15 sources must be 100% target law code (zero leakage)
+            const beforeCount = sortedSources.length;
 
-            if (downrankCount > 0) {
-              console.log(`🛡️ [v12.17] CROSS_LAW_DOWNRANK: Penalized ${downrankCount} non-${targetLawCode} sources for ${targetLawCode} query`);
+            // First, identify KDVK sources (sources that match target law code)
+            const targetPatterns: RegExp[] = [];
+            const targetAliases = lawCodes[targetLawCode] || [];
+            targetPatterns.push(new RegExp(targetLawCode, 'i'));
+            for (const alias of targetAliases) {
+              if (alias.length > 3) {
+                targetPatterns.push(new RegExp(alias.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i'));
+              }
             }
+
+            // Filter: Keep only sources that match target law code OR don't match any law code
+            const filteredSources = sortedSources.filter(s => {
+              const searchText = `${s.content || ''} ${s.title || ''}`;
+
+              // Check if source matches target law code
+              const matchesTarget = targetPatterns.some(p => p.test(searchText));
+              if (matchesTarget) return true;
+
+              // Check if source matches any OTHER law code (should be excluded)
+              const matchesOther = excludePatterns.some(p => p.test(searchText));
+              if (matchesOther) return false;
+
+              // Generic sources (no specific law code) - keep with lower priority
+              return true;
+            });
+
+            const removedCount = beforeCount - filteredSources.length;
+            if (removedCount > 0) {
+              console.log(`🛡️ [v12.21] CROSS_LAW_FILTER: Removed ${removedCount} non-${targetLawCode} sources (strict isolation)`);
+            }
+
+            sortedSources = filteredSources;
           }
         }
       }
