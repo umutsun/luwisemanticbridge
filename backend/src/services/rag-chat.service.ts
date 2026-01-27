@@ -4269,7 +4269,15 @@ Beyanname için mi yoksa ödeme için mi soruyorsunuz?`;
 
     const isAmbiguousQuestion = ambiguousPatterns.some(pattern => pattern.test(queryLower));
 
-    // If ambiguous AND doesn't have explicit beyanname/ödeme keyword, return 'ambiguous'
+    // v12.16 FIX: If comparison pattern (24 mü 26 mı) is detected, ALWAYS return ambiguous
+    // because the user is confused about which day applies - they need BOTH explained
+    // This overrides even explicit "beyanname" or "ödeme" keywords in the question
+    if (isKdvQuestion && hasComparisonPattern) {
+      console.log(`🛡️ [v12.16] COMPARISON_PATTERN: User is confused about 24 vs 26, returning ambiguous`);
+      return 'ambiguous';
+    }
+
+    // If ambiguous patterns detected (but not comparison pattern) AND no explicit keyword
     const hasExplicitBeyanname = ['beyanname', 'beyan', 'bildirim'].some(kw => queryLower.includes(kw));
     const hasExplicitOdeme = ['ödeme', 'ödenir', 'ödemesi', 'yatırılır'].some(kw => queryLower.includes(kw));
 
