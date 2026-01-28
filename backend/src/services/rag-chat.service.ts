@@ -2441,6 +2441,32 @@ Beyanname için mi yoksa ödeme için mi soruyorsunuz?`;
         response.content = this.fixDateContradiction(response.content, searchResults, message, responseLanguage);
       }
 
+      // 🎯 v12.23: VUK REGULATORY INTENT HANDLER (fatura düzenleme süresi, etc.)
+      // Similar to KDV deadline handler but for VUK-specific known facts
+      const vukRegulatoryIntent = this.detectVukRegulatoryIntent(message);
+      if (vukRegulatoryIntent && !deadlineFixApplied) {
+        const vukIntent = this.VUK_REGULATORY_INTENTS[vukRegulatoryIntent];
+        if (vukIntent) {
+          console.log(`🛡️ [v12.23] VUK_REGULATORY_HANDLER: Applying ${vukRegulatoryIntent} hardcoded response`);
+
+          // Find the best VUK source for citation
+          let vukSourceIndex = 1;
+          const vukSourcePattern = /vuk|vergi usul|231/i;
+          for (let i = 0; i < searchResults.length && i < 5; i++) {
+            const src = searchResults[i];
+            const srcText = `${src.title || ''} ${src.content || ''}`.toLowerCase();
+            if (vukSourcePattern.test(srcText)) {
+              vukSourceIndex = i + 1;
+              break;
+            }
+          }
+
+          // Generate the deterministic response
+          response.content = `${vukIntent.answer} (${vukIntent.citation}) [${vukSourceIndex}].`;
+          console.log(`🛡️ [v12.23] VUK_REGULATORY: Generated response for ${vukRegulatoryIntent}`);
+        }
+      }
+
       // 🛡️ P0: ARTICLE NOT FOUND RESPONSE
       // If user asked for specific article (e.g., VUK 376) but it's not in DB, give explicit response
       if (articleQuery?.detected && !articleQuery.exact_match_found && articleQuery.exact_match_count === 0) {
@@ -4311,6 +4337,24 @@ Beyanname için mi yoksa ödeme için mi soruyorsunuz?`;
   };
 
   /**
+   * 🎯 v12.23: VUK REGULATORY INTENTS - VUK deadline/timeline detection
+   * These are known factual deadlines from Vergi Usul Kanunu
+   */
+  private readonly VUK_REGULATORY_INTENTS: Record<string, {
+    keywords: string[];
+    articles: string[];
+    answer: string;
+    citation: string;
+  }> = {
+    fatura_duzenleme: {
+      keywords: ['fatura düzenleme', 'fatura düzenle', 'fatura ne zaman', 'fatura süresi', 'fatura kaç gün'],
+      articles: ['madde 231', 'm.231', 'vuk 231'],
+      answer: 'Fatura, malın teslimi veya hizmetin yapıldığı tarihten itibaren azami **7 (yedi) gün** içinde düzenlenir',
+      citation: 'VUK madde 231/5'
+    }
+  };
+
+  /**
    * 🎯 DEADLINE TOKEN MAP - Turkish ordinal numbers for days
    */
   private readonly DEADLINE_TOKENS: Record<string, { day: number; word: string }> = {
@@ -4522,6 +4566,42 @@ Beyanname için mi yoksa ödeme için mi soruyorsunuz?`;
     }
 
     // No KDV context found - don't apply KDV deadline handler
+    return null;
+  }
+
+  /**
+   * 🎯 v12.23: Detect VUK regulatory intent (fatura düzenleme süresi, etc.)
+   * These are known factual deadlines from Vergi Usul Kanunu
+   */
+  private detectVukRegulatoryIntent(query: string): string | null {
+    const queryLower = query.toLowerCase();
+
+    // Check each VUK regulatory intent
+    for (const [intentType, intent] of Object.entries(this.VUK_REGULATORY_INTENTS)) {
+      // Check keywords
+      const hasKeyword = intent.keywords.some(kw => queryLower.includes(kw));
+      if (hasKeyword) {
+        console.log(`🛡️ [v12.23] VUK_REGULATORY_INTENT: Detected ${intentType} (keyword match)`);
+        return intentType;
+      }
+
+      // Check articles
+      const hasArticle = intent.articles.some(art => queryLower.includes(art));
+      if (hasArticle) {
+        console.log(`🛡️ [v12.23] VUK_REGULATORY_INTENT: Detected ${intentType} (article match)`);
+        return intentType;
+      }
+    }
+
+    // Also check for generic "fatura" + "süre/zaman/kaç gün" combinations
+    if (queryLower.includes('fatura') &&
+        (queryLower.includes('süre') || queryLower.includes('zaman') ||
+         queryLower.includes('kaç gün') || queryLower.includes('ne kadar') ||
+         queryLower.includes('içinde') || queryLower.includes('kadar'))) {
+      console.log(`🛡️ [v12.23] VUK_REGULATORY_INTENT: Detected fatura_duzenleme (generic pattern)`);
+      return 'fatura_duzenleme';
+    }
+
     return null;
   }
 
