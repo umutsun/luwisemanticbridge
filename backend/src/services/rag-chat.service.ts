@@ -4475,10 +4475,14 @@ Beyanname için mi yoksa ödeme için mi soruyorsunuz?`;
     },
     odeme: {
       // v12.15: Expanded keywords to catch more ödeme variants
+      // v12.30: Added ASCII variants (ö→o, ı→i, ş→s, ğ→g)
       keywords: [
         'ödeme', 'ödenir', 'ödemesi', 'ödemesini', 'ödenmesi', 'öden',
+        'odeme', 'odenir', 'odemesi', 'odemesini', 'odenmesi', 'oden',  // ASCII variants
         'yatırılır', 'yatırma', 'yatırılma', 'yatır',
-        'ödeyeceğ', 'ödeye', 'ödeniyor', 'ödenmekte'
+        'yatirilir', 'yatirma', 'yatirilma', 'yatir',  // ASCII variants
+        'ödeyeceğ', 'ödeye', 'ödeniyor', 'ödenmekte',
+        'odeyeceg', 'odeye', 'odeniyor', 'odenmekte'   // ASCII variants
       ],
       articles: ['madde 46', 'm.46', 'm. 46'],
       action: 'ödenmelidir',
@@ -4689,7 +4693,11 @@ Beyanname için mi yoksa ödeme için mi soruyorsunuz?`;
 
     // If ambiguous patterns detected (but not comparison pattern) AND no explicit keyword
     const hasExplicitBeyanname = ['beyanname', 'beyan', 'bildirim'].some(kw => queryLower.includes(kw));
-    const hasExplicitOdeme = ['ödeme', 'ödenir', 'ödemesi', 'yatırılır'].some(kw => queryLower.includes(kw));
+    // v12.30: Added ASCII variants for ödeme detection
+    const hasExplicitOdeme = [
+      'ödeme', 'ödenir', 'ödemesi', 'yatırılır',
+      'odeme', 'odenir', 'odemesi', 'yatirilir'  // ASCII variants
+    ].some(kw => queryLower.includes(kw));
 
     if (isKdvQuestion && isAmbiguousQuestion && !hasExplicitBeyanname && !hasExplicitOdeme) {
       console.log(`🛡️ [v12.15] AMBIGUOUS_QUESTION: KDV deadline question without specific intent`);
