@@ -278,16 +278,16 @@ export class RAGChatService {
     message: string,
     conversationId: string
   ): Promise<{ isFollowUp: boolean; resolution?: string; context?: any; pending?: PendingDisambiguation }> {
-    console.log(`🔍 [v12.35] DETECT_FOLLOWUP_START: message="${message}", convId="${conversationId}"`);
+    console.log(`🔍 [v12.36] DETECT_FOLLOWUP_START: message="${message}", convId="${conversationId}"`);
 
     // 1. Check for pending disambiguation
     const pending = await this.getPendingDisambiguation(conversationId);
     if (!pending) {
-      console.log(`🔍 [v12.35] DETECT_FOLLOWUP: No pending disambiguation found for convId=${conversationId}`);
+      console.log(`🔍 [v12.36] DETECT_FOLLOWUP: No pending disambiguation found for convId=${conversationId}`);
       return { isFollowUp: false };
     }
 
-    console.log(`🔍 [v12.35] DETECT_FOLLOWUP: Found pending disambiguation - originalQuery="${pending.originalQuery}", expectedResponses=${JSON.stringify(pending.expectedResponses.map(r => r.keyword))}`);
+    console.log(`🔍 [v12.36] DETECT_FOLLOWUP: Found pending disambiguation - originalQuery="${pending.originalQuery}", expectedResponses=${JSON.stringify(pending.expectedResponses.map(r => r.keyword))}`);
 
 
     // 2. Normalize message
@@ -382,7 +382,7 @@ export class RAGChatService {
     resolution: string,
     pending: PendingDisambiguation,
     conversationId: string
-  ): Promise<{ content: string; sources: any[] }> {
+  ): Promise<{ content: string; sources: any[]; exitToFlow?: string }> {
     // v12.34: Defensive null checks
     if (!pending || !pending.cachedContext) {
       console.error(`❌ [v12.34] RESOLVE_ERROR: Invalid pending disambiguation state`);
@@ -392,15 +392,37 @@ export class RAGChatService {
       };
     }
 
+    // v12.36: Handle exit cases (oran, iade)
+    if (resolution === 'exit_to_oran') {
+      console.log(`🔀 [v12.36] EXIT_TO_ORAN: Exiting deadline flow, user asked about KDV rate`);
+      await this.clearPendingDisambiguation(conversationId);
+      return {
+        content: 'KDV oranları hakkında bilgi almak istiyorsunuz. Lütfen hangi mal veya hizmetin KDV oranını öğrenmek istediğinizi belirtin.',
+        sources: [],
+        exitToFlow: 'oran'
+      };
+    }
+
+    if (resolution === 'exit_to_iade') {
+      console.log(`🔀 [v12.36] EXIT_TO_IADE: Exiting deadline flow, user asked about KDV refund`);
+      await this.clearPendingDisambiguation(conversationId);
+      return {
+        content: 'KDV iadesi hakkında bilgi almak istiyorsunuz. Lütfen hangi tür KDV iadesi (ihracat, indirimli oran, yatırım teşvik vb.) hakkında soru sormak istediğinizi belirtin.',
+        sources: [],
+        exitToFlow: 'iade'
+      };
+    }
+
     // Get pre-computed answer from disambiguation responses
     const responseConfig = DEADLINE_DISAMBIGUATION_RESPONSES[resolution];
 
     if (!responseConfig || !responseConfig.answer) {
-      // Fallback: couldn't find pre-computed answer
-      console.warn(`⚠️ [v12.33] RESOLUTION_NOT_FOUND: ${resolution}`);
+      // v12.36: Unknown response - give single warning, no more follow-up
+      console.warn(`⚠️ [v12.36] RESOLUTION_NOT_FOUND: ${resolution} - exiting with warning`);
+      await this.clearPendingDisambiguation(conversationId);
       return {
-        content: 'Belirtilen seçenek için yanıt bulunamadı. Lütfen sorunuzu yeniden ifade edin.',
-        sources: pending.cachedContext?.searchResults || []
+        content: 'Belirtilen seçenek tanınmadı. Lütfen "beyanname" veya "ödeme" olarak belirtin ya da sorunuzu yeniden ifade edin.',
+        sources: []
       };
     }
 
@@ -2527,22 +2549,51 @@ ${questionLabel}: ${message}`;
       // ========================================
 
       // ═══════════════════════════════════════════════════════════════════════════
-      // v12.35: AMBIGUOUS DEADLINE EARLY EXIT (BEFORE LLM CALL)
-      // For "24 mü 26 mı" comparison queries, bypass LLM entirely
-      // Return deterministic disambiguation question + store state for follow-up
+      // v12.36: DATE SIGNAL DETECTION + AMBIGUOUS DEADLINE HANDLING
+      // Priority: 1) Date signal → direct answer (no follow-up)
+      //           2) "24 mü 26 mı" → single follow-up, then deterministic answer
+      // Max follow-up = 1, no loops allowed
       // ═══════════════════════════════════════════════════════════════════════════
+
+      // v12.36: DATE_SIGNALS - If detected, go directly to answer (no follow-up)
+      const DATE_SIGNAL_PATTERNS = [
+        /kaçın(a|da)\s*(kadar)?/i,      // "kaçına kadar"
+        /hangi\s*gün/i,                  // "hangi gün"
+        /son\s*gün/i,                    // "son gün"
+        /ne\s*zaman/i,                   // "ne zaman"
+        /verilir/i,                      // "verilir"
+        /öde(nir|mesi)/i,                // "ödenir", "ödemesi"
+        /yatırılır/i,                    // "yatırılır"
+      ];
+
+      const hasDateSignal = DATE_SIGNAL_PATTERNS.some(p => p.test(message));
+      const hasExplicitBeyanname = /beyanname/i.test(message);
+      const hasExplicitOdeme = /ödeme|odeme/i.test(message);
+
+      // v12.36: If date signal + explicit intent → direct answer, NO follow-up
+      if (hasDateSignal && (hasExplicitBeyanname || hasExplicitOdeme)) {
+        console.log(`🎯 [v12.36] DATE_SIGNAL_BYPASS: hasDateSignal=${hasDateSignal}, beyanname=${hasExplicitBeyanname}, odeme=${hasExplicitOdeme} → Direct answer, no follow-up`);
+        // Let normal RAG flow handle with detectDeadlineIntent
+        // The post-processing will apply the correct deterministic answer
+      }
+
       const earlyAmbiguousIntent = this.detectDeadlineIntent(message);
       const hasDeadlineComparisonPatternEarly = /24\s*(mı?|mi|mu|mü)?\s*(yoksa|veya)?\s*26/i.test(message) ||
                                                  /26\s*(mı?|mi|mu|mü)?\s*(yoksa|veya)?\s*24/i.test(message);
       const hasKdvContextEarly = /kdv|katma\s*değer|kdvk/i.test(message);
+
+      // v12.36: Only trigger follow-up for "24 mü 26 mı" WITHOUT date signals
       const isAmbiguousComparisonQuery = earlyAmbiguousIntent === 'ambiguous' &&
                                           hasDeadlineComparisonPatternEarly &&
-                                          hasKdvContextEarly;
+                                          hasKdvContextEarly &&
+                                          !hasDateSignal &&  // v12.36: Skip if date signal present
+                                          !hasExplicitBeyanname &&  // v12.36: Skip if explicit beyanname
+                                          !hasExplicitOdeme;  // v12.36: Skip if explicit ödeme
 
-      console.log(`🔍 [v12.35] AMBIGUOUS_CHECK: intent=${earlyAmbiguousIntent}, compPattern=${hasDeadlineComparisonPatternEarly}, kdvContext=${hasKdvContextEarly}, isAmbiguous=${isAmbiguousComparisonQuery}`);
+      console.log(`🔍 [v12.36] AMBIGUOUS_CHECK: intent=${earlyAmbiguousIntent}, compPattern=${hasDeadlineComparisonPatternEarly}, kdvContext=${hasKdvContextEarly}, dateSignal=${hasDateSignal}, isAmbiguous=${isAmbiguousComparisonQuery}`);
 
       if (isAmbiguousComparisonQuery) {
-        console.log(`🛡️ [v12.35] AMBIGUOUS_EARLY_EXIT: Detected comparison query, bypassing LLM`);
+        console.log(`🛡️ [v12.36] AMBIGUOUS_EARLY_EXIT: Detected comparison query, single follow-up`);
 
         // Fetch m.41 and m.46 from database for citations
         const disambiguationSources: any[] = [];
@@ -2575,36 +2626,46 @@ ${questionLabel}: ${message}`;
                 metadata: row.metadata || {},
                 _intentType: targetInfo.type
               });
-              console.log(`✅ [v12.35] AMBIGUOUS_SOURCE_FETCHED: KDVK m.${targetInfo.article}`);
+              console.log(`✅ [v12.36] AMBIGUOUS_SOURCE_FETCHED: KDVK m.${targetInfo.article}`);
             }
           } catch (fetchError) {
-            console.error(`❌ [v12.35] AMBIGUOUS_SOURCE_FETCH_FAILED for m.${targetInfo.article}:`, fetchError);
+            console.error(`❌ [v12.36] AMBIGUOUS_SOURCE_FETCH_FAILED for m.${targetInfo.article}:`, fetchError);
           }
         }
 
+        // v12.36: Extended expected responses including oran/iade exit options
+        const extendedExpectedResponses: ExpectedDisambiguationResponse[] = [
+          ...Object.values(DEADLINE_DISAMBIGUATION_RESPONSES),
+          { keyword: 'oran', aliases: ['kdv oranı', 'vergi oranı', 'yüzde'], resolution: 'exit_to_oran' },
+          { keyword: 'iade', aliases: ['kdv iadesi', 'vergi iadesi'], resolution: 'exit_to_iade' }
+        ];
+
         // Store disambiguation state in Redis for follow-up detection
+        // v12.36: Max follow-up = 1, set followUpCount = 1 (this is the first and only follow-up)
         const pendingDisambiguation: PendingDisambiguation = {
           originalQuery: message,
           intentCategory: 'deadline',
           intentType: null, // Will be resolved on follow-up
-          expectedResponses: Object.values(DEADLINE_DISAMBIGUATION_RESPONSES),
+          expectedResponses: extendedExpectedResponses,
           cachedContext: {
             searchResults: disambiguationSources,
             detectedIntent: 'ambiguous'
           },
-          followUpCount: 1,
+          followUpCount: 1,  // v12.36: This is the ONLY follow-up allowed
           createdAt: Date.now(),
           expiresAt: Date.now() + (DEFAULT_FOLLOWUP_CONFIG.ttlSeconds * 1000),
           conversationId: convId
         };
 
         await this.setPendingDisambiguation(convId, pendingDisambiguation);
-        console.log(`💾 [v12.35] DISAMBIGUATION_STATE_STORED: TTL=${DEFAULT_FOLLOWUP_CONFIG.ttlSeconds}s`);
+        console.log(`💾 [v12.36] DISAMBIGUATION_STATE_STORED: TTL=${DEFAULT_FOLLOWUP_CONFIG.ttlSeconds}s, maxFollowUp=1`);
 
-        // Deterministic disambiguation question
-        const disambiguationQuestion = `KDV'de beyanname ve ödeme için farklı son tarihler bulunmaktadır.
+        // v12.36: Comprehensive disambiguation question
+        const disambiguationQuestion = `24–26 ile neyi kastediyorsunuz:
 
-**Beyanname için mi, yoksa ödeme için mi** soruyorsunuz?`;
+• **Beyanname son günü** (24)
+• **Ödeme son günü** (26)
+• Yoksa **KDV oranı** veya **iade** gibi başka bir konu mu?`;
 
         // Save messages to database
         await this.saveMessage(convId, 'user', message);
@@ -2616,7 +2677,7 @@ ${questionLabel}: ${message}`;
           query: message,
           intent: 'ambiguous',
           sourcesFound: disambiguationSources.length,
-          earlyExit: 'ambiguous_deadline_v12.35'
+          earlyExit: 'ambiguous_deadline_v12.36'
         });
 
         return {
@@ -2644,7 +2705,7 @@ ${questionLabel}: ${message}`;
             earlyExitReason: 'ambiguous_deadline_comparison',
             sourcesCount: disambiguationSources.length,
             deterministic: true,
-            version: 'v12.35'
+            version: 'v12.36'
           }
         };
       }
