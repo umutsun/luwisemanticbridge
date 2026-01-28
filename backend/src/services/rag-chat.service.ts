@@ -278,11 +278,17 @@ export class RAGChatService {
     message: string,
     conversationId: string
   ): Promise<{ isFollowUp: boolean; resolution?: string; context?: any; pending?: PendingDisambiguation }> {
+    console.log(`🔍 [v12.35] DETECT_FOLLOWUP_START: message="${message}", convId="${conversationId}"`);
+
     // 1. Check for pending disambiguation
     const pending = await this.getPendingDisambiguation(conversationId);
     if (!pending) {
+      console.log(`🔍 [v12.35] DETECT_FOLLOWUP: No pending disambiguation found for convId=${conversationId}`);
       return { isFollowUp: false };
     }
+
+    console.log(`🔍 [v12.35] DETECT_FOLLOWUP: Found pending disambiguation - originalQuery="${pending.originalQuery}", expectedResponses=${JSON.stringify(pending.expectedResponses.map(r => r.keyword))}`);
+
 
     // 2. Normalize message
     const normalized = this.normalizeQueryForIntent(message);
@@ -1650,13 +1656,15 @@ ${questionLabel}: ${message}`;
             // Max depth reached - return closing message
             console.log(`🛑 [v12.33] FOLLOW_UP_CLOSED: Max depth reached, returning closing message`);
 
-            // Analytics: Log max depth reached
-            await this.logActivity(userId, 'follow_up_max_depth', {
+            // Analytics: Log max depth reached (use chat_message type with custom metadata)
+            await this.logActivity(userId, 'chat_message', {
               conversationId: convId,
               originalQuery: followUpCheck.pending.originalQuery,
               lastQuery: message,
               depth: followUpCheck.pending.followUpCount,
-              intentCategory: followUpCheck.pending.intentCategory
+              intentCategory: followUpCheck.pending.intentCategory,
+              action: 'follow_up_max_depth',
+              version: 'v12.33'
             });
 
             // Clear disambiguation state
@@ -1664,7 +1672,7 @@ ${questionLabel}: ${message}`;
 
             return {
               conversationId: convId,
-              content: depthCheck.closingResponse || DEFAULT_FOLLOWUP_CONFIG.closingMessage.tr,
+              response: depthCheck.closingResponse || DEFAULT_FOLLOWUP_CONFIG.closingMessage.tr,  // v12.35: Fixed field name
               sources: [],
               responseType: 'CLOSING' as const,
               timings: { total: Date.now() - startTotal }
@@ -1678,19 +1686,21 @@ ${questionLabel}: ${message}`;
             convId
           );
 
-          // Analytics: Log successful follow-up resolution
-          await this.logActivity(userId, 'follow_up_resolved', {
+          // Analytics: Log successful follow-up resolution (use chat_message type with custom metadata)
+          await this.logActivity(userId, 'chat_message', {
             conversationId: convId,
             originalQuery: followUpCheck.pending.originalQuery,
             followUpQuery: message,
             resolution: followUpCheck.resolution,
             depth: followUpCheck.pending.followUpCount,
-            intentCategory: followUpCheck.pending.intentCategory
+            intentCategory: followUpCheck.pending.intentCategory,
+            action: 'follow_up_resolved',
+            version: 'v12.33'
           });
 
           return {
             conversationId: convId,
-            content: resolved.content,
+            response: resolved.content,  // v12.35: Fixed field name (content → response)
             sources: resolved.sources,
             responseType: 'FOUND' as const,
             timings: { total: Date.now() - startTotal }
@@ -1913,10 +1923,22 @@ ${questionLabel}: ${message}`;
       const earlyWordCount = earlyQueryLower.split(/\s+/).filter(w => w.length > 2).length;
 
       // --- EARLY AMBIGUITY CHECK ---
+      // v12.35: Check for deadline comparison pattern BEFORE ambiguity check
+      // "kdv 24 mu 26 mi" should NOT be treated as ambiguous - it's a valid deadline query
+      const isDeadlineComparisonPattern = (
+        (/24\s*(mı?|mi|mu|mü)?\s*(yoksa|veya)?\s*26/i.test(message) ||
+         /26\s*(mı?|mi|mu|mü)?\s*(yoksa|veya)?\s*24/i.test(message)) &&
+        /kdv|katma\s*değer|kdvk/i.test(message)
+      );
+
+      if (isDeadlineComparisonPattern) {
+        console.log(`🛡️ [v12.35] DEADLINE_COMPARISON_DETECTED: "${message}" - bypassing tooShortNoQuestion check`);
+      }
+
       const earlyAmbiguityCheck = {
         justNumbers: /^\d+$/.test(message.trim()) || /^(\d+\s*\/\s*\d+)$/.test(message.trim()),
         vagueQuestion: /^(ne|nasıl|nedir|neden|kim)\s*\??$/i.test(message.trim()),
-        tooShortNoQuestion: earlyWordCount < 2 && !message.includes('?'),
+        tooShortNoQuestion: earlyWordCount < 2 && !message.includes('?') && !isDeadlineComparisonPattern,  // v12.35: Exception for deadline comparisons
         singleToken: message.trim().split(/\s+/).length === 1 && !/\?$/.test(message.trim())
       };
       const isEarlyAmbiguous = Object.values(earlyAmbiguityCheck).some(v => v);
@@ -2503,6 +2525,130 @@ ${questionLabel}: ${message}`;
         };
       }
       // ========================================
+
+      // ═══════════════════════════════════════════════════════════════════════════
+      // v12.35: AMBIGUOUS DEADLINE EARLY EXIT (BEFORE LLM CALL)
+      // For "24 mü 26 mı" comparison queries, bypass LLM entirely
+      // Return deterministic disambiguation question + store state for follow-up
+      // ═══════════════════════════════════════════════════════════════════════════
+      const earlyAmbiguousIntent = this.detectDeadlineIntent(message);
+      const hasDeadlineComparisonPatternEarly = /24\s*(mı?|mi|mu|mü)?\s*(yoksa|veya)?\s*26/i.test(message) ||
+                                                 /26\s*(mı?|mi|mu|mü)?\s*(yoksa|veya)?\s*24/i.test(message);
+      const hasKdvContextEarly = /kdv|katma\s*değer|kdvk/i.test(message);
+      const isAmbiguousComparisonQuery = earlyAmbiguousIntent === 'ambiguous' &&
+                                          hasDeadlineComparisonPatternEarly &&
+                                          hasKdvContextEarly;
+
+      console.log(`🔍 [v12.35] AMBIGUOUS_CHECK: intent=${earlyAmbiguousIntent}, compPattern=${hasDeadlineComparisonPatternEarly}, kdvContext=${hasKdvContextEarly}, isAmbiguous=${isAmbiguousComparisonQuery}`);
+
+      if (isAmbiguousComparisonQuery) {
+        console.log(`🛡️ [v12.35] AMBIGUOUS_EARLY_EXIT: Detected comparison query, bypassing LLM`);
+
+        // Fetch m.41 and m.46 from database for citations
+        const disambiguationSources: any[] = [];
+        const articlesToFetch = [
+          { article: '41', lawName: 'KATMA DEĞER VERGİSİ KANUNU', type: 'beyanname' },
+          { article: '46', lawName: 'KATMA DEĞER VERGİSİ KANUNU', type: 'odeme' }
+        ];
+
+        for (const targetInfo of articlesToFetch) {
+          try {
+            const fetchResult = await this.pool.query(
+              `SELECT id, source_table, source_type, source_name, content, metadata
+               FROM unified_embeddings
+               WHERE source_table = 'vergilex_mevzuat_kanunlar_chunks'
+                 AND source_name ILIKE $1
+               LIMIT 1`,
+              [`%${targetInfo.lawName}%Madde ${targetInfo.article}%`]
+            );
+
+            if (fetchResult.rows.length > 0) {
+              const row = fetchResult.rows[0];
+              disambiguationSources.push({
+                id: row.id,
+                sourceTable: row.source_table,
+                sourceType: row.source_type || 'kanun',
+                title: row.source_name || `KDVK Madde ${targetInfo.article}`,
+                content: row.content,
+                excerpt: row.content?.substring(0, 500),
+                score: targetInfo.article === '41' ? 0.96 : 0.95,
+                metadata: row.metadata || {},
+                _intentType: targetInfo.type
+              });
+              console.log(`✅ [v12.35] AMBIGUOUS_SOURCE_FETCHED: KDVK m.${targetInfo.article}`);
+            }
+          } catch (fetchError) {
+            console.error(`❌ [v12.35] AMBIGUOUS_SOURCE_FETCH_FAILED for m.${targetInfo.article}:`, fetchError);
+          }
+        }
+
+        // Store disambiguation state in Redis for follow-up detection
+        const pendingDisambiguation: PendingDisambiguation = {
+          originalQuery: message,
+          intentCategory: 'deadline',
+          intentType: null, // Will be resolved on follow-up
+          expectedResponses: Object.values(DEADLINE_DISAMBIGUATION_RESPONSES),
+          cachedContext: {
+            searchResults: disambiguationSources,
+            detectedIntent: 'ambiguous'
+          },
+          followUpCount: 1,
+          createdAt: Date.now(),
+          expiresAt: Date.now() + (DEFAULT_FOLLOWUP_CONFIG.ttlSeconds * 1000),
+          conversationId: convId
+        };
+
+        await this.setPendingDisambiguation(convId, pendingDisambiguation);
+        console.log(`💾 [v12.35] DISAMBIGUATION_STATE_STORED: TTL=${DEFAULT_FOLLOWUP_CONFIG.ttlSeconds}s`);
+
+        // Deterministic disambiguation question
+        const disambiguationQuestion = `KDV'de beyanname ve ödeme için farklı son tarihler bulunmaktadır.
+
+**Beyanname için mi, yoksa ödeme için mi** soruyorsunuz?`;
+
+        // Save messages to database
+        await this.saveMessage(convId, 'user', message);
+        await this.saveMessage(convId, 'assistant', disambiguationQuestion, disambiguationSources, 'deterministic');
+
+        // Analytics: Log early exit (use chat_message type with custom metadata)
+        await this.logActivity(userId, 'chat_message', {
+          conversationId: convId,
+          query: message,
+          intent: 'ambiguous',
+          sourcesFound: disambiguationSources.length,
+          earlyExit: 'ambiguous_deadline_v12.35'
+        });
+
+        return {
+          response: disambiguationQuestion,
+          sources: disambiguationSources.map((s, idx) => ({
+            ...s,
+            _originalIndex: idx,
+            displayIndex: idx + 1
+          })),
+          relatedTopics: [],
+          followUpQuestions: [],
+          suggestedQuestions: ['Beyanname', 'Ödeme'],
+          conversationId: convId,
+          provider: 'system',
+          model: 'deterministic',
+          providerDisplayName: 'Sistem',
+          language: responseLanguage,
+          fallbackUsed: false,
+          fastMode: false,
+          strictMode: false,
+          timings: { total: Date.now() - startTotal },
+          _debug: {
+            responseType: 'DISAMBIGUATION',
+            earlyExit: true,
+            earlyExitReason: 'ambiguous_deadline_comparison',
+            sourcesCount: disambiguationSources.length,
+            deterministic: true,
+            version: 'v12.35'
+          }
+        };
+      }
+      // ═══════════════════════════════════════════════════════════════════════════
 
       // CASE 2 & 3: Has results (either high confidence or partial match)
       // Let LLM generate response, but add instruction for partial matches
