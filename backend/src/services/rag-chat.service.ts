@@ -4474,9 +4474,12 @@ Beyanname için mi yoksa ödeme için mi soruyorsunuz?`;
     const queryLower = query.toLowerCase();
 
     // Generic deadline question indicators
+    // v12.24: Added ASCII variants for Turkish chars (ç→c, ı→i, ş→s, ü→u, ö→o, ğ→g)
     const hasDeadlineKeyword = [
-      'kaçına kadar', 'ne zamana kadar', 'ne zaman', 'süre',
-      'son tarih', 'deadline', 'teslim', 'son gün'
+      'kaçına kadar', 'kacina kadar',     // ç→c, ı→i
+      'ne zamana kadar', 'ne zaman',
+      'süre', 'sure',                      // ü→u
+      'son tarih', 'deadline', 'teslim', 'son gün', 'son gun'  // ü→u
     ].some(kw => queryLower.includes(kw));
 
     // v12.16: Also detect implicit deadline questions that compare 24/26
