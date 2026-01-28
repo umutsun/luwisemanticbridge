@@ -3430,16 +3430,16 @@ Beyanname için mi yoksa ödeme için mi soruyorsunuz?`;
         } else if (bestLawSourceIndex === 0) {
           console.log(`✅ [v12.25] MURAT_HIERARCHY: Law article already at Top-1`);
         } else {
-          // v12.26: No law source found - inject synthetic law source at Top-1
+          // v12.27: No law source found - inject synthetic law source at Top-1 with transparent labeling
           const syntheticLawSources: Record<string, any> = {
             'beyanname': {
               id: 'synthetic-kdvk-41',
-              title: 'KATMA DEĞER VERGİSİ KANUNU Madde 41 - Beyan Esası',
-              excerpt: 'Mükellefler Katma Değer Vergisi beyannamelerini, vergilendirme dönemini takip eden ayın yirmidördüncü günü akşamına kadar ilgili vergi dairesine vermekle yükümlüdürler.',
-              content: '3065 sayılı Katma Değer Vergisi Kanunu Madde 41: Mükellefler Katma Değer Vergisi beyannamelerini, vergilendirme dönemini takip eden ayın yirmidördüncü günü akşamına kadar ilgili vergi dairesine vermekle yükümlüdürler. Vergi kesintisi yapmakla sorumlu tutulanlar ise beyannamelerini vergilendirme dönemini takip eden ayın yirmibirinci günü akşamına kadar vermelidir.',
+              title: '3065 sayılı KATMA DEĞER VERGİSİ KANUNU - Madde 41 [REFERANS]',
+              excerpt: '[Kanun maddesi arama sonuçlarında bulunamadığı için referans olarak eklendi] Mükellefler Katma Değer Vergisi beyannamelerini, vergilendirme dönemini takip eden ayın yirmidördüncü günü akşamına kadar ilgili vergi dairesine vermekle yükümlüdürler.',
+              content: '3065 sayılı Katma Değer Vergisi Kanunu Madde 41 (Beyan Esası): Mükellefler Katma Değer Vergisi beyannamelerini, vergilendirme dönemini takip eden ayın yirmidördüncü günü akşamına kadar ilgili vergi dairesine vermekle yükümlüdürler. Vergi kesintisi yapmakla sorumlu tutulanlar ise beyannamelerini vergilendirme dönemini takip eden ayın yirmibirinci günü akşamına kadar vermelidir.',
               category: 'Mevzuat_Kanun',
               sourceTable: 'vergilex_mevzuat_kanunlar_chunks',
-              citation: '[Kanun]',
+              citation: '[Kanun Referans]',
               score: 100,
               relevance: 100,
               relevanceText: 'Yüksek',
@@ -3448,21 +3448,24 @@ Beyanname için mi yoksa ödeme için mi soruyorsunuz?`;
               _combinedScore: 100,
               _originalIndex: 0,
               _synthetic: true,
+              _syntheticNote: 'Kanun maddesi arama sonuçlarında bulunamadığı için referans olarak eklendi',
               metadata: {
                 law_name: 'KATMA DEĞER VERGİSİ KANUNU',
                 law_number: '3065',
                 article_number: '41',
-                chunk_type: 'article'
+                chunk_type: 'article',
+                synthetic: true,
+                synthetic_reason: 'law_article_not_in_search_results'
               }
             },
             'odeme': {
               id: 'synthetic-kdvk-46',
-              title: 'KATMA DEĞER VERGİSİ KANUNU Madde 46 - Ödeme',
-              excerpt: 'Mükellefler bir vergilendirme dönemine ait katma değer vergilerini beyanname verecekleri ayın yirmialtıncı günü akşamına kadar ödemeye mecburdurlar.',
-              content: '3065 sayılı Katma Değer Vergisi Kanunu Madde 46: Beyanname vermek mecburiyetinde olan mükellefler bir vergilendirme dönemine ait katma değer vergilerini beyanname verecekleri ayın yirmialtıncı günü akşamına kadar ödemeye mecburdurlar. Vergi kesintisi yapmakla sorumlu tutulanlar ise beyanname verecekleri ayın yirmiüçüncü günü akşamına kadar ödemelidir.',
+              title: '3065 sayılı KATMA DEĞER VERGİSİ KANUNU - Madde 46 [REFERANS]',
+              excerpt: '[Kanun maddesi arama sonuçlarında bulunamadığı için referans olarak eklendi] Mükellefler bir vergilendirme dönemine ait katma değer vergilerini beyanname verecekleri ayın yirmialtıncı günü akşamına kadar ödemeye mecburdurlar.',
+              content: '3065 sayılı Katma Değer Vergisi Kanunu Madde 46 (Ödeme): Beyanname vermek mecburiyetinde olan mükellefler bir vergilendirme dönemine ait katma değer vergilerini beyanname verecekleri ayın yirmialtıncı günü akşamına kadar ödemeye mecburdurlar. Vergi kesintisi yapmakla sorumlu tutulanlar ise beyanname verecekleri ayın yirmiüçüncü günü akşamına kadar ödemelidir.',
               category: 'Mevzuat_Kanun',
               sourceTable: 'vergilex_mevzuat_kanunlar_chunks',
-              citation: '[Kanun]',
+              citation: '[Kanun Referans]',
               score: 100,
               relevance: 100,
               relevanceText: 'Yüksek',
@@ -3471,11 +3474,14 @@ Beyanname için mi yoksa ödeme için mi soruyorsunuz?`;
               _combinedScore: 100,
               _originalIndex: 0,
               _synthetic: true,
+              _syntheticNote: 'Kanun maddesi arama sonuçlarında bulunamadığı için referans olarak eklendi',
               metadata: {
                 law_name: 'KATMA DEĞER VERGİSİ KANUNU',
                 law_number: '3065',
                 article_number: '46',
-                chunk_type: 'article'
+                chunk_type: 'article',
+                synthetic: true,
+                synthetic_reason: 'law_article_not_in_search_results'
               }
             }
           };
