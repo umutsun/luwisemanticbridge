@@ -2464,6 +2464,10 @@ Beyanname için mi yoksa ödeme için mi soruyorsunuz?`;
           // Generate the deterministic response
           response.content = `${vukIntent.answer} (${vukIntent.citation}) [${vukSourceIndex}].`;
           console.log(`🛡️ [v12.23] VUK_REGULATORY: Generated response for ${vukRegulatoryIntent}`);
+
+          // v12.23: Skip sanitizer/claim verification for VUK regulatory (known correct values)
+          deadlineHardcodedApplied = true;
+          deadlineFixApplied = true;
         }
       }
 
