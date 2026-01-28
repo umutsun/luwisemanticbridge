@@ -4621,11 +4621,15 @@ Beyanname için mi yoksa ödeme için mi soruyorsunuz?`;
 
     // Generic deadline question indicators
     // v12.24: Added ASCII variants for Turkish chars (ç→c, ı→i, ş→s, ü→u, ö→o, ğ→g)
+    // v12.29: Added "hangi gün", "hangi tarihe kadar" patterns
     const hasDeadlineKeyword = [
       'kaçına kadar', 'kacina kadar',     // ç→c, ı→i
       'ne zamana kadar', 'ne zaman',
       'süre', 'sure',                      // ü→u
-      'son tarih', 'deadline', 'teslim', 'son gün', 'son gun'  // ü→u
+      'son tarih', 'deadline', 'teslim', 'son gün', 'son gun',  // ü→u
+      'hangi gün', 'hangi gun',            // v12.29: "hangi gün verilir?"
+      'hangi tarihe kadar', 'hangi tarih', // v12.29: "hangi tarihe kadar?"
+      'kaçıncı gün', 'kacinci gun'         // v12.29: "ayın kaçıncı günü?"
     ].some(kw => queryLower.includes(kw));
 
     // v12.16: Also detect implicit deadline questions that compare 24/26
