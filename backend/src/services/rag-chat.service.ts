@@ -3458,80 +3458,64 @@ Beyanname için mi yoksa ödeme için mi soruyorsunuz?`;
           }
 
           if (foundInFullList) {
-            // Skip synthetic injection - real source found
+            // Skip DB fetch - real source found in sortedSources
           } else {
-          // v12.27: No law source found anywhere - inject synthetic law source at Top-1 with transparent labeling
-          const syntheticLawSources: Record<string, any> = {
-            'beyanname': {
-              id: 'synthetic-kdvk-41',
-              title: '3065 sayılı KATMA DEĞER VERGİSİ KANUNU - Madde 41 [REFERANS]',
-              excerpt: '[Kanun maddesi arama sonuçlarında bulunamadığı için referans olarak eklendi] Mükellefler Katma Değer Vergisi beyannamelerini, vergilendirme dönemini takip eden ayın yirmidördüncü günü akşamına kadar ilgili vergi dairesine vermekle yükümlüdürler.',
-              content: '3065 sayılı Katma Değer Vergisi Kanunu Madde 41 (Beyan Esası): Mükellefler Katma Değer Vergisi beyannamelerini, vergilendirme dönemini takip eden ayın yirmidördüncü günü akşamına kadar ilgili vergi dairesine vermekle yükümlüdürler. Vergi kesintisi yapmakla sorumlu tutulanlar ise beyannamelerini vergilendirme dönemini takip eden ayın yirmibirinci günü akşamına kadar vermelidir.',
-              category: 'Mevzuat_Kanun',
-              sourceTable: 'vergilex_mevzuat_kanunlar_chunks',
-              citation: '[Kanun Referans]',
-              score: 100,
-              relevance: 100,
-              relevanceText: 'Yüksek',
-              _hierarchyWeight: 100,
-              _similarityScore: 100,
-              _combinedScore: 100,
-              _originalIndex: 0,
-              _synthetic: true,
-              _syntheticNote: 'Kanun maddesi arama sonuçlarında bulunamadığı için referans olarak eklendi',
-              metadata: {
-                law_name: 'KATMA DEĞER VERGİSİ KANUNU',
-                law_number: '3065',
-                article_number: '41',
-                chunk_type: 'article',
-                synthetic: true,
-                synthetic_reason: 'law_article_not_in_search_results'
-              }
-            },
-            'odeme': {
-              id: 'synthetic-kdvk-46',
-              title: '3065 sayılı KATMA DEĞER VERGİSİ KANUNU - Madde 46 [REFERANS]',
-              excerpt: '[Kanun maddesi arama sonuçlarında bulunamadığı için referans olarak eklendi] Mükellefler bir vergilendirme dönemine ait katma değer vergilerini beyanname verecekleri ayın yirmialtıncı günü akşamına kadar ödemeye mecburdurlar.',
-              content: '3065 sayılı Katma Değer Vergisi Kanunu Madde 46 (Ödeme): Beyanname vermek mecburiyetinde olan mükellefler bir vergilendirme dönemine ait katma değer vergilerini beyanname verecekleri ayın yirmialtıncı günü akşamına kadar ödemeye mecburdurlar. Vergi kesintisi yapmakla sorumlu tutulanlar ise beyanname verecekleri ayın yirmiüçüncü günü akşamına kadar ödemelidir.',
-              category: 'Mevzuat_Kanun',
-              sourceTable: 'vergilex_mevzuat_kanunlar_chunks',
-              citation: '[Kanun Referans]',
-              score: 100,
-              relevance: 100,
-              relevanceText: 'Yüksek',
-              _hierarchyWeight: 100,
-              _similarityScore: 100,
-              _combinedScore: 100,
-              _originalIndex: 0,
-              _synthetic: true,
-              _syntheticNote: 'Kanun maddesi arama sonuçlarında bulunamadığı için referans olarak eklendi',
-              metadata: {
-                law_name: 'KATMA DEĞER VERGİSİ KANUNU',
-                law_number: '3065',
-                article_number: '46',
-                chunk_type: 'article',
-                synthetic: true,
-                synthetic_reason: 'law_article_not_in_search_results'
+            // v12.28: Targeted DB fetch - query unified_embeddings for the exact law article
+            // This replaces synthetic injection with REAL source data from DB
+            const targetArticleNumbers: Record<string, { article: string; lawName: string }> = {
+              'beyanname': { article: '41', lawName: 'KATMA DEĞER VERGİSİ KANUNU' },
+              'odeme': { article: '46', lawName: 'KATMA DEĞER VERGİSİ KANUNU' }
+            };
+            const targetInfo = targetArticleNumbers[deadlineIntentForHierarchy];
+            let dbFetchSuccess = false;
+
+            if (targetInfo) {
+              try {
+                const dbResult = await this.pool.query(
+                  `SELECT id, source_table, source_type, source_name, content, metadata
+                   FROM unified_embeddings
+                   WHERE source_table = 'vergilex_mevzuat_kanunlar_chunks'
+                     AND source_name ILIKE $1
+                     AND metadata->>'article_number' = $2
+                   LIMIT 1`,
+                  [`%${targetInfo.lawName}%Madde ${targetInfo.article}%`, targetInfo.article]
+                );
+
+                if (dbResult.rows.length > 0) {
+                  const row = dbResult.rows[0];
+                  const dbSource = {
+                    id: row.id,
+                    title: row.source_name,
+                    content: row.content,
+                    excerpt: row.content?.substring(0, 300),
+                    category: 'Mevzuat_Kanun',
+                    sourceTable: row.source_table,
+                    source_type: row.source_type,
+                    citation: row.source_name,
+                    score: 1.0,
+                    relevance: 100,
+                    relevanceText: 'Yüksek',
+                    _hierarchyWeight: 100,
+                    _similarityScore: 1.0,
+                    _combinedScore: 1.0,
+                    _originalIndex: 0,
+                    metadata: row.metadata || {}
+                  };
+                  rankedSources.unshift(dbSource);
+                  dbFetchSuccess = true;
+                  console.log(`🏛️ [v12.28] MURAT_HIERARCHY: Fetched REAL law article from DB at Top-1: "${row.source_name?.substring(0, 60)}"`);
+                }
+              } catch (dbErr) {
+                console.warn(`⚠️ [v12.28] DB fetch failed for ${targetInfo.lawName} Madde ${targetInfo.article}:`, dbErr);
               }
             }
-          };
 
-          const syntheticSource = syntheticLawSources[deadlineIntentForHierarchy];
-          if (syntheticSource) {
-            // Shift all original indices by 1 since we're inserting at position 0
-            rankedSources.forEach(s => {
-              if (typeof s._originalIndex === 'number') {
-                s._originalIndex = s._originalIndex + 1;
-              }
-            });
-            rankedSources.unshift(syntheticSource);
-            console.log(`🏛️ [v12.26] MURAT_HIERARCHY: Injected synthetic law source at Top-1: "${syntheticSource.title}"`);
-          } else {
-            console.warn(`⚠️ [v12.25] MURAT_HIERARCHY: No law source with target article (${deadlineIntentForHierarchy}) found in sources`);
-          }
-          } // close: else (foundInFullList === false → synthetic injection)
-        }
-      }
+            if (!dbFetchSuccess) {
+              console.warn(`⚠️ [v12.28] MURAT_HIERARCHY: Law article not found in DB either (${deadlineIntentForHierarchy}) - no source available`);
+            }
+          } // close: else (not foundInFullList → DB fetch attempt)
+        } // close: else (bestLawSourceIndex === -1)
+      } // close: if (deadlineIntentForHierarchy)
 
       rankedSources.forEach((s, i) => {
         const detectedType = s.sourceTable || s.category || s.source_type || 'unknown';
