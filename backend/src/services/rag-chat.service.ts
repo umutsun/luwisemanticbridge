@@ -2560,15 +2560,40 @@ Bu soru karmaşık bir vergisel senaryo içermektedir. Yanıtını AŞAĞIDAKİ 
         deadlineHardcodedApplied = true;
       }
       // v12.15: Handle AMBIGUOUS questions by providing BOTH deadlines
+      // v12.32: Fixed citation format - separate citations for each article
       else if (postProcDeadlineIntent === 'ambiguous') {
         console.log(`🛡️ [v12.15] AMBIGUOUS_HANDLER: Providing both beyanname and ödeme deadlines`);
 
-        // Generate response with both deadlines
+        // v12.32: Try to find m.41 and m.46 in sources and assign correct citation numbers
+        let beyanCitation = '[1]';
+        let odemeCitation = '[2]';
+
+        // Search for m.41 (beyanname) and m.46 (ödeme) in search results
+        for (let i = 0; i < searchResults.length; i++) {
+          const source = searchResults[i];
+          const content = (source.content || source.excerpt || source.title || '').toLowerCase();
+          const sourceName = (source.source_name || source.title || '').toLowerCase();
+
+          if (content.includes('madde 41') || sourceName.includes('madde 41') ||
+              content.includes('m.41') || content.includes('m. 41') ||
+              (content.includes('41') && content.includes('beyanname'))) {
+            beyanCitation = `[${i + 1}]`;
+          }
+          if (content.includes('madde 46') || sourceName.includes('madde 46') ||
+              content.includes('m.46') || content.includes('m. 46') ||
+              (content.includes('46') && (content.includes('ödeme') || content.includes('odeme')))) {
+            odemeCitation = `[${i + 1}]`;
+          }
+        }
+
+        console.log(`🔍 [v12.32] AMBIGUOUS_CITATIONS: beyan=${beyanCitation}, odeme=${odemeCitation}`);
+
+        // Generate response with correct citations
         response.content = `KDV'de iki farklı son tarih bulunmaktadır:
 
-**Beyanname (Bildirim):** KDV beyannamesi, vergilendirme dönemini takip eden ayın 24'ü (yirmidördüncü günü) akşamına kadar ilgili vergi dairesine verilmelidir (KDVK madde 41) [1].
+**Beyanname (Bildirim):** KDV beyannamesi, vergilendirme dönemini takip eden ayın 24'ü (yirmidördüncü günü) akşamına kadar ilgili vergi dairesine verilmelidir (KDVK madde 41) ${beyanCitation}.
 
-**Ödeme:** KDV, takip eden ayın 26'sı (yirmialtıncı günü) akşamına kadar ödenmelidir (KDVK madde 46) [1].
+**Ödeme:** KDV, takip eden ayın 26'sı (yirmialtıncı günü) akşamına kadar ödenmelidir (KDVK madde 46) ${odemeCitation}.
 
 Beyanname için mi yoksa ödeme için mi soruyorsunuz?`;
 
@@ -3120,7 +3145,19 @@ Beyanname için mi yoksa ödeme için mi soruyorsunuz?`;
       // - justNumbers: "6111", "213", "7326" - could mean law number, article, year, etc.
       // - vagueQuestion: "ne?", "nedir?" - no subject specified
       // - tooShort without clear question form: "KDV" vs "KDV nedir?"
-      const isStrongAmbiguity = (
+      //
+      // v12.32: EXEMPTION for deadline comparison patterns (24 mü 26 mı, kdv 24 mu 26 mi)
+      // These are clear intent patterns that should NOT be treated as ambiguous
+      const hasDeadlineComparisonPattern = /24\s*(mı?|mi|mu|mü)?\s*(yoksa|veya)?\s*26/i.test(message) ||
+                                            /26\s*(mı?|mi|mu|mü)?\s*(yoksa|veya)?\s*24/i.test(message);
+      const hasKdvContext = /kdv|katma\s*değer|kdvk/i.test(message);
+      const isDeadlineComparisonQuery = hasDeadlineComparisonPattern && hasKdvContext;
+
+      if (isDeadlineComparisonQuery) {
+        console.log(`🛡️ [v12.32] DEADLINE_COMPARISON_EXEMPTION: Skipping strong ambiguity for "24 vs 26" query`);
+      }
+
+      const isStrongAmbiguity = !isDeadlineComparisonQuery && (
         needsClarificationPatterns.justNumbers ||
         needsClarificationPatterns.vagueQuestion ||
         (needsClarificationPatterns.tooShort && !message.includes('?'))
@@ -3158,9 +3195,59 @@ Beyanname için mi yoksa ödeme için mi soruyorsunuz?`;
       // v12.31: DEADLINE EARLY-ESCAPE PREVENTION
       // For deadline queries with poor search results, do targeted DB fetch
       // This prevents "net bilgi yok" fallback for typo/malformed deadline queries
+      // v12.32: Also handles 'ambiguous' case - fetches BOTH m.41 and m.46
       // ═══════════════════════════════════════════════════════════════════════════
       const earlyDeadlineIntent = this.detectDeadlineIntent(message);
-      if (earlyDeadlineIntent && earlyDeadlineIntent !== 'ambiguous' && searchResults.length === 0) {
+
+      // v12.32: For ambiguous "24 vs 26" queries, fetch BOTH m.41 and m.46
+      if (earlyDeadlineIntent === 'ambiguous' && (searchResults.length < 2 || isDeadlineComparisonQuery)) {
+        console.log(`🛡️ [v12.32] AMBIGUOUS_RESCUE: Fetching both m.41 and m.46 for comparison query`);
+
+        const articlesToFetch = [
+          { article: '41', lawName: 'KATMA DEĞER VERGİSİ KANUNU' },
+          { article: '46', lawName: 'KATMA DEĞER VERGİSİ KANUNU' }
+        ];
+
+        for (const targetInfo of articlesToFetch) {
+          // Check if this article is already in results
+          const alreadyExists = searchResults.some(r =>
+            (r.content || r.title || '').toLowerCase().includes(`madde ${targetInfo.article}`)
+          );
+
+          if (!alreadyExists) {
+            try {
+              const rescueResult = await this.pool.query(
+                `SELECT id, source_table, source_type, source_name, content, metadata
+                 FROM unified_embeddings
+                 WHERE source_table = 'vergilex_mevzuat_kanunlar_chunks'
+                   AND source_name ILIKE $1
+                 LIMIT 1`,
+                [`%${targetInfo.lawName}%Madde ${targetInfo.article}%`]
+              );
+
+              if (rescueResult.rows.length > 0) {
+                const row = rescueResult.rows[0];
+                const rescuedSource = {
+                  id: row.id,
+                  sourceTable: row.source_table,
+                  sourceType: row.source_type || 'kanun',
+                  title: row.source_name || `KDVK Madde ${targetInfo.article}`,
+                  content: row.content,
+                  excerpt: row.content?.substring(0, 500),
+                  score: targetInfo.article === '41' ? 0.96 : 0.95, // m.41 slightly higher for ordering
+                  metadata: row.metadata || {}
+                };
+                searchResults.push(rescuedSource);
+                console.log(`✅ [v12.32] AMBIGUOUS_RESCUED: Added KDVK m.${targetInfo.article} from DB`);
+              }
+            } catch (rescueError) {
+              console.error(`❌ [v12.32] AMBIGUOUS_RESCUE_FAILED for m.${targetInfo.article}:`, rescueError);
+            }
+          }
+        }
+      }
+      // v12.31: Single intent rescue (beyanname or odeme)
+      else if (earlyDeadlineIntent && earlyDeadlineIntent !== 'ambiguous' && searchResults.length === 0) {
         console.log(`🛡️ [v12.31] DEADLINE_RESCUE: No search results but deadline intent detected (${earlyDeadlineIntent}), attempting DB fetch`);
 
         // Targeted article mapping
