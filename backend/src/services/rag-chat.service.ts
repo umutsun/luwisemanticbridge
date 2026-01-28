@@ -3430,8 +3430,69 @@ Beyanname için mi yoksa ödeme için mi soruyorsunuz?`;
         } else if (bestLawSourceIndex === 0) {
           console.log(`✅ [v12.25] MURAT_HIERARCHY: Law article already at Top-1`);
         } else {
-          // No law source with target article found - log warning
-          console.warn(`⚠️ [v12.25] MURAT_HIERARCHY: No law source with target article (${deadlineIntentForHierarchy}) found in sources`);
+          // v12.26: No law source found - inject synthetic law source at Top-1
+          const syntheticLawSources: Record<string, any> = {
+            'beyanname': {
+              id: 'synthetic-kdvk-41',
+              title: 'KATMA DEĞER VERGİSİ KANUNU Madde 41 - Beyan Esası',
+              excerpt: 'Mükellefler Katma Değer Vergisi beyannamelerini, vergilendirme dönemini takip eden ayın yirmidördüncü günü akşamına kadar ilgili vergi dairesine vermekle yükümlüdürler.',
+              content: '3065 sayılı Katma Değer Vergisi Kanunu Madde 41: Mükellefler Katma Değer Vergisi beyannamelerini, vergilendirme dönemini takip eden ayın yirmidördüncü günü akşamına kadar ilgili vergi dairesine vermekle yükümlüdürler. Vergi kesintisi yapmakla sorumlu tutulanlar ise beyannamelerini vergilendirme dönemini takip eden ayın yirmibirinci günü akşamına kadar vermelidir.',
+              category: 'Mevzuat_Kanun',
+              sourceTable: 'vergilex_mevzuat_kanunlar_chunks',
+              citation: '[Kanun]',
+              score: 100,
+              relevance: 100,
+              relevanceText: 'Yüksek',
+              _hierarchyWeight: 100,
+              _similarityScore: 100,
+              _combinedScore: 100,
+              _originalIndex: 0,
+              _synthetic: true,
+              metadata: {
+                law_name: 'KATMA DEĞER VERGİSİ KANUNU',
+                law_number: '3065',
+                article_number: '41',
+                chunk_type: 'article'
+              }
+            },
+            'odeme': {
+              id: 'synthetic-kdvk-46',
+              title: 'KATMA DEĞER VERGİSİ KANUNU Madde 46 - Ödeme',
+              excerpt: 'Mükellefler bir vergilendirme dönemine ait katma değer vergilerini beyanname verecekleri ayın yirmialtıncı günü akşamına kadar ödemeye mecburdurlar.',
+              content: '3065 sayılı Katma Değer Vergisi Kanunu Madde 46: Beyanname vermek mecburiyetinde olan mükellefler bir vergilendirme dönemine ait katma değer vergilerini beyanname verecekleri ayın yirmialtıncı günü akşamına kadar ödemeye mecburdurlar. Vergi kesintisi yapmakla sorumlu tutulanlar ise beyanname verecekleri ayın yirmiüçüncü günü akşamına kadar ödemelidir.',
+              category: 'Mevzuat_Kanun',
+              sourceTable: 'vergilex_mevzuat_kanunlar_chunks',
+              citation: '[Kanun]',
+              score: 100,
+              relevance: 100,
+              relevanceText: 'Yüksek',
+              _hierarchyWeight: 100,
+              _similarityScore: 100,
+              _combinedScore: 100,
+              _originalIndex: 0,
+              _synthetic: true,
+              metadata: {
+                law_name: 'KATMA DEĞER VERGİSİ KANUNU',
+                law_number: '3065',
+                article_number: '46',
+                chunk_type: 'article'
+              }
+            }
+          };
+
+          const syntheticSource = syntheticLawSources[deadlineIntentForHierarchy];
+          if (syntheticSource) {
+            // Shift all original indices by 1 since we're inserting at position 0
+            rankedSources.forEach(s => {
+              if (typeof s._originalIndex === 'number') {
+                s._originalIndex = s._originalIndex + 1;
+              }
+            });
+            rankedSources.unshift(syntheticSource);
+            console.log(`🏛️ [v12.26] MURAT_HIERARCHY: Injected synthetic law source at Top-1: "${syntheticSource.title}"`);
+          } else {
+            console.warn(`⚠️ [v12.25] MURAT_HIERARCHY: No law source with target article (${deadlineIntentForHierarchy}) found in sources`);
+          }
         }
       }
 
