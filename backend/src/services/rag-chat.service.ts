@@ -6,7 +6,18 @@ import pool from '../config/database';
 import { redis } from '../config/redis';
 import dotenv from 'dotenv';
 import { TIMEOUTS } from '../config';
-import { TopicEntity, LLMConfig, SanitizerConfig, DEFAULT_SANITIZER_CONFIG, SanitizerPattern } from '../types/data-schema.types';
+import {
+  TopicEntity,
+  LLMConfig,
+  SanitizerConfig,
+  DEFAULT_SANITIZER_CONFIG,
+  SanitizerPattern,
+  PendingDisambiguation,
+  FollowUpConfig,
+  DEFAULT_FOLLOWUP_CONFIG,
+  DEADLINE_DISAMBIGUATION_RESPONSES,
+  ExpectedDisambiguationResponse
+} from '../types/data-schema.types';
 import { RAGRoutingSchema, RAGResponseType } from '../types/settings.types';
 import { DEFAULT_RAG_ROUTING_SCHEMA, getRAGRoutingSchema } from '../config/rag-routing-schema.config';
 import { getSanitizerLangPack, buildTemporalPattern, buildDatePattern, buildPercentagePattern, SanitizerLangPack, normalizeNumberWords, buildNumberMatchPattern } from '../config/sanitizer-langs';
@@ -173,6 +184,252 @@ export class RAGChatService {
   constructor() {
     this.llmManager = LLMManager.getInstance();
     console.log(' RAG Chat Service initialized with LLM Manager');
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // v12.33: FOLLOW-UP DEPTH CONTROL & INTENT CARRY-OVER
+  // Prevents chatbot-like behavior with MAX_DEPTH=2, EXCEPTIONAL_MAX=3
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  /**
+   * Get Redis key prefix for pending disambiguation
+   * Multi-tenant: Uses TENANT_NAME env var if set (e.g., vergilex, geolex, bookie)
+   * Format: {tenant}:rag:disambiguation:{conversationId}
+   */
+  private getDisambiguationKey(conversationId: string): string {
+    const tenant = process.env.TENANT_NAME || process.env.APP_NAME || 'lsemb';
+    return `${tenant}:rag:disambiguation:${conversationId}`;
+  }
+
+  /**
+   * v12.33: Store pending disambiguation in Redis
+   * @param conversationId - Conversation ID
+   * @param disambiguation - Pending disambiguation state
+   * @param config - Follow-up configuration (for TTL)
+   */
+  private async setPendingDisambiguation(
+    conversationId: string,
+    disambiguation: PendingDisambiguation,
+    config: FollowUpConfig = DEFAULT_FOLLOWUP_CONFIG
+  ): Promise<void> {
+    try {
+      const key = this.getDisambiguationKey(conversationId);
+      const ttl = config.ttlSeconds || 300; // Default 5 minutes
+
+      await redis.setex(key, ttl, JSON.stringify(disambiguation));
+      console.log(`💾 [v12.33] PENDING_SAVED: ${key} (TTL=${ttl}s, depth=${disambiguation.followUpCount})`);
+    } catch (error) {
+      console.error(`❌ [v12.33] DISAMBIGUATION_STORE_FAILED:`, error);
+    }
+  }
+
+  /**
+   * v12.33: Get pending disambiguation from Redis
+   * @param conversationId - Conversation ID
+   * @returns PendingDisambiguation or null if not found/expired
+   */
+  private async getPendingDisambiguation(conversationId: string): Promise<PendingDisambiguation | null> {
+    try {
+      const key = this.getDisambiguationKey(conversationId);
+      const data = await redis.get(key);
+
+      if (!data) {
+        return null;
+      }
+
+      const disambiguation = JSON.parse(data) as PendingDisambiguation;
+
+      // Check if expired (double-check, Redis TTL should handle this)
+      if (Date.now() > disambiguation.expiresAt) {
+        await this.clearPendingDisambiguation(conversationId);
+        return null;
+      }
+
+      return disambiguation;
+    } catch (error) {
+      console.error(`❌ [v12.33] DISAMBIGUATION_GET_FAILED:`, error);
+      return null;
+    }
+  }
+
+  /**
+   * v12.33: Clear pending disambiguation from Redis
+   * @param conversationId - Conversation ID
+   */
+  private async clearPendingDisambiguation(conversationId: string): Promise<void> {
+    try {
+      const key = this.getDisambiguationKey(conversationId);
+      await redis.del(key);
+      console.log(`🧹 [v12.33] DISAMBIGUATION_CLEARED: ${key}`);
+    } catch (error) {
+      console.error(`❌ [v12.33] DISAMBIGUATION_CLEAR_FAILED:`, error);
+    }
+  }
+
+  /**
+   * v12.33: Detect if message is a follow-up to pending disambiguation
+   * Uses fuzzy matching with Levenshtein distance for typo tolerance
+   *
+   * @param message - User message
+   * @param conversationId - Conversation ID
+   * @returns Detection result with resolution if matched
+   */
+  private async detectFollowUp(
+    message: string,
+    conversationId: string
+  ): Promise<{ isFollowUp: boolean; resolution?: string; context?: any; pending?: PendingDisambiguation }> {
+    // 1. Check for pending disambiguation
+    const pending = await this.getPendingDisambiguation(conversationId);
+    if (!pending) {
+      return { isFollowUp: false };
+    }
+
+    // 2. Normalize message
+    const normalized = this.normalizeQueryForIntent(message);
+    const words = normalized.split(/\s+/).filter(w => w.length > 0);
+
+    // 3. Short message detection (1-3 words likely a follow-up response)
+    if (words.length > 5) {
+      // Too long to be a simple follow-up response like "beyanname"
+      console.log(`🔍 [v12.33] FOLLOWUP_CHECK: Message too long (${words.length} words), treating as new query`);
+      return { isFollowUp: false };
+    }
+
+    // 4. Check if any word matches expected responses (with fuzzy matching)
+    for (const expected of pending.expectedResponses) {
+      const allKeywords = [expected.keyword, ...expected.aliases];
+
+      for (const word of words) {
+        // Exact match
+        if (allKeywords.includes(word)) {
+          console.log(`✅ [v12.33] FOLLOWUP_DETECTED: Exact match "${word}" → ${expected.resolution}`);
+          return {
+            isFollowUp: true,
+            resolution: expected.resolution,
+            context: pending.cachedContext,
+            pending
+          };
+        }
+
+        // Fuzzy match with Levenshtein distance
+        const maxDistance = word.length <= 4 ? 1 : 2; // Shorter words = stricter matching
+        if (this.fuzzyContainsKeyword(word, allKeywords, maxDistance)) {
+          console.log(`✅ [v12.33] FOLLOWUP_DETECTED: Fuzzy match "${word}" → ${expected.resolution}`);
+          return {
+            isFollowUp: true,
+            resolution: expected.resolution,
+            context: pending.cachedContext,
+            pending
+          };
+        }
+      }
+    }
+
+    // 5. No match found
+    console.log(`🔍 [v12.33] FOLLOWUP_CHECK: No match for "${message}" in expected responses`);
+    return { isFollowUp: false };
+  }
+
+  /**
+   * v12.33: Handle depth control - prevent endless follow-up loops
+   *
+   * @param pending - Current pending disambiguation state
+   * @param config - Follow-up configuration
+   * @returns Whether to proceed or close with message
+   */
+  private handleWithDepthControl(
+    pending: PendingDisambiguation | null,
+    config: FollowUpConfig = DEFAULT_FOLLOWUP_CONFIG
+  ): { proceed: boolean; closingResponse?: string } {
+    if (!pending) {
+      return { proceed: true };
+    }
+
+    const currentDepth = pending.followUpCount || 0;
+
+    // Check if this intent category gets exceptional depth
+    const maxAllowed = config.exceptionalIntents.includes(pending.intentCategory)
+      ? config.exceptionalMaxDepth
+      : config.maxDepth;
+
+    if (currentDepth >= maxAllowed) {
+      console.log(`🛑 [v12.33] MAX_DEPTH_REACHED: depth=${currentDepth}, max=${maxAllowed}, category=${pending.intentCategory}`);
+      return {
+        proceed: false,
+        closingResponse: config.closingMessage.tr // TODO: detect language
+      };
+    }
+
+    return { proceed: true };
+  }
+
+  /**
+   * v12.33: Resolve disambiguation with cached context
+   * Generates the final answer based on user's follow-up response
+   *
+   * @param resolution - Resolution key (e.g., 'beyanname', 'odeme')
+   * @param pending - Pending disambiguation state
+   * @param conversationId - Conversation ID
+   * @returns Final response with content and sources
+   */
+  private async resolveDisambiguation(
+    resolution: string,
+    pending: PendingDisambiguation,
+    conversationId: string
+  ): Promise<{ content: string; sources: any[] }> {
+    // Get pre-computed answer from disambiguation responses
+    const responseConfig = DEADLINE_DISAMBIGUATION_RESPONSES[resolution];
+
+    if (!responseConfig || !responseConfig.answer) {
+      // Fallback: couldn't find pre-computed answer
+      console.warn(`⚠️ [v12.33] RESOLUTION_NOT_FOUND: ${resolution}`);
+      return {
+        content: 'Belirtilen seçenek için yanıt bulunamadı. Lütfen sorunuzu yeniden ifade edin.',
+        sources: pending.cachedContext.searchResults || []
+      };
+    }
+
+    const { day, article, lawCode } = responseConfig.answer;
+
+    // Find citation index from cached search results
+    let citationIndex = 1;
+    const searchResults = pending.cachedContext.searchResults || [];
+
+    for (let i = 0; i < searchResults.length; i++) {
+      const source = searchResults[i];
+      const content = (source.content || source.excerpt || source.title || '').toLowerCase();
+      const sourceName = (source.source_name || source.title || '').toLowerCase();
+      const articleNum = article.replace('m.', '');
+
+      if (content.includes(`madde ${articleNum}`) || sourceName.includes(`madde ${articleNum}`) ||
+          content.includes(article) || content.includes(`m. ${articleNum}`)) {
+        citationIndex = i + 1;
+        break;
+      }
+    }
+
+    // Generate response
+    const dayWord = day === 24 ? 'yirmidördüncü' : 'yirmialtıncı';
+    const suffix = this.getSuffix(day);
+
+    let content: string;
+    if (resolution === 'beyanname') {
+      content = `KDV beyannamesi, vergilendirme dönemini takip eden ayın ${day}'${suffix} (${dayWord} günü) akşamına kadar ilgili vergi dairesine verilmelidir (${lawCode} ${article}) [${citationIndex}].`;
+    } else if (resolution === 'odeme') {
+      content = `KDV ödemesi, takip eden ayın ${day}'${suffix} (${dayWord} günü) akşamına kadar yapılmalıdır (${lawCode} ${article}) [${citationIndex}].`;
+    } else {
+      content = `${resolution} için son tarih: takip eden ayın ${day}'${suffix} (${lawCode} ${article}) [${citationIndex}].`;
+    }
+
+    // Clear disambiguation state - conversation resolved
+    await this.clearPendingDisambiguation(conversationId);
+
+    console.log(`✅ [v12.33] DISAMBIGUATION_RESOLVED: ${resolution} → day=${day}, article=${article}`);
+
+    return {
+      content,
+      sources: searchResults.slice(0, 3) // Return top 3 sources
+    };
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
@@ -1345,6 +1602,51 @@ ${questionLabel}: ${message}`;
         // Log activity for existing conversation
         await this.logActivity(userId, 'chat_message', { conversationId: convId });
       }
+
+      // ═══════════════════════════════════════════════════════════════════════════
+      // v12.33: FOLLOW-UP DETECTION - Check if this is a disambiguation response
+      // This MUST run BEFORE normal RAG flow to intercept follow-up messages
+      // ═══════════════════════════════════════════════════════════════════════════
+      const followUpCheck = await this.detectFollowUp(message, convId);
+
+      if (followUpCheck.isFollowUp && followUpCheck.resolution && followUpCheck.pending) {
+        console.log(`🔄 [v12.33] FOLLOW_UP_DETECTED: Resolving "${message}" → ${followUpCheck.resolution}`);
+
+        // Check depth control
+        const depthCheck = this.handleWithDepthControl(followUpCheck.pending);
+
+        if (!depthCheck.proceed) {
+          // Max depth reached - return closing message
+          console.log(`🛑 [v12.33] FOLLOW_UP_CLOSED: Max depth reached, returning closing message`);
+
+          // Clear disambiguation state
+          await this.clearPendingDisambiguation(convId);
+
+          return {
+            conversationId: convId,
+            content: depthCheck.closingResponse || DEFAULT_FOLLOWUP_CONFIG.closingMessage.tr,
+            sources: [],
+            responseType: 'CLOSING' as const,
+            timings: { total: Date.now() - startTotal }
+          };
+        }
+
+        // Resolve disambiguation with cached context
+        const resolved = await this.resolveDisambiguation(
+          followUpCheck.resolution,
+          followUpCheck.pending,
+          convId
+        );
+
+        return {
+          conversationId: convId,
+          content: resolved.content,
+          sources: resolved.sources,
+          responseType: 'FOUND' as const,
+          timings: { total: Date.now() - startTotal }
+        };
+      }
+      // ═══════════════════════════════════════════════════════════════════════════
 
       // Get system prompt from database or use default
       let systemPrompt = options.systemPrompt || await this.getSystemPrompt();
@@ -2599,6 +2901,33 @@ Beyanname için mi yoksa ödeme için mi soruyorsunuz?`;
 
         deadlineFixApplied = true;
         deadlineHardcodedApplied = true; // Skip sanitizer for this response
+
+        // ═══════════════════════════════════════════════════════════════════════════
+        // v12.33: Store pending disambiguation for follow-up detection
+        // This enables the system to understand "beyanname" or "ödeme" as follow-ups
+        // ═══════════════════════════════════════════════════════════════════════════
+        const pendingDisambiguation: PendingDisambiguation = {
+          originalQuery: message,
+          intentCategory: 'deadline',
+          intentType: null, // Will be resolved on follow-up
+          expectedResponses: [
+            DEADLINE_DISAMBIGUATION_RESPONSES.beyanname,
+            DEADLINE_DISAMBIGUATION_RESPONSES.odeme
+          ],
+          cachedContext: {
+            searchResults: searchResults,
+            detectedIntent: 'ambiguous'
+          },
+          followUpCount: 1,
+          createdAt: Date.now(),
+          expiresAt: Date.now() + (DEFAULT_FOLLOWUP_CONFIG.ttlSeconds * 1000),
+          conversationId: convId
+        };
+
+        // Store in Redis for follow-up detection
+        await this.setPendingDisambiguation(convId, pendingDisambiguation);
+        console.log(`🔄 [v12.33] DISAMBIGUATION_PENDING: Stored for follow-up (TTL=${DEFAULT_FOLLOWUP_CONFIG.ttlSeconds}s)`);
+        // ═══════════════════════════════════════════════════════════════════════════
       }
       // Handle specific beyanname or odeme intent
       else if (postProcDeadlineIntent === 'beyanname' || postProcDeadlineIntent === 'odeme') {

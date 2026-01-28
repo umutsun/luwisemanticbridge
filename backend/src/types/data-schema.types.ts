@@ -376,6 +376,20 @@ export interface LLMConfig {
    * Multi-tenant: Each schema can have its own sanitizer rules
    */
   sanitizerConfig?: SanitizerConfig;
+
+  /**
+   * v12.33: Follow-up configuration for depth control
+   * Controls disambiguation follow-up behavior and limits
+   * Multi-tenant: Each schema can have its own follow-up rules
+   */
+  followUpConfig?: FollowUpConfig;
+
+  /**
+   * v12.33: Deadline configuration for schema-driven deadline detection
+   * Enables dynamic deadline intent mapping and responses
+   * Multi-tenant: Each schema can have its own deadline rules
+   */
+  deadlineConfig?: DeadlineConfig;
 }
 
 /**
@@ -709,3 +723,157 @@ m²/kare fiyatı önemli bir karşılaştırma metriğidir.`
     llmGuide: 'Genel amaçlı doküman. Yapısal bilgiler mevcut değilse içerikten anlam çıkar.'
   }
 ];
+
+// ============================================
+// v12.33: FOLLOW-UP DEPTH CONTROL TYPES
+// ============================================
+
+/**
+ * Expected response for disambiguation
+ * Maps user response to resolution and pre-computed answer
+ */
+export interface ExpectedDisambiguationResponse {
+  /** Primary keyword to match (e.g., 'beyanname') */
+  keyword: string;
+  /** Alternative keywords/aliases (e.g., ['beyan', 'bildirim']) */
+  aliases: string[];
+  /** Resolution key for processing */
+  resolution: string;
+  /** Pre-computed answer data */
+  answer?: {
+    day: number;
+    article: string;
+    lawCode: string;
+  };
+}
+
+/**
+ * Pending disambiguation state stored in Redis
+ * Tracks context between user query and follow-up response
+ */
+export interface PendingDisambiguation {
+  /** Original user query that triggered disambiguation (e.g., "KDV 24 mü 26 mı?") */
+  originalQuery: string;
+  /** Category of intent (e.g., 'deadline', 'rate', 'exemption') */
+  intentCategory: string;
+  /** Specific intent type, null until resolved */
+  intentType: string | null;
+  /** Expected responses that can resolve this disambiguation */
+  expectedResponses: ExpectedDisambiguationResponse[];
+  /** Cached context for reuse */
+  cachedContext: {
+    /** Search results from original query */
+    searchResults: any[];
+    /** Detected intent from original query */
+    detectedIntent: string;
+  };
+  /** Number of follow-up questions asked */
+  followUpCount: number;
+  /** Timestamp when disambiguation was created */
+  createdAt: number;
+  /** Timestamp when disambiguation expires */
+  expiresAt: number;
+  /** Conversation ID for tracking */
+  conversationId: string;
+}
+
+/**
+ * Follow-up configuration for depth control
+ * Schema-driven, can be customized per tenant
+ */
+export interface FollowUpConfig {
+  /** Whether follow-up detection is enabled */
+  enabled: boolean;
+  /** Maximum follow-up depth before forcing closure (default: 2) */
+  maxDepth: number;
+  /** Maximum depth for exceptional intents like iade, istisna (default: 3) */
+  exceptionalMaxDepth: number;
+  /** Intent categories that get exceptional max depth */
+  exceptionalIntents: string[];
+  /** Closing message when max depth reached */
+  closingMessage: {
+    tr: string;
+    en: string;
+  };
+  /** Number of messages to look back for context (default: 2) */
+  carryOverWindow: number;
+  /** TTL in seconds for pending disambiguation (default: 300) */
+  ttlSeconds: number;
+}
+
+/**
+ * Deadline intent configuration
+ * Schema-driven deadline detection and response
+ */
+export interface DeadlineIntentConfig {
+  /** Keywords for this intent type (Turkish) */
+  keywords: string[];
+  /** ASCII variants of keywords */
+  keywordsAscii: string[];
+  /** Target article number (e.g., "41" for beyanname) */
+  articleNumber: string;
+  /** Law code (e.g., "KDVK") */
+  lawCode: string;
+  /** Full law name */
+  lawName: string;
+  /** Deadline information */
+  deadline: {
+    day: number;
+    wordTr: string;
+  };
+  /** Table filter for targeted DB fetch */
+  tableFilter: string;
+}
+
+/**
+ * Deadline configuration for schema
+ */
+export interface DeadlineConfig {
+  /** Whether deadline detection is enabled */
+  enabled: boolean;
+  /** Intent configurations keyed by intent type */
+  intents: Record<string, DeadlineIntentConfig>;
+  /** Patterns for detecting comparison questions (e.g., "24 mü 26 mı") */
+  comparisonPatterns: string[];
+  /** Typo tolerance configuration */
+  typoTolerance: {
+    enabled: boolean;
+    maxLevenshteinDistance: number;
+    shortWordMaxDistance: number;
+  };
+}
+
+/**
+ * Default follow-up configuration
+ */
+export const DEFAULT_FOLLOWUP_CONFIG: FollowUpConfig = {
+  enabled: true,
+  maxDepth: 2,
+  exceptionalMaxDepth: 3,
+  exceptionalIntents: ['iade', 'istisna', 'tevkifat'],
+  closingMessage: {
+    tr: 'Bu konu birden fazla hukuki senaryo içeriyor. Lütfen sorunuzu tek başlık altında netleştirerek yeni bir sorgu oluşturun.',
+    en: 'This topic involves multiple legal scenarios. Please clarify your question under a single topic.'
+  },
+  carryOverWindow: 2,
+  ttlSeconds: 300
+};
+
+/**
+ * Default deadline disambiguation responses
+ * Used when user responds to "Beyanname mi ödeme mi?" question
+ */
+export const DEADLINE_DISAMBIGUATION_RESPONSES: Record<string, ExpectedDisambiguationResponse> = {
+  beyanname: {
+    keyword: 'beyanname',
+    aliases: ['beyan', 'bildirim', 'declaration', 'bildiri'],
+    resolution: 'beyanname',
+    answer: { day: 24, article: 'm.41', lawCode: 'KDVK' }
+  },
+  odeme: {
+    keyword: 'ödeme',
+    aliases: ['odeme', 'ödenir', 'odenir', 'payment', 'yatırma', 'yatirma', 'öde', 'ode'],
+    resolution: 'odeme',
+    answer: { day: 26, article: 'm.46', lawCode: 'KDVK' }
+  }
+};
