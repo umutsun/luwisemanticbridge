@@ -377,6 +377,15 @@ export class RAGChatService {
     pending: PendingDisambiguation,
     conversationId: string
   ): Promise<{ content: string; sources: any[] }> {
+    // v12.34: Defensive null checks
+    if (!pending || !pending.cachedContext) {
+      console.error(`❌ [v12.34] RESOLVE_ERROR: Invalid pending disambiguation state`);
+      return {
+        content: 'Önceki sorgu bağlamı bulunamadı. Lütfen sorunuzu yeniden sorun.',
+        sources: []
+      };
+    }
+
     // Get pre-computed answer from disambiguation responses
     const responseConfig = DEADLINE_DISAMBIGUATION_RESPONSES[resolution];
 
@@ -385,21 +394,41 @@ export class RAGChatService {
       console.warn(`⚠️ [v12.33] RESOLUTION_NOT_FOUND: ${resolution}`);
       return {
         content: 'Belirtilen seçenek için yanıt bulunamadı. Lütfen sorunuzu yeniden ifade edin.',
-        sources: pending.cachedContext.searchResults || []
+        sources: pending.cachedContext?.searchResults || []
       };
     }
 
     const { day, article, lawCode } = responseConfig.answer;
 
-    // Find citation index from cached search results
+    // v12.34: Re-order sources to prioritize Kanun/Mevzuat over Sirküler
+    // This ensures the citation points to the authoritative source
+    let searchResults = [...(pending.cachedContext.searchResults || [])];
+    const articleNum = article.replace('m.', '');
+
+    // Find Kanun/Mevzuat source that contains the target article
+    const kanunSourceIndex = searchResults.findIndex((source: any) => {
+      const sourceTable = (source.source_table || source.table_name || '').toLowerCase();
+      const content = (source.content || source.excerpt || source.title || '').toLowerCase();
+      const isKanun = sourceTable.includes('kanun') || sourceTable.includes('mevzuat');
+      const hasArticle = content.includes(`madde ${articleNum}`) || content.includes(`m.${articleNum}`) || content.includes(`m. ${articleNum}`);
+      return isKanun && hasArticle;
+    });
+
+    // If Kanun source found and not already at top, move it to top
+    if (kanunSourceIndex > 0) {
+      const kanunSource = searchResults[kanunSourceIndex];
+      searchResults.splice(kanunSourceIndex, 1);
+      searchResults.unshift(kanunSource);
+      console.log(`🔄 [v12.34] SOURCE_REORDER: Moved Kanun source to Top-1 (was at index ${kanunSourceIndex})`);
+    }
+
+    // Find citation index - should now be 1 if Kanun source was moved
     let citationIndex = 1;
-    const searchResults = pending.cachedContext.searchResults || [];
 
     for (let i = 0; i < searchResults.length; i++) {
       const source = searchResults[i];
       const content = (source.content || source.excerpt || source.title || '').toLowerCase();
       const sourceName = (source.source_name || source.title || '').toLowerCase();
-      const articleNum = article.replace('m.', '');
 
       if (content.includes(`madde ${articleNum}`) || sourceName.includes(`madde ${articleNum}`) ||
           content.includes(article) || content.includes(`m. ${articleNum}`)) {
@@ -1605,65 +1634,74 @@ ${questionLabel}: ${message}`;
 
       // ═══════════════════════════════════════════════════════════════════════════
       // v12.33: FOLLOW-UP DETECTION - Check if this is a disambiguation response
+      // v12.34: Added try-catch for graceful error handling (P0 crash fix)
       // This MUST run BEFORE normal RAG flow to intercept follow-up messages
       // ═══════════════════════════════════════════════════════════════════════════
-      const followUpCheck = await this.detectFollowUp(message, convId);
+      try {
+        const followUpCheck = await this.detectFollowUp(message, convId);
 
-      if (followUpCheck.isFollowUp && followUpCheck.resolution && followUpCheck.pending) {
-        console.log(`🔄 [v12.33] FOLLOW_UP_DETECTED: Resolving "${message}" → ${followUpCheck.resolution}`);
+        if (followUpCheck.isFollowUp && followUpCheck.resolution && followUpCheck.pending) {
+          console.log(`🔄 [v12.33] FOLLOW_UP_DETECTED: Resolving "${message}" → ${followUpCheck.resolution}`);
 
-        // Check depth control
-        const depthCheck = this.handleWithDepthControl(followUpCheck.pending);
+          // Check depth control
+          const depthCheck = this.handleWithDepthControl(followUpCheck.pending);
 
-        if (!depthCheck.proceed) {
-          // Max depth reached - return closing message
-          console.log(`🛑 [v12.33] FOLLOW_UP_CLOSED: Max depth reached, returning closing message`);
+          if (!depthCheck.proceed) {
+            // Max depth reached - return closing message
+            console.log(`🛑 [v12.33] FOLLOW_UP_CLOSED: Max depth reached, returning closing message`);
 
-          // Analytics: Log max depth reached
-          await this.logActivity(userId, 'follow_up_max_depth', {
+            // Analytics: Log max depth reached
+            await this.logActivity(userId, 'follow_up_max_depth', {
+              conversationId: convId,
+              originalQuery: followUpCheck.pending.originalQuery,
+              lastQuery: message,
+              depth: followUpCheck.pending.followUpCount,
+              intentCategory: followUpCheck.pending.intentCategory
+            });
+
+            // Clear disambiguation state
+            await this.clearPendingDisambiguation(convId);
+
+            return {
+              conversationId: convId,
+              content: depthCheck.closingResponse || DEFAULT_FOLLOWUP_CONFIG.closingMessage.tr,
+              sources: [],
+              responseType: 'CLOSING' as const,
+              timings: { total: Date.now() - startTotal }
+            };
+          }
+
+          // Resolve disambiguation with cached context
+          const resolved = await this.resolveDisambiguation(
+            followUpCheck.resolution,
+            followUpCheck.pending,
+            convId
+          );
+
+          // Analytics: Log successful follow-up resolution
+          await this.logActivity(userId, 'follow_up_resolved', {
             conversationId: convId,
             originalQuery: followUpCheck.pending.originalQuery,
-            lastQuery: message,
+            followUpQuery: message,
+            resolution: followUpCheck.resolution,
             depth: followUpCheck.pending.followUpCount,
             intentCategory: followUpCheck.pending.intentCategory
           });
 
-          // Clear disambiguation state
-          await this.clearPendingDisambiguation(convId);
-
           return {
             conversationId: convId,
-            content: depthCheck.closingResponse || DEFAULT_FOLLOWUP_CONFIG.closingMessage.tr,
-            sources: [],
-            responseType: 'CLOSING' as const,
+            content: resolved.content,
+            sources: resolved.sources,
+            responseType: 'FOUND' as const,
             timings: { total: Date.now() - startTotal }
           };
         }
-
-        // Resolve disambiguation with cached context
-        const resolved = await this.resolveDisambiguation(
-          followUpCheck.resolution,
-          followUpCheck.pending,
-          convId
-        );
-
-        // Analytics: Log successful follow-up resolution
-        await this.logActivity(userId, 'follow_up_resolved', {
-          conversationId: convId,
-          originalQuery: followUpCheck.pending.originalQuery,
-          followUpQuery: message,
-          resolution: followUpCheck.resolution,
-          depth: followUpCheck.pending.followUpCount,
-          intentCategory: followUpCheck.pending.intentCategory
-        });
-
-        return {
-          conversationId: convId,
-          content: resolved.content,
-          sources: resolved.sources,
-          responseType: 'FOUND' as const,
-          timings: { total: Date.now() - startTotal }
-        };
+      } catch (followUpError) {
+        // v12.34: Graceful fallback - if follow-up detection fails, continue with normal RAG flow
+        console.error(`❌ [v12.34] FOLLOW_UP_ERROR: ${followUpError instanceof Error ? followUpError.message : followUpError}`);
+        console.log(`🔄 [v12.34] FOLLOW_UP_FALLBACK: Continuing with normal RAG flow`);
+        // Clear any corrupted disambiguation state
+        await this.clearPendingDisambiguation(convId).catch(() => {});
       }
       // ═══════════════════════════════════════════════════════════════════════════
 
@@ -2909,14 +2947,11 @@ Bu soru karmaşık bir vergisel senaryo içermektedir. Yanıtını AŞAĞIDAKİ 
 
         console.log(`🔍 [v12.32] AMBIGUOUS_CITATIONS: beyan=${beyanCitation}, odeme=${odemeCitation}`);
 
-        // Generate response with correct citations
-        response.content = `KDV'de iki farklı son tarih bulunmaktadır:
+        // v12.34: Clean disambiguation - ONLY ask the question, don't give away the answer
+        // User requested: First turn should NOT show 24/26 values
+        response.content = `KDV'de beyanname ve ödeme için farklı son tarihler bulunmaktadır.
 
-**Beyanname (Bildirim):** KDV beyannamesi, vergilendirme dönemini takip eden ayın 24'ü (yirmidördüncü günü) akşamına kadar ilgili vergi dairesine verilmelidir (KDVK madde 41) ${beyanCitation}.
-
-**Ödeme:** KDV, takip eden ayın 26'sı (yirmialtıncı günü) akşamına kadar ödenmelidir (KDVK madde 46) ${odemeCitation}.
-
-Beyanname için mi yoksa ödeme için mi soruyorsunuz?`;
+**Beyanname için mi, yoksa ödeme için mi** soruyorsunuz?`;
 
         deadlineFixApplied = true;
         deadlineHardcodedApplied = true; // Skip sanitizer for this response
