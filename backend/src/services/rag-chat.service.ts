@@ -1619,6 +1619,15 @@ ${questionLabel}: ${message}`;
           // Max depth reached - return closing message
           console.log(`🛑 [v12.33] FOLLOW_UP_CLOSED: Max depth reached, returning closing message`);
 
+          // Analytics: Log max depth reached
+          await this.logActivity(userId, 'follow_up_max_depth', {
+            conversationId: convId,
+            originalQuery: followUpCheck.pending.originalQuery,
+            lastQuery: message,
+            depth: followUpCheck.pending.followUpCount,
+            intentCategory: followUpCheck.pending.intentCategory
+          });
+
           // Clear disambiguation state
           await this.clearPendingDisambiguation(convId);
 
@@ -1637,6 +1646,16 @@ ${questionLabel}: ${message}`;
           followUpCheck.pending,
           convId
         );
+
+        // Analytics: Log successful follow-up resolution
+        await this.logActivity(userId, 'follow_up_resolved', {
+          conversationId: convId,
+          originalQuery: followUpCheck.pending.originalQuery,
+          followUpQuery: message,
+          resolution: followUpCheck.resolution,
+          depth: followUpCheck.pending.followUpCount,
+          intentCategory: followUpCheck.pending.intentCategory
+        });
 
         return {
           conversationId: convId,
