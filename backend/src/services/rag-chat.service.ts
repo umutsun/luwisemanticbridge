@@ -175,6 +175,203 @@ export class RAGChatService {
     console.log(' RAG Chat Service initialized with LLM Manager');
   }
 
+  // ═══════════════════════════════════════════════════════════════════════════
+  // v12.31: QUERY NORMALIZATION & FUZZY MATCHING LAYER
+  // Systematic tolerance for typos, ASCII variants, and malformed queries
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  /**
+   * Turkish character to ASCII mapping
+   */
+  private readonly TURKISH_CHAR_MAP: Record<string, string> = {
+    'ö': 'o', 'ü': 'u', 'ı': 'i', 'ş': 's', 'ç': 'c', 'ğ': 'g',
+    'Ö': 'o', 'Ü': 'u', 'İ': 'i', 'Ş': 's', 'Ç': 'c', 'Ğ': 'g'
+  };
+
+  /**
+   * Common typo patterns for intent keywords
+   * Maps typo → correct word
+   */
+  private readonly COMMON_TYPO_CORRECTIONS: Record<string, string> = {
+    // "hangi" typos
+    'nagi': 'hangi', 'nagı': 'hangi', 'hngi': 'hangi', 'hangı': 'hangi',
+    'hagi': 'hangi', 'hagı': 'hangi', 'angi': 'hangi', 'angı': 'hangi',
+    // "gün" typos
+    'gn': 'gun', 'gün': 'gun', 'güm': 'gun', 'gum': 'gun',
+    // "kaçına" typos
+    'kacna': 'kacina', 'kaçna': 'kacina', 'kcina': 'kacina', 'kacına': 'kacina',
+    // "ödeme" typos
+    'odme': 'odeme', 'ödme': 'odeme', 'oedme': 'odeme',
+    // "beyanname" typos
+    'beyanne': 'beyanname', 'beyaname': 'beyanname', 'byeanname': 'beyanname'
+  };
+
+  /**
+   * v12.31: Normalize query for intent detection
+   * - Lowercase
+   * - Turkish → ASCII
+   * - Common typo corrections
+   */
+  private normalizeQueryForIntent(query: string): string {
+    let normalized = query.toLowerCase();
+
+    // Step 1: Turkish character normalization
+    for (const [tr, ascii] of Object.entries(this.TURKISH_CHAR_MAP)) {
+      normalized = normalized.replace(new RegExp(tr, 'g'), ascii);
+    }
+
+    // Step 2: Apply common typo corrections
+    const words = normalized.split(/\s+/);
+    const correctedWords = words.map(word => {
+      // Check exact typo match
+      if (this.COMMON_TYPO_CORRECTIONS[word]) {
+        return this.COMMON_TYPO_CORRECTIONS[word];
+      }
+      return word;
+    });
+
+    return correctedWords.join(' ');
+  }
+
+  /**
+   * v12.31: Calculate Levenshtein distance between two strings
+   */
+  private levenshteinDistance(a: string, b: string): number {
+    if (a.length === 0) return b.length;
+    if (b.length === 0) return a.length;
+
+    const matrix: number[][] = [];
+
+    for (let i = 0; i <= a.length; i++) {
+      matrix[i] = [i];
+    }
+    for (let j = 0; j <= b.length; j++) {
+      matrix[0][j] = j;
+    }
+
+    for (let i = 1; i <= a.length; i++) {
+      for (let j = 1; j <= b.length; j++) {
+        if (a[i - 1] === b[j - 1]) {
+          matrix[i][j] = matrix[i - 1][j - 1];
+        } else {
+          matrix[i][j] = Math.min(
+            matrix[i - 1][j - 1] + 1, // substitution
+            matrix[i][j - 1] + 1,     // insertion
+            matrix[i - 1][j] + 1      // deletion
+          );
+        }
+      }
+    }
+
+    return matrix[a.length][b.length];
+  }
+
+  /**
+   * v12.31: Check if query contains keyword with fuzzy tolerance
+   * @param query - Normalized query
+   * @param keywords - Array of keywords to match
+   * @param maxDistance - Maximum edit distance allowed (default: 2)
+   */
+  private fuzzyContainsKeyword(query: string, keywords: string[], maxDistance: number = 2): boolean {
+    const words = query.split(/\s+/);
+
+    for (const word of words) {
+      for (const keyword of keywords) {
+        // For short keywords (<=3 chars), require exact match or 1 edit
+        const allowedDistance = keyword.length <= 3 ? 1 : maxDistance;
+
+        if (this.levenshteinDistance(word, keyword) <= allowedDistance) {
+          return true;
+        }
+
+        // Also check if word contains keyword as substring (for compound words)
+        if (word.length > keyword.length && word.includes(keyword)) {
+          return true;
+        }
+      }
+    }
+
+    return false;
+  }
+
+  /**
+   * v12.31: Robust deadline keyword detection with typo tolerance
+   * Returns true if query likely asks about a deadline/timing
+   */
+  private hasDeadlineKeywordRobust(query: string): boolean {
+    // Normalize query first
+    const normalizedQuery = this.normalizeQueryForIntent(query);
+
+    // Core deadline keywords (ASCII normalized)
+    const deadlineKeywords = [
+      'kacina', 'kadar', 'zaman', 'sure', 'tarih', 'gun', 'deadline', 'teslim'
+    ];
+
+    // Time-related question words
+    const questionWords = ['hangi', 'ne', 'kac', 'kacinci'];
+
+    // Check for exact/fuzzy deadline keywords
+    if (this.fuzzyContainsKeyword(normalizedQuery, deadlineKeywords, 2)) {
+      console.log(`🔍 [v12.31] ROBUST_DEADLINE: Matched deadline keyword in "${normalizedQuery}"`);
+      return true;
+    }
+
+    // Check for question word + "gun" pattern (e.g., "hangi gun", "nagi gun")
+    const hasQuestionWord = this.fuzzyContainsKeyword(normalizedQuery, questionWords, 2);
+    const hasGunVariant = /g[uü]n|gn|gum|güm/i.test(normalizedQuery);
+
+    if (hasQuestionWord && hasGunVariant) {
+      console.log(`🔍 [v12.31] ROBUST_DEADLINE: Matched question+gun pattern in "${normalizedQuery}"`);
+      return true;
+    }
+
+    // Fallback: Original exact patterns
+    const exactPatterns = [
+      'kaçına kadar', 'kacina kadar',
+      'ne zamana kadar', 'ne zaman',
+      'süre', 'sure',
+      'son tarih', 'son gün', 'son gun',
+      'hangi gün', 'hangi gun',
+      'hangi tarihe kadar', 'hangi tarih',
+      'kaçıncı gün', 'kacinci gun'
+    ];
+
+    const queryLower = query.toLowerCase();
+    if (exactPatterns.some(kw => queryLower.includes(kw))) {
+      return true;
+    }
+
+    return false;
+  }
+
+  /**
+   * v12.31: Robust ödeme keyword detection with typo tolerance
+   */
+  private hasOdemeKeywordRobust(query: string): boolean {
+    const normalizedQuery = this.normalizeQueryForIntent(query);
+
+    const odemeKeywords = [
+      'odeme', 'odenir', 'odemesi', 'odemesini', 'odenmesi', 'oden',
+      'yatirilir', 'yatirma', 'yatirilma', 'yatir',
+      'odeyeceg', 'odeye', 'odeniyor', 'odenmekte'
+    ];
+
+    return this.fuzzyContainsKeyword(normalizedQuery, odemeKeywords, 2);
+  }
+
+  /**
+   * v12.31: Robust beyanname keyword detection with typo tolerance
+   */
+  private hasBeyanKeywordRobust(query: string): boolean {
+    const normalizedQuery = this.normalizeQueryForIntent(query);
+
+    const beyanKeywords = [
+      'beyanname', 'beyan', 'bildirim', 'verilir', 'verilme'
+    ];
+
+    return this.fuzzyContainsKeyword(normalizedQuery, beyanKeywords, 2);
+  }
+
   /**
    * 📋 Load RAG Routing Schema from settings
    * Caches schema for 1 minute to avoid DB hits on every request
@@ -2957,6 +3154,55 @@ Beyanname için mi yoksa ödeme için mi soruyorsunuz?`;
       // 4. searchResults.length == 0 + !isQueryInScope → OUT_OF_SCOPE
       let responseType: 'OUT_OF_SCOPE' | 'NOT_FOUND' | 'NEEDS_CLARIFICATION' | 'FOUND' = 'FOUND';
 
+      // ═══════════════════════════════════════════════════════════════════════════
+      // v12.31: DEADLINE EARLY-ESCAPE PREVENTION
+      // For deadline queries with poor search results, do targeted DB fetch
+      // This prevents "net bilgi yok" fallback for typo/malformed deadline queries
+      // ═══════════════════════════════════════════════════════════════════════════
+      const earlyDeadlineIntent = this.detectDeadlineIntent(message);
+      if (earlyDeadlineIntent && earlyDeadlineIntent !== 'ambiguous' && searchResults.length === 0) {
+        console.log(`🛡️ [v12.31] DEADLINE_RESCUE: No search results but deadline intent detected (${earlyDeadlineIntent}), attempting DB fetch`);
+
+        // Targeted article mapping
+        const targetArticles: Record<string, { article: string; lawName: string }> = {
+          'beyanname': { article: '41', lawName: 'KATMA DEĞER VERGİSİ KANUNU' },
+          'odeme': { article: '46', lawName: 'KATMA DEĞER VERGİSİ KANUNU' }
+        };
+
+        const targetInfo = targetArticles[earlyDeadlineIntent];
+        if (targetInfo) {
+          try {
+            const rescueResult = await this.pool.query(
+              `SELECT id, source_table, source_type, source_name, content, metadata
+               FROM unified_embeddings
+               WHERE source_table = 'vergilex_mevzuat_kanunlar_chunks'
+                 AND source_name ILIKE $1
+               LIMIT 1`,
+              [`%${targetInfo.lawName}%Madde ${targetInfo.article}%`]
+            );
+
+            if (rescueResult.rows.length > 0) {
+              const row = rescueResult.rows[0];
+              const rescuedSource = {
+                id: row.id,
+                sourceTable: row.source_table,
+                sourceType: row.source_type || 'kanun',
+                title: row.source_name || `KDVK Madde ${targetInfo.article}`,
+                content: row.content,
+                excerpt: row.content?.substring(0, 500),
+                score: 0.95,
+                metadata: row.metadata || {}
+              };
+              searchResults.push(rescuedSource);
+              console.log(`✅ [v12.31] DEADLINE_RESCUED: Added KDVK m.${targetInfo.article} from DB (${row.source_name})`);
+            }
+          } catch (rescueError) {
+            console.error(`❌ [v12.31] DEADLINE_RESCUE_FAILED:`, rescueError);
+          }
+        }
+      }
+      // ═══════════════════════════════════════════════════════════════════════════
+
       if (isStrongAmbiguity) {
         // RULE 0: Strong ambiguity → NEEDS_CLARIFICATION (even with results!)
         // This prevents showing misleading results for "6111", "ne?" etc.
@@ -2967,9 +3213,16 @@ Beyanname için mi yoksa ödeme için mi soruyorsunuz?`;
         responseType = 'FOUND';
         console.log(`✅ FOUND: ${searchResults.length} results - deterministic FOUND`);
       } else if (isQueryInScope) {
-        // RULE 2: No results + in-scope → NOT_FOUND (single sentence, sources=[])
-        responseType = 'NOT_FOUND';
-        console.log(`🔍 NOT_FOUND: No results for in-scope query - deterministic NOT_FOUND`);
+        // v12.31: For deadline queries, never fall back to NOT_FOUND - use fallback response
+        const deadlineIntentForNotFound = this.detectDeadlineIntent(message);
+        if (deadlineIntentForNotFound && deadlineIntentForNotFound !== 'ambiguous') {
+          responseType = 'FOUND'; // Force FOUND to use deadline handler
+          console.log(`🛡️ [v12.31] DEADLINE_FORCE_FOUND: Preventing NOT_FOUND for deadline query (${deadlineIntentForNotFound})`);
+        } else {
+          // RULE 2: No results + in-scope → NOT_FOUND (single sentence, sources=[])
+          responseType = 'NOT_FOUND';
+          console.log(`🔍 NOT_FOUND: No results for in-scope query - deterministic NOT_FOUND`);
+        }
       } else if (needsClarification) {
         // RULE 3: No results + unclear → NEEDS_CLARIFICATION
         responseType = 'NEEDS_CLARIFICATION';
@@ -4619,22 +4872,13 @@ Beyanname için mi yoksa ödeme için mi soruyorsunuz?`;
    * Detect deadline intent type from query
    * v12.15 FIX: Added KDV scope check to prevent other tax types from triggering KDV fallback
    * v12.15 FIX: Added 'ambiguous' return for questions that need clarification
+   * v12.31 FIX: Use robust fuzzy matching for typo tolerance
    */
   private detectDeadlineIntent(query: string): 'beyanname' | 'odeme' | 'ambiguous' | null {
     const queryLower = query.toLowerCase();
 
-    // Generic deadline question indicators
-    // v12.24: Added ASCII variants for Turkish chars (ç→c, ı→i, ş→s, ü→u, ö→o, ğ→g)
-    // v12.29: Added "hangi gün", "hangi tarihe kadar" patterns
-    const hasDeadlineKeyword = [
-      'kaçına kadar', 'kacina kadar',     // ç→c, ı→i
-      'ne zamana kadar', 'ne zaman',
-      'süre', 'sure',                      // ü→u
-      'son tarih', 'deadline', 'teslim', 'son gün', 'son gun',  // ü→u
-      'hangi gün', 'hangi gun',            // v12.29: "hangi gün verilir?"
-      'hangi tarihe kadar', 'hangi tarih', // v12.29: "hangi tarihe kadar?"
-      'kaçıncı gün', 'kacinci gun'         // v12.29: "ayın kaçıncı günü?"
-    ].some(kw => queryLower.includes(kw));
+    // v12.31: Use robust deadline keyword detection with fuzzy matching
+    const hasDeadlineKeyword = this.hasDeadlineKeywordRobust(query);
 
     // v12.16: Also detect implicit deadline questions that compare 24/26
     // E.g., "KDV beyanname 24 mü 26 mı?" - no explicit "ne zaman" but clearly asking about deadlines
@@ -4643,7 +4887,13 @@ Beyanname için mi yoksa ödeme için mi soruyorsunuz?`;
 
     const isDeadlineQuestion = hasDeadlineKeyword || hasComparisonPattern;
 
-    if (!isDeadlineQuestion) return null;
+    if (!isDeadlineQuestion) {
+      console.log(`🔍 [v12.31] DEADLINE_CHECK: No deadline pattern found in "${query}"`);
+      return null;
+    }
+
+    console.log(`🔍 [v12.31] DEADLINE_CHECK: Deadline pattern detected in "${query}"`);
+
 
     // 🛡️ v12.15 SCOPE CHECK: This handler is ONLY for KDV questions
     // Check if query mentions KDV explicitly
@@ -4691,34 +4941,34 @@ Beyanname için mi yoksa ödeme için mi soruyorsunuz?`;
       return 'ambiguous';
     }
 
-    // If ambiguous patterns detected (but not comparison pattern) AND no explicit keyword
-    const hasExplicitBeyanname = ['beyanname', 'beyan', 'bildirim'].some(kw => queryLower.includes(kw));
-    // v12.30: Added ASCII variants for ödeme detection
-    const hasExplicitOdeme = [
-      'ödeme', 'ödenir', 'ödemesi', 'yatırılır',
-      'odeme', 'odenir', 'odemesi', 'yatirilir'  // ASCII variants
-    ].some(kw => queryLower.includes(kw));
+    // v12.31: Use robust fuzzy matching for beyanname/odeme detection
+    const hasExplicitBeyanname = this.hasBeyanKeywordRobust(query);
+    const hasExplicitOdeme = this.hasOdemeKeywordRobust(query);
 
     if (isKdvQuestion && isAmbiguousQuestion && !hasExplicitBeyanname && !hasExplicitOdeme) {
       console.log(`🛡️ [v12.15] AMBIGUOUS_QUESTION: KDV deadline question without specific intent`);
       return 'ambiguous';
     }
 
-    // Check for ödeme (payment) intent first (more specific)
-    // v12.15: Also check for explicit "ödeme" in KDV context
-    const isOdeme = this.DEADLINE_INTENTS.odeme.keywords.some(kw => queryLower.includes(kw)) ||
+    // v12.31: Check for ödeme (payment) intent with robust matching
+    const isOdeme = hasExplicitOdeme ||
                     this.DEADLINE_INTENTS.odeme.articles.some(art => queryLower.includes(art));
 
     // v12.15: For KDV questions, check if it's asking about payment specifically
-    if (isKdvQuestion && isOdeme) return 'odeme';
+    if (isKdvQuestion && isOdeme) {
+      console.log(`🔍 [v12.31] INTENT_DETECTED: odeme (KDV payment deadline)`);
+      return 'odeme';
+    }
 
-    // Check for beyanname (declaration) intent
-    // v12.15: Only match if KDV is mentioned OR specific KDV articles mentioned
-    const isBeyanname = this.DEADLINE_INTENTS.beyanname.keywords.some(kw => queryLower.includes(kw)) ||
+    // v12.31: Check for beyanname (declaration) intent with robust matching
+    const isBeyanname = hasExplicitBeyanname ||
                         this.DEADLINE_INTENTS.beyanname.articles.some(art => queryLower.includes(art));
 
     // v12.15: For beyanname, require KDV context to avoid matching other beyan types
-    if (isKdvQuestion && isBeyanname) return 'beyanname';
+    if (isKdvQuestion && isBeyanname) {
+      console.log(`🔍 [v12.31] INTENT_DETECTED: beyanname (KDV declaration deadline)`);
+      return 'beyanname';
+    }
 
     // If only articles mentioned without KDV keyword, still match (m.41, m.46 are KDV specific)
     if (this.DEADLINE_INTENTS.odeme.articles.some(art => queryLower.includes(art))) return 'odeme';
@@ -4726,11 +4976,12 @@ Beyanname için mi yoksa ödeme için mi soruyorsunuz?`;
 
     // For generic KDV questions without explicit intent, return ambiguous to provide both answers
     if (isKdvQuestion && !hasExplicitBeyanname && !hasExplicitOdeme) {
-      console.log(`🛡️ [v12.15] AMBIGUOUS_QUESTION: Generic KDV deadline question, providing both answers`);
+      console.log(`🛡️ [v12.31] AMBIGUOUS_QUESTION: Generic KDV deadline question, providing both answers`);
       return 'ambiguous';
     }
 
     // No KDV context found - don't apply KDV deadline handler
+    console.log(`🔍 [v12.31] NO_KDV_CONTEXT: Deadline pattern found but no KDV context`);
     return null;
   }
 
