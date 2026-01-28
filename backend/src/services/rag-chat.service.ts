@@ -3372,6 +3372,69 @@ Beyanname için mi yoksa ödeme için mi soruyorsunuz?`;
       }
 
       console.log(`📊 [SOURCES] Total=${formattedSources.length}, AboveThreshold(${(sourceThreshold * 100).toFixed(0)}%)=${sourcesAboveThreshold.length}, Showing=${rankedSources.length} (min=${minSourcesToShow}, max=${maxSourcesToShow})`);
+
+      // ═══════════════════════════════════════════════════════════════
+      // v12.25: MURAT HIERARCHY - Law Article to Top-1 for deadline queries
+      // For KDV deadline questions, the target law article (madde 41/46) should be Top-1
+      // This ensures "Kanun/Mevzuat" appears first, then Tebliğ, then Makale
+      // ═══════════════════════════════════════════════════════════════
+      const deadlineIntentForHierarchy = this.detectDeadlineIntent(message);
+      if (deadlineIntentForHierarchy && deadlineIntentForHierarchy !== 'ambiguous') {
+        const targetArticlePatterns: Record<string, RegExp[]> = {
+          'beyanname': [/madde\s*41\b/i, /m\.?\s*41\b/i],
+          'odeme': [/madde\s*46\b/i, /m\.?\s*46\b/i]
+        };
+        const targetPatterns = targetArticlePatterns[deadlineIntentForHierarchy] || [];
+
+        // Also pattern to identify law sources (Kanun/Mevzuat)
+        const lawSourcePatterns = [
+          /kanun/i,
+          /mevzuat.*kanun/i,
+          /3065\s*sayılı/i,      // KDVK law number
+          /katma\s*değer\s*vergisi\s*kanunu/i
+        ];
+
+        // Find the best law source with target article
+        let bestLawSourceIndex = -1;
+        let bestLawSourceScore = -1;
+
+        for (let i = 0; i < rankedSources.length; i++) {
+          const source = rankedSources[i];
+          const title = (source.title || '').toLowerCase();
+          const content = (source.content || source.excerpt || '').toLowerCase();
+          const sourceType = (source.sourceTable || source.source_type || '').toLowerCase();
+          const combinedText = title + ' ' + content;
+
+          // Check if this is a law source
+          const isLawSource = lawSourcePatterns.some(p => p.test(combinedText)) ||
+                              sourceType.includes('mevzuat') ||
+                              sourceType.includes('kanun');
+
+          // Check if it contains the target article
+          const hasTargetArticle = targetPatterns.some(p => p.test(combinedText));
+
+          if (isLawSource && hasTargetArticle) {
+            const score = source._combinedScore || 0;
+            if (score > bestLawSourceScore) {
+              bestLawSourceScore = score;
+              bestLawSourceIndex = i;
+            }
+          }
+        }
+
+        // Move best law source to Top-1 if found and not already there
+        if (bestLawSourceIndex > 0) {
+          const lawSource = rankedSources.splice(bestLawSourceIndex, 1)[0];
+          rankedSources.unshift(lawSource);
+          console.log(`🏛️ [v12.25] MURAT_HIERARCHY: Moved law article to Top-1: "${lawSource.title?.substring(0, 50)}..."`);
+        } else if (bestLawSourceIndex === 0) {
+          console.log(`✅ [v12.25] MURAT_HIERARCHY: Law article already at Top-1`);
+        } else {
+          // No law source with target article found - log warning
+          console.warn(`⚠️ [v12.25] MURAT_HIERARCHY: No law source with target article (${deadlineIntentForHierarchy}) found in sources`);
+        }
+      }
+
       rankedSources.forEach((s, i) => {
         const detectedType = s.sourceTable || s.category || s.source_type || 'unknown';
         console.log(`   ${i + 1}. ${detectedType} (weight=${s._hierarchyWeight}, combined=${(s._combinedScore * 100).toFixed(1)}%, orig=[${s._originalIndex}]): ${s.title?.substring(0, 40)}...`);
