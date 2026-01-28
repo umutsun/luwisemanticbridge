@@ -3430,7 +3430,37 @@ Beyanname için mi yoksa ödeme için mi soruyorsunuz?`;
         } else if (bestLawSourceIndex === 0) {
           console.log(`✅ [v12.25] MURAT_HIERARCHY: Law article already at Top-1`);
         } else {
-          // v12.27: No law source found - inject synthetic law source at Top-1 with transparent labeling
+          // v12.28: Before synthetic injection, search FULL sortedSources (beyond Top-N cutoff)
+          // The target article may exist in DB but was cut by Top-N limiting
+          let foundInFullList = false;
+          for (let i = 0; i < sortedSources.length; i++) {
+            const source = sortedSources[i];
+            // Skip if already in rankedSources
+            if (rankedSources.includes(source)) continue;
+
+            const title = (source.title || '').toLowerCase();
+            const content = (source.content || source.excerpt || '').toLowerCase();
+            const sourceType = (source.sourceTable || source.source_type || '').toLowerCase();
+            const combinedText = title + ' ' + content;
+
+            const isLawSource = lawSourcePatterns.some(p => p.test(combinedText)) ||
+                                sourceType.includes('mevzuat') ||
+                                sourceType.includes('kanun');
+            const hasTargetArticle = targetPatterns.some(p => p.test(combinedText));
+
+            if (isLawSource && hasTargetArticle) {
+              // Found in full list - pull into rankedSources at Top-1 instead of synthetic
+              rankedSources.unshift(source);
+              console.log(`🏛️ [v12.28] MURAT_HIERARCHY: Found law article in full source list (was below Top-N cutoff), moved to Top-1: "${source.title?.substring(0, 50)}..."`);
+              foundInFullList = true;
+              break;
+            }
+          }
+
+          if (foundInFullList) {
+            // Skip synthetic injection - real source found
+          } else {
+          // v12.27: No law source found anywhere - inject synthetic law source at Top-1 with transparent labeling
           const syntheticLawSources: Record<string, any> = {
             'beyanname': {
               id: 'synthetic-kdvk-41',
@@ -3499,6 +3529,7 @@ Beyanname için mi yoksa ödeme için mi soruyorsunuz?`;
           } else {
             console.warn(`⚠️ [v12.25] MURAT_HIERARCHY: No law source with target article (${deadlineIntentForHierarchy}) found in sources`);
           }
+          } // close: else (foundInFullList === false → synthetic injection)
         }
       }
 
@@ -3681,13 +3712,14 @@ Beyanname için mi yoksa ödeme için mi soruyorsunuz?`;
           }
         }
 
-        if (targetSourceIndex > 0 && targetSourceIndex !== 1) {
-          finalResponse = finalResponse.replace(/\[1\]/g, `[${targetSourceIndex}]`);
-          console.log(`🔄 [v12.16] CITATION_UPDATED: Replaced hardcoded [1] with ${targetLawCode} source [${targetSourceIndex}]`);
-        } else if (targetSourceIndex < 0) {
-          console.warn(`⚠️ [v12.16] No ${targetLawCode} source found in ranked sources - keeping [1] (may be incorrect citation)`);
+        if (targetSourceIndex > 0) {
+          // v12.28 FIX: Replace ALL citation patterns [n], not just [1]
+          // extractDeadlineFromSources returns sourceIndex from raw searchResults (e.g. [8])
+          // but limitedSources has fewer items, so [8] would be stripped by fixMarkdownAndCitations
+          finalResponse = finalResponse.replace(/\[\d+\]/g, `[${targetSourceIndex}]`);
+          console.log(`🔄 [v12.28] CITATION_UPDATED: Replaced all citations with ${targetLawCode} source [${targetSourceIndex}]`);
         } else {
-          console.log(`✅ [v12.16] ${targetLawCode} source already at [1] - no change needed`);
+          console.warn(`⚠️ [v12.16] No ${targetLawCode} source found in ranked sources - keeping citation as-is`);
         }
         // Skip normal citation remap for hardcoded responses
       } else if (citationRemap.size > 0) {
