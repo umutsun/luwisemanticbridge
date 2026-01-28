@@ -14,6 +14,10 @@ interface Source {
   summary?: string;
   keywords?: string[];
   category?: string;
+  // v12.27: Synthetic source fields
+  _synthetic?: boolean;
+  _syntheticNote?: string;
+  metadata?: Record<string, unknown>;
 }
 
 interface ChatSourcesProps {
@@ -81,9 +85,15 @@ export const ChatSources: React.FC<ChatSourcesProps> = ({
               </div>
               <div className="flex-1 min-w-0">
                 {/* Document title from schema - allow 2-3 lines */}
+                {/* v12.27: For synthetic sources, show full title with [REFERANS] badge */}
                 {source.title && (
                   <h4 className="text-xs sm:text-sm font-medium text-foreground line-clamp-2 sm:line-clamp-3 mb-1">
                     {stripHtml(source.title)}
+                    {(source._synthetic || (source.metadata as Record<string, unknown>)?.synthetic) && (
+                      <span className="ml-2 text-[10px] px-1.5 py-0.5 rounded bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300 font-medium">
+                        REFERANS
+                      </span>
+                    )}
                   </h4>
                 )}
 

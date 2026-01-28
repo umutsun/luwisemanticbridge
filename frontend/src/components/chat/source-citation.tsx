@@ -173,6 +173,18 @@ export function SourceCitation({ sources, onLoadMore, hasMore = false, showLoadM
                 {/* Source Type and Number with Marker Style */}
                 {(() => {
                   const typeInfo = getSourceTypeInfo(source.sourceTable, source.category);
+                  // v12.27: Check if synthetic source - show full title with [REFERANS] badge
+                  const isSynthetic = source._synthetic === true || (source.metadata as Record<string, unknown>)?.synthetic === true;
+
+                  if (isSynthetic && source.title) {
+                    // For synthetic sources, show the full title (includes law number + article + [REFERANS])
+                    return (
+                      <span className={`marker marker-purple text-[11px] font-semibold text-gray-900 dark:text-gray-100 inline-block mb-2`}>
+                        <span className="text-[9px] opacity-70">[{index + 1}]</span> {stripHtml(source.title)}
+                      </span>
+                    );
+                  }
+
                   return (
                     <span className={`marker ${typeInfo.markerClass} text-[11px] font-semibold text-gray-900 dark:text-gray-100 inline-block mb-2`}>
                       <span className="text-[9px] opacity-70">[{index + 1}]</span> {typeInfo.label}

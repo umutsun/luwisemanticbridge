@@ -5,6 +5,19 @@ export interface PdfAttachment {
   cacheKey?: string;
 }
 
+/**
+ * Article query metadata from RAG article anchoring
+ * Used to show warnings when a specific law article was queried but not found
+ */
+export interface ArticleQuery {
+  detected: boolean;
+  lawCode?: string;       // e.g., "VUK", "GVK", "KDVK"
+  articleNumber?: string; // e.g., "114", "40", "29"
+  exactMatchFound?: boolean;
+  exactMatchCount?: number;
+  wrongMatchCount?: number;
+}
+
 export interface Message {
   id: string;
   role: 'user' | 'assistant' | 'system';
@@ -17,6 +30,7 @@ export interface Message {
   statusMessage?: string;
   relatedTopics?: Source[];
   pdfAttachment?: PdfAttachment;
+  articleQuery?: ArticleQuery; // Article anchoring metadata
 }
 
 export interface Source {
@@ -31,6 +45,9 @@ export interface Source {
   metadata?: Record<string, unknown>;
   confidence?: number;
   timestamp?: string;
+  // v12.27: Synthetic source fields for transparent labeling
+  _synthetic?: boolean;
+  _syntheticNote?: string;
 }
 
 export interface Conversation {
@@ -58,4 +75,5 @@ export interface ChatResponse {
   sources?: Source[];
   relatedTopics?: Source[];
   conversationId: string;
+  articleQuery?: ArticleQuery; // Article anchoring metadata from RAG
 }
