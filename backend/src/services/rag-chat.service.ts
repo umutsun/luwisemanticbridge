@@ -2590,7 +2590,7 @@ ${questionLabel}: ${message}`;
                                           !hasExplicitBeyanname &&  // v12.36: Skip if explicit beyanname
                                           !hasExplicitOdeme;  // v12.36: Skip if explicit ödeme
 
-      console.log(`🔍 [v12.36] AMBIGUOUS_CHECK: intent=${earlyAmbiguousIntent}, compPattern=${hasDeadlineComparisonPatternEarly}, kdvContext=${hasKdvContextEarly}, dateSignal=${hasDateSignal}, isAmbiguous=${isAmbiguousComparisonQuery}`);
+      console.log(`🔍 [v12.37] AMBIGUOUS_CHECK: intent=${earlyAmbiguousIntent}, compPattern=${hasDeadlineComparisonPatternEarly}, kdvContext=${hasKdvContextEarly}, dateSignal=${hasDateSignal}, isAmbiguous=${isAmbiguousComparisonQuery}`);
 
       if (isAmbiguousComparisonQuery) {
         console.log(`🛡️ [v12.36] AMBIGUOUS_EARLY_EXIT: Detected comparison query, single follow-up`);
@@ -2658,14 +2658,15 @@ ${questionLabel}: ${message}`;
         };
 
         await this.setPendingDisambiguation(convId, pendingDisambiguation);
-        console.log(`💾 [v12.36] DISAMBIGUATION_STATE_STORED: TTL=${DEFAULT_FOLLOWUP_CONFIG.ttlSeconds}s, maxFollowUp=1`);
+        console.log(`💾 [v12.37] DISAMBIGUATION_STATE_STORED: TTL=${DEFAULT_FOLLOWUP_CONFIG.ttlSeconds}s, maxFollowUp=1`);
 
-        // v12.36: Comprehensive disambiguation question
-        const disambiguationQuestion = `24–26 ile neyi kastediyorsunuz:
+        // v12.37: Clean disambiguation question - no markdown inside bullets to avoid format processing
+        const disambiguationQuestion = `KDV ile ilgili sorunuzu netleştirebilir misiniz?
 
-• **Beyanname son günü** (24)
-• **Ödeme son günü** (26)
-• Yoksa **KDV oranı** veya **iade** gibi başka bir konu mu?`;
+- Beyanname son günü (ayın 24'ü) için mi soruyorsunuz?
+- Ödeme son günü (ayın 26'sı) için mi soruyorsunuz?
+
+Lütfen "beyanname" veya "ödeme" yazarak belirtin.`;
 
         // Save messages to database
         await this.saveMessage(convId, 'user', message);
@@ -2705,7 +2706,7 @@ ${questionLabel}: ${message}`;
             earlyExitReason: 'ambiguous_deadline_comparison',
             sourcesCount: disambiguationSources.length,
             deterministic: true,
-            version: 'v12.36'
+            version: 'v12.37'
           }
         };
       }
