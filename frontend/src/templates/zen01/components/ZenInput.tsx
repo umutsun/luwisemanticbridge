@@ -24,6 +24,7 @@ export const ZenInput: React.FC<ZenInputProps> = ({
   voiceSettings,
   onSlashCommand,
   historyPanel,
+  suggestPanel,
   recentConversations,
 }) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -257,6 +258,9 @@ export const ZenInput: React.FC<ZenInputProps> = ({
         <div className="zen01-input flex items-end gap-3 p-3 relative">
           {/* History Panel - renders above input */}
           {historyPanel}
+
+          {/* Suggest Panel - renders above input */}
+          {suggestPanel}
 
           {/* Slash Command Autocomplete */}
           <SlashCommandAutocomplete

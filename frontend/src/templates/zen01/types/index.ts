@@ -201,6 +201,8 @@ export interface ZenInputProps {
   onSlashCommand?: (command: SlashCommand) => void;
   // History panel support (renders above input like slash commands)
   historyPanel?: React.ReactNode;
+  // Suggest panel support (renders above input like history)
+  suggestPanel?: React.ReactNode;
   // Recent conversations for /suggest command
   recentConversations?: ZenRecentConversation[];
 }

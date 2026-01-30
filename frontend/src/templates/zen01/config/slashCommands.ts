@@ -44,17 +44,14 @@ export const SLASH_COMMANDS: SlashCommand[] = [
     icon: '',
     category: 'navigation'
   },
-  // Suggestion command - shows recent conversations
+  // Suggestion command - opens panel with recent conversations
   {
     id: 'suggest',
     trigger: '/suggest',
     label: 'Öneriler',
     description: 'Son konuşmalara devam et',
     icon: '',
-    category: 'suggestion',
-    hasSubmenu: true,
-    hasDynamicSubmenu: true,  // Populated at runtime with conversations
-    submenuItems: []  // Will be filled dynamically
+    category: 'suggestion'
   }
 ];
 

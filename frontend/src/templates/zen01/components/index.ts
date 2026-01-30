@@ -11,3 +11,4 @@ export { SchemaRenderer } from './SchemaRenderer';
 export { SlashCommandAutocomplete } from './SlashCommandAutocomplete';
 export { TranslationBadge } from './TranslationBadge';
 export { ZenHistoryPanel } from './ZenHistoryPanel';
+export { ZenSuggestPanel } from './ZenSuggestPanel';

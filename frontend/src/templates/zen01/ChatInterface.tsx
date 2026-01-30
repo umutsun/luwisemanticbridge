@@ -20,7 +20,7 @@ import './styles/zen01.css';
 import { useTheme } from '@/hooks/useTheme';
 
 // Import Zen01 components
-import { ZenHeader, ZenWelcome, ZenMessage, ZenInput, ZenHistoryPanel } from './components';
+import { ZenHeader, ZenWelcome, ZenMessage, ZenInput, ZenHistoryPanel, ZenSuggestPanel } from './components';
 import { useZenTheme, useConversationHistory } from './hooks';
 import type {
   ZenMessage as ZenMessageType,
@@ -168,6 +168,8 @@ export default function ChatInterface() {
 
   // History panel state
   const [isHistoryOpen, setIsHistoryOpen] = useState(false);
+  // Suggest panel state (recent conversations dropdown)
+  const [isSuggestOpen, setIsSuggestOpen] = useState(false);
   const {
     conversations,
     isLoading: isHistoryLoading,
@@ -211,6 +213,15 @@ export default function ChatInterface() {
       });
     }
   }, [isHistoryOpen, fetchConversations]);
+
+  // Fetch conversations when suggest panel opens
+  useEffect(() => {
+    if (isSuggestOpen) {
+      fetchConversations().catch(err => {
+        console.error('[ChatInterface] Failed to fetch conversations for suggest:', err);
+      });
+    }
+  }, [isSuggestOpen, fetchConversations]);
 
   // Load suggestions only after settings are loaded AND if enabled
   useEffect(() => {
@@ -932,6 +943,7 @@ export default function ChatInterface() {
     // Handle navigation commands
     if (command.category === 'navigation') {
       if (command.id === 'history') {
+        setIsSuggestOpen(false); // Close suggest panel if open
         await fetchConversations();
         setIsHistoryOpen(true);
       } else if (command.id === 'new') {
@@ -940,10 +952,16 @@ export default function ChatInterface() {
       return;
     }
 
-    // Handle suggestion commands (conversation selection)
+    // Handle suggestion commands - open suggest panel
     if (command.category === 'suggestion') {
       if (command.conversationId) {
+        // Submenu item selected - load conversation
         handleSelectConversation(command.conversationId);
+      } else {
+        // Main command - open suggest panel
+        setIsHistoryOpen(false); // Close history panel if open
+        await fetchConversations();
+        setIsSuggestOpen(true);
       }
       return;
     }
@@ -1210,7 +1228,7 @@ export default function ChatInterface() {
           </ScrollArea>
         </div>
 
-        {/* Floating Input with History Panel */}
+        {/* Floating Input with History & Suggest Panels */}
         <ZenInput
           value={inputText}
           onChange={setInputText}
@@ -1234,6 +1252,15 @@ export default function ChatInterface() {
               onSelectConversation={handleSelectConversation}
               onNewConversation={handleNewConversation}
               onDeleteConversation={handleDeleteConversation}
+            />
+          }
+          suggestPanel={
+            <ZenSuggestPanel
+              isOpen={isSuggestOpen}
+              onClose={() => setIsSuggestOpen(false)}
+              conversations={conversations}
+              isLoading={isHistoryLoading}
+              onSelectConversation={handleSelectConversation}
             />
           }
         />
