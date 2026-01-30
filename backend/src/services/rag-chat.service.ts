@@ -294,21 +294,15 @@ export class RAGChatService {
     const normalized = this.normalizeQueryForIntent(message);
     const words = normalized.split(/\s+/).filter(w => w.length > 0);
 
-    // 3. Short message detection (1-3 words likely a follow-up response)
-    if (words.length > 5) {
-      // Too long to be a simple follow-up response like "beyanname"
-      console.log(`🔍 [v12.33] FOLLOWUP_CHECK: Message too long (${words.length} words), treating as new query`);
-      return { isFollowUp: false };
-    }
-
-    // 4. Check if any word matches expected responses (with fuzzy matching)
+    // v12.38: ALWAYS check for keyword matches first, regardless of message length
+    // This ensures "beyanname günü ne zaman?" (4 words) still triggers follow-up
     for (const expected of pending.expectedResponses) {
       const allKeywords = [expected.keyword, ...expected.aliases];
 
       for (const word of words) {
         // Exact match
         if (allKeywords.includes(word)) {
-          console.log(`✅ [v12.33] FOLLOWUP_DETECTED: Exact match "${word}" → ${expected.resolution}`);
+          console.log(`✅ [v12.38] FOLLOWUP_DETECTED: Exact match "${word}" → ${expected.resolution}`);
           return {
             isFollowUp: true,
             resolution: expected.resolution,
@@ -320,7 +314,7 @@ export class RAGChatService {
         // Fuzzy match with Levenshtein distance
         const maxDistance = word.length <= 4 ? 1 : 2; // Shorter words = stricter matching
         if (this.fuzzyContainsKeyword(word, allKeywords, maxDistance)) {
-          console.log(`✅ [v12.33] FOLLOWUP_DETECTED: Fuzzy match "${word}" → ${expected.resolution}`);
+          console.log(`✅ [v12.38] FOLLOWUP_DETECTED: Fuzzy match "${word}" → ${expected.resolution}`);
           return {
             isFollowUp: true,
             resolution: expected.resolution,
@@ -331,8 +325,15 @@ export class RAGChatService {
       }
     }
 
-    // 5. No match found
-    console.log(`🔍 [v12.33] FOLLOWUP_CHECK: No match for "${message}" in expected responses`);
+    // v12.38: If no keyword match but message is short (1-3 words), it might be a typo
+    // Allow it to pass through for potential clarification
+    if (words.length <= 3) {
+      console.log(`🔍 [v12.38] FOLLOWUP_CHECK: Short message (${words.length} words) but no keyword match - treating as unclear follow-up`);
+      // Return as not a follow-up to trigger normal RAG flow which will use conversation context
+    }
+
+    // No match found - let normal RAG flow handle with conversation context
+    console.log(`🔍 [v12.38] FOLLOWUP_CHECK: No match for "${message}" in expected responses (${words.length} words)`);
     return { isFollowUp: false };
   }
 
@@ -427,13 +428,46 @@ export class RAGChatService {
     }
 
     const { day, article, lawCode } = responseConfig.answer;
-
-    // v12.34: Re-order sources to prioritize Kanun/Mevzuat over Sirküler
-    // This ensures the citation points to the authoritative source
-    let searchResults = [...(pending.cachedContext.searchResults || [])];
     const articleNum = article.replace('m.', '');
 
-    // Find Kanun/Mevzuat source that contains the target article
+    // v12.38: Enhanced source filtering with cross-law protection
+    // 1. Start with cached results
+    let searchResults = [...(pending.cachedContext.searchResults || [])];
+
+    // 2. Filter to ONLY KDVK sources (remove Harçlar, GVK, VUK etc.)
+    const kdvkPatterns = [
+      /katma\s*değer\s*vergi/i,
+      /kdv/i,
+      /kdvk/i,
+      /3065/i  // KDV Kanunu numarası
+    ];
+
+    const excludePatterns = [
+      /harç/i,
+      /492/i,  // Harçlar Kanunu
+      /gelir\s*vergisi/i,
+      /gvk/i,
+      /vergi\s*usul/i,
+      /vuk/i
+    ];
+
+    // Filter sources: keep only KDVK-related sources
+    const filteredResults = searchResults.filter((source: any) => {
+      const searchText = `${source.content || ''} ${source.title || ''} ${source.source_name || ''} ${source.source_table || ''}`.toLowerCase();
+      const isKdvk = kdvkPatterns.some(p => p.test(searchText));
+      const isExcluded = excludePatterns.some(p => p.test(searchText));
+      return isKdvk && !isExcluded;
+    });
+
+    // Use filtered results if we have any, otherwise fall back to original
+    if (filteredResults.length > 0) {
+      searchResults = filteredResults;
+      console.log(`🛡️ [v12.38] CROSS_LAW_FILTER: Filtered to ${searchResults.length} KDVK sources from ${pending.cachedContext.searchResults?.length || 0} total`);
+    } else {
+      console.warn(`⚠️ [v12.38] CROSS_LAW_FILTER: No KDVK sources found, using original cached results`);
+    }
+
+    // 3. Re-order sources to prioritize Kanun/Mevzuat over Sirküler
     const kanunSourceIndex = searchResults.findIndex((source: any) => {
       const sourceTable = (source.source_table || source.table_name || '').toLowerCase();
       const content = (source.content || source.excerpt || source.title || '').toLowerCase();
@@ -447,10 +481,10 @@ export class RAGChatService {
       const kanunSource = searchResults[kanunSourceIndex];
       searchResults.splice(kanunSourceIndex, 1);
       searchResults.unshift(kanunSource);
-      console.log(`🔄 [v12.34] SOURCE_REORDER: Moved Kanun source to Top-1 (was at index ${kanunSourceIndex})`);
+      console.log(`🔄 [v12.38] SOURCE_REORDER: Moved Kanun source to Top-1 (was at index ${kanunSourceIndex})`);
     }
 
-    // Find citation index - should now be 1 if Kanun source was moved
+    // 4. Find citation index - should now be 1 if Kanun source was moved
     let citationIndex = 1;
 
     for (let i = 0; i < searchResults.length; i++) {
@@ -2590,7 +2624,7 @@ ${questionLabel}: ${message}`;
                                           !hasExplicitBeyanname &&  // v12.36: Skip if explicit beyanname
                                           !hasExplicitOdeme;  // v12.36: Skip if explicit ödeme
 
-      console.log(`🔍 [v12.37] AMBIGUOUS_CHECK: intent=${earlyAmbiguousIntent}, compPattern=${hasDeadlineComparisonPatternEarly}, kdvContext=${hasKdvContextEarly}, dateSignal=${hasDateSignal}, isAmbiguous=${isAmbiguousComparisonQuery}`);
+      console.log(`🔍 [v12.38] AMBIGUOUS_CHECK: intent=${earlyAmbiguousIntent}, compPattern=${hasDeadlineComparisonPatternEarly}, kdvContext=${hasKdvContextEarly}, dateSignal=${hasDateSignal}, isAmbiguous=${isAmbiguousComparisonQuery}`);
 
       if (isAmbiguousComparisonQuery) {
         console.log(`🛡️ [v12.36] AMBIGUOUS_EARLY_EXIT: Detected comparison query, single follow-up`);
@@ -2658,7 +2692,7 @@ ${questionLabel}: ${message}`;
         };
 
         await this.setPendingDisambiguation(convId, pendingDisambiguation);
-        console.log(`💾 [v12.37] DISAMBIGUATION_STATE_STORED: TTL=${DEFAULT_FOLLOWUP_CONFIG.ttlSeconds}s, maxFollowUp=1`);
+        console.log(`💾 [v12.38] DISAMBIGUATION_STATE_STORED: TTL=${DEFAULT_FOLLOWUP_CONFIG.ttlSeconds}s, maxFollowUp=1`);
 
         // v12.37: Clean disambiguation question - no markdown inside bullets to avoid format processing
         const disambiguationQuestion = `KDV ile ilgili sorunuzu netleştirebilir misiniz?
@@ -2706,7 +2740,7 @@ Lütfen "beyanname" veya "ödeme" yazarak belirtin.`;
             earlyExitReason: 'ambiguous_deadline_comparison',
             sourcesCount: disambiguationSources.length,
             deterministic: true,
-            version: 'v12.37'
+            version: 'v12.38'
           }
         };
       }
@@ -3787,7 +3821,7 @@ Bu soru karmaşık bir vergisel senaryo içermektedir. Yanıtını AŞAĞIDAKİ 
       // For deadline queries with poor search results, do targeted DB fetch
       // This prevents "net bilgi yok" fallback for typo/malformed deadline queries
       // v12.32: Also handles 'ambiguous' case - fetches BOTH m.41 and m.46
-      // ═══════════════════════════════════════════════════════════════════════════
+      // ═══════════════════════════════════════════════════════════════════════��═══
       const earlyDeadlineIntent = this.detectDeadlineIntent(message);
 
       // v12.32: For ambiguous "24 vs 26" queries, fetch BOTH m.41 and m.46
@@ -4628,13 +4662,23 @@ Bu soru karmaşık bir vergisel senaryo içermektedir. Yanıtını AŞAĞIDAKİ 
         }
 
         if (targetSourceIndex > 0) {
-          // v12.28 FIX: Replace ALL citation patterns [n], not just [1]
+          // v12.38 FIX: Only replace out-of-range citations, don't collapse all to single index
           // extractDeadlineFromSources returns sourceIndex from raw searchResults (e.g. [8])
-          // but limitedSources has fewer items, so [8] would be stripped by fixMarkdownAndCitations
-          finalResponse = finalResponse.replace(/\[\d+\]/g, `[${targetSourceIndex}]`);
-          console.log(`🔄 [v12.28] CITATION_UPDATED: Replaced all citations with ${targetLawCode} source [${targetSourceIndex}]`);
+          // but limitedSources has fewer items, so [8] would be invalid
+          const maxValidIndex = limitedSources.length;
+          finalResponse = finalResponse.replace(/\[(\d+)\]/g, (match, num) => {
+            const citationNum = parseInt(num, 10);
+            // Only replace if citation is out of range (invalid)
+            if (citationNum > maxValidIndex || citationNum < 1) {
+              console.log(`🔄 [v12.38] CITATION_FIX: [${citationNum}] → [${targetSourceIndex}] (out of range)`);
+              return `[${targetSourceIndex}]`;
+            }
+            // Keep valid citations as-is
+            return match;
+          });
+          console.log(`🔄 [v12.38] CITATION_VALIDATED: maxValidIndex=${maxValidIndex}, targetSource=[${targetSourceIndex}]`);
         } else {
-          console.warn(`⚠️ [v12.16] No ${targetLawCode} source found in ranked sources - keeping citation as-is`);
+          console.warn(`⚠️ [v12.38] No ${targetLawCode} source found in ranked sources - keeping citation as-is`);
         }
         // Skip normal citation remap for hardcoded responses
       } else if (citationRemap.size > 0) {
@@ -6910,7 +6954,7 @@ Please verify the article number or check official sources.`;
       }
     };
 
-    // ═══════════════════════════════════════════════════════════════
+    // ════════════════��══════════════════════════════════════════════
     // PROCESS EACH SENTENCE (v9 - Universal Critical Claim Verification)
     //
     // Key insight for v9: Critical claims (temporal, date, %, article) must be
@@ -6923,7 +6967,7 @@ Please verify the article number or check official sources.`;
     //    a. Check for critical claims → REMOVE if found (need citation)
     //    b. Check for forbidden pattern → REMOVE if found (v8 rule)
     //    c. Neither → KEEP
-    // ═══════════════════════════════════════════════════════════════
+    // ═════════��═════════════════════════════════════════════════════
     for (const sentence of sentences) {
       const trimmedSentence = sentence.trim();
       if (!trimmedSentence) continue;
