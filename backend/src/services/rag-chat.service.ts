@@ -1200,6 +1200,79 @@ PROHIBITED:
     }
 
     // ═══════════════════════════════════════════════════════════════
+    // v12.41: TOPIC CHANGE DETECTION - Prevent context drift
+    // If current question introduces a completely NEW topic not related to previous,
+    // treat it as a NEW QUESTION, not a follow-up
+    // This prevents "yirmibirinci günü" from drifting to unrelated GVK/ÖTV topics
+    // ═══════════════════════════════════════════════════════════════
+    const detectTopicChange = () => {
+      // Check if current message introduces new distinct tax keywords
+      const TAX_TOPIC_KEYWORDS = {
+        'KDV': ['kdv', 'katma değer', 'kdvk', '3065'],
+        'GVK': ['gelir vergisi', 'gvk', '193', 'beyana', 'yıllık beyan'],
+        'KVK': ['kurumlar vergisi', 'kvk', '5520'],
+        'VUK': ['vergi usul', 'vuk', '213'],
+        'ÖTV': ['özel tüketim', 'ötv', '4760'],
+        'DVK': ['damga vergisi', 'dvk', '488'],
+        'MTV': ['motorlu taşıt', 'mtv', '197']
+      };
+
+      // Extract topics from previous question
+      const prevTopics = new Set<string>();
+      const prevLower = lastUserQuestion.toLowerCase();
+      for (const [topic, keywords] of Object.entries(TAX_TOPIC_KEYWORDS)) {
+        if (keywords.some(k => prevLower.includes(k))) {
+          prevTopics.add(topic);
+        }
+      }
+
+      // Extract topics from current question
+      const currTopics = new Set<string>();
+      for (const [topic, keywords] of Object.entries(TAX_TOPIC_KEYWORDS)) {
+        if (keywords.some(k => lowerMessage.includes(k))) {
+          currTopics.add(topic);
+        }
+      }
+
+      // If current introduces NEW topics not in previous, it's a topic change
+      if (currTopics.size > 0 && prevTopics.size > 0) {
+        const newTopics = [...currTopics].filter(t => !prevTopics.has(t));
+        if (newTopics.length > 0 && ![...currTopics].some(t => prevTopics.has(t))) {
+          console.log(`🔀 [v12.41] TOPIC_CHANGE: Previous=[${[...prevTopics].join(', ')}] → Current=[${[...currTopics].join(', ')}] - NOT a follow-up`);
+          return true;
+        }
+      }
+
+      // Check if current message has specific date/deadline patterns that conflict with previous context
+      // "yirmibirinci günü" without previous KDV context should NOT inherit KDV context
+      const datePatterns = [
+        /(\d+)['\u2019]?\s*(inci|ıncı|nci|üncü|uncu)\s*günü?/i,  // "yirmibirinci günü", "24'üncü gün"
+        /ayın\s*(\d+)/i,  // "ayın 24'ü"
+        /(\d+)\s*tarih/i   // "24 tarihine"
+      ];
+
+      const hasDatePattern = datePatterns.some(p => p.test(currentMessage));
+
+      // If current has date pattern but NO tax topic keywords, and previous had a specific topic
+      // This is likely asking about a DIFFERENT context
+      if (hasDatePattern && currTopics.size === 0 && prevTopics.size > 0) {
+        // Check if the date/deadline in current is "context-free" (no law reference)
+        const hasLawRef = /\b(kdv|gvk|kvk|vuk|ötv|dvk|mtv|kanun|vergi)\b/i.test(lowerMessage);
+        if (!hasLawRef) {
+          // Ambiguous date question without context - should ask for clarification
+          console.log(`🔀 [v12.41] AMBIGUOUS_DATE_QUERY: "${currentMessage.substring(0, 40)}..." has date but no law context - treating as new question`);
+          return true;
+        }
+      }
+
+      return false;
+    };
+
+    if (detectTopicChange()) {
+      return { isFollowUp: false, enhancedQuery: currentMessage, contextInfo: '' };
+    }
+
+    // ═══════════════════════════════════════════════════════════════
     // v12.39: EXTRACT LAW CODE CONTEXT from previous question
     // Uses schema's lawCodeConfig for dynamic pattern matching
     // This will be used to filter semantic search results for follow-ups
@@ -4657,6 +4730,79 @@ Bu soru karmaşık bir vergisel senaryo içermektedir. Yanıtını AŞAĞIDAKİ 
       }
 
       console.log(`📊 [SOURCES] Total=${formattedSources.length}, AboveThreshold(${(sourceThreshold * 100).toFixed(0)}%)=${sourcesAboveThreshold.length}, Showing=${rankedSources.length} (min=${minSourcesToShow}, max=${maxSourcesToShow})`);
+
+      // ═══════════════════════════════════════════════════════════════
+      // v12.41: SOURCE DIVERSIFICATION by similarity score tiers
+      // Ensures variety in citations by picking from different score ranges
+      // Tier 1 (High): 0.7+ | Tier 2 (Medium): 0.5-0.7 | Tier 3 (Lower): 0.3-0.5
+      // This prevents all citations coming from similar-scored duplicate content
+      // ═══════════════════════════════════════════════════════════════
+      const diversifySources = (sources: typeof rankedSources, maxPerTier: number = 5): typeof rankedSources => {
+        if (sources.length <= 5) return sources; // Too few to diversify
+
+        const tier1: typeof sources = []; // High similarity (0.7+)
+        const tier2: typeof sources = []; // Medium similarity (0.5-0.7)
+        const tier3: typeof sources = []; // Lower similarity (0.3-0.5)
+        const tier4: typeof sources = []; // Marginal (below 0.3)
+
+        for (const source of sources) {
+          const score = source._similarityScore || 0;
+          if (score >= 0.7) tier1.push(source);
+          else if (score >= 0.5) tier2.push(source);
+          else if (score >= 0.3) tier3.push(source);
+          else tier4.push(source);
+        }
+
+        // Build diversified list: prioritize high tiers but include variety
+        const diversified: typeof sources = [];
+
+        // Take from each tier proportionally
+        const tierAllocation = [
+          { tier: tier1, max: Math.min(tier1.length, maxPerTier) },
+          { tier: tier2, max: Math.min(tier2.length, maxPerTier) },
+          { tier: tier3, max: Math.min(tier3.length, Math.ceil(maxPerTier / 2)) },
+          { tier: tier4, max: Math.min(tier4.length, Math.ceil(maxPerTier / 3)) }
+        ];
+
+        for (const { tier, max } of tierAllocation) {
+          // Within each tier, diversify by source type
+          const byType = new Map<string, typeof sources>();
+          for (const s of tier) {
+            const type = (s.sourceTable || s.source_type || 'unknown').toLowerCase();
+            if (!byType.has(type)) byType.set(type, []);
+            byType.get(type)!.push(s);
+          }
+
+          // Round-robin pick from each type
+          let picked = 0;
+          const types = [...byType.keys()];
+          let typeIndex = 0;
+          while (picked < max && types.length > 0) {
+            const currentType = types[typeIndex % types.length];
+            const typeList = byType.get(currentType)!;
+            if (typeList.length > 0) {
+              diversified.push(typeList.shift()!);
+              picked++;
+            } else {
+              types.splice(typeIndex % types.length, 1);
+            }
+            typeIndex++;
+          }
+        }
+
+        // Fill remaining slots with any leftover sources (by score order)
+        const remaining = sources.filter(s => !diversified.includes(s));
+        const maxTotal = Math.min(maxSourcesToShow, sources.length);
+        while (diversified.length < maxTotal && remaining.length > 0) {
+          diversified.push(remaining.shift()!);
+        }
+
+        console.log(`🎨 [v12.41] SOURCE_DIVERSIFY: Tier1=${tier1.length}, Tier2=${tier2.length}, Tier3=${tier3.length}, Tier4=${tier4.length} → Diversified=${diversified.length}`);
+        return diversified;
+      };
+
+      // Apply diversification
+      rankedSources = diversifySources(rankedSources);
 
       // ═══════════════════════════════════════════════════════════════
       // v12.25: MURAT HIERARCHY - Law Article to Top-1 for deadline queries
