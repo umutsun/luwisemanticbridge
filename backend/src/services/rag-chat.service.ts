@@ -2576,6 +2576,16 @@ ${questionLabel}: ${message}`;
         }
       }
 
+      // ═══════════════════════════════════════════════════════════════
+      // v12.44: P0 - DOMAIN ROUTING
+      // Filter sources based on query domain to reduce noise
+      // Example: "Veraset vergisi..." → only VIVK sources, filter out KDV
+      // ═══════════════════════════════════════════════════════════════
+      const queryDomain = this.detectQueryDomain(message);
+      if (queryDomain.domain) {
+        allResults = this.filterSourcesByDomain(allResults, queryDomain);
+      }
+
       // 🎯 P0: INTENT-BASED ARTICLE BOOST
       // Detect deadline intent and boost relevant articles (m.41 for beyanname, m.46 for ödeme)
       const deadlineIntent = this.detectDeadlineIntent(searchQuery);
@@ -5275,6 +5285,28 @@ Bu soru karmaşık bir vergisel senaryo içermektedir. Yanıtını AŞAĞIDAKİ 
       if (responseType === 'OUT_OF_SCOPE' || responseType === 'NOT_FOUND' || responseType === 'NEEDS_CLARIFICATION') {
         console.log(`🚫 ${responseType}: Clearing all sources per behavioral contract`);
         finalSources = [];
+      }
+
+      // ═══════════════════════════════════════════════════════════════════════════
+      // v12.44: P1-P3 POST-PROCESSING FIXES
+      // These run AFTER LLM response but BEFORE returning to user
+      // ═══════════════════════════════════════════════════════════════════════════
+
+      // P1: ESCAPE PATTERN DETECTION - Fix "açık düzenleme yok" + "yapılmalıdır" contradiction
+      if (!deadlineHardcodedApplied && responseType === 'FOUND') {
+        finalResponse = this.fixEscapePatternContradiction(finalResponse, options.language || 'tr');
+      }
+
+      // P2: CITATION VALIDATION - Ensure [N] doesn't exceed source count
+      const citationValidation = this.validateAndFixCitations(finalResponse, finalSources.length);
+      if (citationValidation.invalidCitations.length > 0) {
+        finalResponse = citationValidation.fixed;
+        console.log(`🔧 [v12.44] P2_CITATION_FIX: Fixed ${citationValidation.invalidCitations.length} invalid citations`);
+      }
+
+      // P3: SUMMARY CITATION ENFORCEMENT - Ensure summary has at least one citation
+      if (finalSources.length > 0 && responseType === 'FOUND') {
+        finalResponse = this.enforceSummaryCitation(finalResponse, finalSources, options.language || 'tr');
       }
 
       // Log sources content for debugging
