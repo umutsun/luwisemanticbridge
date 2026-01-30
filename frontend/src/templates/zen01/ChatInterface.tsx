@@ -833,6 +833,15 @@ export default function ChatInterface() {
 
         finalData = await fetchSourcesWithRetry(2);
 
+        // 🔍 DEBUG: Log finalData structure for citation debugging
+        console.log('[Streaming] finalData received:', {
+          hasSources: !!finalData.sources,
+          sourcesLength: finalData.sources?.length || 0,
+          fastMode: finalData.fastMode,
+          hasResponse: !!finalData.response,
+          keys: Object.keys(finalData)
+        });
+
         // Check if sources fetch failed (empty finalData means all retries failed)
         const sourcesFetchFailed = !finalData.sources && !finalData.fastMode && Object.keys(finalData).length === 0;
         if (sourcesFetchFailed) {
