@@ -16,7 +16,10 @@ import {
   FollowUpConfig,
   DEFAULT_FOLLOWUP_CONFIG,
   DEADLINE_DISAMBIGUATION_RESPONSES,
-  ExpectedDisambiguationResponse
+  ExpectedDisambiguationResponse,
+  // v12.40: Full multi-tenant support
+  DeadlineConfig,
+  DeadlineIntentConfig
 } from '../types/data-schema.types';
 import { RAGRoutingSchema, RAGResponseType } from '../types/settings.types';
 import { DEFAULT_RAG_ROUTING_SCHEMA, getRAGRoutingSchema } from '../config/rag-routing-schema.config';
@@ -382,7 +385,8 @@ export class RAGChatService {
   private async resolveDisambiguation(
     resolution: string,
     pending: PendingDisambiguation,
-    conversationId: string
+    conversationId: string,
+    domainConfig?: { deadlineConfig?: DeadlineConfig; lawCodeConfig?: { lawCodes?: Record<string, string[]> } }
   ): Promise<{ content: string; sources: any[]; exitToFlow?: string }> {
     // v12.34: Defensive null checks
     if (!pending || !pending.cachedContext) {
@@ -414,8 +418,34 @@ export class RAGChatService {
       };
     }
 
-    // Get pre-computed answer from disambiguation responses
-    const responseConfig = DEADLINE_DISAMBIGUATION_RESPONSES[resolution];
+    // v12.40: Get pre-computed answer from schema's deadlineConfig OR fallback to hardcoded
+    let responseConfig: ExpectedDisambiguationResponse | undefined;
+
+    // First try schema-based deadline config
+    if (domainConfig?.deadlineConfig?.enabled && domainConfig.deadlineConfig.intents) {
+      const intentConfig = domainConfig.deadlineConfig.intents[resolution];
+      if (intentConfig) {
+        responseConfig = {
+          keyword: resolution,
+          aliases: [...intentConfig.keywords, ...intentConfig.keywordsAscii],
+          resolution: resolution,
+          answer: {
+            day: intentConfig.deadline.day,
+            article: `m.${intentConfig.articleNumber}`,
+            lawCode: intentConfig.lawCode
+          }
+        };
+        console.log(`📋 [v12.40] SCHEMA_DEADLINE: Using deadlineConfig for "${resolution}" (day=${intentConfig.deadline.day})`);
+      }
+    }
+
+    // Fallback to hardcoded if schema doesn't have this resolution
+    if (!responseConfig) {
+      responseConfig = DEADLINE_DISAMBIGUATION_RESPONSES[resolution];
+      if (responseConfig) {
+        console.log(`📋 [v12.40] FALLBACK_DEADLINE: Using hardcoded config for "${resolution}"`);
+      }
+    }
 
     if (!responseConfig || !responseConfig.answer) {
       // v12.36: Unknown response - give single warning, no more follow-up
@@ -430,41 +460,57 @@ export class RAGChatService {
     const { day, article, lawCode } = responseConfig.answer;
     const articleNum = article.replace('m.', '');
 
-    // v12.38: Enhanced source filtering with cross-law protection
-    // 1. Start with cached results
+    // v12.40: Schema-based source filtering with cross-law protection
+    // Uses lawCodeConfig from schema to build patterns dynamically
     let searchResults = [...(pending.cachedContext.searchResults || [])];
 
-    // 2. Filter to ONLY KDVK sources (remove Harçlar, GVK, VUK etc.)
-    const kdvkPatterns = [
-      /katma\s*değer\s*vergi/i,
-      /kdv/i,
-      /kdvk/i,
-      /3065/i  // KDV Kanunu numarası
-    ];
+    // Build match/exclude patterns from schema
+    const buildLawPatterns = (targetCode: string): { match: RegExp[]; exclude: RegExp[] } => {
+      const matchPatterns: RegExp[] = [new RegExp(`\\b${targetCode.toLowerCase()}\\b`, 'i')];
+      const excludePatterns: RegExp[] = [];
 
-    const excludePatterns = [
-      /harç/i,
-      /492/i,  // Harçlar Kanunu
-      /gelir\s*vergisi/i,
-      /gvk/i,
-      /vergi\s*usul/i,
-      /vuk/i
-    ];
+      if (domainConfig?.lawCodeConfig?.lawCodes) {
+        // Add aliases for target law code
+        const aliases = domainConfig.lawCodeConfig.lawCodes[targetCode] || [];
+        for (const alias of aliases) {
+          matchPatterns.push(new RegExp(alias.toLowerCase().replace(/\s+/g, '\\s*'), 'i'));
+        }
 
-    // Filter sources: keep only KDVK-related sources
+        // Add exclude patterns for OTHER law codes
+        for (const [code, codeAliases] of Object.entries(domainConfig.lawCodeConfig.lawCodes)) {
+          if (code === targetCode) continue;
+          excludePatterns.push(new RegExp(`\\b${code.toLowerCase()}\\b`, 'i'));
+          for (const alias of codeAliases) {
+            if (/kanun|vergi/i.test(alias) && alias.length > 10) {
+              excludePatterns.push(new RegExp(alias.toLowerCase().replace(/\s+/g, '\\s*'), 'i'));
+            }
+          }
+        }
+      } else {
+        // Fallback patterns for KDVK if no schema config
+        matchPatterns.push(/katma\s*değer\s*vergi/i, /kdv/i, /3065/i);
+        excludePatterns.push(/harç/i, /492/i, /gelir\s*vergisi/i, /vergi\s*usul/i);
+      }
+
+      return { match: matchPatterns, exclude: excludePatterns };
+    };
+
+    const { match: matchPatterns, exclude: excludePatterns } = buildLawPatterns(lawCode);
+
+    // Filter sources: keep only target law code sources
     const filteredResults = searchResults.filter((source: any) => {
       const searchText = `${source.content || ''} ${source.title || ''} ${source.source_name || ''} ${source.source_table || ''}`.toLowerCase();
-      const isKdvk = kdvkPatterns.some(p => p.test(searchText));
+      const matchesTarget = matchPatterns.some(p => p.test(searchText));
       const isExcluded = excludePatterns.some(p => p.test(searchText));
-      return isKdvk && !isExcluded;
+      return matchesTarget && !isExcluded;
     });
 
     // Use filtered results if we have any, otherwise fall back to original
     if (filteredResults.length > 0) {
       searchResults = filteredResults;
-      console.log(`🛡️ [v12.38] CROSS_LAW_FILTER: Filtered to ${searchResults.length} KDVK sources from ${pending.cachedContext.searchResults?.length || 0} total`);
+      console.log(`🛡️ [v12.40] CROSS_LAW_FILTER: Filtered to ${searchResults.length} ${lawCode} sources from ${pending.cachedContext.searchResults?.length || 0} total`);
     } else {
-      console.warn(`⚠️ [v12.38] CROSS_LAW_FILTER: No KDVK sources found, using original cached results`);
+      console.warn(`⚠️ [v12.40] CROSS_LAW_FILTER: No ${lawCode} sources found, using original cached results`);
     }
 
     // 3. Re-order sources to prioritize Kanun/Mevzuat over Sirküler
@@ -885,6 +931,12 @@ PROHIBITED:
       lawNameToCode?: Record<string, string>;
       lawCodePatterns?: Array<{ pattern: string; code: string }>;
     };
+    // v12.40: Full multi-tenant support - all schema fields
+    followUpConfig?: FollowUpConfig;
+    deadlineConfig?: DeadlineConfig;
+    searchContext?: string;
+    chatbotContext?: string;
+    schemaName?: string;
   }> {
     try {
       const config = await dataSchemaService.loadConfig();
@@ -909,6 +961,26 @@ PROHIBITED:
       } | undefined;
       const lawCodes = lawCodeConfig?.lawCodes ? Object.keys(lawCodeConfig.lawCodes) : undefined;
 
+      // ═══════════════════════════════════════════════════════════════
+      // v12.40: FULL MULTI-TENANT SUPPORT
+      // Extract ALL schema fields for dynamic behavior
+      // ═══════════════════════════════════════════════════════════════
+
+      // Follow-up configuration (depth control, TTL, closing messages)
+      const followUpConfig = llmConfig?.followUpConfig as FollowUpConfig | undefined;
+
+      // Deadline configuration (intent detection, responses)
+      const deadlineConfig = llmConfig?.deadlineConfig as DeadlineConfig | undefined;
+
+      // Search context for semantic search enhancement
+      const searchContext = llmConfig?.searchContext as string | undefined;
+
+      // Chatbot context from schema's llmGuide
+      const chatbotContext = activeSchema?.llmGuide as string | undefined;
+
+      // Schema name for logging
+      const schemaName = activeSchema?.name || 'unknown';
+
       // Get authority levels from RAG Settings (NOT from schema - single source of truth)
       // This uses ragSettings.sourceTypeHierarchy which is configured via UI
       const hierarchyRaw = await settingsService.getSetting('ragSettings.sourceTypeHierarchy');
@@ -928,16 +1000,36 @@ PROHIBITED:
         }
       }
 
+      // Detailed logging for multi-tenant debugging
       if (topicEntities.length === 0 && keyTerms.length === 0) {
         console.log(`⚠️ [DOMAIN_CONFIG] No domain config in DB!`);
         console.log(`   Import a domain config JSON via Settings > Schema > JSON Import`);
       } else {
         const sanitizerStatus = sanitizerConfig?.enabled ? 'enabled' : 'disabled/default';
         const lawCodeStatus = lawCodes ? lawCodes.join(', ') : 'not configured';
-        console.log(`📋 [DOMAIN_CONFIG] Loaded: ${topicEntities.length} entities, ${keyTerms.length} terms, ${Object.keys(authorityLevels).length} authority levels, sanitizer=${sanitizerStatus}, lawCodes=[${lawCodeStatus}]`);
+        const followUpStatus = followUpConfig?.enabled ? `enabled (maxDepth=${followUpConfig.maxDepth})` : 'default';
+        const deadlineStatus = deadlineConfig?.enabled ? `enabled (${Object.keys(deadlineConfig.intents || {}).length} intents)` : 'default';
+        console.log(`📋 [DOMAIN_CONFIG] Schema: "${schemaName}"`);
+        console.log(`   Entities: ${topicEntities.length}, Terms: ${keyTerms.length}, Authority: ${Object.keys(authorityLevels).length}`);
+        console.log(`   Sanitizer: ${sanitizerStatus}, LawCodes: [${lawCodeStatus}]`);
+        console.log(`   FollowUp: ${followUpStatus}, Deadline: ${deadlineStatus}`);
+        if (searchContext) console.log(`   SearchContext: ${searchContext.substring(0, 50)}...`);
       }
 
-      return { topicEntities, keyTerms, authorityLevels, sanitizerConfig, lawCodes, lawCodeConfig };
+      return {
+        topicEntities,
+        keyTerms,
+        authorityLevels,
+        sanitizerConfig,
+        lawCodes,
+        lawCodeConfig,
+        // v12.40: New fields
+        followUpConfig,
+        deadlineConfig,
+        searchContext,
+        chatbotContext,
+        schemaName
+      };
     } catch (error) {
       console.error('[DOMAIN_CONFIG] Failed to load config:', error);
       return { topicEntities: [], keyTerms: [], authorityLevels: {} };
@@ -989,8 +1081,12 @@ PROHIBITED:
    */
   private detectFollowUpQuestion(
     currentMessage: string,
-    history: { role: string; content: string }[]
-  ): { isFollowUp: boolean; enhancedQuery: string; contextInfo: string } {
+    history: { role: string; content: string }[],
+    lawCodeConfig?: {
+      lawCodes?: Record<string, string[]>;
+      lawNumberToCode?: Record<string, string>;
+    }
+  ): { isFollowUp: boolean; enhancedQuery: string; contextInfo: string; lawCodeContext?: string } {
     // Turkish follow-up indicators
     const followUpIndicators = {
       // Pronouns referring to previous subject
@@ -1103,6 +1199,63 @@ PROHIBITED:
       return { isFollowUp: false, enhancedQuery: currentMessage, contextInfo: '' };
     }
 
+    // ═══════════════════════════════════════════════════════════════
+    // v12.39: EXTRACT LAW CODE CONTEXT from previous question
+    // Uses schema's lawCodeConfig for dynamic pattern matching
+    // This will be used to filter semantic search results for follow-ups
+    // ═══════════════════════════════════════════════════════════════
+    let lawCodeContext: string | undefined;
+    const prevQuestionLower = lastUserQuestion.toLowerCase();
+
+    // Build patterns from schema config (if available)
+    if (lawCodeConfig?.lawCodes) {
+      // Check each law code and its aliases
+      for (const [code, aliases] of Object.entries(lawCodeConfig.lawCodes)) {
+        // Check the code itself (e.g., "VUK", "KDVK")
+        const codePattern = new RegExp(`\\b${code.toLowerCase()}\\b`, 'i');
+        if (codePattern.test(prevQuestionLower)) {
+          lawCodeContext = code;
+          console.log(`🏷️ [v12.39] LAW_CODE_CONTEXT: Matched code "${code}" from previous question`);
+          break;
+        }
+
+        // Check aliases (e.g., "Vergi Usul Kanunu", "Katma Değer Vergisi")
+        for (const alias of aliases) {
+          // Handle multi-word aliases with flexible spacing
+          const aliasPattern = new RegExp(alias.toLowerCase().replace(/\s+/g, '\\s*'), 'i');
+          if (aliasPattern.test(prevQuestionLower)) {
+            lawCodeContext = code;
+            console.log(`🏷️ [v12.39] LAW_CODE_CONTEXT: Matched alias "${alias}" → "${code}" from previous question`);
+            break;
+          }
+        }
+        if (lawCodeContext) break;
+      }
+    }
+
+    // Also check law numbers from schema (e.g., "213" → "VUK", "3065" → "KDVK")
+    if (!lawCodeContext && lawCodeConfig?.lawNumberToCode) {
+      for (const [num, code] of Object.entries(lawCodeConfig.lawNumberToCode)) {
+        const numPattern = new RegExp(`\\b${num}\\b`);
+        if (numPattern.test(lastUserQuestion)) {
+          lawCodeContext = code;
+          console.log(`🏷️ [v12.39] LAW_CODE_CONTEXT: Matched law number "${num}" → "${code}" from previous question`);
+          break;
+        }
+      }
+    }
+
+    // Fallback: Try to extract from article pattern if schema didn't match
+    if (!lawCodeContext && previousArticles.length > 0) {
+      // previousArticles format: ["VUK_114", "KDVK_29"]
+      const firstArticle = previousArticles[0];
+      const extractedCode = firstArticle.split('_')[0];
+      if (extractedCode) {
+        lawCodeContext = extractedCode;
+        console.log(`🏷️ [v12.39] LAW_CODE_CONTEXT: Extracted from article reference "${firstArticle}" → "${extractedCode}"`);
+      }
+    }
+
     // Create enhanced query that combines previous context with current question
     // This helps semantic search find relevant documents
     const enhancedQuery = `${lastUserQuestion} ${currentMessage}`;
@@ -1112,8 +1265,11 @@ PROHIBITED:
     console.log(`   Previous: "${lastUserQuestion.substring(0, 50)}..."`);
     console.log(`   Current: "${currentMessage.substring(0, 50)}..."`);
     console.log(`   Enhanced: "${enhancedQuery.substring(0, 80)}..."`);
+    if (lawCodeContext) {
+      console.log(`   Law Code Context: ${lawCodeContext}`);
+    }
 
-    return { isFollowUp: true, enhancedQuery, contextInfo };
+    return { isFollowUp: true, enhancedQuery, contextInfo, lawCodeContext };
   }
 
   /**
@@ -1709,8 +1865,11 @@ ${questionLabel}: ${message}`;
         if (followUpCheck.isFollowUp && followUpCheck.resolution && followUpCheck.pending) {
           console.log(`🔄 [v12.33] FOLLOW_UP_DETECTED: Resolving "${message}" → ${followUpCheck.resolution}`);
 
+          // v12.40: Use schema followUpConfig or fallback to default
+          const effectiveFollowUpConfig = domainConfig.followUpConfig || DEFAULT_FOLLOWUP_CONFIG;
+
           // Check depth control
-          const depthCheck = this.handleWithDepthControl(followUpCheck.pending);
+          const depthCheck = this.handleWithDepthControl(followUpCheck.pending, effectiveFollowUpConfig);
 
           if (!depthCheck.proceed) {
             // Max depth reached - return closing message
@@ -1724,7 +1883,7 @@ ${questionLabel}: ${message}`;
               depth: followUpCheck.pending.followUpCount,
               intentCategory: followUpCheck.pending.intentCategory,
               action: 'follow_up_max_depth',
-              version: 'v12.33'
+              version: 'v12.40'
             });
 
             // Clear disambiguation state
@@ -1732,7 +1891,7 @@ ${questionLabel}: ${message}`;
 
             return {
               conversationId: convId,
-              response: depthCheck.closingResponse || DEFAULT_FOLLOWUP_CONFIG.closingMessage.tr,  // v12.35: Fixed field name
+              response: depthCheck.closingResponse || effectiveFollowUpConfig.closingMessage.tr,
               sources: [],
               responseType: 'CLOSING' as const,
               timings: { total: Date.now() - startTotal }
@@ -1740,10 +1899,12 @@ ${questionLabel}: ${message}`;
           }
 
           // Resolve disambiguation with cached context
+          // v12.40: Pass domainConfig for schema-based deadline resolution
           const resolved = await this.resolveDisambiguation(
             followUpCheck.resolution,
             followUpCheck.pending,
-            convId
+            convId,
+            domainConfig
           );
 
           // Analytics: Log successful follow-up resolution (use chat_message type with custom metadata)
@@ -1952,7 +2113,7 @@ ${questionLabel}: ${message}`;
       let searchQuery = sanitizeResult.sanitized;
 
       // 🔗 FOLLOW-UP QUESTION DETECTION (moved outside to be available in all modes)
-      const followUpResult = this.detectFollowUpQuestion(message, earlyHistory);
+      const followUpResult = this.detectFollowUpQuestion(message, earlyHistory, domainConfig.lawCodeConfig);
       if (followUpResult.isFollowUp) {
         searchQuery = followUpResult.enhancedQuery;
         console.log(`🔗 Follow-up detected, enhanced query: "${searchQuery.substring(0, 60)}..."`);
@@ -1995,11 +2156,17 @@ ${questionLabel}: ${message}`;
         console.log(`🛡️ [v12.35] DEADLINE_COMPARISON_DETECTED: "${message}" - bypassing tooShortNoQuestion check`);
       }
 
+      // v12.39: Also bypass ambiguity check for valid follow-up questions
+      const isValidFollowUp = followUpResult.isFollowUp && followUpResult.lawCodeContext;
+      if (isValidFollowUp) {
+        console.log(`🛡️ [v12.39] VALID_FOLLOWUP: "${message.substring(0, 40)}..." with context ${followUpResult.lawCodeContext} - bypassing ambiguity check`);
+      }
+
       const earlyAmbiguityCheck = {
         justNumbers: /^\d+$/.test(message.trim()) || /^(\d+\s*\/\s*\d+)$/.test(message.trim()),
-        vagueQuestion: /^(ne|nasıl|nedir|neden|kim)\s*\??$/i.test(message.trim()),
-        tooShortNoQuestion: earlyWordCount < 2 && !message.includes('?') && !isDeadlineComparisonPattern,  // v12.35: Exception for deadline comparisons
-        singleToken: message.trim().split(/\s+/).length === 1 && !/\?$/.test(message.trim())
+        vagueQuestion: /^(ne|nasıl|nedir|neden|kim)\s*\??$/i.test(message.trim()) && !isValidFollowUp,  // v12.39: Exception for valid follow-ups
+        tooShortNoQuestion: earlyWordCount < 2 && !message.includes('?') && !isDeadlineComparisonPattern && !isValidFollowUp,  // v12.35: Exception for deadline comparisons, v12.39: follow-ups
+        singleToken: message.trim().split(/\s+/).length === 1 && !/\?$/.test(message.trim()) && !isValidFollowUp  // v12.39: Exception for valid follow-ups
       };
       const isEarlyAmbiguous = Object.values(earlyAmbiguityCheck).some(v => v);
 
@@ -2150,12 +2317,21 @@ ${questionLabel}: ${message}`;
         console.log(`🔍 SILENT SEARCH: Citations disabled, searching with ${searchMaxResults} results`);
       }
 
+      // v12.40: Enhance search query with schema's searchContext
+      // This provides domain-specific context to improve semantic search relevance
+      let enhancedSearchQuery = searchQuery;
+      if (domainConfig.searchContext) {
+        // Prepend search context to query for better embedding match
+        enhancedSearchQuery = `${domainConfig.searchContext} ${searchQuery}`;
+        console.log(`🔍 [v12.40] SEARCH_CONTEXT: Enhanced query with schema context`);
+      }
+
       // ⏱️ Semantic search timing
       const startSearch = Date.now();
       if (useUnifiedEmbeddings) {
-        allResults = await semanticSearch.unifiedSemanticSearch(searchQuery, searchMaxResults);
+        allResults = await semanticSearch.unifiedSemanticSearch(enhancedSearchQuery, searchMaxResults);
       } else {
-        allResults = await semanticSearch.hybridSearch(searchQuery, searchMaxResults);
+        allResults = await semanticSearch.hybridSearch(enhancedSearchQuery, searchMaxResults);
       }
       timings.search = Date.now() - startSearch;
 
@@ -2210,6 +2386,122 @@ ${questionLabel}: ${message}`;
           _keywordBoost: keywordBoost
         };
       });
+
+      // ═══════════════════════════════════════════════════════════════
+      // v12.39: FOLLOW-UP LAW CODE FILTERING (Schema-Based)
+      // Filter semantic search results to match the law code from previous question
+      // Uses domainConfig.lawCodeConfig for dynamic pattern matching
+      // This prevents "hangi maddeler ile belirlenmiş?" returning Harçlar when asking about KDV
+      // ═══════════════════════════════════════════════════════════════
+      if (followUpResult.isFollowUp && followUpResult.lawCodeContext) {
+        const lawCode = followUpResult.lawCodeContext;
+        console.log(`🔍 [v12.39] FOLLOW-UP_FILTER: Applying law code filter for "${lawCode}" (schema-based)`);
+
+        // Build match patterns from schema config
+        const buildMatchPatterns = (targetCode: string): RegExp[] => {
+          const patterns: RegExp[] = [];
+
+          // Always add the code itself as a pattern
+          patterns.push(new RegExp(`\\b${targetCode.toLowerCase()}\\b`, 'i'));
+
+          if (domainConfig.lawCodeConfig?.lawCodes) {
+            const aliases = domainConfig.lawCodeConfig.lawCodes[targetCode] || [];
+            for (const alias of aliases) {
+              // Convert alias to flexible regex pattern
+              const aliasPattern = alias.toLowerCase().replace(/\s+/g, '\\s*');
+              patterns.push(new RegExp(aliasPattern, 'i'));
+            }
+          }
+
+          // Add law number patterns from schema
+          if (domainConfig.lawCodeConfig?.lawNumberToCode) {
+            for (const [num, code] of Object.entries(domainConfig.lawCodeConfig.lawNumberToCode)) {
+              if (code === targetCode) {
+                patterns.push(new RegExp(`\\b${num}\\b`));
+              }
+            }
+          }
+
+          return patterns;
+        };
+
+        // Build exclusion patterns (patterns from OTHER law codes)
+        const buildExcludePatterns = (targetCode: string): RegExp[] => {
+          const patterns: RegExp[] = [];
+
+          if (domainConfig.lawCodeConfig?.lawCodes) {
+            for (const [code, aliases] of Object.entries(domainConfig.lawCodeConfig.lawCodes)) {
+              if (code === targetCode) continue; // Skip target code
+
+              // Add full law name patterns for other codes (to exclude them)
+              for (const alias of aliases) {
+                // Only exclude if alias contains "kanun" or "vergi" (to avoid over-exclusion)
+                if (/kanun|vergi/i.test(alias) && alias.length > 10) {
+                  const aliasPattern = alias.toLowerCase().replace(/\s+/g, '\\s*');
+                  patterns.push(new RegExp(aliasPattern, 'i'));
+                }
+              }
+            }
+          }
+
+          return patterns;
+        };
+
+        const matchPatterns = buildMatchPatterns(lawCode);
+        const excludePatterns = buildExcludePatterns(lawCode);
+        console.log(`🔍 [v12.39] FOLLOW-UP_FILTER: Built ${matchPatterns.length} match patterns, ${excludePatterns.length} exclude patterns`);
+
+        const preFilterCount = allResults.length;
+        const filteredResults = allResults.filter((result: any) => {
+          const searchText = `${result.content || ''} ${result.title || ''} ${result.source_name || ''} ${result.source_table || ''}`.toLowerCase();
+
+          // Check if it matches the target law code
+          const matchesLaw = matchPatterns.some((p: RegExp) => p.test(searchText));
+
+          // Check if it matches an excluded law code
+          const isExcluded = excludePatterns.some((p: RegExp) => p.test(searchText));
+
+          if (matchesLaw && !isExcluded) {
+            return true;
+          }
+
+          // If it doesn't match target and has no law code reference, keep it (might be generic)
+          // Build "any law code" patterns from schema
+          let hasAnyLawCode = false;
+          if (domainConfig.lawCodeConfig?.lawCodes) {
+            for (const [code, aliases] of Object.entries(domainConfig.lawCodeConfig.lawCodes)) {
+              // Check code itself
+              if (new RegExp(`\\b${code.toLowerCase()}\\b`, 'i').test(searchText)) {
+                hasAnyLawCode = true;
+                break;
+              }
+              // Check aliases
+              for (const alias of aliases) {
+                if (searchText.includes(alias.toLowerCase())) {
+                  hasAnyLawCode = true;
+                  break;
+                }
+              }
+              if (hasAnyLawCode) break;
+            }
+          }
+
+          if (!hasAnyLawCode) {
+            return true; // Keep generic sources
+          }
+
+          return false; // Exclude sources that match other specific law codes
+        });
+
+        console.log(`🔍 [v12.39] FOLLOW-UP_FILTER: ${preFilterCount} → ${filteredResults.length} results (filtered for ${lawCode})`);
+
+        // Only use filtered results if we still have enough results
+        if (filteredResults.length >= 2) {
+          allResults = filteredResults;
+        } else {
+          console.log(`⚠️ [v12.39] FOLLOW-UP_FILTER: Too few results after filtering (${filteredResults.length}), keeping original`);
+        }
+      }
 
       // 🎯 P0: INTENT-BASED ARTICLE BOOST
       // Detect deadline intent and boost relevant articles (m.41 for beyanname, m.46 for ödeme)
@@ -2679,6 +2971,9 @@ ${questionLabel}: ${message}`;
         ];
 
         // Store disambiguation state in Redis for follow-up detection
+        // v12.40: Use schema followUpConfig or fallback to default
+        const effectiveFollowUpConfig = domainConfig.followUpConfig || DEFAULT_FOLLOWUP_CONFIG;
+
         // v12.36: Max follow-up = 1, set followUpCount = 1 (this is the first and only follow-up)
         const pendingDisambiguation: PendingDisambiguation = {
           originalQuery: message,
@@ -2691,12 +2986,12 @@ ${questionLabel}: ${message}`;
           },
           followUpCount: 1,  // v12.36: This is the ONLY follow-up allowed
           createdAt: Date.now(),
-          expiresAt: Date.now() + (DEFAULT_FOLLOWUP_CONFIG.ttlSeconds * 1000),
+          expiresAt: Date.now() + (effectiveFollowUpConfig.ttlSeconds * 1000),
           conversationId: convId
         };
 
-        await this.setPendingDisambiguation(convId, pendingDisambiguation);
-        console.log(`💾 [v12.38] DISAMBIGUATION_STATE_STORED: TTL=${DEFAULT_FOLLOWUP_CONFIG.ttlSeconds}s, maxFollowUp=1`);
+        await this.setPendingDisambiguation(convId, pendingDisambiguation, effectiveFollowUpConfig);
+        console.log(`💾 [v12.40] DISAMBIGUATION_STATE_STORED: TTL=${effectiveFollowUpConfig.ttlSeconds}s, maxFollowUp=${effectiveFollowUpConfig.maxDepth}`);
 
         // v12.37: Clean disambiguation question - no markdown inside bullets to avoid format processing
         const disambiguationQuestion = `KDV ile ilgili sorunuzu netleştirebilir misiniz?
@@ -3206,27 +3501,48 @@ Bu soru karmaşık bir vergisel senaryo içermektedir. Yanıtını AŞAĞIDAKİ 
         // v12.33: Store pending disambiguation for follow-up detection
         // This enables the system to understand "beyanname" or "ödeme" as follow-ups
         // ═══════════════════════════════════════════════════════════════════════════
+        // v12.40: Build expected responses from schema or fallback
+        const buildExpectedResponses = (): ExpectedDisambiguationResponse[] => {
+          if (domainConfig.deadlineConfig?.enabled && domainConfig.deadlineConfig.intents) {
+            return Object.entries(domainConfig.deadlineConfig.intents).map(([key, intent]) => ({
+              keyword: key,
+              aliases: [...intent.keywords, ...intent.keywordsAscii],
+              resolution: key,
+              answer: {
+                day: intent.deadline.day,
+                article: `m.${intent.articleNumber}`,
+                lawCode: intent.lawCode
+              }
+            }));
+          }
+          // Fallback to hardcoded
+          return [
+            DEADLINE_DISAMBIGUATION_RESPONSES.beyanname,
+            DEADLINE_DISAMBIGUATION_RESPONSES.odeme
+          ];
+        };
+
+        // v12.40: Use schema followUpConfig or fallback
+        const effectiveFollowUpConfig = domainConfig.followUpConfig || DEFAULT_FOLLOWUP_CONFIG;
+
         const pendingDisambiguation: PendingDisambiguation = {
           originalQuery: message,
           intentCategory: 'deadline',
           intentType: null, // Will be resolved on follow-up
-          expectedResponses: [
-            DEADLINE_DISAMBIGUATION_RESPONSES.beyanname,
-            DEADLINE_DISAMBIGUATION_RESPONSES.odeme
-          ],
+          expectedResponses: buildExpectedResponses(),
           cachedContext: {
             searchResults: searchResults,
             detectedIntent: 'ambiguous'
           },
           followUpCount: 1,
           createdAt: Date.now(),
-          expiresAt: Date.now() + (DEFAULT_FOLLOWUP_CONFIG.ttlSeconds * 1000),
+          expiresAt: Date.now() + (effectiveFollowUpConfig.ttlSeconds * 1000),
           conversationId: convId
         };
 
         // Store in Redis for follow-up detection
-        await this.setPendingDisambiguation(convId, pendingDisambiguation);
-        console.log(`🔄 [v12.33] DISAMBIGUATION_PENDING: Stored for follow-up (TTL=${DEFAULT_FOLLOWUP_CONFIG.ttlSeconds}s)`);
+        await this.setPendingDisambiguation(convId, pendingDisambiguation, effectiveFollowUpConfig);
+        console.log(`🔄 [v12.40] DISAMBIGUATION_PENDING: Stored for follow-up (TTL=${effectiveFollowUpConfig.ttlSeconds}s)`);
         // ═══════════════════════════════════════════════════════════════════════════
       }
       // Handle specific beyanname or odeme intent

@@ -845,10 +845,11 @@ export interface DeadlineConfig {
 
 /**
  * Default follow-up configuration
+ * v12.36: maxDepth = 1 (single follow-up only, no loops)
  */
 export const DEFAULT_FOLLOWUP_CONFIG: FollowUpConfig = {
   enabled: true,
-  maxDepth: 2,
+  maxDepth: 1,  // v12.36: Single follow-up only
   exceptionalMaxDepth: 3,
   exceptionalIntents: ['iade', 'istisna', 'tevkifat'],
   closingMessage: {

@@ -1,0 +1,301 @@
+{
+  "id": "vergilex-tax-schema-v12.40",
+  "name": "vergilex_tax_law",
+  "displayName": "Vergilex Vergi Mevzuatı",
+  "description": "Türk vergi mevzuatı için tam dinamik schema yapılandırması. Multi-tenant desteği, deadline yönetimi, follow-up kontrolü ve tüm RAG özelliklerini içerir.",
+  "isActive": true,
+  "isDefault": true,
+
+  "fields": [
+    {
+      "key": "kanun_no",
+      "label": "Kanun Numarası",
+      "type": "reference",
+      "required": false,
+      "extractionHint": "Kanun numarasını çıkar (örn: 213, 193, 3065)",
+      "showInCitation": true
+    },
+    {
+      "key": "madde_no",
+      "label": "Madde Numarası",
+      "type": "reference",
+      "required": false,
+      "extractionHint": "Madde numarasını çıkar",
+      "showInCitation": true
+    },
+    {
+      "key": "kanun_adi",
+      "label": "Kanun Adı",
+      "type": "string",
+      "required": false,
+      "extractionHint": "Tam kanun adını çıkar",
+      "showInCitation": true
+    },
+    {
+      "key": "tarih",
+      "label": "Tarih",
+      "type": "date",
+      "format": "DD.MM.YYYY",
+      "required": false,
+      "showInCitation": true
+    },
+    {
+      "key": "kaynak_tipi",
+      "label": "Kaynak Tipi",
+      "type": "category",
+      "required": false,
+      "extractionHint": "Kaynak tipini belirle: kanun, tebliğ, sirküler, özelge, danıştay, makale",
+      "showInTags": true
+    }
+  ],
+
+  "templates": {
+    "analyze": "Bu belge Türk vergi mevzuatına aittir. İçeriği analiz ederek aşağıdaki bilgileri çıkar:\n1. Kanun numarası ve adı\n2. İlgili madde numaraları\n3. Tarihler ve süreler\n4. Vergi oranları\n5. Muafiyet/istisna bilgileri",
+    "citation": "{{kaynak_tipi}} - {{kanun_adi}} {{madde_no ? 'Md.' + madde_no : ''}}",
+    "excerpt": "{{excerpt | truncate:300}}",
+    "questions": [
+      "{{kanun_adi}} {{madde_no}}. maddenin istisnaları nelerdir?",
+      "{{kanun_adi}} kapsamında muafiyet şartları nelerdir?",
+      "{{madde_no}}. madde hangi durumlarda uygulanır?"
+    ],
+    "example_questions": [
+      "KDV beyannamesi ne zaman verilir?",
+      "KDV ödemesi ayın kaçına kadar yapılır?",
+      "Vergi levhası asma zorunluluğu var mı?",
+      "Stopaj oranları nelerdir?",
+      "E-fatura zorunluluğu kimleri kapsar?",
+      "Geçici vergi beyannamesi ne zaman verilir?"
+    ]
+  },
+
+  "llmGuide": "Sen Vergilex, Türk vergi mevzuatı uzmanı bir asistansın.\n\n## TEMEL KURALLAR\n1. Her iddia için kaynak göster: (KANUN_KODU madde X) [citation_no]\n2. Madde numarasını tam yaz: 'madde 41' ('m.41' değil)\n3. Tarih/süreleri kesin belirt: 'ayın 24'üne kadar'\n4. Kanunları karıştırma: KDVK ≠ VUK ≠ GVK\n5. Belirsiz soruda netleştirici soru sor\n\n## KDV ÖNEMLİ TARİHLER\n- KDV Beyannamesi: Takip eden ayın 24'ü (KDVK madde 41)\n- KDV Ödemesi: Takip eden ayın 26'sı (KDVK madde 46)\n\n## YANITLAMA FORMATI\nBasit: [Yanıt] (Kanun madde X) [1]\nDetaylı: Özet + Açıklama + Dayanak listesi\n\n## KISITLAMALAR\n- Sadece veritabanı bilgilerine dayan\n- Kişisel hukuki tavsiye verme\n- Belirsiz ifade kullanma (bence, muhtemelen)\n- Kaynak yoksa 'bu bilgi veritabanında bulunamadı' de",
+
+  "llmConfig": {
+    "chatbotContext": "Sen Vergilex, Türk vergi hukuku uzmanı asistansın. VUK, GVK, KVK, KDVK ve tüm vergi mevzuatı hakkında bilgi verirsin. KDV beyannamesi ayın 24'üne kadar verilir (KDVK madde 41), KDV ödemesi ayın 26'sına kadar yapılır (KDVK madde 46). Her yanıtta kanun ve madde referansı kullan. Belirsiz sorularda netleştirici soru sor.",
+
+    "embeddingPrefix": "Türk vergi mevzuatı: ",
+
+    "searchContext": "Türk vergi mevzuatı hukuku KDV KDVK VUK GVK KVK beyanname ödeme süre tarih son gün madde kanun vergi mükellefiyet",
+
+    "topicEntities": [
+      { "name": "VUK", "type": "law", "aliases": ["Vergi Usul Kanunu", "213 sayılı kanun", "213 sayılı Vergi Usul Kanunu"] },
+      { "name": "GVK", "type": "law", "aliases": ["Gelir Vergisi Kanunu", "193 sayılı kanun", "193 sayılı Gelir Vergisi Kanunu"] },
+      { "name": "KVK", "type": "law", "aliases": ["Kurumlar Vergisi Kanunu", "5520 sayılı kanun", "5520 sayılı Kurumlar Vergisi Kanunu"] },
+      { "name": "KDVK", "type": "law", "aliases": ["Katma Değer Vergisi Kanunu", "3065 sayılı kanun", "KDV Kanunu", "Katma Değer Vergisi", "3065 sayılı KDV Kanunu"] },
+      { "name": "ÖTVK", "type": "law", "aliases": ["Özel Tüketim Vergisi Kanunu", "4760 sayılı kanun", "ÖTV Kanunu"] },
+      { "name": "DVK", "type": "law", "aliases": ["Damga Vergisi Kanunu", "488 sayılı kanun"] },
+      { "name": "HK", "type": "law", "aliases": ["Harçlar Kanunu", "492 sayılı kanun"] },
+      { "name": "MTV", "type": "law", "aliases": ["Motorlu Taşıtlar Vergisi Kanunu", "197 sayılı kanun"] },
+      { "name": "EVK", "type": "law", "aliases": ["Emlak Vergisi Kanunu", "1319 sayılı kanun"] },
+      { "name": "AATUHK", "type": "law", "aliases": ["Amme Alacaklarının Tahsil Usulü Hakkında Kanun", "6183 sayılı kanun"] },
+      { "name": "KDV_BEYANNAME", "type": "deadline", "aliases": ["24", "yirmidört", "yirmidördüncü", "beyanname tarihi", "beyanname süresi", "beyanname son gün"] },
+      { "name": "KDV_ODEME", "type": "deadline", "aliases": ["26", "yirmialtı", "yirmialtıncı", "ödeme tarihi", "ödeme süresi", "ödeme son gün"] }
+    ],
+
+    "keyTerms": [
+      "vergi", "kdv", "beyanname", "beyannamesi", "mükellef", "mükellefiyet", "fatura", "matrah", "stopaj",
+      "tevkifat", "muafiyet", "istisna", "kanun", "madde", "tebliğ", "özelge", "sirküler",
+      "levha", "vuk", "gvk", "kvk", "kdvk", "damga", "ötv", "emlak", "gelir", "kurumlar",
+      "iade", "tahakkuk", "tarh", "tahsil", "ceza", "usulsüzlük", "vergi cezası",
+      "zamanaşımı", "düzeltme", "itiraz", "dava", "uzlaşma", "pişmanlık", "indirim",
+      "ödeme", "ödemesi", "ödenir", "ödenmesi", "süre", "tarih", "gün", "ay", "yıl", "zaman", "kadar",
+      "verilir", "verilmesi", "yapılır", "yapılması", "bildirilir", "bildirim",
+      "son gün", "son tarih", "vade", "beyan", "takip eden"
+    ],
+
+    "sourceTables": [
+      "csv_kanun_mevzuat",
+      "csv_danistaykararlari",
+      "csv_ozelge",
+      "csv_sirkuler",
+      "csv_makale_arsiv_2021",
+      "csv_makale_arsiv_2022",
+      "csv_sorucevap",
+      "csv_hukdkk"
+    ],
+
+    "lawCodeConfig": {
+      "lawCodes": {
+        "VUK": ["Vergi Usul Kanunu", "VERGİ USUL KANUNU", "213 sayılı Kanun", "213 Sayılı Vergi Usul Kanunu", "Vergi Usul"],
+        "GVK": ["Gelir Vergisi Kanunu", "GELİR VERGİSİ KANUNU", "193 sayılı Kanun", "193 Sayılı Gelir Vergisi Kanunu", "Gelir Vergisi"],
+        "KVK": ["Kurumlar Vergisi Kanunu", "KURUMLAR VERGİSİ KANUNU", "5520 sayılı Kanun", "5520 Sayılı Kurumlar Vergisi Kanunu", "Kurumlar Vergisi"],
+        "KDVK": ["Katma Değer Vergisi Kanunu", "KATMA DEĞER VERGİSİ KANUNU", "KDV Kanunu", "3065 sayılı Kanun", "3065 Sayılı KDV Kanunu", "Katma Değer Vergisi", "KDV"],
+        "ÖTVK": ["Özel Tüketim Vergisi Kanunu", "ÖTV Kanunu", "4760 sayılı Kanun", "Özel Tüketim Vergisi", "ÖTV"],
+        "DVK": ["Damga Vergisi Kanunu", "488 sayılı Kanun", "Damga Vergisi"],
+        "HK": ["Harçlar Kanunu", "492 sayılı Kanun", "Harçlar"],
+        "MTV": ["Motorlu Taşıtlar Vergisi Kanunu", "197 sayılı Kanun", "Motorlu Taşıtlar Vergisi", "MTV"],
+        "EVK": ["Emlak Vergisi Kanunu", "1319 sayılı Kanun", "Emlak Vergisi"],
+        "AATUHK": ["Amme Alacaklarının Tahsil Usulü Hakkında Kanun", "6183 sayılı Kanun", "Amme Alacakları", "AATUHK"]
+      },
+      "lawNumberToCode": {
+        "213": "VUK",
+        "193": "GVK",
+        "5520": "KVK",
+        "3065": "KDVK",
+        "4760": "ÖTVK",
+        "488": "DVK",
+        "492": "HK",
+        "197": "MTV",
+        "1319": "EVK",
+        "6183": "AATUHK"
+      },
+      "lawNameToCode": {
+        "VERGİSİ KANUNU (G.V.K.)Kanun": "GVK",
+        "VERGİSİ KANUNU (K.D.V.K.)Kanun": "KDVK",
+        "Kanunlar No: 492": "HK",
+        "Kanunlar No: 213": "VUK",
+        "Kanunlar No: 3065": "KDVK"
+      },
+      "lawCodePatterns": [
+        { "pattern": "G\\.V\\.K", "code": "GVK" },
+        { "pattern": "K\\.D\\.V\\.K", "code": "KDVK" },
+        { "pattern": "K\\.V\\.K", "code": "KVK" },
+        { "pattern": "V\\.U\\.K", "code": "VUK" },
+        { "pattern": "\\(GVK\\)", "code": "GVK" },
+        { "pattern": "\\(KDVK\\)", "code": "KDVK" },
+        { "pattern": "\\(KVK\\)", "code": "KVK" },
+        { "pattern": "\\(VUK\\)", "code": "VUK" }
+      ]
+    },
+
+    "sanitizerConfig": {
+      "enabled": true,
+      "minGroundedKeywords": 1,
+      "logRemovals": true,
+      "forbiddenPatterns": [
+        { "id": "norm-1", "category": "normative", "pattern": "gerek(?:mektedir|ir|iyor|lidir|tirmektedir)(?:ler)?(?=[.,;\\s]|$)", "description": "Gerekmektedir varyantları", "enabled": true },
+        { "id": "norm-2", "category": "normative", "pattern": "zorunlu(?:dur|luktur|luğu)?(?:lar)?(?=[.,;\\s]|$)", "description": "Zorunludur", "enabled": true },
+        { "id": "norm-3", "category": "normative", "pattern": "zorundadır(?:lar|s[ıi]n[ıi]z)?(?=[.,;\\s]|$)", "description": "Zorundadır + çekimler", "enabled": true },
+        { "id": "norm-4", "category": "normative", "pattern": "mecbur(?:dur|idir|iyet)?(?:lar)?(?=[.,;\\s]|$)", "description": "Mecburdur/mecburiyet", "enabled": true },
+        { "id": "norm-5", "category": "normative", "pattern": "(?:yapıl|veril|öden|bildiril)(?:mesi|ması)\\s+(?:gerekir|lazımdır|şarttır|zorunludur)(?=[.,;\\s]|$)", "description": "Modal zorunluluk", "enabled": true },
+        { "id": "proc-1", "category": "procedural", "pattern": "başvur(?:ulmalıdır|ulması gerekir|ması gerekir)(?=[.,;\\s]|$)", "description": "Başvurulmalıdır", "enabled": true },
+        { "id": "proc-2", "category": "procedural", "pattern": "bildiril(?:melidir|mesi gerekir)(?=[.,;\\s]|$)", "description": "Bildirilmelidir", "enabled": true },
+        { "id": "proc-3", "category": "procedural", "pattern": "ibraz\\s+(?:edilmelidir|edilmesi gerekir)(?=[.,;\\s]|$)", "description": "İbraz edilmelidir", "enabled": true },
+        { "id": "cons-1", "category": "consequence", "pattern": "ceza(?:landırılır|ya tabi|sı uygulanır)(?=[.,;\\s]|$)", "description": "Cezalandırılır", "enabled": true },
+        { "id": "dur-1", "category": "duration", "pattern": "\\b(\\d+)\\s*(yıl|ay|gün|hafta|iş günü)\\s*içinde(?=[.,;\\s]|$)", "description": "Süre ifadesi", "enabled": true }
+      ],
+      "groundingKeywords": [
+        "kanun", "madde", "sayılı", "tarihli", "tebliğ", "yönetmelik",
+        "karar", "özelge", "sirküler", "bent", "fıkra", "paragraf",
+        "hüküm", "düzenleme", "mevzuat", "usul", "esas"
+      ]
+    },
+
+    "followUpConfig": {
+      "enabled": true,
+      "maxDepth": 1,
+      "exceptionalMaxDepth": 3,
+      "exceptionalIntents": ["iade", "istisna", "tevkifat", "muafiyet", "indirim"],
+      "closingMessage": {
+        "tr": "Bu konu birden fazla hukuki senaryo içeriyor. Lütfen sorunuzu tek başlık altında netleştirerek yeni bir sorgu oluşturun.",
+        "en": "This topic involves multiple legal scenarios. Please clarify your question under a single topic."
+      },
+      "carryOverWindow": 2,
+      "ttlSeconds": 300
+    },
+
+    "deadlineConfig": {
+      "enabled": true,
+      "intents": {
+        "beyanname": {
+          "keywords": ["beyanname", "beyannamesi", "beyan", "bildirim", "bildiri", "verilir", "verilmesi", "veriliyor", "beyan edilir"],
+          "keywordsAscii": ["beyanname", "beyannamesi", "beyan", "bildirim", "bildiri", "verilir", "verilmesi", "veriliyor", "beyan edilir"],
+          "articleNumber": "41",
+          "lawCode": "KDVK",
+          "lawName": "Katma Değer Vergisi Kanunu",
+          "deadline": {
+            "day": 24,
+            "wordTr": "yirmidördüncü"
+          },
+          "tableFilter": "csv_kanun_mevzuat"
+        },
+        "odeme": {
+          "keywords": ["ödeme", "ödemesi", "ödenir", "ödenmesi", "yatırma", "öde", "ödeyeceği", "ödenecek", "ödeniyor", "yatırılır"],
+          "keywordsAscii": ["odeme", "odemesi", "odenir", "odenmesi", "yatirma", "ode", "odeyecegi", "odenecek", "odeniyor", "yatirilir"],
+          "articleNumber": "46",
+          "lawCode": "KDVK",
+          "lawName": "Katma Değer Vergisi Kanunu",
+          "deadline": {
+            "day": 26,
+            "wordTr": "yirmialtıncı"
+          },
+          "tableFilter": "csv_kanun_mevzuat"
+        }
+      },
+      "comparisonPatterns": [
+        "24\\s*(mı?|mi|mu|mü)?\\s*(yoksa|veya|ya da)?\\s*26",
+        "26\\s*(mı?|mi|mu|mü)?\\s*(yoksa|veya|ya da)?\\s*24",
+        "beyanname\\s*(mı?|mi)?\\s*(yoksa|veya|ya da)?\\s*ödeme",
+        "ödeme\\s*(mi)?\\s*(yoksa|veya|ya da)?\\s*beyanname",
+        "24.?\\s*(mü|mı)\\s*26.?\\s*(mı|mü)",
+        "(ayın)?\\s*kaç(ı|ına|ında)",
+        "ne\\s*zaman.*ne\\s*zaman",
+        "hangi\\s*tarih",
+        "son\\s*(tarih|gün)\\s*(ne|hangisi)",
+        "iki(si)?\\s*(de|da)\\s*(aynı|farklı)"
+      ],
+      "typoTolerance": {
+        "enabled": true,
+        "maxLevenshteinDistance": 2,
+        "shortWordMaxDistance": 1
+      }
+    },
+
+    "articlePatterns": {
+      "enabled": true,
+      "patterns": [
+        "madde\\s*(\\d+)",
+        "m\\.?\\s*(\\d+)",
+        "(\\d+)['.]?\\s*(inci|ıncı|nci|ncı|üncü|uncu)?\\s*madde",
+        "(\\d+)\\s*numaralı\\s*madde"
+      ],
+      "combinedPatterns": [
+        "(VUK|GVK|KVK|KDVK|ÖTVK|DVK|HK|MTV|EVK|AATUHK)\\s*(?:madde\\s*)?(\\d+)",
+        "(\\d+)\\s*sayılı\\s*kanun\\s*(?:madde\\s*)?(\\d+)"
+      ]
+    },
+
+    "followUpIndicators": {
+      "patterns": [
+        "hangi\\s*madde",
+        "hangi\\s*kanun",
+        "hangi\\s*hüküm",
+        "nasıl\\s*belirlen",
+        "neye\\s*göre",
+        "dayanağı\\s*ne",
+        "kaynağı\\s*ne",
+        "referans",
+        "bu\\s*konuda",
+        "bununla\\s*ilgili",
+        "peki",
+        "ya\\s*(da|şu)",
+        "ayrıca",
+        "bir\\s*de"
+      ],
+      "pronounPatterns": [
+        "^bu\\b",
+        "^şu\\b",
+        "^o\\b",
+        "^bunun\\b",
+        "^onun\\b",
+        "^buna\\b",
+        "^ona\\b"
+      ]
+    }
+  },
+
+  "sourceTables": [
+    "csv_kanun_mevzuat",
+    "csv_danistaykararlari",
+    "csv_ozelge",
+    "csv_sirkuler",
+    "csv_makale_arsiv_2021",
+    "csv_makale_arsiv_2022",
+    "csv_sorucevap",
+    "csv_hukdkk"
+  ],
+
+  "createdAt": "2024-01-01T00:00:00Z",
+  "updatedAt": "2026-01-30T00:00:00Z",
+  "version": "12.40"
+}
