@@ -1,9 +1,8 @@
 'use client';
 
-import React, { useMemo } from 'react';
+import React, { useMemo, useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, Plus, MessageSquare, Trash2, Loader2 } from 'lucide-react';
-import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
+import { X, Plus, MessageSquare, Trash2, Search } from 'lucide-react';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import type { Conversation } from '../hooks/useConversationHistory';
 
@@ -51,7 +50,6 @@ function groupConversationsByDate(conversations: Conversation[]) {
     }
   });
 
-  // Filter out empty groups
   return Object.entries(groups).filter(([_, convs]) => convs.length > 0);
 }
 
@@ -65,17 +63,14 @@ function formatTime(dateStr: string): string {
   const convDay = new Date(date.getFullYear(), date.getMonth(), date.getDate());
 
   if (convDay >= today) {
-    // Today: show time
     return date.toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' });
   } else {
-    // Other days: show short date
     return date.toLocaleDateString('tr-TR', { day: 'numeric', month: 'short' });
   }
 }
 
 /**
- * ZenHistoryPanel
- * Slide-out panel for viewing conversation history
+ * ZenHistoryPanel - Minimal dropdown style (like Claude Code)
  */
 export const ZenHistoryPanel: React.FC<ZenHistoryPanelProps> = ({
   isOpen,
@@ -87,10 +82,58 @@ export const ZenHistoryPanel: React.FC<ZenHistoryPanelProps> = ({
   onNewConversation,
   onDeleteConversation,
 }) => {
+  const [searchQuery, setSearchQuery] = useState('');
+  const panelRef = useRef<HTMLDivElement>(null);
+  const searchRef = useRef<HTMLInputElement>(null);
+
+  // Filter conversations by search
+  const filteredConversations = useMemo(() => {
+    if (!searchQuery.trim()) return conversations;
+    const query = searchQuery.toLowerCase();
+    return conversations.filter(conv =>
+      conv.title?.toLowerCase().includes(query)
+    );
+  }, [conversations, searchQuery]);
+
   const groupedConversations = useMemo(
-    () => groupConversationsByDate(conversations),
-    [conversations]
+    () => groupConversationsByDate(filteredConversations),
+    [filteredConversations]
   );
+
+  // Focus search on open
+  useEffect(() => {
+    if (isOpen && searchRef.current) {
+      setTimeout(() => searchRef.current?.focus(), 100);
+    }
+    if (!isOpen) {
+      setSearchQuery('');
+    }
+  }, [isOpen]);
+
+  // Close on click outside
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (panelRef.current && !panelRef.current.contains(e.target as Node)) {
+        onClose();
+      }
+    };
+
+    if (isOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [isOpen, onClose]);
+
+  // Close on Escape
+  useEffect(() => {
+    const handleEscape = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    if (isOpen) {
+      document.addEventListener('keydown', handleEscape);
+    }
+    return () => document.removeEventListener('keydown', handleEscape);
+  }, [isOpen, onClose]);
 
   const handleDelete = (e: React.MouseEvent, id: string) => {
     e.stopPropagation();
@@ -99,107 +142,104 @@ export const ZenHistoryPanel: React.FC<ZenHistoryPanelProps> = ({
     }
   };
 
-  return (
-    <Sheet open={isOpen} onOpenChange={(open) => !open && onClose()}>
-      <SheetContent side="left" className="zen01-history-panel p-0">
-        {/* Header */}
-        <div className="zen01-history-header">
-          <SheetHeader className="pb-0">
-            <SheetTitle className="zen01-history-title">
-              Konuşma Geçmişi
-            </SheetTitle>
-          </SheetHeader>
+  if (!isOpen) return null;
 
-          {/* New Conversation Button */}
-          <div className="pr-1">
+  return (
+    <AnimatePresence>
+      <motion.div
+        ref={panelRef}
+        initial={{ opacity: 0, y: -10, scale: 0.95 }}
+        animate={{ opacity: 1, y: 0, scale: 1 }}
+        exit={{ opacity: 0, y: -10, scale: 0.95 }}
+        transition={{ duration: 0.15 }}
+        className="zen01-history-dropdown"
+      >
+        {/* Search */}
+        <div className="zen01-history-search">
+          <Search className="h-4 w-4 text-current opacity-50" />
+          <input
+            ref={searchRef}
+            type="text"
+            placeholder="Konuşma ara..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="zen01-history-search-input"
+          />
+          {searchQuery && (
             <button
-              onClick={() => {
-                onNewConversation();
-                onClose();
-              }}
-              className="zen01-new-conversation-btn"
+              onClick={() => setSearchQuery('')}
+              className="opacity-50 hover:opacity-100"
             >
-              <Plus className="h-4 w-4" />
-              Yeni Konuşma
+              <X className="h-3.5 w-3.5" />
             </button>
-          </div>
+          )}
         </div>
 
-        {/* Content */}
-        <ScrollArea className="h-[calc(100vh-160px)]">
-          <div className="px-5 pb-5 pt-2">
-            {isLoading ? (
-              // Loading skeleton
-              <div className="space-y-3">
-                {[1, 2, 3].map(i => (
-                  <div key={i} className="zen01-history-skeleton" />
-                ))}
-              </div>
-            ) : conversations.length === 0 ? (
-              // Empty state
-              <div className="zen01-history-empty">
-                <div className="zen01-history-empty-icon">💬</div>
-                <p className="text-sm font-medium">Henüz konuşma yok</p>
-                <p className="text-xs opacity-70 mt-1">
-                  Yeni bir konuşma başlatın
-                </p>
-              </div>
-            ) : (
-              // Grouped conversations
-              <AnimatePresence mode="popLayout">
-                {groupedConversations.map(([group, convs]) => (
-                  <motion.div
-                    key={group}
-                    initial={{ opacity: 0, y: 10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, y: -10 }}
-                    transition={{ duration: 0.2 }}
+        {/* New Conversation */}
+        <button
+          onClick={() => {
+            onNewConversation();
+            onClose();
+          }}
+          className="zen01-history-new-btn"
+        >
+          <Plus className="h-4 w-4" />
+          <span>Yeni Konuşma</span>
+        </button>
+
+        {/* Divider */}
+        <div className="zen01-history-divider" />
+
+        {/* Conversations List */}
+        <ScrollArea className="zen01-history-list">
+          {isLoading ? (
+            <div className="zen01-history-loading">
+              <div className="zen01-history-skeleton-sm" />
+              <div className="zen01-history-skeleton-sm" />
+              <div className="zen01-history-skeleton-sm" />
+            </div>
+          ) : filteredConversations.length === 0 ? (
+            <div className="zen01-history-empty-minimal">
+              {searchQuery ? 'Sonuç bulunamadı' : 'Henüz konuşma yok'}
+            </div>
+          ) : (
+            groupedConversations.map(([group, convs]) => (
+              <div key={group}>
+                <div className="zen01-history-group-label">{group}</div>
+                {convs.map(conv => (
+                  <div
+                    key={conv.id}
+                    onClick={() => {
+                      onSelectConversation(conv.id);
+                      onClose();
+                    }}
+                    className={`zen01-history-item ${
+                      conv.id === currentConversationId ? 'active' : ''
+                    }`}
                   >
-                    <div className="zen01-history-date-group">{group}</div>
-                    {convs.map(conv => (
-                      <motion.div
-                        key={conv.id}
-                        layout
-                        initial={{ opacity: 0, x: -20 }}
-                        animate={{ opacity: 1, x: 0 }}
-                        exit={{ opacity: 0, x: 20 }}
-                        transition={{ duration: 0.15 }}
-                        onClick={() => {
-                          onSelectConversation(conv.id);
-                          onClose();
-                        }}
-                        className={`zen01-conversation-item ${
-                          conv.id === currentConversationId ? 'active' : ''
-                        }`}
-                      >
-                        <div className="flex items-start gap-3">
-                          <MessageSquare className="h-4 w-4 mt-0.5 flex-shrink-0 opacity-60" />
-                          <div className="flex-1 min-w-0">
-                            <p className="zen01-conversation-title">
-                              {conv.title || 'Adsız konuşma'}
-                            </p>
-                            <p className="zen01-conversation-meta">
-                              {conv.message_count} mesaj • {formatTime(conv.updated_at || conv.created_at)}
-                            </p>
-                          </div>
-                          <button
-                            onClick={(e) => handleDelete(e, conv.id)}
-                            className="zen01-delete-btn"
-                            title="Konuşmayı sil"
-                          >
-                            <Trash2 className="h-3.5 w-3.5" />
-                          </button>
-                        </div>
-                      </motion.div>
-                    ))}
-                  </motion.div>
+                    <div className="zen01-history-item-content">
+                      <span className="zen01-history-item-title">
+                        {conv.title || 'Adsız konuşma'}
+                      </span>
+                      <span className="zen01-history-item-time">
+                        {formatTime(conv.updated_at || conv.created_at)}
+                      </span>
+                    </div>
+                    <button
+                      onClick={(e) => handleDelete(e, conv.id)}
+                      className="zen01-history-item-delete"
+                      title="Sil"
+                    >
+                      <Trash2 className="h-3 w-3" />
+                    </button>
+                  </div>
                 ))}
-              </AnimatePresence>
-            )}
-          </div>
+              </div>
+            ))
+          )}
         </ScrollArea>
-      </SheetContent>
-    </Sheet>
+      </motion.div>
+    </AnimatePresence>
   );
 };
 
