@@ -190,6 +190,8 @@ export interface ZenInputProps {
   voiceSettings?: ZenVoiceSettings;
   // Slash command support
   onSlashCommand?: (command: SlashCommand) => void;
+  // History panel support (renders above input like slash commands)
+  historyPanel?: React.ReactNode;
 }
 
 export interface ZenMessageProps {

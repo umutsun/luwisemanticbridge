@@ -1152,18 +1152,6 @@ export default function ChatInterface() {
         {/* Particles Background */}
         <ParticlesBackground variant={isDark ? 'dark' : 'light'} />
 
-        {/* History Panel */}
-        <ZenHistoryPanel
-          isOpen={isHistoryOpen}
-          onClose={() => setIsHistoryOpen(false)}
-          conversations={conversations}
-          isLoading={isHistoryLoading}
-          currentConversationId={conversationId}
-          onSelectConversation={handleSelectConversation}
-          onNewConversation={handleNewConversation}
-          onDeleteConversation={handleDeleteConversation}
-        />
-
         {/* Header */}
         <ZenHeader
           chatbotSettings={chatbotSettings}
@@ -1212,7 +1200,7 @@ export default function ChatInterface() {
           </ScrollArea>
         </div>
 
-        {/* Floating Input */}
+        {/* Floating Input with History Panel */}
         <ZenInput
           value={inputText}
           onChange={setInputText}
@@ -1225,6 +1213,18 @@ export default function ChatInterface() {
           onPdfSelect={setPdfFile}
           voiceSettings={voiceSettings}
           onSlashCommand={handleSlashCommand}
+          historyPanel={
+            <ZenHistoryPanel
+              isOpen={isHistoryOpen}
+              onClose={() => setIsHistoryOpen(false)}
+              conversations={conversations}
+              isLoading={isHistoryLoading}
+              currentConversationId={conversationId}
+              onSelectConversation={handleSelectConversation}
+              onNewConversation={handleNewConversation}
+              onDeleteConversation={handleDeleteConversation}
+            />
+          }
         />
 
       </div>
