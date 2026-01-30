@@ -503,13 +503,17 @@ export class RAGChatService {
     const dayWord = day === 24 ? 'yirmidördüncü' : 'yirmialtıncı';
     const suffix = this.getSuffix(day);
 
+    // v12.38: Fixed citation format - use article reference format that won't be parsed as markdown list
+    // Format: "KDVK madde 41" instead of "KDVK m.41)" to avoid markdown list interpretation
+    const articleDisplay = article.replace('m.', 'madde ');
+
     let content: string;
     if (resolution === 'beyanname') {
-      content = `KDV beyannamesi, vergilendirme dönemini takip eden ayın ${day}'${suffix} (${dayWord} günü) akşamına kadar ilgili vergi dairesine verilmelidir (${lawCode} ${article}) [${citationIndex}].`;
+      content = `KDV beyannamesi, vergilendirme dönemini takip eden ayın ${day}'${suffix} (${dayWord} günü) akşamına kadar ilgili vergi dairesine verilmelidir. Dayanak: ${lawCode} ${articleDisplay} [${citationIndex}]`;
     } else if (resolution === 'odeme') {
-      content = `KDV ödemesi, takip eden ayın ${day}'${suffix} (${dayWord} günü) akşamına kadar yapılmalıdır (${lawCode} ${article}) [${citationIndex}].`;
+      content = `KDV ödemesi, takip eden ayın ${day}'${suffix} (${dayWord} günü) akşamına kadar yapılmalıdır. Dayanak: ${lawCode} ${articleDisplay} [${citationIndex}]`;
     } else {
-      content = `${resolution} için son tarih: takip eden ayın ${day}'${suffix} (${lawCode} ${article}) [${citationIndex}].`;
+      content = `${resolution} için son tarih: takip eden ayın ${day}'${suffix}. Dayanak: ${lawCode} ${articleDisplay} [${citationIndex}]`;
     }
 
     // Clear disambiguation state - conversation resolved
