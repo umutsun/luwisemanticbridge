@@ -1,8 +1,8 @@
 'use client';
 
-import React, { useRef, useEffect } from 'react';
+import React, { useMemo, useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { MessageSquare } from 'lucide-react';
+import { Search, X } from 'lucide-react';
 import type { Conversation } from '../hooks/useConversationHistory';
 
 interface ZenSuggestPanelProps {
@@ -30,7 +30,7 @@ function formatTime(dateStr: string): string {
 }
 
 /**
- * ZenSuggestPanel - Shows recent 12 conversations as suggestions
+ * ZenSuggestPanel - Shows recent 12 conversations as suggestions with search
  */
 export const ZenSuggestPanel: React.FC<ZenSuggestPanelProps> = ({
   isOpen,
@@ -39,10 +39,33 @@ export const ZenSuggestPanel: React.FC<ZenSuggestPanelProps> = ({
   isLoading,
   onSelectConversation,
 }) => {
+  const [searchQuery, setSearchQuery] = useState('');
   const panelRef = useRef<HTMLDivElement>(null);
+  const searchRef = useRef<HTMLInputElement>(null);
 
-  // Get last 12 conversations
-  const recentConversations = conversations.slice(0, 12);
+  // Filter conversations by search
+  const filteredConversations = useMemo(() => {
+    const recent = conversations.slice(0, 12);
+    if (!searchQuery.trim()) return recent;
+    const query = searchQuery.toLowerCase();
+    return recent.filter(conv =>
+      (conv.title || '').toLowerCase().includes(query)
+    );
+  }, [conversations, searchQuery]);
+
+  // Focus search on open
+  useEffect(() => {
+    if (isOpen && searchRef.current) {
+      setTimeout(() => searchRef.current?.focus(), 50);
+    }
+  }, [isOpen]);
+
+  // Reset search when panel closes
+  useEffect(() => {
+    if (!isOpen) {
+      setSearchQuery('');
+    }
+  }, [isOpen]);
 
   // Close on click outside
   useEffect(() => {
@@ -81,10 +104,25 @@ export const ZenSuggestPanel: React.FC<ZenSuggestPanelProps> = ({
         transition={{ duration: 0.15 }}
         className="zen01-suggest-dropdown"
       >
-        {/* Header */}
-        <div className="zen01-suggest-header">
-          <MessageSquare className="h-4 w-4" />
-          <span>Son Konuşmalar</span>
+        {/* Search Box */}
+        <div className="zen01-history-search">
+          <Search className="h-4 w-4 opacity-50" />
+          <input
+            ref={searchRef}
+            type="text"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="Konuşmalarda ara..."
+            className="zen01-history-search-input"
+          />
+          {searchQuery && (
+            <button
+              onClick={() => setSearchQuery('')}
+              className="opacity-50 hover:opacity-100"
+            >
+              <X className="h-3.5 w-3.5" />
+            </button>
+          )}
         </div>
 
         {/* Conversations List */}
@@ -95,12 +133,12 @@ export const ZenSuggestPanel: React.FC<ZenSuggestPanelProps> = ({
                 <div key={i} className="zen01-suggest-skeleton" />
               ))}
             </div>
-          ) : recentConversations.length === 0 ? (
+          ) : filteredConversations.length === 0 ? (
             <div className="zen01-suggest-empty">
-              Henüz konuşma yok
+              {searchQuery ? 'Sonuç bulunamadı' : 'Henüz konuşma yok'}
             </div>
           ) : (
-            recentConversations.map(conv => (
+            filteredConversations.map(conv => (
               <button
                 key={conv.id}
                 onClick={() => {
