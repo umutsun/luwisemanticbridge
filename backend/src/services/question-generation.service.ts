@@ -1011,7 +1011,7 @@ Sadece soruları listele, her satırda bir soru. Numaralandırma veya açıklama
    *
    * All questions are verified by LLM for quality and relevance
    */
-  async generateSimpleSuggestions(schemaName: string, count: number = 4): Promise<string[]> {
+  async generateSimpleSuggestions(schemaName: string, count: number = 25): Promise<string[]> {
     console.log(`[Suggestions] generateSimpleSuggestions called for schema: ${schemaName}, count: ${count}`);
 
     try {

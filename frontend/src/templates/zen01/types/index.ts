@@ -261,7 +261,7 @@ export const DEFAULT_CHATBOT_SETTINGS: ZenChatbotSettings = {
   primaryColor: '',
   activeChatModel: '',
   enableSuggestions: true,
-  maxSuggestionCards: 4,
+  maxSuggestionCards: 10,
   welcomeMessage: '',
   greeting: ''
 };

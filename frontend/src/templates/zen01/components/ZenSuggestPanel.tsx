@@ -2,7 +2,7 @@
 
 import React, { useMemo, useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Search, X, Sparkles } from 'lucide-react';
+import { Search, X, Sparkles, Loader2 } from 'lucide-react';
 
 interface ZenSuggestPanelProps {
   isOpen: boolean;
@@ -109,9 +109,8 @@ export const ZenSuggestPanel: React.FC<ZenSuggestPanelProps> = ({
         <div className="zen01-suggest-list">
           {isLoading ? (
             <div className="zen01-suggest-loading">
-              {[1, 2, 3].map(i => (
-                <div key={i} className="zen01-suggest-skeleton" />
-              ))}
+              <Loader2 className="h-5 w-5 animate-spin text-cyan-500" />
+              <span className="text-xs text-slate-400 mt-2">Öneriler yükleniyor...</span>
             </div>
           ) : filteredSuggestions.length === 0 ? (
             <div className="zen01-suggest-empty">
@@ -136,10 +135,6 @@ export const ZenSuggestPanel: React.FC<ZenSuggestPanelProps> = ({
           )}
         </div>
 
-        {/* Hint */}
-        <div className="zen01-suggest-hint">
-          <kbd>↵</kbd> seç <kbd>esc</kbd> kapat
-        </div>
       </motion.div>
     </AnimatePresence>
   );

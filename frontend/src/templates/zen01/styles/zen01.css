@@ -1520,7 +1520,11 @@
 
 /* Loading */
 .zen01-suggest-loading {
-  padding: 8px 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 24px 8px;
 }
 
 .zen01-suggest-skeleton {

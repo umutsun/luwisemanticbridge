@@ -343,8 +343,9 @@ router.get('/api/v2/chat/suggestions', authenticateToken, async (req: Authentica
   try {
     const { questionGenerationService } = await import('../services/question-generation.service');
 
-    // Get suggestion count from settings (default: 4)
-    let suggestionCount = 4;
+    // Get suggestion count from settings (default: 25 for /suggest panel)
+    // The panel now shows all suggestions with search, so we return the full pool
+    let suggestionCount = 25;
     try {
       const settingsResult = await dbConfig.query(`
         SELECT value FROM settings WHERE key = 'chatbot'
@@ -353,7 +354,8 @@ router.get('/api/v2/chat/suggestions', authenticateToken, async (req: Authentica
         const rawValue = settingsResult.rows[0].value;
         const chatbotData = typeof rawValue === 'string' ? JSON.parse(rawValue) : (rawValue || {});
         // Support both maxSuggestionCards (UI) and suggestionCount (legacy)
-        suggestionCount = chatbotData.maxSuggestionCards || chatbotData.suggestionCount || 4;
+        // Use higher value since /suggest panel displays all with search
+        suggestionCount = Math.max(chatbotData.maxSuggestionCards || 10, 25);
       }
     } catch (e) {
       // Use default

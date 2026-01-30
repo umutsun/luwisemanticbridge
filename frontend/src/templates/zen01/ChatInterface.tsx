@@ -82,8 +82,9 @@ export default function ChatInterface() {
   // Suggestions cache
   const suggestionsCache = useRef<{ data: string[], timestamp: number } | null>(null);
 
-  const fetchSuggestedQuestions = async () => {
-    if (suggestionsCache.current) {
+  const fetchSuggestedQuestions = async (forceRefresh = false) => {
+    // Use cache unless force refresh requested
+    if (!forceRefresh && suggestionsCache.current) {
       const age = Date.now() - suggestionsCache.current.timestamp;
       if (age < SUGGESTIONS_CACHE_TTL) {
         return suggestionsCache.current.data;
@@ -260,8 +261,8 @@ export default function ChatInterface() {
       const j = Math.floor(((i + 1) * seed * 7) % shuffled.length);
       [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
     }
-    // Use maxSuggestionCards from settings (default 4)
-    const maxCards = chatbotSettings.maxSuggestionCards || 4;
+    // Use maxSuggestionCards from settings (default 10 for /suggest panel)
+    const maxCards = chatbotSettings.maxSuggestionCards || 10;
     setShuffledSuggestions(shuffled.slice(0, maxCards));
   }, [suggestedQuestions, chatbotSettings.maxSuggestionCards]);
 
@@ -325,8 +326,8 @@ export default function ChatInterface() {
           primaryColor: chatbotData.primaryColor || '',
           activeChatModel: settingsData.llmSettings?.activeChatModel || '',
           enableSuggestions: chatbotData.enableSuggestions !== undefined ? chatbotData.enableSuggestions : true,
-          // Suggestion Cards count - from settings
-          maxSuggestionCards: chatbotData.maxSuggestionCards || 4,
+          // Suggestion Cards count - from settings (default 10 for /suggest panel)
+          maxSuggestionCards: chatbotData.maxSuggestionCards || 10,
           welcomeMessage: chatbotData.welcomeMessage || '',
           greeting: chatbotData.greeting || '',
           // Feature toggles from schema - default to TRUE for better UX
@@ -967,10 +968,14 @@ export default function ChatInterface() {
         // Submenu item selected - load conversation
         handleSelectConversation(command.conversationId);
       } else {
-        // Main command - open suggest panel
+        // Main command - open suggest panel with fresh suggestions
         setIsHistoryOpen(false); // Close history panel if open
-        await fetchConversations();
         setIsSuggestOpen(true);
+        // Fetch fresh suggestions with loading state
+        setIsSuggestionsLoading(true);
+        const freshSuggestions = await fetchSuggestedQuestions(true); // Force refresh
+        setSuggestedQuestions(freshSuggestions);
+        setIsSuggestionsLoading(false);
       }
       return;
     }

@@ -3217,21 +3217,21 @@ function RAGSettings() {
                   <div className="flex-1">
                     <Label>Max Suggestion Cards</Label>
                     <p className="text-xs text-muted-foreground mt-1">
-                      Maximum number of suggestion cards to show (1-10)
+                      Maximum number of suggestions to show in /suggest panel (1-25)
                     </p>
                   </div>
                   <div className="w-20">
                     <Input
                       type="number"
-                      value={tempChatbotConfig?.chatbot?.maxSuggestionCards || 4}
+                      value={tempChatbotConfig?.chatbot?.maxSuggestionCards || 10}
                       onChange={(e) =>
                         updateChatbotSetting(
                           "maxSuggestionCards",
-                          Math.min(10, Math.max(1, parseInt(e.target.value) || 4))
+                          Math.min(25, Math.max(1, parseInt(e.target.value) || 10))
                         )
                       }
                       min="1"
-                      max="10"
+                      max="25"
                     />
                   </div>
                 </div>

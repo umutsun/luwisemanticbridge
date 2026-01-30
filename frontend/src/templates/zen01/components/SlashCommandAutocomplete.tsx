@@ -90,9 +90,6 @@ export const SlashCommandAutocomplete: React.FC<SlashCommandAutocompleteProps> =
               </AnimatePresence>
             </div>
           ))}
-          <div className="zen01-slash-command-hint">
-            <kbd>↑</kbd><kbd>↓</kbd> seç <kbd>↵</kbd> onayla <kbd>esc</kbd> kapat
-          </div>
         </motion.div>
       )}
     </AnimatePresence>
