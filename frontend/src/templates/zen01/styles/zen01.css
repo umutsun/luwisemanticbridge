@@ -1065,36 +1065,48 @@
    History Panel - Conversation History
    ============================================ */
 .zen01-history-panel {
-  background: #0d1f3c !important;
-  backdrop-filter: none !important;
-  border-right: 1px solid var(--zen-glass-border) !important;
-  box-shadow: 4px 0 20px rgba(0, 0, 0, 0.5) !important;
+  background: linear-gradient(180deg, #0a1628 0%, #0d1f3c 100%) !important;
+  border-right: 1px solid rgba(6, 182, 212, 0.2) !important;
+  box-shadow: 4px 0 30px rgba(0, 0, 0, 0.5) !important;
+  width: 320px !important;
+}
+
+@media (min-width: 640px) {
+  .zen01-history-panel {
+    width: 380px !important;
+  }
 }
 
 .zen01-container.light .zen01-history-panel {
-  background: #ffffff !important;
-  border-right: 1px solid rgba(203, 213, 225, 0.6) !important;
-  box-shadow: 4px 0 20px rgba(0, 0, 0, 0.08) !important;
+  background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%) !important;
+  border-right: 1px solid rgba(203, 213, 225, 0.8) !important;
+  box-shadow: 4px 0 30px rgba(0, 0, 0, 0.1) !important;
 }
 
 .zen01-history-header {
-  border-bottom: 1px solid var(--zen-glass-border);
+  border-bottom: 1px solid rgba(6, 182, 212, 0.15);
+  padding: 1.25rem 1.25rem 0;
+}
+
+.zen01-container.light .zen01-history-header {
+  border-bottom: 1px solid rgba(203, 213, 225, 0.6);
 }
 
 .zen01-history-title {
-  font-size: 1.125rem;
-  font-weight: 600;
+  font-size: 1.25rem;
+  font-weight: 700;
   color: var(--zen-text-primary);
+  margin-bottom: 0.5rem;
 }
 
 /* New Conversation Button */
 .zen01-new-conversation-btn {
   background: linear-gradient(135deg, var(--zen-cyan) 0%, var(--zen-purple) 100%);
   border: none;
-  border-radius: 0.75rem;
-  padding: 0.75rem 1rem;
+  border-radius: 0.875rem;
+  padding: 0.875rem 1.25rem;
   color: white;
-  font-weight: 500;
+  font-weight: 600;
   width: 100%;
   cursor: pointer;
   transition: all 0.2s ease;
@@ -1102,12 +1114,13 @@
   align-items: center;
   justify-content: center;
   gap: 0.5rem;
-  font-size: 0.875rem;
+  font-size: 0.9rem;
+  margin: 1rem 0;
 }
 
 .zen01-new-conversation-btn:hover {
   transform: translateY(-2px);
-  box-shadow: 0 4px 15px rgba(6, 182, 212, 0.3);
+  box-shadow: 0 6px 20px rgba(6, 182, 212, 0.4);
 }
 
 .zen01-new-conversation-btn:active {
@@ -1117,77 +1130,89 @@
 /* Date Group Header */
 .zen01-history-date-group {
   font-size: 0.7rem;
-  font-weight: 600;
+  font-weight: 700;
   text-transform: uppercase;
-  letter-spacing: 0.05em;
-  color: var(--zen-text-muted);
-  padding: 0.75rem 0 0.5rem;
+  letter-spacing: 0.08em;
+  color: var(--zen-cyan);
+  padding: 1rem 0 0.625rem;
   margin-top: 0.5rem;
+  border-bottom: 1px solid rgba(6, 182, 212, 0.1);
+}
+
+.zen01-container.light .zen01-history-date-group {
+  color: #0891b2;
+  border-bottom-color: rgba(8, 145, 178, 0.15);
 }
 
 .zen01-history-date-group:first-child {
   margin-top: 0;
+  padding-top: 0.5rem;
 }
 
 /* Conversation Item */
 .zen01-conversation-item {
-  background: rgba(6, 182, 212, 0.05);
-  border: 1px solid rgba(6, 182, 212, 0.15);
-  border-radius: 0.75rem;
-  padding: 0.875rem 1rem;
-  margin-bottom: 0.5rem;
+  background: rgba(6, 182, 212, 0.08);
+  border: 1px solid rgba(6, 182, 212, 0.2);
+  border-radius: 0.875rem;
+  padding: 1rem 1.125rem;
+  margin-bottom: 0.625rem;
   cursor: pointer;
   transition: all 0.2s ease;
 }
 
 .zen01-conversation-item:hover {
-  background: rgba(6, 182, 212, 0.1);
-  border-color: rgba(6, 182, 212, 0.3);
+  background: rgba(6, 182, 212, 0.15);
+  border-color: rgba(6, 182, 212, 0.35);
   transform: translateX(4px);
 }
 
 .zen01-conversation-item.active {
-  background: rgba(6, 182, 212, 0.15);
-  border-color: rgba(6, 182, 212, 0.4);
-  box-shadow: 0 0 12px rgba(6, 182, 212, 0.2);
+  background: rgba(6, 182, 212, 0.2);
+  border-color: var(--zen-cyan);
+  box-shadow: 0 0 15px rgba(6, 182, 212, 0.25);
 }
 
 .zen01-container.light .zen01-conversation-item {
-  background: rgba(8, 145, 178, 0.04);
-  border: 1px solid rgba(8, 145, 178, 0.12);
+  background: rgba(8, 145, 178, 0.06);
+  border: 1px solid rgba(8, 145, 178, 0.18);
 }
 
 .zen01-container.light .zen01-conversation-item:hover {
-  background: rgba(8, 145, 178, 0.08);
-  border-color: rgba(8, 145, 178, 0.25);
+  background: rgba(8, 145, 178, 0.12);
+  border-color: rgba(8, 145, 178, 0.3);
 }
 
 .zen01-container.light .zen01-conversation-item.active {
-  background: rgba(8, 145, 178, 0.12);
-  border-color: rgba(8, 145, 178, 0.35);
+  background: rgba(8, 145, 178, 0.15);
+  border-color: #0891b2;
+  box-shadow: 0 0 15px rgba(8, 145, 178, 0.2);
 }
 
 .zen01-conversation-title {
-  font-size: 0.875rem;
+  font-size: 0.9rem;
   font-weight: 500;
   color: var(--zen-text-primary);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  margin-bottom: 0.25rem;
+  margin-bottom: 0.375rem;
 }
 
 .zen01-conversation-meta {
   font-size: 0.75rem;
-  color: var(--zen-text-muted);
+  color: var(--zen-text-secondary);
+}
+
+.zen01-container.light .zen01-conversation-meta {
+  color: #64748b;
 }
 
 /* Delete Button */
 .zen01-delete-btn {
   opacity: 0;
-  transition: opacity 0.2s ease;
-  padding: 0.375rem;
-  border-radius: 0.375rem;
+  transition: all 0.2s ease;
+  padding: 0.5rem;
+  border-radius: 0.5rem;
   color: var(--zen-rose);
   background: transparent;
   border: none;
@@ -1200,7 +1225,7 @@
 
 .zen01-delete-btn:hover {
   opacity: 1 !important;
-  background: rgba(244, 63, 94, 0.1);
+  background: rgba(244, 63, 94, 0.15);
 }
 
 /* Empty State */
@@ -1220,14 +1245,23 @@
 .zen01-history-skeleton {
   background: linear-gradient(90deg,
     rgba(6, 182, 212, 0.08) 25%,
-    rgba(6, 182, 212, 0.15) 50%,
+    rgba(6, 182, 212, 0.18) 50%,
     rgba(6, 182, 212, 0.08) 75%
   );
   background-size: 200% 100%;
   animation: zen-skeleton 1.5s ease-in-out infinite;
-  border-radius: 0.75rem;
-  height: 4.5rem;
-  margin-bottom: 0.5rem;
+  border-radius: 0.875rem;
+  height: 5rem;
+  margin-bottom: 0.625rem;
+}
+
+.zen01-container.light .zen01-history-skeleton {
+  background: linear-gradient(90deg,
+    rgba(8, 145, 178, 0.06) 25%,
+    rgba(8, 145, 178, 0.12) 50%,
+    rgba(8, 145, 178, 0.06) 75%
+  );
+  background-size: 200% 100%;
 }
 
 @keyframes zen-skeleton {

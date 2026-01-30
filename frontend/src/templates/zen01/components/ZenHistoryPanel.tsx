@@ -101,17 +101,17 @@ export const ZenHistoryPanel: React.FC<ZenHistoryPanelProps> = ({
 
   return (
     <Sheet open={isOpen} onOpenChange={(open) => !open && onClose()}>
-      <SheetContent side="left" className="zen01-history-panel p-0 w-80 sm:w-96">
+      <SheetContent side="left" className="zen01-history-panel p-0">
         {/* Header */}
         <div className="zen01-history-header">
-          <SheetHeader className="p-4 pb-0">
+          <SheetHeader className="pb-0">
             <SheetTitle className="zen01-history-title">
               Konuşma Geçmişi
             </SheetTitle>
           </SheetHeader>
 
           {/* New Conversation Button */}
-          <div className="px-4 py-3">
+          <div className="pr-1">
             <button
               onClick={() => {
                 onNewConversation();
@@ -126,8 +126,8 @@ export const ZenHistoryPanel: React.FC<ZenHistoryPanelProps> = ({
         </div>
 
         {/* Content */}
-        <ScrollArea className="h-[calc(100vh-140px)]">
-          <div className="px-4 pb-4">
+        <ScrollArea className="h-[calc(100vh-160px)]">
+          <div className="px-5 pb-5 pt-2">
             {isLoading ? (
               // Loading skeleton
               <div className="space-y-3">
