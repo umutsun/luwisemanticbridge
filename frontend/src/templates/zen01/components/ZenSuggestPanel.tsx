@@ -2,56 +2,36 @@
 
 import React, { useMemo, useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Search, X } from 'lucide-react';
-import type { Conversation } from '../hooks/useConversationHistory';
+import { Search, X, Sparkles } from 'lucide-react';
 
 interface ZenSuggestPanelProps {
   isOpen: boolean;
   onClose: () => void;
-  conversations: Conversation[];
+  suggestions: string[];
   isLoading: boolean;
-  onSelectConversation: (id: string) => void;
+  onSelectSuggestion: (question: string) => void;
 }
 
 /**
- * Format time for display
- */
-function formatTime(dateStr: string): string {
-  const date = new Date(dateStr);
-  const now = new Date();
-  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  const convDay = new Date(date.getFullYear(), date.getMonth(), date.getDate());
-
-  if (convDay >= today) {
-    return date.toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' });
-  } else {
-    return date.toLocaleDateString('tr-TR', { day: 'numeric', month: 'short' });
-  }
-}
-
-/**
- * ZenSuggestPanel - Shows recent 12 conversations as suggestions with search
+ * ZenSuggestPanel - Shows suggestion questions with search
  */
 export const ZenSuggestPanel: React.FC<ZenSuggestPanelProps> = ({
   isOpen,
   onClose,
-  conversations,
+  suggestions,
   isLoading,
-  onSelectConversation,
+  onSelectSuggestion,
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const panelRef = useRef<HTMLDivElement>(null);
   const searchRef = useRef<HTMLInputElement>(null);
 
-  // Filter conversations by search
-  const filteredConversations = useMemo(() => {
-    const recent = conversations.slice(0, 12);
-    if (!searchQuery.trim()) return recent;
+  // Filter suggestions by search
+  const filteredSuggestions = useMemo(() => {
+    if (!searchQuery.trim()) return suggestions;
     const query = searchQuery.toLowerCase();
-    return recent.filter(conv =>
-      (conv.title || '').toLowerCase().includes(query)
-    );
-  }, [conversations, searchQuery]);
+    return suggestions.filter(s => s.toLowerCase().includes(query));
+  }, [suggestions, searchQuery]);
 
   // Focus search on open
   useEffect(() => {
@@ -112,7 +92,7 @@ export const ZenSuggestPanel: React.FC<ZenSuggestPanelProps> = ({
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Konuşmalarda ara..."
+            placeholder="Önerilerde ara..."
             className="zen01-history-search-input"
           />
           {searchQuery && (
@@ -125,7 +105,7 @@ export const ZenSuggestPanel: React.FC<ZenSuggestPanelProps> = ({
           )}
         </div>
 
-        {/* Conversations List */}
+        {/* Suggestions List */}
         <div className="zen01-suggest-list">
           {isLoading ? (
             <div className="zen01-suggest-loading">
@@ -133,25 +113,23 @@ export const ZenSuggestPanel: React.FC<ZenSuggestPanelProps> = ({
                 <div key={i} className="zen01-suggest-skeleton" />
               ))}
             </div>
-          ) : filteredConversations.length === 0 ? (
+          ) : filteredSuggestions.length === 0 ? (
             <div className="zen01-suggest-empty">
-              {searchQuery ? 'Sonuç bulunamadı' : 'Henüz konuşma yok'}
+              {searchQuery ? 'Sonuç bulunamadı' : 'Henüz öneri yok'}
             </div>
           ) : (
-            filteredConversations.map(conv => (
+            filteredSuggestions.map((suggestion, index) => (
               <button
-                key={conv.id}
+                key={index}
                 onClick={() => {
-                  onSelectConversation(conv.id);
+                  onSelectSuggestion(suggestion);
                   onClose();
                 }}
                 className="zen01-suggest-item"
               >
+                <Sparkles className="h-3.5 w-3.5 flex-shrink-0 opacity-50" />
                 <span className="zen01-suggest-item-title">
-                  {conv.title || 'Adsız konuşma'}
-                </span>
-                <span className="zen01-suggest-item-time">
-                  {formatTime(conv.updated_at || conv.created_at)}
+                  {suggestion}
                 </span>
               </button>
             ))

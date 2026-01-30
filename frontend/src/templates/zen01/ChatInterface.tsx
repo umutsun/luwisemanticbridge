@@ -1197,9 +1197,6 @@ export default function ChatInterface() {
                 <ZenWelcome
                   chatbotSettings={chatbotSettings}
                   user={user}
-                  suggestions={memoizedSuggestions}
-                  onSuggestionClick={handleSuggestionClick}
-                  isLoading={isSuggestionsLoading}
                   recentConversations={conversations.slice(0, 12).map(c => ({ id: c.id, title: c.title || 'Adsız konuşma' }))}
                   onConversationClick={handleSelectConversation}
                 />
@@ -1258,9 +1255,9 @@ export default function ChatInterface() {
             <ZenSuggestPanel
               isOpen={isSuggestOpen}
               onClose={() => setIsSuggestOpen(false)}
-              conversations={conversations}
-              isLoading={isHistoryLoading}
-              onSelectConversation={handleSelectConversation}
+              suggestions={suggestedQuestions}
+              isLoading={isSuggestionsLoading}
+              onSelectSuggestion={handleSuggestionClick}
             />
           }
         />

@@ -164,9 +164,6 @@ export interface ZenRecentConversation {
 export interface ZenWelcomeProps {
   chatbotSettings: ZenChatbotSettings;
   user: ZenUserInfo | null;
-  suggestions: string[];
-  onSuggestionClick: (question: string) => void;
-  isLoading: boolean;
   // Recent conversations to show as cards
   recentConversations?: ZenRecentConversation[];
   onConversationClick?: (id: string) => void;
