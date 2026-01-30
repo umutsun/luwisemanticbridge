@@ -1065,11 +1065,10 @@
    History Panel - Conversation History
    ============================================ */
 .zen01-history-panel {
-  background: var(--zen-mid) !important;
-  backdrop-filter: blur(20px) !important;
+  background: #0d1f3c !important;
+  backdrop-filter: none !important;
   border-right: 1px solid var(--zen-glass-border) !important;
-  box-shadow: 4px 0 20px rgba(0, 0, 0, 0.3) !important;
-  z-index: 100 !important;
+  box-shadow: 4px 0 20px rgba(0, 0, 0, 0.5) !important;
 }
 
 .zen01-container.light .zen01-history-panel {
