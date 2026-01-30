@@ -203,6 +203,15 @@ export default function ChatInterface() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [settingsLoaded, chatbotSettings.enableSuggestions]);
 
+  // Fetch conversations when history panel opens
+  useEffect(() => {
+    if (isHistoryOpen) {
+      fetchConversations().catch(err => {
+        console.error('[ChatInterface] Failed to fetch conversations:', err);
+      });
+    }
+  }, [isHistoryOpen, fetchConversations]);
+
   // Load suggestions only after settings are loaded AND if enabled
   useEffect(() => {
     if (!settingsLoaded) return;
