@@ -83,6 +83,7 @@ export const ZenHistoryPanel: React.FC<ZenHistoryPanelProps> = ({
   onDeleteConversation,
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const panelRef = useRef<HTMLDivElement>(null);
   const searchRef = useRef<HTMLInputElement>(null);
 
@@ -127,19 +128,42 @@ export const ZenHistoryPanel: React.FC<ZenHistoryPanelProps> = ({
   // Close on Escape
   useEffect(() => {
     const handleEscape = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
+      if (e.key === 'Escape') {
+        if (confirmDeleteId) {
+          setConfirmDeleteId(null);
+        } else {
+          onClose();
+        }
+      }
     };
     if (isOpen) {
       document.addEventListener('keydown', handleEscape);
     }
     return () => document.removeEventListener('keydown', handleEscape);
-  }, [isOpen, onClose]);
+  }, [isOpen, onClose, confirmDeleteId]);
 
-  const handleDelete = (e: React.MouseEvent, id: string) => {
-    e.stopPropagation();
-    if (window.confirm('Bu konuşmayı silmek istediğinizden emin misiniz?')) {
-      onDeleteConversation(id);
+  // Reset confirm state when panel closes
+  useEffect(() => {
+    if (!isOpen) {
+      setConfirmDeleteId(null);
     }
+  }, [isOpen]);
+
+  const handleDeleteClick = (e: React.MouseEvent, id: string) => {
+    e.stopPropagation();
+    if (confirmDeleteId === id) {
+      // Second click - confirm delete
+      onDeleteConversation(id);
+      setConfirmDeleteId(null);
+    } else {
+      // First click - show confirm
+      setConfirmDeleteId(id);
+    }
+  };
+
+  const handleCancelDelete = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setConfirmDeleteId(null);
   };
 
   if (!isOpen) return null;
@@ -225,13 +249,30 @@ export const ZenHistoryPanel: React.FC<ZenHistoryPanelProps> = ({
                         {formatTime(conv.updated_at || conv.created_at)}
                       </span>
                     </div>
-                    <button
-                      onClick={(e) => handleDelete(e, conv.id)}
-                      className="zen01-history-item-delete"
-                      title="Sil"
-                    >
-                      <Trash2 className="h-3 w-3" />
-                    </button>
+                    {confirmDeleteId === conv.id ? (
+                      <div className="zen01-history-delete-confirm">
+                        <button
+                          onClick={(e) => handleDeleteClick(e, conv.id)}
+                          className="zen01-history-confirm-yes"
+                        >
+                          Sil
+                        </button>
+                        <button
+                          onClick={handleCancelDelete}
+                          className="zen01-history-confirm-no"
+                        >
+                          <X className="h-3 w-3" />
+                        </button>
+                      </div>
+                    ) : (
+                      <button
+                        onClick={(e) => handleDeleteClick(e, conv.id)}
+                        className="zen01-history-item-delete"
+                        title="Sil"
+                      >
+                        <Trash2 className="h-3 w-3" />
+                      </button>
+                    )}
                   </div>
                 ))}
               </div>
