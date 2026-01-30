@@ -1004,11 +1004,12 @@ Sadece soruları listele, her satırda bir soru. Numaralandırma veya açıklama
   }
 
   /**
-   * Simplified 2-tier suggestion generator
+   * 3-tier suggestion generator with LLM enhancement
    * Tier 1: Schema example questions (from active schema config)
    * Tier 2: User pool questions (quality user questions from chat history)
+   * Tier 3: LLM-generated questions (if pool is small or needs refresh)
    *
-   * No LLM fallback - keeps it simple and fast
+   * All questions are verified by LLM for quality and relevance
    */
   async generateSimpleSuggestions(schemaName: string, count: number = 4): Promise<string[]> {
     console.log(`[Suggestions] generateSimpleSuggestions called for schema: ${schemaName}, count: ${count}`);
@@ -1025,7 +1026,7 @@ Sadece soruları listele, her satırda bir soru. Numaralandırma veya açıklama
         return this.getRandomQuestions(pool, count);
       }
 
-      // Build question pool from 2 sources
+      // Build question pool from 3 sources
       const questionPool: string[] = [];
 
       // Tier 1: Schema example questions
@@ -1045,6 +1046,33 @@ Sadece soruları listele, her satırda bir soru. Numaralandırma veya açıklama
         );
         questionPool.push(...uniqueUserQuestions);
         console.log(`[Suggestions] Added ${uniqueUserQuestions.length} unique user pool questions`);
+      }
+
+      // Tier 3: LLM-generated questions (fill up to 25 total)
+      const targetTotal = 25;
+      if (questionPool.length < targetTotal) {
+        const llmCount = Math.min(15, targetTotal - questionPool.length);
+        console.log(`[Suggestions] Pool has ${questionPool.length} questions, generating ${llmCount} LLM questions...`);
+
+        try {
+          const dataSourceStats = await this.getDataSourceStats();
+          const llmQuestions = await this.generateLLMQuestionsEnriched({
+            schemaName,
+            dataSourceStats
+          }, llmCount);
+
+          // Filter out duplicates
+          const existingSet = new Set(questionPool.map(q => q.toLowerCase().trim()));
+          const uniqueLLMQuestions = llmQuestions.filter(
+            q => !existingSet.has(q.toLowerCase().trim())
+          );
+
+          questionPool.push(...uniqueLLMQuestions);
+          console.log(`[Suggestions] Added ${uniqueLLMQuestions.length} LLM-generated questions`);
+        } catch (llmError) {
+          console.error('[Suggestions] LLM generation failed:', llmError);
+          // Continue without LLM questions
+        }
       }
 
       // Remove exact duplicates
