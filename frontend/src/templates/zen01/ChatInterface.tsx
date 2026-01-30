@@ -1175,7 +1175,7 @@ export default function ChatInterface() {
         />
 
         {/* Main Chat Area */}
-        <div className="relative z-10 pt-20 pb-32 max-w-5xl mx-auto w-full px-4">
+        <div className="relative z-10 pt-20 pb-32 max-w-5xl mx-auto w-full px-4 overflow-hidden">
           <ScrollArea className="h-[calc(100vh-13rem)] zen01-scroll">
             <div className="space-y-6 py-4 pr-4">
               {/* Welcome Screen - only render after settings are loaded */}

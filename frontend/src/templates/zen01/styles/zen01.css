@@ -1065,14 +1065,17 @@
    History Panel - Conversation History
    ============================================ */
 .zen01-history-panel {
-  background: var(--zen-surface-hover) !important;
+  background: var(--zen-mid) !important;
   backdrop-filter: blur(20px) !important;
   border-right: 1px solid var(--zen-glass-border) !important;
+  box-shadow: 4px 0 20px rgba(0, 0, 0, 0.3) !important;
+  z-index: 100 !important;
 }
 
 .zen01-container.light .zen01-history-panel {
-  background: rgba(255, 255, 255, 0.95) !important;
+  background: #ffffff !important;
   border-right: 1px solid rgba(203, 213, 225, 0.6) !important;
+  box-shadow: 4px 0 20px rgba(0, 0, 0, 0.08) !important;
 }
 
 .zen01-history-header {
@@ -1235,4 +1238,15 @@
   100% {
     background-position: -200% 0;
   }
+}
+
+/* ============================================
+   Sheet Overlay - Ensure proper backdrop
+   Portal renders outside container, use global selector
+   ============================================ */
+[data-theme="zen01"] ~ [data-radix-dialog-overlay],
+body:has([data-theme="zen01"]) [data-radix-dialog-overlay] {
+  background: rgba(0, 0, 0, 0.7) !important;
+  z-index: 99 !important;
+  backdrop-filter: blur(4px) !important;
 }
