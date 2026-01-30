@@ -155,12 +155,21 @@ export interface ZenHeaderProps {
   onToggleTheme: () => void;
 }
 
+// Recent conversation for welcome screen
+export interface ZenRecentConversation {
+  id: string;
+  title: string;
+}
+
 export interface ZenWelcomeProps {
   chatbotSettings: ZenChatbotSettings;
   user: ZenUserInfo | null;
   suggestions: string[];
   onSuggestionClick: (question: string) => void;
   isLoading: boolean;
+  // Recent conversations to show as cards
+  recentConversations?: ZenRecentConversation[];
+  onConversationClick?: (id: string) => void;
 }
 
 // PDF Settings Interface

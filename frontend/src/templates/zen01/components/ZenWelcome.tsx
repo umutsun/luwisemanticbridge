@@ -1,13 +1,13 @@
 'use client';
 
 import React from 'react';
-import { Sparkles } from 'lucide-react';
+import { Sparkles, MessageSquare } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import type { ZenWelcomeProps } from '../types';
 
 /**
  * Zen01 Welcome Component
- * Displays greeting and suggestion pills when no messages exist
+ * Displays greeting, suggestion pills, and recent conversations when no messages exist
  */
 export const ZenWelcome: React.FC<ZenWelcomeProps> = ({
   chatbotSettings,
@@ -15,6 +15,8 @@ export const ZenWelcome: React.FC<ZenWelcomeProps> = ({
   suggestions,
   onSuggestionClick,
   isLoading,
+  recentConversations,
+  onConversationClick,
 }) => {
   const { t } = useTranslation();
   const displayName = user?.name?.split(' ')[0] || user?.email?.split('@')[0] || 'User';
@@ -53,6 +55,27 @@ export const ZenWelcome: React.FC<ZenWelcomeProps> = ({
               </button>
             ))
           )}
+        </div>
+      )}
+
+      {/* Recent Conversations */}
+      {recentConversations && recentConversations.length > 0 && onConversationClick && (
+        <div className="mt-10">
+          <h3 className="zen01-recent-title">
+            <MessageSquare className="h-4 w-4" />
+            Son Konuşmalar
+          </h3>
+          <div className="zen01-recent-grid">
+            {recentConversations.map((conv) => (
+              <button
+                key={conv.id}
+                onClick={() => onConversationClick(conv.id)}
+                className="zen01-recent-card"
+              >
+                <span className="zen01-recent-card-title">{conv.title}</span>
+              </button>
+            ))}
+          </div>
         </div>
       )}
     </div>

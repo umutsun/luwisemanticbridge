@@ -1174,6 +1174,8 @@ export default function ChatInterface() {
                   suggestions={memoizedSuggestions}
                   onSuggestionClick={handleSuggestionClick}
                   isLoading={isSuggestionsLoading}
+                  recentConversations={conversations.slice(0, 12).map(c => ({ id: c.id, title: c.title || 'Adsız konuşma' }))}
+                  onConversationClick={handleSelectConversation}
                 />
               )}
 

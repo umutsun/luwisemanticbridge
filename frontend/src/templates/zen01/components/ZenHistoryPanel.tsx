@@ -2,7 +2,7 @@
 
 import React, { useMemo, useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, Plus, MessageSquare, Trash2, Search } from 'lucide-react';
+import { X, Trash2, Search } from 'lucide-react';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import type { Conversation } from '../hooks/useConversationHistory';
 
@@ -199,20 +199,6 @@ export const ZenHistoryPanel: React.FC<ZenHistoryPanelProps> = ({
           )}
         </div>
 
-        {/* New Conversation */}
-        <button
-          onClick={() => {
-            onNewConversation();
-            onClose();
-          }}
-          className="zen01-history-new-btn"
-        >
-          <Plus className="h-4 w-4" />
-          <span>Yeni Konuşma</span>
-        </button>
-
-        {/* Divider */}
-        <div className="zen01-history-divider" />
 
         {/* Conversations List */}
         <ScrollArea className="zen01-history-list">
