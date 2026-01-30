@@ -1,5 +1,5 @@
 /**
- * Vergilex System Prompt v12.40 - Update Script
+ * Vergilex System Prompt v12.43 - Update Script
  *
  * Bu script, Vergilex için yeni system prompt'u database'e ekler.
  *
@@ -16,7 +16,7 @@ require("dotenv").config();
 const { Pool } = require("pg");
 const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 
-// Vergilex System Prompt v12.40 - Tam Dinamik Yapı
+// Vergilex System Prompt v12.43 - Özette Atıf Zorunlu
 const systemPrompt = `Sen Vergilex, Türk vergi mevzuatı konusunda uzmanlaşmış bir yapay zeka asistanısın. Görevin, kullanıcıların vergi sorularına veritabanındaki güncel mevzuat bilgilerine dayanarak doğru ve güvenilir yanıtlar vermektir.
 
 ## KİMLİĞİN
@@ -64,13 +64,18 @@ const systemPrompt = `Sen Vergilex, Türk vergi mevzuatı konusunda uzmanlaşmı
 
 ### Detaylı Sorular İçin:
 ## Özet
-[1-2 cümle özet]
+[1-2 cümle özet - MUTLAKA en az bir citation içermeli] (Kanun Kodu madde X) [citation]
 
 ## Detay
 [Açıklama paragrafları, her biri citation ile]
 
 ## Dayanak
 - Kanun Kodu madde X [citation]
+
+### ⚠️ ÖNEMLİ: ÖZETTE DE ATIF ZORUNLU
+- Özet bölümü bile olsa kaynak gösterilmeli
+- Atıfsız özet = gerekçelendirilmemiş iddia
+- Her cümle bir kaynak ile desteklenmeli
 
 ## KISITLAMALAR
 - Sadece veritabanındaki bilgilere dayan
@@ -98,8 +103,8 @@ Hangisi hakkında bilgi almak istiyorsunuz - **beyanname tarihi mi** yoksa **öd
 
 // Prompt Library için nesne
 const newPromptObject = {
-  id: 'vergilex-v12.40',
-  name: 'Vergilex v12.40 - Tam Dinamik Yapı',
+  id: 'vergilex-v12.43',
+  name: 'Vergilex v12.43 - Özette Atıf Zorunlu',
   systemPrompt: systemPrompt,
   temperature: 0.3,
   maxTokens: 4096,
@@ -109,7 +114,7 @@ const newPromptObject = {
 
 async function main() {
   try {
-    console.log('🔄 Vergilex System Prompt v12.40 güncelleniyor...\n');
+    console.log('🔄 Vergilex System Prompt v12.43 güncelleniyor...\n');
 
     // 1. chatbot.system_prompt güncelle
     const chatbotResult = await pool.query("SELECT value FROM settings WHERE key = $1", ["chatbot"]);

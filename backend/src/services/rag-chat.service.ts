@@ -4714,22 +4714,27 @@ Bu soru karmaşık bir vergisel senaryo içermektedir. Yanıtını AŞAĞIDAKİ 
         }
       }
 
-      // Step 3: Filter by similarity threshold, then apply min/max bounds
+      // Step 3: Filter by similarity threshold - STRICT mode (v12.43)
+      // NO LONGER force-fill with low-quality sources below threshold
+      // If we can't find enough quality sources, show fewer but better sources
       const sourcesAboveThreshold = sortedSources.filter(s => s._similarityScore >= sourceThreshold);
 
       let rankedSources: typeof sortedSources;
       if (sourcesAboveThreshold.length >= maxSourcesToShow) {
         // More than max passed threshold → take top max
         rankedSources = sourcesAboveThreshold.slice(0, maxSourcesToShow);
-      } else if (sourcesAboveThreshold.length >= minSourcesToShow) {
-        // Between min and max passed threshold → take all that passed
+      } else if (sourcesAboveThreshold.length > 0) {
+        // v12.43: Take only sources above threshold, don't force-fill with garbage
+        // Quality over quantity - irrelevant sources damage trust more than fewer sources
         rankedSources = sourcesAboveThreshold;
       } else {
-        // Less than min passed threshold → take top min (even below threshold)
-        rankedSources = sortedSources.slice(0, minSourcesToShow);
+        // No sources above threshold - take top 3 as fallback (minimal noise)
+        // This is rare and indicates a retrieval problem, not a display problem
+        rankedSources = sortedSources.slice(0, 3);
+        console.log(`⚠️ [v12.43] NO_QUALITY_SOURCES: All ${sortedSources.length} sources below threshold ${sourceThreshold}, using top 3 as fallback`);
       }
 
-      console.log(`📊 [SOURCES] Total=${formattedSources.length}, AboveThreshold(${(sourceThreshold * 100).toFixed(0)}%)=${sourcesAboveThreshold.length}, Showing=${rankedSources.length} (min=${minSourcesToShow}, max=${maxSourcesToShow})`);
+      console.log(`📊 [SOURCES] Total=${formattedSources.length}, AboveThreshold(${(sourceThreshold * 100).toFixed(0)}%)=${sourcesAboveThreshold.length}, Showing=${rankedSources.length} (quality-first, no force-fill)`);
 
       // ═══════════════════════════════════════════════════════════════
       // v12.42: SOURCE DIVERSIFICATION by similarity score tiers
