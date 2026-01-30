@@ -135,8 +135,11 @@ export const ZenHeader: React.FC<ZenHeaderProps> = ({
               <h1 className="text-lg font-semibold text-slate-800 dark:text-slate-100">
                 {chatbotSettings.title || 'Zen Assistant'}
               </h1>
-              <span className="text-[10px] font-medium px-1.5 py-0.5 rounded-md bg-cyan-500/10 dark:bg-cyan-500/20 text-cyan-700 dark:text-cyan-300 border border-cyan-500/20 dark:border-cyan-500/30">
-                v2026.01.21
+              <span
+                className="text-[10px] font-medium px-1.5 py-0.5 rounded-md bg-cyan-500/10 dark:bg-cyan-500/20 text-cyan-700 dark:text-cyan-300 border border-cyan-500/20 dark:border-cyan-500/30"
+                title={`Build: ${process.env.NEXT_PUBLIC_BUILD_TIMESTAMP || 'dev'}`}
+              >
+                v{process.env.NEXT_PUBLIC_BUILD_VERSION || '1.0.0'}
               </span>
             </div>
             {chatbotSettings.subtitle && (

@@ -1,3 +1,15 @@
+import { readFileSync } from 'fs';
+import { join, dirname } from 'path';
+import { fileURLToPath } from 'url';
+
+// Get package.json version
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const pkg = JSON.parse(readFileSync(join(__dirname, 'package.json'), 'utf-8'));
+
+// Generate build timestamp
+const buildDate = new Date();
+const buildTimestamp = `${buildDate.getFullYear()}.${String(buildDate.getMonth() + 1).padStart(2, '0')}.${String(buildDate.getDate()).padStart(2, '0')}.${String(buildDate.getHours()).padStart(2, '0')}${String(buildDate.getMinutes()).padStart(2, '0')}`;
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: false,
@@ -36,6 +48,8 @@ const nextConfig = {
   // Use ?? to only fallback when undefined/null, not empty string
   env: {
     NEXT_PUBLIC_API_URL: process.env.NEXT_PUBLIC_API_URL ?? '',
+    NEXT_PUBLIC_BUILD_VERSION: pkg.version,
+    NEXT_PUBLIC_BUILD_TIMESTAMP: buildTimestamp,
   },
 
   // Rewrite API requests to backend
