@@ -4732,24 +4732,25 @@ Bu soru karmaşık bir vergisel senaryo içermektedir. Yanıtını AŞAĞIDAKİ 
       console.log(`📊 [SOURCES] Total=${formattedSources.length}, AboveThreshold(${(sourceThreshold * 100).toFixed(0)}%)=${sourcesAboveThreshold.length}, Showing=${rankedSources.length} (min=${minSourcesToShow}, max=${maxSourcesToShow})`);
 
       // ═══════════════════════════════════════════════════════════════
-      // v12.41: SOURCE DIVERSIFICATION by similarity score tiers
+      // v12.42: SOURCE DIVERSIFICATION by similarity score tiers
       // Ensures variety in citations by picking from different score ranges
-      // Tier 1 (High): 0.7+ | Tier 2 (Medium): 0.5-0.7 | Tier 3 (Lower): 0.3-0.5
+      // Tier 1 (High): 0.4+ | Tier 2 (Medium): 0.25-0.4 | Tier 3 (Lower): 0.15-0.25
+      // Real-world RAG scores are typically 0.15-0.50, not 0.7+
       // This prevents all citations coming from similar-scored duplicate content
       // ═══════════════════════════════════════════════════════════════
       const diversifySources = (sources: typeof rankedSources, maxPerTier: number = 5): typeof rankedSources => {
         if (sources.length <= 5) return sources; // Too few to diversify
 
-        const tier1: typeof sources = []; // High similarity (0.7+)
-        const tier2: typeof sources = []; // Medium similarity (0.5-0.7)
-        const tier3: typeof sources = []; // Lower similarity (0.3-0.5)
-        const tier4: typeof sources = []; // Marginal (below 0.3)
+        const tier1: typeof sources = []; // High similarity (0.4+) - very relevant
+        const tier2: typeof sources = []; // Medium similarity (0.25-0.4) - relevant
+        const tier3: typeof sources = []; // Lower similarity (0.15-0.25) - possibly relevant
+        const tier4: typeof sources = []; // Marginal (below 0.15) - weak match
 
         for (const source of sources) {
           const score = source._similarityScore || 0;
-          if (score >= 0.7) tier1.push(source);
-          else if (score >= 0.5) tier2.push(source);
-          else if (score >= 0.3) tier3.push(source);
+          if (score >= 0.4) tier1.push(source);
+          else if (score >= 0.25) tier2.push(source);
+          else if (score >= 0.15) tier3.push(source);
           else tier4.push(source);
         }
 
