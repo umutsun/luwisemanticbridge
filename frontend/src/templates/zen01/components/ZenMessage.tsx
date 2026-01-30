@@ -386,8 +386,11 @@ export const ZenMessage: React.FC<ZenMessageProps> = ({
     if (isPlaying) {
       pause();
     } else {
+      // Use displayContent (translated if available, otherwise original)
+      const contentToRead = displayContent || message.content;
+
       // Extract plain text from markdown content
-      const plainText = message.content
+      const plainText = contentToRead
         .replace(/#{1,6}\s/g, '') // Remove headers
         .replace(/\*\*([^*]+)\*\*/g, '$1') // Remove bold
         .replace(/\*([^*]+)\*/g, '$1') // Remove italic
