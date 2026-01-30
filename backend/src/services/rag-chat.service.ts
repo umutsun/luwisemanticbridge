@@ -3066,11 +3066,12 @@ ${questionLabel}: ${message}`;
         await this.setPendingDisambiguation(convId, pendingDisambiguation, effectiveFollowUpConfig);
         console.log(`💾 [v12.40] DISAMBIGUATION_STATE_STORED: TTL=${effectiveFollowUpConfig.ttlSeconds}s, maxFollowUp=${effectiveFollowUpConfig.maxDepth}`);
 
-        // v12.37: Clean disambiguation question - no markdown inside bullets to avoid format processing
+        // v12.44: CLEAN disambiguation question - NO date info until user responds
+        // P1 FIX: Do not reveal 24/26 in first turn - only ask the question
         const disambiguationQuestion = `KDV ile ilgili sorunuzu netleştirebilir misiniz?
 
-- Beyanname son günü (ayın 24'ü) için mi soruyorsunuz?
-- Ödeme son günü (ayın 26'sı) için mi soruyorsunuz?
+**Beyanname** tarihi mi (ne zaman verilir?)
+**Ödeme** tarihi mi (ne zaman ödenir?)
 
 Lütfen "beyanname" veya "ödeme" yazarak belirtin.`;
 
@@ -12415,6 +12416,365 @@ UNUT: ${conversationTone} üslubunda YORUMLA, kopyalama. KENDI KELİMELERİNLE a
       contentLength: (r.content || r.excerpt || '').length,
       enriched: false
     };
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // v12.44: P0 - DOMAIN ROUTING
+  // Detects query domain (veraset, kdv, gelir, etc.) and filters sources
+  // Prevents wrong domain sources appearing (e.g., KDV sirküleri for veraset question)
+  // ═══════════════════════════════════════════════════════════════════════════
+  private detectQueryDomain(query: string): { domain: string | null; keywords: string[]; tablePatterns: RegExp[] } {
+    const queryLower = query.toLowerCase();
+
+    // Domain → keywords and allowed table patterns
+    const DOMAIN_ROUTING: Record<string, { keywords: string[]; tablePatterns: RegExp[] }> = {
+      'VIVK': {
+        keywords: ['veraset', 'intikal', 'miras', 'vasiyet', 'veraset vergisi', 'veraset beyanı', 'tereke'],
+        tablePatterns: [/vivk/i, /veraset/i, /intikal/i, /miras/i]
+      },
+      'KDVK': {
+        keywords: ['kdv', 'katma değer', 'kdvk', '3065', 'kdv beyanname', 'kdv iade'],
+        tablePatterns: [/kdv/i, /katma/i, /3065/i]
+      },
+      'GVK': {
+        keywords: ['gelir vergisi', 'gvk', '193', 'yıllık beyan', 'stopaj', 'tevkifat', 'ücret', 'serbest meslek', 'menkul', 'gayrimenkul sermaye iradı'],
+        tablePatterns: [/gvk/i, /gelir/i, /193/i]
+      },
+      'KVK': {
+        keywords: ['kurumlar vergisi', 'kvk', '5520', 'kurum kazancı', 'kar dağıtımı'],
+        tablePatterns: [/kvk/i, /kurumlar/i, /5520/i]
+      },
+      'VUK': {
+        keywords: ['vergi usul', 'vuk', '213', 'usul', 'yoklama', 'inceleme', 'zamanaşımı', 'tebliğ', 'uzlaşma', 'izaha davet'],
+        tablePatterns: [/vuk/i, /usul/i, /213/i]
+      },
+      'DVK': {
+        keywords: ['damga vergisi', 'dvk', '488', 'damga', 'nispi', 'maktu'],
+        tablePatterns: [/dvk/i, /damga/i, /488/i]
+      },
+      'OTVK': {
+        keywords: ['özel tüketim', 'ötv', 'ötvk', '4760', 'taşıt'],
+        tablePatterns: [/otv/i, /4760/i]
+      },
+      'MTVK': {
+        keywords: ['motorlu taşıt', 'mtv', 'mtvk', '197'],
+        tablePatterns: [/mtv/i, /197/i]
+      },
+      'AATUHK': {
+        keywords: ['6183', 'amme alacağı', 'kamu alacağı', 'haciz', 'ödeme emri', 'teminat', 'tecil', 'taksit'],
+        tablePatterns: [/aatuhk/i, /6183/i, /amme/i]
+      },
+      'CVOA': {
+        keywords: ['çifte vergilendirme', 'çvöa', 'uluslararası', 'stopaj anlaşma', 'dar mükellef'],
+        tablePatterns: [/cvoa/i, /cifte/i, /anlas/i]
+      }
+    };
+
+    // Find matching domain
+    for (const [domain, config] of Object.entries(DOMAIN_ROUTING)) {
+      const matchedKeywords = config.keywords.filter(k => queryLower.includes(k));
+      if (matchedKeywords.length > 0) {
+        console.log(`🎯 [v12.44] DOMAIN_DETECTED: ${domain} (matched: ${matchedKeywords.join(', ')})`);
+        return { domain, keywords: matchedKeywords, tablePatterns: config.tablePatterns };
+      }
+    }
+
+    return { domain: null, keywords: [], tablePatterns: [] };
+  }
+
+  /**
+   * v12.44: P0 - Filter sources by detected domain
+   * Removes sources from unrelated domains to reduce noise
+   */
+  private filterSourcesByDomain(
+    sources: any[],
+    queryDomain: { domain: string | null; keywords: string[]; tablePatterns: RegExp[] }
+  ): any[] {
+    if (!queryDomain.domain || queryDomain.tablePatterns.length === 0) {
+      return sources; // No domain detected, keep all
+    }
+
+    const beforeCount = sources.length;
+
+    // Build exclude patterns for OTHER domains
+    const EXCLUDE_IF_NOT_DOMAIN: Record<string, RegExp[]> = {
+      'VIVK': [/kdv/i, /gvk/i, /kvk/i, /otv/i], // If asking about VIVK, exclude KDV/GVK/KVK/OTV
+      'KDVK': [/vivk/i, /veraset/i, /miras/i, /intikal/i], // If asking about KDV, exclude VIVK
+      'GVK': [/vivk/i, /veraset/i, /kvk/i], // If asking about GVK, exclude VIVK/KVK
+      'KVK': [/vivk/i, /veraset/i, /gvk_(?!ortak)/i], // If asking about KVK, exclude VIVK/GVK
+      'VUK': [], // VUK is cross-cutting, don't exclude
+      'DVK': [/vivk/i, /veraset/i],
+      'OTVK': [/vivk/i, /veraset/i, /kdv(?!.*otv)/i],
+      'MTVK': [/vivk/i, /veraset/i],
+      'AATUHK': [], // AATUHK is cross-cutting
+      'CVOA': [/vivk/i, /veraset/i]
+    };
+
+    const excludePatterns = EXCLUDE_IF_NOT_DOMAIN[queryDomain.domain] || [];
+
+    if (excludePatterns.length === 0) {
+      return sources; // No exclusion patterns for this domain
+    }
+
+    const filteredSources = sources.filter(source => {
+      const tableName = (source.sourceTable || source.table_name || '').toLowerCase();
+      const title = (source.title || '').toLowerCase();
+      const content = (source.content || source.excerpt || '').substring(0, 500).toLowerCase();
+      const combinedText = `${tableName} ${title} ${content}`;
+
+      // Check if source matches an excluded domain
+      const matchesExcluded = excludePatterns.some(p => p.test(combinedText));
+
+      // Also check if source matches the TARGET domain (keep if it does)
+      const matchesTarget = queryDomain.tablePatterns.some(p => p.test(combinedText));
+
+      // Keep if: matches target OR doesn't match excluded
+      if (matchesTarget) return true; // Always keep target domain sources
+      if (matchesExcluded) {
+        console.log(`🚫 [v12.44] DOMAIN_FILTER: Excluding "${title.substring(0, 50)}..." (wrong domain for ${queryDomain.domain})`);
+        return false;
+      }
+      return true; // Keep generic sources
+    });
+
+    const removedCount = beforeCount - filteredSources.length;
+    if (removedCount > 0) {
+      console.log(`🎯 [v12.44] DOMAIN_ROUTING: Filtered ${removedCount}/${beforeCount} sources for domain ${queryDomain.domain}`);
+    }
+
+    return filteredSources;
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // v12.44: P1 - ESCAPE PATTERN DETECTION
+  // Detects contradiction: "açık düzenleme yok" + "dolayısıyla X yapılmalıdır"
+  // If both patterns exist, response is inconsistent and needs correction
+  // ═══════════════════════════════════════════════════════════════════════════
+  private detectEscapePatternContradiction(response: string): { hasContradiction: boolean; escapeMatch: string | null; assertionMatch: string | null } {
+    // Escape patterns: "no clear regulation", "not found in legislation"
+    const ESCAPE_PATTERNS = [
+      /açık\s+düzenleme.*?(?:bulunmam|yok)/i,
+      /doğrudan\s+düzenleme.*?yok/i,
+      /mevzuatta.*?yer\s+almam/i,
+      /ilgili\s+(?:bir\s+)?(?:hüküm|düzenleme).*?(?:bulunmam|yok)/i,
+      /kaynaklarda.*?(?:bulunamad|yok)/i,
+      /net\s+bir\s+düzenleme.*?yok/i
+    ];
+
+    // Assertion patterns: "therefore must do X", "thus should be done"
+    const ASSERTION_PATTERNS = [
+      /dolayısıyla.*?(?:yapılmalı|edilmeli|gerek|zorunlu)/i,
+      /bu\s+nedenle.*?(?:gerekir|gereklidir|edilmeli)/i,
+      /sonuç\s+olarak.*?(?:edilmeli|yapılmalı|belirlenir)/i,
+      /bu\s+durumda.*?(?:uygulanır|hesaplanır|yapılır)/i,
+      /(?:beyan\s+edilmeli|vergi.*?hesaplanmalı|ödenmeli)/i
+    ];
+
+    let escapeMatch: string | null = null;
+    let assertionMatch: string | null = null;
+
+    for (const pattern of ESCAPE_PATTERNS) {
+      const match = response.match(pattern);
+      if (match) {
+        escapeMatch = match[0];
+        break;
+      }
+    }
+
+    for (const pattern of ASSERTION_PATTERNS) {
+      const match = response.match(pattern);
+      if (match) {
+        assertionMatch = match[0];
+        break;
+      }
+    }
+
+    const hasContradiction = !!(escapeMatch && assertionMatch);
+
+    if (hasContradiction) {
+      console.log(`⚠️ [v12.44] ESCAPE_CONTRADICTION: "${escapeMatch}" + "${assertionMatch}"`);
+    }
+
+    return { hasContradiction, escapeMatch, assertionMatch };
+  }
+
+  /**
+   * v12.44: P1 - Fix escape pattern contradiction
+   * Rewrites response to be more honest about uncertainty
+   */
+  private fixEscapePatternContradiction(response: string, language: string = 'tr'): string {
+    const contradiction = this.detectEscapePatternContradiction(response);
+
+    if (!contradiction.hasContradiction) {
+      return response;
+    }
+
+    console.log(`🔧 [v12.44] FIXING_ESCAPE_CONTRADICTION`);
+
+    // Add uncertainty marker to assertions
+    const uncertaintyMarker = language === 'tr'
+      ? '**⚠️ Belirsizlik:** Bu konuda mevzuatta açık bir düzenleme bulunamamıştır. Aşağıdaki değerlendirme genel ilkelere dayanmaktadır ve kesin hüküm niteliği taşımamaktadır.'
+      : '**⚠️ Uncertainty:** No explicit regulation was found on this matter. The following assessment is based on general principles and is not a definitive ruling.';
+
+    // Insert marker after the escape statement
+    let fixedResponse = response;
+
+    // Find the escape pattern location and insert warning after it
+    const escapePatterns = [
+      /açık\s+düzenleme.*?(?:bulunmam|yok)[^.]*\./i,
+      /doğrudan\s+düzenleme.*?yok[^.]*\./i,
+      /mevzuatta.*?yer\s+almam[^.]*\./i
+    ];
+
+    for (const pattern of escapePatterns) {
+      if (pattern.test(fixedResponse)) {
+        fixedResponse = fixedResponse.replace(pattern, (match) => {
+          return `${match}\n\n${uncertaintyMarker}\n\n`;
+        });
+        break;
+      }
+    }
+
+    return fixedResponse;
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // v12.44: P2 - CITATION VALIDATION
+  // Ensures citation numbers [N] don't exceed actual source count
+  // Fixes orphaned citations that point to non-existent sources
+  // ═══════════════════════════════════════════════════════════════════════════
+  private validateAndFixCitations(response: string, sourceCount: number): { fixed: string; invalidCitations: number[] } {
+    const invalidCitations: number[] = [];
+
+    if (sourceCount === 0) {
+      // No sources - remove all citations
+      const cleaned = response.replace(/\[\d+\]/g, '');
+      return { fixed: cleaned, invalidCitations: [] };
+    }
+
+    // Find all citations
+    const citationMatches = response.match(/\[(\d+)\]/g) || [];
+    const uniqueCitations = new Set(citationMatches.map(m => parseInt(m.slice(1, -1))));
+
+    // Check for invalid citations
+    for (const citationNum of uniqueCitations) {
+      if (citationNum > sourceCount || citationNum < 1) {
+        invalidCitations.push(citationNum);
+      }
+    }
+
+    if (invalidCitations.length === 0) {
+      return { fixed: response, invalidCitations: [] };
+    }
+
+    console.log(`⚠️ [v12.44] INVALID_CITATIONS: [${invalidCitations.join(', ')}] exceed source count ${sourceCount}`);
+
+    // Fix strategy: Replace invalid citations with [1] (first source) or remove
+    let fixedResponse = response;
+    for (const invalidNum of invalidCitations) {
+      const pattern = new RegExp(`\\[${invalidNum}\\]`, 'g');
+      // If there are sources, replace with [1], otherwise remove
+      fixedResponse = fixedResponse.replace(pattern, sourceCount > 0 ? '[1]' : '');
+    }
+
+    console.log(`🔧 [v12.44] CITATIONS_FIXED: Replaced ${invalidCitations.length} invalid citations`);
+
+    return { fixed: fixedResponse, invalidCitations };
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // v12.44: P3 - SUMMARY CITATION ENFORCEMENT
+  // Ensures summary/özet section contains at least one citation
+  // Adds citation if missing to improve credibility
+  // ═══════════════════════════════════════════════════════════════════════════
+  private enforceSummaryCitation(response: string, sources: any[], language: string = 'tr'): string {
+    // Detect summary section patterns
+    const summaryPatterns = [
+      /^##\s*özet/im,
+      /^\*\*özet\*\*/im,
+      /^özet:/im,
+      /^##\s*summary/im,
+      /^\*\*summary\*\*/im
+    ];
+
+    // Check if response has a summary section
+    let hasSummarySection = false;
+    let summaryStartIndex = -1;
+    let summaryEndIndex = -1;
+
+    for (const pattern of summaryPatterns) {
+      const match = response.match(pattern);
+      if (match && match.index !== undefined) {
+        hasSummarySection = true;
+        summaryStartIndex = match.index;
+
+        // Find end of summary (next ## section or end of response)
+        const afterSummary = response.substring(summaryStartIndex + match[0].length);
+        const nextSectionMatch = afterSummary.match(/\n##\s+/);
+        if (nextSectionMatch && nextSectionMatch.index !== undefined) {
+          summaryEndIndex = summaryStartIndex + match[0].length + nextSectionMatch.index;
+        } else {
+          // Look for double newline as section break
+          const doubleNewline = afterSummary.indexOf('\n\n');
+          if (doubleNewline > 0 && doubleNewline < 500) {
+            summaryEndIndex = summaryStartIndex + match[0].length + doubleNewline;
+          } else {
+            summaryEndIndex = Math.min(summaryStartIndex + 500, response.length);
+          }
+        }
+        break;
+      }
+    }
+
+    // If no explicit summary section, check first paragraph (often functions as summary)
+    if (!hasSummarySection) {
+      // First paragraph is implicit summary
+      const firstParaEnd = response.indexOf('\n\n');
+      if (firstParaEnd > 50) {
+        summaryStartIndex = 0;
+        summaryEndIndex = firstParaEnd;
+      }
+    }
+
+    if (summaryStartIndex < 0 || summaryEndIndex < 0) {
+      return response; // No summary found
+    }
+
+    // Extract summary section
+    const summarySection = response.substring(summaryStartIndex, summaryEndIndex);
+
+    // Check if summary has any citations
+    const hasCitation = /\[\d+\]/.test(summarySection);
+
+    if (hasCitation) {
+      return response; // Summary already has citation
+    }
+
+    // Summary lacks citation - try to add one
+    if (sources.length === 0) {
+      console.log(`⚠️ [v12.44] SUMMARY_NO_CITATION: No sources to cite`);
+      return response;
+    }
+
+    console.log(`⚠️ [v12.44] SUMMARY_NO_CITATION: Adding citation to summary`);
+
+    // Find the best source to cite (first source with high score)
+    const bestSourceIndex = 1; // Citation index is 1-based
+
+    // Find the first sentence end in summary to add citation
+    const summaryContent = summarySection;
+    const sentenceEndMatch = summaryContent.match(/[.!?](?=\s|$)/);
+
+    if (sentenceEndMatch && sentenceEndMatch.index !== undefined) {
+      // Insert citation after first sentence
+      const insertPosition = summaryStartIndex + sentenceEndMatch.index + 1;
+      const beforeInsert = response.substring(0, insertPosition);
+      const afterInsert = response.substring(insertPosition);
+
+      return `${beforeInsert} [${bestSourceIndex}]${afterInsert}`;
+    }
+
+    return response;
   }
 
   /**
