@@ -212,15 +212,24 @@ export interface ZenMessageProps {
   onToggleTranslation?: () => void;
 }
 
+// Slash Command Submenu Item
+export interface SlashCommandSubmenuItem {
+  id: string;
+  label: string;
+  targetLanguage: string;
+}
+
 // Slash Command Types
 export interface SlashCommand {
   id: string;
-  trigger: string;       // '/en', '/tr', '/de', '/history'
-  label: string;         // 'English', 'Türkçe', 'Geçmiş'
-  description: string;   // 'Translate to English', 'Konuşma geçmişini göster'
-  icon: string;          // Flag emoji or icon
+  trigger: string;       // '/translate', '/history'
+  label: string;         // 'Çevir', 'Geçmiş'
+  description: string;   // 'Mesajı çevir', 'Konuşma geçmişini göster'
+  icon: string;          // Icon (empty string if none)
   category: 'translation' | 'navigation' | 'utility';
   targetLanguage?: string;
+  hasSubmenu?: boolean;
+  submenuItems?: SlashCommandSubmenuItem[];
 }
 
 // Message Translation State

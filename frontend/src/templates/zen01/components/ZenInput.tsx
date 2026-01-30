@@ -1,9 +1,9 @@
 'use client';
 
 import React, { useRef, useState, ChangeEvent } from 'react';
-import { Send, Paperclip, X, FileText, Mic, Square, Loader2 } from 'lucide-react';
+import { Send, Paperclip, X, FileText, Mic, Square, Loader2, Command } from 'lucide-react';
 import { useVoiceRecording } from '@/lib/hooks/use-voice-recording';
-import type { ZenInputProps, SlashCommand } from '../types';
+import type { ZenInputProps, SlashCommand, SlashCommandSubmenuItem } from '../types';
 import { SlashCommandAutocomplete } from './SlashCommandAutocomplete';
 import { SLASH_COMMANDS, filterCommands } from '../config/slashCommands';
 
@@ -110,15 +110,34 @@ export const ZenInput: React.FC<ZenInputProps> = ({
     }
   };
 
-  // Handle command selection
-  const handleCommandSelect = (command: SlashCommand) => {
+  // Handle command selection (with optional submenu item)
+  const handleCommandSelect = (command: SlashCommand, submenuItem?: SlashCommandSubmenuItem) => {
     setShowSlashAutocomplete(false);
     setSlashSearchText('');
     onChange(''); // Clear input
 
     if (onSlashCommand) {
-      onSlashCommand(command);
+      // If submenu item selected, create a modified command with targetLanguage
+      if (submenuItem) {
+        const modifiedCommand: SlashCommand = {
+          ...command,
+          targetLanguage: submenuItem.targetLanguage,
+          id: `${command.id}-${submenuItem.id}`
+        };
+        onSlashCommand(modifiedCommand);
+      } else {
+        onSlashCommand(command);
+      }
     }
+  };
+
+  // Open slash command menu via button
+  const handleSlashButtonClick = () => {
+    setShowSlashAutocomplete(true);
+    setSlashSearchText('');
+    setSelectedCommandIndex(0);
+    onChange('/');
+    textareaRef?.current?.focus();
   };
 
   const handleSend = () => {
@@ -233,6 +252,20 @@ export const ZenInput: React.FC<ZenInputProps> = ({
               <Paperclip className="h-5 w-5" />
             </button>
           )}
+
+          {/* Slash command button */}
+          <button
+            onClick={handleSlashButtonClick}
+            disabled={isLoading || isRecording}
+            className={`p-2 rounded-lg transition-colors ${
+              showSlashAutocomplete
+                ? 'text-cyan-600 dark:text-cyan-400 bg-cyan-100 dark:bg-cyan-500/20'
+                : 'text-slate-500 dark:text-slate-400 hover:text-cyan-600 dark:hover:text-cyan-400 hover:bg-cyan-100 dark:hover:bg-cyan-500/10'
+            } disabled:opacity-50`}
+            title="Komutlar"
+          >
+            <Command className="h-5 w-5" />
+          </button>
 
           {/* Mic button - only visible when voice input is enabled */}
           {voiceSettings?.enableVoiceInput && (

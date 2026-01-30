@@ -1011,6 +1011,34 @@
   color: var(--zen-cyan);
 }
 
+/* Slash Command Submenu */
+.zen01-slash-submenu {
+  background: rgba(0, 0, 0, 0.15);
+  overflow: hidden;
+}
+
+.zen01-container.light .zen01-slash-submenu {
+  background: rgba(0, 0, 0, 0.03);
+}
+
+.zen01-slash-submenu-item {
+  padding: 0.625rem 1rem 0.625rem 2.5rem;
+  font-size: 0.875rem;
+  color: var(--zen-text-primary);
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.zen01-slash-submenu-item:hover,
+.zen01-slash-submenu-item.selected {
+  background: rgba(6, 182, 212, 0.15);
+}
+
+.zen01-container.light .zen01-slash-submenu-item:hover,
+.zen01-container.light .zen01-slash-submenu-item.selected {
+  background: rgba(8, 145, 178, 0.1);
+}
+
 /* ============================================
    Translation Badge
    ============================================ */

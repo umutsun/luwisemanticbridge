@@ -6,33 +6,26 @@
 import type { SlashCommand } from '../types';
 
 export const SLASH_COMMANDS: SlashCommand[] = [
-  // Translation commands
+  // Translation command with submenu
   {
-    id: 'translate-en',
-    trigger: '/en',
-    label: 'English',
-    description: 'Translate to English',
-    icon: '🇬🇧',
+    id: 'translate',
+    trigger: '/translate',
+    label: 'Çevir',
+    description: 'Mesajı çevir',
+    icon: '',
     category: 'translation',
-    targetLanguage: 'en'
-  },
-  {
-    id: 'translate-tr',
-    trigger: '/tr',
-    label: 'Türkçe',
-    description: 'Türkçe\'ye çevir',
-    icon: '🇹🇷',
-    category: 'translation',
-    targetLanguage: 'tr'
-  },
-  {
-    id: 'translate-de',
-    trigger: '/de',
-    label: 'Deutsch',
-    description: 'Auf Deutsch übersetzen',
-    icon: '🇩🇪',
-    category: 'translation',
-    targetLanguage: 'de'
+    hasSubmenu: true,
+    submenuItems: [
+      { id: 'en', label: 'English', targetLanguage: 'en' },
+      { id: 'de', label: 'Deutsch', targetLanguage: 'de' },
+      { id: 'fr', label: 'Français', targetLanguage: 'fr' },
+      { id: 'es', label: 'Español', targetLanguage: 'es' },
+      { id: 'ar', label: 'العربية', targetLanguage: 'ar' },
+      { id: 'ru', label: 'Русский', targetLanguage: 'ru' },
+      { id: 'zh', label: '中文', targetLanguage: 'zh' },
+      { id: 'ja', label: '日本語', targetLanguage: 'ja' },
+      { id: 'ko', label: '한국어', targetLanguage: 'ko' },
+    ]
   },
   // Navigation commands
   {
@@ -40,7 +33,7 @@ export const SLASH_COMMANDS: SlashCommand[] = [
     trigger: '/history',
     label: 'Geçmiş',
     description: 'Konuşma geçmişini göster',
-    icon: '📜',
+    icon: '',
     category: 'navigation'
   },
   {
@@ -48,7 +41,7 @@ export const SLASH_COMMANDS: SlashCommand[] = [
     trigger: '/new',
     label: 'Yeni',
     description: 'Yeni konuşma başlat',
-    icon: '✨',
+    icon: '',
     category: 'navigation'
   }
 ];
@@ -63,7 +56,6 @@ export function filterCommands(searchText: string): SlashCommand[] {
   return SLASH_COMMANDS.filter(cmd =>
     cmd.trigger.toLowerCase().includes('/' + search) ||
     cmd.trigger.toLowerCase().slice(1).startsWith(search) ||
-    cmd.label.toLowerCase().includes(search) ||
-    cmd.targetLanguage?.toLowerCase().startsWith(search)
+    cmd.label.toLowerCase().includes(search)
   );
 }
