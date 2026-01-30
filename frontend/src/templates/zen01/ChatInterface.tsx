@@ -925,7 +925,7 @@ export default function ChatInterface() {
     [chatbotSettings.enableSourceQuestionGeneration, inputText, setInputText]
   );
 
-  // Handle slash commands (translation, navigation, etc.)
+  // Handle slash commands (translation, navigation, suggestion, etc.)
   const handleSlashCommand = async (command: SlashCommand) => {
     console.log('[SlashCommand] Triggered:', command);
 
@@ -936,6 +936,14 @@ export default function ChatInterface() {
         setIsHistoryOpen(true);
       } else if (command.id === 'new') {
         handleNewConversation();
+      }
+      return;
+    }
+
+    // Handle suggestion commands (conversation selection)
+    if (command.category === 'suggestion') {
+      if (command.conversationId) {
+        handleSelectConversation(command.conversationId);
       }
       return;
     }
@@ -1215,6 +1223,7 @@ export default function ChatInterface() {
           onPdfSelect={setPdfFile}
           voiceSettings={voiceSettings}
           onSlashCommand={handleSlashCommand}
+          recentConversations={conversations.slice(0, 12).map(c => ({ id: c.id, title: c.title || 'Adsız konuşma' }))}
           historyPanel={
             <ZenHistoryPanel
               isOpen={isHistoryOpen}

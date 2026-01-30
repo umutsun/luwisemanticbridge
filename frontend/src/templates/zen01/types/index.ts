@@ -201,6 +201,8 @@ export interface ZenInputProps {
   onSlashCommand?: (command: SlashCommand) => void;
   // History panel support (renders above input like slash commands)
   historyPanel?: React.ReactNode;
+  // Recent conversations for /suggest command
+  recentConversations?: ZenRecentConversation[];
 }
 
 export interface ZenMessageProps {
@@ -227,7 +229,8 @@ export interface ZenMessageProps {
 export interface SlashCommandSubmenuItem {
   id: string;
   label: string;
-  targetLanguage: string;
+  targetLanguage?: string;
+  conversationId?: string;  // For conversation selection commands
 }
 
 // Slash Command Types
@@ -237,9 +240,11 @@ export interface SlashCommand {
   label: string;         // 'Çevir', 'Geçmiş'
   description: string;   // 'Mesajı çevir', 'Konuşma geçmişini göster'
   icon: string;          // Icon (empty string if none)
-  category: 'translation' | 'navigation' | 'utility';
+  category: 'translation' | 'navigation' | 'utility' | 'suggestion';
   targetLanguage?: string;
+  conversationId?: string;  // For conversation selection
   hasSubmenu?: boolean;
+  hasDynamicSubmenu?: boolean;  // Submenu populated at runtime
   submenuItems?: SlashCommandSubmenuItem[];
 }
 

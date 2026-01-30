@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useRef, useState, ChangeEvent } from 'react';
+import React, { useRef, useState, useMemo, ChangeEvent } from 'react';
 import { Send, Paperclip, X, FileText, Mic, Square, Loader2, Command } from 'lucide-react';
 import { useVoiceRecording } from '@/lib/hooks/use-voice-recording';
 import type { ZenInputProps, SlashCommand, SlashCommandSubmenuItem } from '../types';
@@ -24,6 +24,7 @@ export const ZenInput: React.FC<ZenInputProps> = ({
   voiceSettings,
   onSlashCommand,
   historyPanel,
+  recentConversations,
 }) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -32,8 +33,33 @@ export const ZenInput: React.FC<ZenInputProps> = ({
   const [slashSearchText, setSlashSearchText] = useState('');
   const [selectedCommandIndex, setSelectedCommandIndex] = useState(0);
 
+  // Build commands with dynamic submenu for /suggest
+  const commandsWithDynamicSubmenu = useMemo(() => {
+    return SLASH_COMMANDS.map(cmd => {
+      if (cmd.hasDynamicSubmenu && cmd.id === 'suggest' && recentConversations) {
+        return {
+          ...cmd,
+          submenuItems: recentConversations.slice(0, 12).map(conv => ({
+            id: conv.id,
+            label: conv.title,
+            conversationId: conv.id
+          }))
+        };
+      }
+      return cmd;
+    });
+  }, [recentConversations]);
+
   // Get filtered commands based on search
-  const filteredCommands = filterCommands(slashSearchText);
+  const filteredCommands = useMemo(() => {
+    if (!slashSearchText) return commandsWithDynamicSubmenu;
+    const search = slashSearchText.toLowerCase();
+    return commandsWithDynamicSubmenu.filter(cmd =>
+      cmd.trigger.toLowerCase().includes('/' + search) ||
+      cmd.trigger.toLowerCase().slice(1).startsWith(search) ||
+      cmd.label.toLowerCase().includes(search)
+    );
+  }, [slashSearchText, commandsWithDynamicSubmenu]);
 
   // Voice recording hook
   const {
