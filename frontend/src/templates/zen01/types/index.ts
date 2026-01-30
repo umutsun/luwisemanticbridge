@@ -155,7 +155,7 @@ export interface ZenHeaderProps {
   onToggleTheme: () => void;
 }
 
-// Recent conversation for welcome screen
+// Recent conversation interface (used by history panel)
 export interface ZenRecentConversation {
   id: string;
   title: string;
@@ -164,9 +164,6 @@ export interface ZenRecentConversation {
 export interface ZenWelcomeProps {
   chatbotSettings: ZenChatbotSettings;
   user: ZenUserInfo | null;
-  // Recent conversations to show as cards
-  recentConversations?: ZenRecentConversation[];
-  onConversationClick?: (id: string) => void;
 }
 
 // PDF Settings Interface

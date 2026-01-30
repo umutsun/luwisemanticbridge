@@ -1206,8 +1206,6 @@ export default function ChatInterface() {
                 <ZenWelcome
                   chatbotSettings={chatbotSettings}
                   user={user}
-                  recentConversations={conversations.slice(0, 12).map(c => ({ id: c.id, title: c.title || 'Adsız konuşma' }))}
-                  onConversationClick={handleSelectConversation}
                 />
               )}
 
