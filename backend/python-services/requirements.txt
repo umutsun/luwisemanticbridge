@@ -75,6 +75,9 @@ httpx==0.27.2
 tenacity==8.2.3
 loguru==0.7.2
 
+# Reranking
+rerankers[api]==0.5.3
+
 # SSH & DevOps
 paramiko==3.4.0
 cryptography>=41.0.0

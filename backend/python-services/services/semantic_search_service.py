@@ -81,6 +81,12 @@ class RAGSettings:
     source_table_weights: Dict[str, float] = None  # Individual table weights
     max_excerpt_length: int = 1500  # Maximum excerpt length for citations
     excerpt_max_length: int = 1500  # Alias for compatibility
+    # Reranking settings
+    rerank_enabled: bool = False  # Enable Jina reranking
+    rerank_provider: str = "jina"  # jina, cohere, voyage
+    rerank_model: str = "jina-reranker-v2-base-multilingual"
+    rerank_top_n: int = 10  # Number of results after reranking
+    rerank_min_score: float = 0.0  # Minimum rerank score threshold
 
 
 @dataclass
@@ -576,6 +582,12 @@ class SemanticSearchService:
                 source_table_weights=source_table_weights,
                 max_excerpt_length=int(settings_dict.get('ragSettings.maxExcerptLength', 1500)),
                 excerpt_max_length=int(settings_dict.get('ragSettings.excerptMaxLength', 1500)),
+                # Reranking settings
+                rerank_enabled=settings_dict.get('ragSettings.rerankEnabled', 'false').lower() == 'true',
+                rerank_provider=settings_dict.get('ragSettings.rerankProvider', 'jina'),
+                rerank_model=settings_dict.get('ragSettings.rerankModel', 'jina-reranker-v2-base-multilingual'),
+                rerank_top_n=int(settings_dict.get('ragSettings.rerankTopN', 10)),
+                rerank_min_score=float(settings_dict.get('ragSettings.rerankMinScore', 0.0)),
             )
 
             # Update cache
@@ -3278,6 +3290,47 @@ class SemanticSearchService:
                 if not exact_match_found and len(scored_results) > 0:
                     logger.info(f"ℹ️ Exact article text not in DB, using {len(scored_results)} related sources (özelge, makale, etc.)")
 
+            # === RERANKING: Apply Jina reranker for improved relevance ===
+            reranked = False
+            if settings.rerank_enabled and len(scored_results) > 0:
+                try:
+                    from services.rerank_service import get_rerank_service
+
+                    rerank_start = datetime.now()
+                    rerank_service = get_rerank_service()
+
+                    # Prepare documents for reranking (use full_content for better accuracy)
+                    rerank_docs = []
+                    for r in scored_results:
+                        doc = r.copy()
+                        # Use full_content if available, otherwise content
+                        doc['content'] = r.get('full_content') or r.get('content', '')
+                        rerank_docs.append(doc)
+
+                    # Call reranker
+                    reranked_results = await rerank_service.rerank(
+                        query=query,
+                        documents=rerank_docs,
+                        content_field='content'
+                    )
+
+                    if reranked_results and len(reranked_results) > 0:
+                        # Update scored_results with reranked order and scores
+                        scored_results = reranked_results
+                        reranked = True
+                        timings["rerank_ms"] = (datetime.now() - rerank_start).total_seconds() * 1000
+                        logger.info(f"🔄 Jina rerank applied: {len(reranked_results)} results in {timings['rerank_ms']:.1f}ms")
+                    else:
+                        logger.warning("Reranker returned empty results, using original order")
+                        timings["rerank_ms"] = 0
+
+                except ImportError as e:
+                    logger.warning(f"Rerank service not available: {e}")
+                    timings["rerank_ms"] = 0
+                except Exception as e:
+                    logger.error(f"Reranking failed: {e}. Using original order.")
+                    timings["rerank_ms"] = 0
+
             final_results = scored_results[:limit]
 
             timings["scoring_ms"] = (datetime.now() - score_start).total_seconds() * 1000
@@ -3317,7 +3370,11 @@ class SemanticSearchService:
                     "documents_priority": settings.documents_priority,
                     "web_priority": settings.web_priority,
                     "table_weights_count": len(settings.source_table_weights or {}),
-                    "used_keyword_fallback": use_keyword_fallback
+                    "used_keyword_fallback": use_keyword_fallback,
+                    # Reranking settings
+                    "rerank_enabled": settings.rerank_enabled,
+                    "rerank_provider": settings.rerank_provider if settings.rerank_enabled else None,
+                    "rerank_applied": reranked if 'reranked' in dir() else False
                 },
                 # Article anchoring context for LLM
                 "article_query": {

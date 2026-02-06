@@ -200,6 +200,15 @@ const RealtimeSettings = () => {
                 onChange={(e) => updateSetting('deepseek.apiKey', e.target.value)}
               />
             </div>
+            <div className="space-y-2">
+              <Label>Jina AI API Key (Reranking)</Label>
+              <Input
+                type="password"
+                placeholder="jina_..."
+                value={config.jina?.apiKey || ''}
+                onChange={(e) => updateSetting('jina.apiKey', e.target.value)}
+              />
+            </div>
           </div>
         </CardContent>
       </Card>
@@ -252,6 +261,62 @@ const RealtimeSettings = () => {
             />
             <Label>Enable Hybrid Search</Label>
           </div>
+        </CardContent>
+      </Card>
+
+      {/* Reranking Settings */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            Reranking (Jina AI)
+            <span className="text-xs bg-blue-100 text-blue-800 px-2 py-0.5 rounded">Beta</span>
+          </CardTitle>
+          <CardDescription>
+            Cross-encoder based reranking for improved RAG quality.
+            Requires Jina AI API key configured above.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="flex items-center space-x-2">
+            <Switch
+              checked={config.ragSettings?.rerankEnabled || false}
+              onCheckedChange={(checked) => updateSetting('ragSettings.rerankEnabled', checked)}
+            />
+            <Label>Enable Reranking</Label>
+          </div>
+
+          {config.ragSettings?.rerankEnabled && (
+            <div className="space-y-4 pt-2">
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>Rerank Top N: {config.ragSettings?.rerankTopN || 10}</Label>
+                  <Slider
+                    value={[config.ragSettings?.rerankTopN || 10]}
+                    onValueChange={(value) => updateSetting('ragSettings.rerankTopN', value[0])}
+                    min={3}
+                    max={25}
+                    step={1}
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Number of results to return after reranking
+                  </p>
+                </div>
+                <div className="space-y-2">
+                  <Label>Min Rerank Score: {((config.ragSettings?.rerankMinScore || 0) * 100).toFixed(0)}%</Label>
+                  <Slider
+                    value={[config.ragSettings?.rerankMinScore || 0]}
+                    onValueChange={(value) => updateSetting('ragSettings.rerankMinScore', value[0])}
+                    min={0}
+                    max={0.5}
+                    step={0.05}
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Minimum rerank score threshold (0 = no filtering)
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
         </CardContent>
       </Card>
 

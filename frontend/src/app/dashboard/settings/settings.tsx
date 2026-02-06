@@ -2979,6 +2979,87 @@ function RAGSettings() {
               </div>
             </div>
 
+            {/* Reranking Settings */}
+            <div className="space-y-4 pt-4 border-t">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="text-lg font-medium flex items-center gap-2">
+                    Reranking (Jina AI)
+                    <Badge variant="outline" className="text-xs">Beta</Badge>
+                  </h3>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Cross-encoder tabanlı yeniden sıralama ile daha iyi sonuçlar
+                  </p>
+                </div>
+              </div>
+
+              <div className="space-y-4">
+                {/* Enable Reranking */}
+                <div className="flex items-center justify-between p-3 border rounded-lg bg-muted/30">
+                  <div className="flex-1">
+                    <Label>Reranking Aktif</Label>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Jina Reranker v2 ile sonuçları yeniden sırala (multilingual)
+                    </p>
+                  </div>
+                  <Switch
+                    checked={tempRAGConfig?.ragSettings?.rerankEnabled ?? false}
+                    onCheckedChange={(checked) => updateRAGSetting('rerankEnabled', checked)}
+                  />
+                </div>
+
+                {/* Rerank Top N */}
+                {(tempRAGConfig?.ragSettings?.rerankEnabled ?? false) && (
+                  <div className="space-y-2 p-3 border rounded-lg bg-muted/30">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <Label className="text-sm font-medium">Rerank Top N</Label>
+                        <p className="text-xs text-muted-foreground mt-0.5">
+                          Reranking sonrası döndürülecek sonuç sayısı
+                        </p>
+                      </div>
+                      <Badge variant="default">
+                        {tempRAGConfig?.ragSettings?.rerankTopN ?? 10}
+                      </Badge>
+                    </div>
+                    <Slider
+                      value={[tempRAGConfig?.ragSettings?.rerankTopN ?? 10]}
+                      max={25}
+                      min={3}
+                      step={1}
+                      className="mt-2"
+                      onValueChange={([value]) => updateRAGSetting('rerankTopN', value)}
+                    />
+                  </div>
+                )}
+
+                {/* Rerank Min Score */}
+                {(tempRAGConfig?.ragSettings?.rerankEnabled ?? false) && (
+                  <div className="space-y-2 p-3 border rounded-lg bg-muted/30">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <Label className="text-sm font-medium">Minimum Rerank Skoru</Label>
+                        <p className="text-xs text-muted-foreground mt-0.5">
+                          Bu skorun altındaki sonuçlar filtrelenir (0.0-1.0)
+                        </p>
+                      </div>
+                      <Badge variant="default">
+                        {(tempRAGConfig?.ragSettings?.rerankMinScore ?? 0).toFixed(2)}
+                      </Badge>
+                    </div>
+                    <Slider
+                      value={[(tempRAGConfig?.ragSettings?.rerankMinScore ?? 0) * 100]}
+                      max={100}
+                      min={0}
+                      step={5}
+                      className="mt-2"
+                      onValueChange={([value]) => updateRAGSetting('rerankMinScore', value / 100)}
+                    />
+                  </div>
+                )}
+              </div>
+            </div>
+
             <div className="space-y-4">
               <h3 className="text-lg font-medium">{t('settings.rag.dataSourcePriorities')}</h3>
               <div className="space-y-4">
