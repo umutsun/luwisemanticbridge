@@ -65,7 +65,20 @@ export interface SemanticSearchResult {
   keyword_boost: number;
   source_priority: number;
   final_score: number;
+  rerank_score?: number;  // Jina reranker score (0-1) when reranking is enabled
   metadata?: Record<string, any>;
+}
+
+// Article query detection result (for article anchoring)
+export interface ArticleQuery {
+  detected: boolean;
+  law_code?: string;          // e.g., "VUK", "GVK", "KDVK"
+  article_number?: string;    // e.g., "114", "40", "29"
+  intent?: string;            // e.g., "definition", "application"
+  exact_match_found?: boolean;
+  exact_match_count?: number;
+  wrong_match_count?: number;
+  filter_action?: string;     // e.g., "removed_wrong_articles", "kept_all"
 }
 
 export interface SemanticSearchResponse {
@@ -78,6 +91,7 @@ export interface SemanticSearchResponse {
     embedding_ms?: number;
     vector_search_ms?: number;
     scoring_ms?: number;
+    rerank_ms?: number;
     total_ms: number;
     cache?: string;
   };
@@ -85,7 +99,12 @@ export interface SemanticSearchResponse {
     similarity_threshold: number;
     hybrid_search: boolean;
     keyword_boost: boolean;
+    rerank_enabled?: boolean;
+    rerank_provider?: string;
+    rerank_applied?: boolean;
   };
+  // Article anchoring metadata - tells frontend if user asked about specific law article
+  article_query?: ArticleQuery;
   error?: string;
   _debug?: {
     penalty_config?: Record<string, any>;
@@ -105,6 +124,17 @@ export interface SemanticSearchResponse {
     }>;
     search_mode?: string;
     source_table_weights?: Record<string, number>;
+    article_anchoring?: {
+      enabled: boolean;
+      target_law?: string;
+      target_article?: string;
+      exact_match_found?: boolean;
+      results?: Array<{
+        id: string;
+        match_type: string;
+        reason: string;
+      }>;
+    };
   };
 }
 
@@ -614,7 +644,12 @@ export class PythonIntegrationService {
       const resultCount = response.data.results?.length || 0;
       const cached = response.data.cached ? ' (CACHED)' : '';
 
-      logger.info(`Python semantic search completed: ${resultCount} results in ${elapsedMs}ms${cached}`);
+      // Log rerank info if available
+      const rerankApplied = response.data.settings?.rerank_applied;
+      const rerankMs = response.data.timings?.rerank_ms;
+      const rerankInfo = rerankApplied ? ` [RERANKED in ${rerankMs?.toFixed(0) || 0}ms]` : '';
+
+      logger.info(`Python semantic search completed: ${resultCount} results in ${elapsedMs}ms${cached}${rerankInfo}`);
 
       return response.data;
 
