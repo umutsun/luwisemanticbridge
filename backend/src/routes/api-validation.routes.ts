@@ -51,6 +51,11 @@ const MODEL_PRICING: Record<string, Record<string, { input: number; output: numb
     'embed-english-v3.0': { input: 0.10, output: 0 },
     'embed-multilingual-light-v3.0': { input: 0.10, output: 0 },
     'embed-english-light-v3.0': { input: 0.10, output: 0 },
+  },
+  jina: {
+    'jina-reranker-v2-base-multilingual': { input: 0.02, output: 0 },
+    'jina-reranker-v1-base-en': { input: 0.02, output: 0 },
+    'jina-colbert-v2': { input: 0.02, output: 0 },
   }
 };
 
@@ -710,6 +715,68 @@ router.post('/test/:provider', async (req: Request, res: Response) => {
         }
         break;
 
+      case 'jina':
+        try {
+          console.log(`Testing Jina AI with API key: ${apiKey?.substring(0, 10)}...`);
+
+          // Jina Reranker API validation
+          const jinaResponse = await fetch('https://api.jina.ai/v1/rerank', {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${apiKey}`,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              model: model || 'jina-reranker-v2-base-multilingual',
+              query: 'Test query',
+              documents: ['Test document 1', 'Test document 2'],
+              top_n: 2
+            })
+          });
+
+          const responseTime = Date.now() - startTime;
+
+          if (jinaResponse.ok) {
+            const data = await jinaResponse.json();
+            testResult = {
+              success: true,
+              model: model || 'jina-reranker-v2-base-multilingual',
+              responseTime,
+              usage: {
+                inputTokens: data.usage?.total_tokens || 10,
+                outputTokens: 0,
+                totalTokens: data.usage?.total_tokens || 10
+              },
+              message: 'Jina Reranker API connection successful'
+            };
+          } else {
+            const errorData = await jinaResponse.json().catch(() => ({}));
+            let errorMessage = 'Jina AI API validation failed';
+
+            if (jinaResponse.status === 401) {
+              errorMessage = 'Invalid Jina API key. Get your key from https://jina.ai/';
+            } else if (jinaResponse.status === 429) {
+              errorMessage = 'Jina API rate limit exceeded.';
+            } else if (jinaResponse.status === 402) {
+              errorMessage = 'Jina API quota exhausted. Check your plan at https://jina.ai/';
+            } else if (errorData.detail) {
+              errorMessage = errorData.detail;
+            } else if (errorData.message) {
+              errorMessage = errorData.message;
+            }
+
+            throw new Error(errorMessage);
+          }
+        } catch (error: any) {
+          console.error('Jina AI API validation error:', error);
+          testResult = {
+            success: false,
+            error: error.message || 'Jina AI API validation failed',
+            type: 'jina_api_error'
+          };
+        }
+        break;
+
       default:
         return res.status(400).json({
           success: false,
@@ -810,7 +877,8 @@ router.get('/models/:provider', async (req: Request, res: Response) => {
       huggingface: ['sentence-transformers/all-MiniLM-L6-v2', 'distilbert-base-uncased', 'bert-base-uncased'],
       openrouter: ['openai/gpt-4o', 'openai/gpt-4o-mini', 'openai/gpt-4-turbo', 'anthropic/claude-3.5-sonnet', 'meta-llama/llama-3.1-8b-instruct', 'google/gemini-pro-1.5'],
       voyage: ['voyage-3', 'voyage-3-lite', 'voyage-code-3', 'voyage-finance-2', 'voyage-law-2'],
-      cohere: ['embed-multilingual-v3.0', 'embed-english-v3.0', 'embed-multilingual-light-v3.0', 'embed-english-light-v3.0']
+      cohere: ['embed-multilingual-v3.0', 'embed-english-v3.0', 'embed-multilingual-light-v3.0', 'embed-english-light-v3.0'],
+      jina: ['jina-reranker-v2-base-multilingual', 'jina-reranker-v1-base-en', 'jina-colbert-v2']
     };
 
     const providerModels = models[provider as keyof typeof models] || [];

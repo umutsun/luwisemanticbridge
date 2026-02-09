@@ -264,6 +264,11 @@ function LLMSettings() {
           apiKey: data?.openrouter?.apiKey || null,
           model: data?.openrouter?.model || 'openai/gpt-4o-mini'
         },
+        jina: {
+          ...data?.jina,
+          apiKey: data?.jina?.apiKey || null,
+          model: data?.jina?.model || 'jina-reranker-v2-base-multilingual'
+        },
         // Load llmSettings from database
         llmSettings: data?.llmSettings || {}
       };
@@ -1184,6 +1189,7 @@ function LLMSettings() {
       huggingface: { key: tempConfig?.huggingface?.apiKey || llmConfig?.huggingface?.apiKey, name: 'HuggingFace' },
       openrouter: { key: tempConfig?.openrouter?.apiKey || llmConfig?.openrouter?.apiKey, name: 'OpenRouter' },
       deepl: { key: tempConfig?.deepl?.apiKey || translationConfig?.deepl?.apiKey, name: 'DeepL' },
+      jina: { key: tempConfig?.jina?.apiKey || llmConfig?.jina?.apiKey, name: 'Jina AI' },
     }).filter(([provider]) => isProviderValidated(provider));
 
     debug.log('🔍 [VALIDATED PROVIDERS]', providers.map(([p]) => p));
@@ -1220,6 +1226,7 @@ function LLMSettings() {
                 huggingface: { key: tempConfig?.huggingface?.apiKey ?? llmConfig?.huggingface?.apiKey, name: 'HuggingFace', type: 'Embedding' },
                 openrouter: { key: tempConfig?.openrouter?.apiKey ?? llmConfig?.openrouter?.apiKey, name: 'OpenRouter', type: 'LLM + Embedding' },
                 deepl: { key: tempConfig?.deepl?.apiKey ?? translationConfig?.deepl?.apiKey, name: 'DeepL', type: 'Translation' },
+                jina: { key: tempConfig?.jina?.apiKey ?? llmConfig?.jina?.apiKey, name: 'Jina AI', type: 'Reranking' },
               }).map(([provider, data]) => {
                 const providerStatus = getProviderStatus(provider);
                 const isValidated = isProviderValidated(provider);
