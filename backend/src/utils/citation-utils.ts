@@ -15,6 +15,8 @@ export interface CitationSource {
   source_table?: string;
   similarity_score?: number;
   rerank_score?: number;
+  table_weight?: number;       // v12.45: Table priority weight from settings
+  _hierarchyWeight?: number;   // v12.45: Authority level from schema
   [key: string]: any;
 }
 
@@ -87,10 +89,12 @@ export function reorderCitations(
   const usageCount = countCitationUsage(response);
 
   // Build usage data for each source (0-indexed)
+  // v12.45: Include priority info for secondary sorting
   const sourceUsage = sources.map((source, index) => ({
     originalIndex: index,
     citationNum: index + 1,  // 1-indexed citation number
     count: usageCount.get(index + 1) || 0,
+    priority: source.table_weight ?? source._hierarchyWeight ?? 0.5,  // v12.45: Priority weight
     source
   }));
 
@@ -103,11 +107,14 @@ export function reorderCitations(
   }
 
   // Sort by usage frequency if requested (highest first)
+  // v12.45: Added priority as secondary criterion when usage is equal
   if (sortByUsage && processedSources.some(s => s.count > 0)) {
     processedSources.sort((a, b) => {
       // Primary: usage count (descending)
       if (b.count !== a.count) return b.count - a.count;
-      // Secondary: original order (ascending) for unused or equal usage
+      // Secondary: priority (descending) - higher priority sources first
+      if (b.priority !== a.priority) return b.priority - a.priority;
+      // Tertiary: original order (ascending) for unused or equal usage/priority
       return a.originalIndex - b.originalIndex;
     });
   }
@@ -161,7 +168,9 @@ export function reorderCitations(
     reorderMap
   };
 
-  console.log(`📑 Citation reorder: ${stats.totalCitations} total → ${newSources.length} kept (${stats.removedCitations} removed, ${stats.usedCitations} cited)`);
+  // v12.45: Count high-priority sources for logging
+  const highPriorityCited = processedSources.filter(s => s.count > 0 && s.priority >= 1.0).length;
+  console.log(`📑 Citation reorder: ${stats.totalCitations} total → ${newSources.length} kept (${stats.removedCitations} removed, ${stats.usedCitations} cited, ${highPriorityCited} high-priority)`);
 
   return {
     response: newResponse,

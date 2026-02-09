@@ -2769,11 +2769,14 @@ ${questionLabel}: ${message}`;
       // Now includes schema metadata for richer LLM context
       // 🔧 FIX: Limit context length to prevent model hallucination with small models
       // 📝 NOTE: maxExcerptLength increased from 250 to 600 for better source detail extraction
+      // 🎯 v12.45: Add source priority indicators for LLM citation guidance
       const maxContextLength = parseInt(settingsMap.get('ragSettings.maxContextLength') || '8000');
       const maxExcerptLength = parseInt(settingsMap.get('ragSettings.maxExcerptLength') || '600');
+      const enablePriorityHints = settingsMap.get('ragSettings.enablePriorityHints') !== 'false'; // Default: true
 
       let contextParts: string[] = [];
       let currentContextLength = 0;
+      let highPrioritySources: number[] = []; // Track sources with high authority
 
       for (let idx = 0; idx < Math.min(initialDisplayCount, searchResults.length); idx++) {
         const r = searchResults[idx];
@@ -2790,6 +2793,17 @@ ${questionLabel}: ${message}`;
           content = `Bu kaynak "${title}" başlıklı bir belgedir.`;
         }
 
+        // 🎯 v12.45: Determine source priority from table weight or authority level
+        // High priority sources (table_weight >= 1.0 or _hierarchyWeight >= 80) get ⭐ indicator
+        const tableWeight = r.table_weight || r._tableWeight || 0.5;
+        const hierarchyWeight = r._hierarchyWeight || 0;
+        const isHighPriority = tableWeight >= 1.0 || hierarchyWeight >= 80;
+        const priorityIndicator = enablePriorityHints && isHighPriority ? ' ⭐' : '';
+
+        if (isHighPriority) {
+          highPrioritySources.push(idx + 1);
+        }
+
         // Add schema metadata for richer context (tarih, kurum, makam, konu, kategori, yil)
         let metadataLine = '';
         if (r.metadata) {
@@ -2802,7 +2816,7 @@ ${questionLabel}: ${message}`;
           }
         }
 
-        const part = `${idx + 1}. ${title}${metadataLine}\n${content}\n`;
+        const part = `${idx + 1}.${priorityIndicator} ${title}${metadataLine}\n${content}\n`;
 
         // 🔧 Stop adding context if we've exceeded max length
         if (currentContextLength + part.length > maxContextLength) {
@@ -2814,7 +2828,15 @@ ${questionLabel}: ${message}`;
         currentContextLength += part.length;
       }
 
-      const enhancedContext = contextParts.join('\n');
+      // 🎯 v12.45: Add priority hint header when high-priority sources exist
+      let priorityHint = '';
+      if (enablePriorityHints && highPrioritySources.length > 0) {
+        const priorityList = highPrioritySources.slice(0, 5).map(n => `[${n}]`).join(', ');
+        priorityHint = `[ÖNCELİKLİ KAYNAKLAR: ${priorityList} - Bu kaynaklar daha yüksek otorite seviyesine sahiptir, mümkünse bunlara öncelik ver.]\n\n`;
+        console.log(`🎯 Priority hint: ${highPrioritySources.length} high-priority sources marked`);
+      }
+
+      const enhancedContext = priorityHint + contextParts.join('\n');
       console.log(`📊 Context built: ${contextParts.length} sources, ${enhancedContext.length} chars (max: ${maxContextLength})`);
 
       // Check confidence levels based on similarity scores
@@ -4628,7 +4650,8 @@ Bu soru karmaşık bir vergisel senaryo içermektedir. Yanıtını AŞAĞIDAKİ 
           _hierarchyWeight: hierarchyWeight,
           _similarityScore: similarityScore,
           _combinedScore: combinedScore,
-          _originalIndex: originalIndex + 1  // 1-indexed (matches LLM citation [1], [2], etc.)
+          _originalIndex: originalIndex + 1,  // 1-indexed (matches LLM citation [1], [2], etc.)
+          table_weight: hierarchyWeight / 100  // v12.45: Normalized 0-1 for citation-utils
         };
       });
 
