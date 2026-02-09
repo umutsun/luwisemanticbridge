@@ -2392,11 +2392,16 @@ ${questionLabel}: ${message}`;
 
       // v12.40: Enhance search query with schema's searchContext
       // This provides domain-specific context to improve semantic search relevance
+      // v12.47: Skip context prepend for specific queries (rate questions, article questions)
+      // to prevent polluting the search with broad context
       let enhancedSearchQuery = searchQuery;
-      if (domainConfig.searchContext) {
+      const isSpecificQuery = this.isSpecificQuery(searchQuery);
+      if (domainConfig.searchContext && !isSpecificQuery) {
         // Prepend search context to query for better embedding match
         enhancedSearchQuery = `${domainConfig.searchContext} ${searchQuery}`;
         console.log(`🔍 [v12.40] SEARCH_CONTEXT: Enhanced query with schema context`);
+      } else if (isSpecificQuery) {
+        console.log(`🎯 [v12.47] SPECIFIC_QUERY: Skipping context prepend for focused search`);
       }
 
       // ⏱️ Semantic search timing
@@ -6193,6 +6198,51 @@ Bu soru karmaşık bir vergisel senaryo içermektedir. Yanıtını AŞAĞIDAKİ 
     }
 
     return null;
+  }
+
+  /**
+   * v12.47: Detect specific queries that should NOT have searchContext prepended
+   * This prevents broad context from polluting focused searches for:
+   * - Rate questions: "kurumlar vergisi oranı kaçtır", "KDV oranı"
+   * - Article questions: "VUK 114", "madde 32/C"
+   * - Law code mentions: specific law references
+   */
+  private isSpecificQuery(query: string): boolean {
+    const queryLower = query.toLowerCase();
+
+    // 1. Rate questions - asking about percentages/rates
+    const ratePatterns = [
+      /oran[ıi]\s*(kaç|ne\s*kadar|yüzde)/i,  // "oranı kaç", "oranı ne kadar"
+      /yüzde\s*kaç/i,                         // "yüzde kaç"
+      /%\s*\d+/,                              // "%25"
+      /\d+\s*%/,                              // "25%"
+      /ne\s*kadar\s*(vergi|oran)/i,           // "ne kadar vergi"
+      /vergi\s*oran[ıi]/i,                    // "vergi oranı"
+    ];
+
+    if (ratePatterns.some(pattern => pattern.test(query))) {
+      console.log(`🎯 [v12.47] SPECIFIC_QUERY: Rate question detected`);
+      return true;
+    }
+
+    // 2. Article questions - specific law article references
+    const articlePattern = /\b(VUK|GVK|KVK|KDVK|ÖTVK|MTV|DVK|HMK|SGK|İYUK|AATUHK)\s*(?:madde\s*)?\.?\s*(\d+)/i;
+    const maddePattern = /madde\s*\d+/i;
+    const articleSlashPattern = /\d+\/[A-Z]/i;  // "32/C", "40/A"
+
+    if (articlePattern.test(query) || maddePattern.test(query) || articleSlashPattern.test(query)) {
+      console.log(`🎯 [v12.47] SPECIFIC_QUERY: Article reference detected`);
+      return true;
+    }
+
+    // 3. Specific tax type + year combination
+    const taxYearPattern = /(kurumlar|gelir|kdv|ötv)\s*vergisi?.*\d{4}/i;
+    if (taxYearPattern.test(query)) {
+      console.log(`🎯 [v12.47] SPECIFIC_QUERY: Tax + year combination detected`);
+      return true;
+    }
+
+    return false;
   }
 
   /**
