@@ -135,7 +135,8 @@ router.get('/', cacheMiddleware, async (req: Request, res: Response) => {
              WHERE key LIKE 'openai.%' OR key LIKE 'google.%' OR key LIKE 'anthropic.%'
                 OR key LIKE 'deepseek.%' OR key LIKE 'llmSettings.%'
                 OR key LIKE 'ollama.%' OR key LIKE 'huggingface.%' OR key LIKE 'openrouter.%'
-                OR key LIKE 'voyage.%' OR key LIKE 'cohere.%' OR key LIKE 'apiStatus.%' OR key LIKE 'llmStatus.%'
+                OR key LIKE 'voyage.%' OR key LIKE 'cohere.%' OR key LIKE 'jina.%'
+                OR key LIKE 'apiStatus.%' OR key LIKE 'llmStatus.%'
                 OR key LIKE 'ocrSettings.%' OR key LIKE 'ocrProvider%'`,
 
       embeddings: `SELECT key, value FROM settings
@@ -523,7 +524,8 @@ router.get('/category/:categoryName', cacheMiddleware, async (req: Request, res:
              WHERE key LIKE 'openai.%' OR key LIKE 'google.%' OR key LIKE 'anthropic.%'
                 OR key LIKE 'deepseek.%' OR key LIKE 'llmSettings.%'
                 OR key LIKE 'ollama.%' OR key LIKE 'huggingface.%' OR key LIKE 'openrouter.%'
-                OR key LIKE 'voyage.%' OR key LIKE 'cohere.%' OR key LIKE 'apiStatus.%' OR key LIKE 'llmStatus.%'
+                OR key LIKE 'voyage.%' OR key LIKE 'cohere.%' OR key LIKE 'jina.%'
+                OR key LIKE 'apiStatus.%' OR key LIKE 'llmStatus.%'
                 OR key LIKE 'ocrSettings.%' OR key LIKE 'ocrProvider%'`,
 
       embeddings: `SELECT key, value FROM settings
