@@ -9408,8 +9408,14 @@ Please verify the article number or check official sources.`;
       'DAHA', 'ANCAK', 'AMA', 'FAKAT', 'ÇÜNKÜ', 'EĞER', 'GİBİ', 'GÖRE',
       'HAKKINDA', 'KARŞI', 'SONRA', 'ÖNCE', 'SIRASINDA', 'DOLAYI',
       'DAHİL', 'HARİÇ', 'AYRICA', 'BU', 'ŞU', 'O', 'HER', 'BİR',
-      'KANUN', 'KANUNU', 'MADDE', 'MADDESİ', 'SAYILI', 'TARİHLİ',
-      'GELİR', 'VERGİ', 'VERGİSİ', 'ÖDEME', 'ÖDEMESİ', 'BEYAN', 'BEYANI'
+      'KANUN', 'KANUNU', 'KANUNLARDA', 'MADDE', 'MADDESİ', 'SAYILI', 'TARİHLİ',
+      'GELİR', 'VERGİ', 'VERGİSİ', 'ÖDEME', 'ÖDEMESİ', 'BEYAN', 'BEYANI',
+      'AMACI', 'AMACIYLA', 'DAİR', 'İLİŞKİN', 'BAZI', 'DEĞİŞİKLİK',
+      'YAPILMASI', 'YAPILMASINA', 'ORTAMININ', 'ORTAMIN',
+      'YATIRIM', 'İYİLEŞTİRİLMESİ', 'KATMA', 'DEĞER', 'KURUMLAR', 'GELİR',
+      'USUL', 'HARÇLAR', 'DAMGA', 'EMLAK', 'MOTORLU', 'TAŞITLAR',
+      'HAKKINDA', 'HÜKÜMLER', 'GENEL', 'ÖZEL', 'GEÇİCİ',
+      'KABUL', 'TARİHİ', 'NUMARASI', 'YAYIMLANDIĞI', 'RESMİ', 'GAZETE', 'SAYI'
     ];
 
     // Add space before particles when preceded by letters
@@ -9438,13 +9444,29 @@ Please verify the article number or check official sources.`;
       /(LARI|LERİ)([A-ZÇĞİÖŞÜ]{3,})/g,   // -LARI, -LERİ before uppercase
       /(MASI|MESİ)([A-ZÇĞİÖŞÜ]{3,})/g,   // -MASI, -MESİ before uppercase
       /(ININ|İNİN|UNUN|ÜNÜN)([A-ZÇĞİÖŞÜ]{2,})/g, // Genitive before uppercase
+      /(NIN|NİN|NUN|NÜN)([A-ZÇĞİÖŞÜ]{3,})/g, // Genitive -NIN before uppercase
+      /(YLA|YLE)([A-ZÇĞİÖŞÜ]{3,})/g,     // -YLA, -YLE before uppercase
+      /(INA|İNE)([A-ZÇĞİÖŞÜ]{3,})/g,     // -INA, -İNE dative before uppercase
     ];
 
     for (const pattern of suffixPatterns) {
       result = result.replace(pattern, '$1 $2');
     }
 
-    // 6. Clean up multiple spaces
+    // 6. Aggressive split for remaining long uppercase sequences (>25 chars without space)
+    // This catches cases missed by particle/suffix matching
+    result = result.replace(/[A-ZÇĞİÖŞÜ]{25,}/g, (match) => {
+      // Try to split on common Turkish suffix boundaries within the match
+      let split = match
+        .replace(/(MESİ|MASI|LARI|LERİ|ININ|İNİN|UNUN|ÜNÜN)()/g, '$1 ')
+        .replace(/(NIN|NİN|NUN|NÜN)([A-ZÇĞİÖŞÜ])/g, '$1 $2')
+        .replace(/(YLA|YLE)([A-ZÇĞİÖŞÜ])/g, '$1 $2')
+        .replace(/(INA|İNE)([A-ZÇĞİÖŞÜ])/g, '$1 $2')
+        .replace(/(DA|DE)([A-ZÇĞİÖŞÜ]{3,})/g, '$1 $2');
+      return split;
+    });
+
+    // 7. Clean up multiple spaces
     result = result.replace(/\s{2,}/g, ' ').trim();
 
     return result;
@@ -9570,9 +9592,24 @@ DÜZELTILMIŞ METİN:`;
       // Add space before "hk." (konuhk. -> konu hk.)
       .replace(/([a-zçğıöşü])hk\./gi, '$1 hk.')
       // Add space between date and next field (13/09/2012SAYI -> 13/09/2012 SAYI)
-      .replace(/(\d{2}\/\d{2}\/\d{4})([A-ZÇĞİÖŞÜ])/g, '$1 $2')
+      .replace(/(\d{1,2}\/\d{1,2}\/\d{4})([A-ZÇĞİÖŞÜa-zçğıöşü])/g, '$1 $2')
       // Add space between number and uppercase (120.01SAYI -> 120.01 SAYI)
       .replace(/(\d+\.\d+)([A-ZÇĞİÖŞÜ])/g, '$1 $2')
+      // Add space between plain number and Turkish word (6728Kabul -> 6728 Kabul)
+      .replace(/(\d{2,})([A-ZÇĞİÖŞÜ][a-zçğıöşü])/g, '$1 $2')
+      // Add space between plain number and UPPERCASE word (29796YAYIMLANDIĞI -> 29796 YAYIMLANDIĞI)
+      .replace(/(\d{2,})([A-ZÇĞİÖŞÜ]{2,})/g, '$1 $2')
+      // Known metadata field labels as line-break points
+      .replace(/(Kanun Numarası\s*:\s*\d+)\s*/g, '$1 | ')
+      .replace(/(Kabul Tarihi\s*:\s*[\d\/]+)\s*/g, '$1 | ')
+      .replace(/(Yayımlandığı Resmî Gazete)\s*/g, '| $1 ')
+      .replace(/(Yayımlandığı Düstur)\s*/g, '| $1 ')
+      .replace(/(Tertip\s*:\s*\d+)/g, '$1 | ')
+      .replace(/(Cilt\s*:\s*\d+)/g, '$1 | ')
+      // Clean up pipe separators - no double pipes, no leading/trailing
+      .replace(/\|\s*\|/g, '|')
+      .replace(/^\s*\|\s*/, '')
+      .replace(/\s*\|\s*$/, '')
       // Clean multiple spaces
       .replace(/\s{2,}/g, ' ')
       .trim();

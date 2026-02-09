@@ -13,6 +13,64 @@ interface SourceCitationProps {
   onExcerptClick?: (question: string) => void;
 }
 
+/**
+ * Clean citation text for readable display
+ * Fixes concatenated uppercase words, metadata spacing, and formatting
+ */
+function cleanCitationText(text: string): string {
+  if (!text) return '';
+
+  let result = text;
+
+  // 1. Split concatenated uppercase Turkish text (>20 chars without space)
+  result = result.replace(/[A-ZÇĞİÖŞÜ]{20,}/g, (match) => {
+    // Common Turkish particles to split on
+    const particles = [
+      'AMACIYLA', 'AMACI', 'DAİR', 'İLİŞKİN', 'HAKKINDA',
+      'KANUNLARDA', 'KANUNU', 'KANUN',
+      'YAPILMASINA', 'YAPILMASI',
+      'İYİLEŞTİRİLMESİ', 'DEĞİŞİKLİK',
+      'ORTAMININ', 'BAZI', 'YATIRIM',
+      'VERGİSİ', 'VERGİ', 'USUL',
+      'KABUL', 'TARİHİ', 'NUMARASI',
+      'YAYIMLANDIĞI', 'RESMİ', 'GAZETE',
+    ];
+    let split = match;
+    for (const p of particles) {
+      // Add space before particle when preceded by letters
+      split = split.replace(new RegExp(`([A-ZÇĞİÖŞÜa-zçğıöşü])(?=${p})`, 'g'), '$1 ');
+    }
+    // Suffix-based splitting
+    split = split
+      .replace(/(MESİ|MASI|LARI|LERİ)([A-ZÇĞİÖŞÜ])/g, '$1 $2')
+      .replace(/(NIN|NİN|NUN|NÜN)([A-ZÇĞİÖŞÜ])/g, '$1 $2')
+      .replace(/(YLA|YLE)([A-ZÇĞİÖŞÜ])/g, '$1 $2')
+      .replace(/(INA|İNE)([A-ZÇĞİÖŞÜ])/g, '$1 $2');
+    return split;
+  });
+
+  // 2. Fix metadata-style concatenated text (6728Kabul -> 6728 Kabul)
+  result = result
+    .replace(/(\d{2,})([A-ZÇĞİÖŞÜ][a-zçğıöşü])/g, '$1 $2')
+    .replace(/(\d{2,})([A-ZÇĞİÖŞÜ]{2,})/g, '$1 $2')
+    .replace(/(\d{1,2}\/\d{1,2}\/\d{4})([A-ZÇĞİÖŞÜa-zçğıöşü])/g, '$1 $2');
+
+  // 3. Format known metadata labels with separator
+  result = result
+    .replace(/(Kanun Numarası\s*:\s*\d+)\s*(?=[A-ZÇĞİÖŞÜ])/g, '$1 · ')
+    .replace(/(Kabul Tarihi\s*:\s*[\d\/]+)\s*(?=[A-ZÇĞİÖŞÜ])/g, '$1 · ')
+    .replace(/(Yayımlandığı)\s*(Resmî Gazete)/g, '$1 $2')
+    .replace(/(Resmî Gazete\s*:\s*Tarih\s*:\s*[\d\/]+\s*Sayı\s*:\s*\d+)\s*(?=[A-ZÇĞİÖŞÜ])/g, '$1 · ');
+
+  // 4. Add space between lowercase and uppercase transitions
+  result = result.replace(/([a-zçğıöşü]{2,})([A-ZÇĞİÖŞÜ]{2,})/g, '$1 $2');
+
+  // 5. Clean up
+  result = result.replace(/\s{2,}/g, ' ').trim();
+
+  return result;
+}
+
 export function SourceCitation({ sources, onLoadMore, hasMore = false, showLoadMore = false, onExcerptClick }: SourceCitationProps) {
   if (!sources || sources.length === 0) return null;
 
@@ -135,9 +193,9 @@ export function SourceCitation({ sources, onLoadMore, hasMore = false, showLoadM
 
           // First try metadata fields (baslik, konusu)
           if (source.metadata?.baslik) {
-            displayTitle = stripHtml(source.metadata.baslik);
+            displayTitle = cleanCitationText(stripHtml(source.metadata.baslik));
           } else if (source.metadata?.konusu) {
-            displayTitle = stripHtml(source.metadata.konusu);
+            displayTitle = cleanCitationText(stripHtml(source.metadata.konusu));
           } else {
             // Fall back to citation/title
             const rawTitle = stripHtml(source.citation || source.title || '');
@@ -162,8 +220,8 @@ export function SourceCitation({ sources, onLoadMore, hasMore = false, showLoadM
             }
           }
 
-          // Clean up title
-          displayTitle = displayTitle
+          // Clean up title - fix concatenated text + general cleanup
+          displayTitle = cleanCitationText(displayTitle)
             .replace(/Danıştay Kararları$/i, '')
             .replace(/^\s*[-•]\s*/, '')
             .trim() || 'Kaynak';
@@ -242,7 +300,7 @@ export function SourceCitation({ sources, onLoadMore, hasMore = false, showLoadM
                 {/* Excerpt - fixed display with follow-up button */}
                 {(() => {
                   if (!source.excerpt) return null;
-                  const excerpt = stripHtml(source.excerpt);
+                  const excerpt = cleanCitationText(stripHtml(source.excerpt));
                   // Only show if different from title
                   if (excerpt && excerpt.length > 20 && !displayTitle.includes(excerpt.slice(0, 50)) && !excerpt.includes(displayTitle.slice(0, 50))) {
                     return (
