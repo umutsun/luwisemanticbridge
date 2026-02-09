@@ -3807,7 +3807,21 @@ class SemanticSearchService:
                     )
 
                     if reranked_results and len(reranked_results) > 0:
-                        # Update scored_results with reranked order and scores
+                        # v12.48: Combine rerank_score with our custom boosts
+                        # Reranker provides semantic relevance, we add our domain boosts
+                        for r in reranked_results:
+                            rerank_score = r.get('rerank_score', 0) * 100  # Normalize to percentage
+                            rate_boost = r.get('rate_article_boost', 0)  # Already in percentage
+                            direct_boost = r.get('direct_answer_boost', 0)  # Already in percentage
+
+                            # Combined score: rerank (semantic) + rate boost + direct answer boost
+                            # Rate and direct boosts are important for rate questions
+                            combined_score = rerank_score + rate_boost + direct_boost
+                            r['final_score'] = round(combined_score, 2)
+                            r['rerank_base'] = round(rerank_score, 2)
+
+                        # Re-sort by combined final_score
+                        reranked_results.sort(key=lambda x: x.get('final_score', 0), reverse=True)
                         scored_results = reranked_results
                         reranked = True
                         timings["rerank_ms"] = (datetime.now() - rerank_start).total_seconds() * 1000
