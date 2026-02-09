@@ -226,6 +226,7 @@ function LLMSettings() {
           fallbackEnabled: data?.ocrSettings?.fallbackEnabled !== false,
           cacheEnabled: data?.ocrSettings?.cacheEnabled !== false
         },
+        rerankProvider: data?.llmSettings?.rerankProvider || 'none',
         // Load API keys from database with model selection
         openai: {
           ...data?.openai,
@@ -1561,7 +1562,7 @@ function LLMSettings() {
                       }
                     }}
                   >
-                    <SelectTrigger>
+                    <SelectTrigger className="[&>span]:flex [&>span]:flex-col [&>span]:items-start [&>span]:text-left">
                       <SelectValue placeholder={t('settings.llm.selectModelPlaceholder')} />
                     </SelectTrigger>
                     <SelectContent>
@@ -1722,7 +1723,7 @@ function LLMSettings() {
                       }
                     }}
                   >
-                    <SelectTrigger>
+                    <SelectTrigger className="[&>span]:flex [&>span]:items-center [&>span]:justify-start [&>span]:text-left">
                       <SelectValue placeholder="Select embedding model" />
                     </SelectTrigger>
                     <SelectContent>
@@ -1894,6 +1895,65 @@ function LLMSettings() {
                           <div className="flex flex-col">
                             <span className="font-medium">Tesseract</span>
                             <span className="text-xs text-green-600">Ücretsiz</span>
+                          </div>
+                        </SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+
+                {/* Active Rerank Provider Selection */}
+                <div>
+                  <Label>Rerank Provider</Label>
+                  <div className="mt-2">
+                    <Select
+                      value={tempConfig?.rerankProvider || 'none'}
+                      onValueChange={async (value) => {
+                        const updatedConfig = {
+                          ...tempConfig,
+                          rerankProvider: value
+                        };
+                        updateTempConfig('rerankProvider', value);
+                        setTempConfig(updatedConfig);
+                        // Auto-save when provider changes
+                        try {
+                          await updateSettingsCategory('llm', {
+                            llmSettings: {
+                              ...tempConfig?.llmSettings,
+                              rerankProvider: value
+                            }
+                          });
+                          toast({
+                            title: "Başarılı",
+                            description: "Rerank provider güncellendi",
+                          });
+                        } catch (error) {
+                          toast({
+                            title: "Hata",
+                            description: "Rerank provider güncellenemedi",
+                            variant: "destructive",
+                          });
+                        }
+                      }}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Rerank provider seçin" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="none">
+                          <div className="flex flex-col">
+                            <span className="font-medium">Kapalı</span>
+                            <span className="text-xs text-gray-500">Reranking kullanılmayacak</span>
+                          </div>
+                        </SelectItem>
+                        <SelectItem value="jina" disabled={!isProviderValidated('jina')}>
+                          <div className="flex flex-col">
+                            <span className="font-medium">Jina AI Reranker</span>
+                            {isProviderValidated('jina') ? (
+                              <span className="text-xs text-green-600">jina-reranker-v2-base-multilingual</span>
+                            ) : (
+                              <span className="text-xs text-red-500">API key doğrulanmamış</span>
+                            )}
                           </div>
                         </SelectItem>
                       </SelectContent>
