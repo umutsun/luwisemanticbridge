@@ -670,10 +670,24 @@ export class RAGChatService {
    * @param keywords - Array of keywords to match
    * @param maxDistance - Maximum edit distance allowed (default: 2)
    */
+  // v12.52: Common Turkish words that cause false positives in fuzzy matching
+  private readonly FUZZY_EXCLUSION_WORDS = new Set([
+    'gore', 'göre',     // "göre" fuzzy-matches "süre" (distance=2) - very common word
+    'gere', 'gire',     // typo variants of göre
+    'once', 'önce',     // could match "gun" etc.
+    'icin', 'için',     // very common, could fuzzy-match short keywords
+  ]);
+
   private fuzzyContainsKeyword(query: string, keywords: string[], maxDistance: number = 2): boolean {
     const words = query.split(/\s+/);
 
     for (const word of words) {
+      // v12.52: Skip common words that cause false positive fuzzy matches
+      const cleanWord = word.replace(/[^a-züöçşığ]/gi, ''); // strip punctuation
+      if (this.FUZZY_EXCLUSION_WORDS.has(cleanWord)) {
+        continue;
+      }
+
       for (const keyword of keywords) {
         // For short keywords (<=3 chars), require exact match or 1 edit
         const allowedDistance = keyword.length <= 3 ? 1 : maxDistance;
@@ -6376,6 +6390,16 @@ FORMAT:
       return 'ambiguous';
     }
 
+    // v12.52: If BOTH beyanname AND ödeme mentioned with comparison keywords → ambiguous
+    // e.g., "KDV beyanname suresi ile odeme suresi arasindaki fark nedir?"
+    if (isKdvQuestion && hasExplicitBeyanname && hasExplicitOdeme) {
+      const comparisonKeywords = /fark|karsilastir|karşılaştır|mukayese|ile\s+.{0,30}\s+arasind|vs\.?|versus/i;
+      if (comparisonKeywords.test(queryLower)) {
+        console.log(`🛡️ [v12.52] COMPARISON_DETECTED: Both beyanname+odeme with comparison keyword, returning ambiguous`);
+        return 'ambiguous';
+      }
+    }
+
     // v12.31: Check for ödeme (payment) intent with robust matching
     const isOdeme = hasExplicitOdeme ||
                     this.DEADLINE_INTENTS.odeme.articles.some(art => queryLower.includes(art));
@@ -6401,9 +6425,21 @@ FORMAT:
     if (this.DEADLINE_INTENTS.beyanname.articles.some(art => queryLower.includes(art))) return 'beyanname';
 
     // For generic KDV questions without explicit intent, return ambiguous to provide both answers
-    if (isKdvQuestion && !hasExplicitBeyanname && !hasExplicitOdeme) {
+    // v12.52: But ONLY if question doesn't mention a specific non-deadline article number
+    // e.g., "KDVK madde 29'a gore KDV indirimi" mentions article 29 which is NOT a deadline article
+    const deadlineArticleNums = ['41', '46'];
+    const mentionedArticle = queryLower.match(/madde\s+(\d+)|m\.?\s*(\d+)/);
+    const hasNonDeadlineArticle = mentionedArticle &&
+      !deadlineArticleNums.includes(mentionedArticle[1] || mentionedArticle[2]);
+
+    if (isKdvQuestion && !hasExplicitBeyanname && !hasExplicitOdeme && !hasNonDeadlineArticle) {
       console.log(`🛡️ [v12.31] AMBIGUOUS_QUESTION: Generic KDV deadline question, providing both answers`);
       return 'ambiguous';
+    }
+
+    if (hasNonDeadlineArticle) {
+      console.log(`🛡️ [v12.52] NON_DEADLINE_ARTICLE: Query mentions article ${mentionedArticle![1] || mentionedArticle![2]} which is not a deadline article, skipping deadline handler`);
+      return null;
     }
 
     // No KDV context found - don't apply KDV deadline handler
