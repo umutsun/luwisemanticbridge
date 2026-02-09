@@ -9457,9 +9457,10 @@ Please verify the article number or check official sources.`;
 
     // Check if text needs fixing (low space ratio + long letter sequences without spaces)
     const spaceRatio = (text.match(/\s/g) || []).length / text.length;
-    const hasLongUppercase = /[A-ZÇĞİÖŞÜ]{20,}/.test(text);
-    const hasLongLowercase = /[a-zçğıöşüA-ZÇĞİÖŞÜ]{25,}/.test(text); // Also catch lowercase concatenated
-    if (spaceRatio > 0.1 && !hasLongUppercase && !hasLongLowercase) return text;
+    const hasLongUppercase = /[A-ZÇĞİÖŞÜ]{12,}/.test(text); // 12+ uppercase = likely concatenated
+    const hasLongLowercase = /[a-zçğıöşüA-ZÇĞİÖŞÜ]{25,}/.test(text);
+    const hasWordNumberJoin = /[A-ZÇĞİÖŞÜa-zçğıöşü]\d{3,}[A-ZÇĞİÖŞÜa-zçğıöşü]/.test(text); // e.g. "Numarası4760Kanun"
+    if (spaceRatio > 0.1 && !hasLongUppercase && !hasLongLowercase && !hasWordNumberJoin) return text;
 
     let result = text;
 
@@ -9566,8 +9567,8 @@ Please verify the article number or check official sources.`;
 
       console.log(`🔧 [OCR] Normalizing concatenated text (${text.length} chars)...`);
 
-      // Take first 500 chars for normalization (LLM context limit)
-      const textToNormalize = text.substring(0, 500);
+      // Take first 1500 chars for normalization (covers most excerpts)
+      const textToNormalize = text.substring(0, 1500);
 
       const prompt = `Sen bir OCR hata düzeltme uzmanısın. Aşağıdaki metin PDF/OCR taramasından geldi ve kelimeler arasında boşluklar eksik.
 
