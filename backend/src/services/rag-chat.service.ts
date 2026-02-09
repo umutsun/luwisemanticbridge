@@ -5257,21 +5257,32 @@ FORMAT:
         }
 
         if (targetSourceIndex > 0) {
-          // v12.38 FIX: Only replace out-of-range citations, don't collapse all to single index
-          // extractDeadlineFromSources returns sourceIndex from raw searchResults (e.g. [8])
-          // but limitedSources has fewer items, so [8] would be invalid
+          // v12.51 FIX: For deterministic deadline responses, ALL citations must point to the
+          // correct law source. extractDeadlineFromSources returns sourceIndex from raw searchResults
+          // which may not match limitedSources order. Replace ALL citations with targetSourceIndex.
           const maxValidIndex = limitedSources.length;
-          finalResponse = finalResponse.replace(/\[(\d+)\]/g, (match, num) => {
-            const citationNum = parseInt(num, 10);
-            // Only replace if citation is out of range (invalid)
-            if (citationNum > maxValidIndex || citationNum < 1) {
-              console.log(`🔄 [v12.38] CITATION_FIX: [${citationNum}] → [${targetSourceIndex}] (out of range)`);
+          if (deadlineHardcodedApplied || deadlineFixApplied) {
+            // Deterministic response: force ALL citations to target law source
+            finalResponse = finalResponse.replace(/\[(\d+)\]/g, (match, num) => {
+              const citationNum = parseInt(num, 10);
+              if (citationNum !== targetSourceIndex) {
+                console.log(`🔄 [v12.51] DEADLINE_CITATION_FORCE: [${citationNum}] → [${targetSourceIndex}] (deterministic)`);
+              }
               return `[${targetSourceIndex}]`;
-            }
-            // Keep valid citations as-is
-            return match;
-          });
-          console.log(`🔄 [v12.38] CITATION_VALIDATED: maxValidIndex=${maxValidIndex}, targetSource=[${targetSourceIndex}]`);
+            });
+            console.log(`🔄 [v12.51] DEADLINE_CITATIONS_FIXED: All citations → [${targetSourceIndex}] (${targetLawCode} source)`);
+          } else {
+            // Non-deterministic: only fix out-of-range citations
+            finalResponse = finalResponse.replace(/\[(\d+)\]/g, (match, num) => {
+              const citationNum = parseInt(num, 10);
+              if (citationNum > maxValidIndex || citationNum < 1) {
+                console.log(`🔄 [v12.38] CITATION_FIX: [${citationNum}] → [${targetSourceIndex}] (out of range)`);
+                return `[${targetSourceIndex}]`;
+              }
+              return match;
+            });
+          }
+          console.log(`🔄 [v12.51] CITATION_VALIDATED: maxValidIndex=${maxValidIndex}, targetSource=[${targetSourceIndex}], deterministic=${deadlineHardcodedApplied || deadlineFixApplied}`);
         } else {
           console.warn(`⚠️ [v12.38] No ${targetLawCode} source found in ranked sources - keeping citation as-is`);
         }

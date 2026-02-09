@@ -167,9 +167,11 @@ router.post('/api/v2/chat', authenticateToken, async (req: AuthenticatedRequest,
     });
 
     // 📑 Citation reorder: Sort by usage frequency and remove unused
+    // v12.51: For deterministic responses, keep all sources as context
+    const isDeterministicNonStream = (result as any)._debug?.deterministic === true;
     if (result.response && result.sources?.length > 0) {
       const reordered = reorderCitations(result.response, result.sources, {
-        removeUnused: true,
+        removeUnused: !isDeterministicNonStream,
         sortByUsage: true
       });
       result.response = reordered.response;
@@ -844,9 +846,11 @@ async function streamChatResponse(
     const result = await ragChat.processMessage(message, conversationId, userId, options);
 
     // 📑 Citation reorder: Sort by usage frequency and remove unused
+    // v12.51: For deterministic responses, keep all sources as context
+    const isDeterministicWs = (result as any)._debug?.deterministic === true;
     if (result.response && result.sources?.length > 0) {
       const reordered = reorderCitations(result.response, result.sources, {
-        removeUnused: true,
+        removeUnused: !isDeterministicWs,
         sortByUsage: true
       });
       result.response = reordered.response;
