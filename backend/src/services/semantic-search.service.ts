@@ -41,9 +41,6 @@ export class SemanticSearchService {
   private enableKeywordBoost: boolean = true;
   private parallelLLMCount: number = 5;
   private parallelLLMBatchSize: number = 3;
-  private enableMessageEmbeddings: boolean = true;
-  private enableDocumentEmbeddings: boolean = true;
-  private enableScrapeEmbeddings: boolean = true;
   private enableUnifiedEmbeddings: boolean = true;
   private unifiedEmbeddingsPriority: number = 1;
   private unifiedRecordTypes: string[] = []; // Dynamic list from database
@@ -448,9 +445,6 @@ export class SemanticSearchService {
           'minResults',
           'parallel_llm_count',
           'parallel_llm_batch_size',
-          'ragSettings.enableMessageEmbeddings',
-          'ragSettings.enableDocumentEmbeddings',
-          'ragSettings.enableScrapeEmbeddings',
           'ragSettings.enableUnifiedEmbeddings',
           'ragSettings.unifiedEmbeddingsPriority',
           'ragSettings.databasePriority',
@@ -522,27 +516,6 @@ export class SemanticSearchService {
             const parsedBatchSize = parseInt(value, 10);
             if (!isNaN(parsedBatchSize) && parsedBatchSize > 0 && parsedBatchSize <= 20) {
               this.parallelLLMBatchSize = parsedBatchSize;
-            }
-            break;
-          }
-          case 'ragSettings.enableMessageEmbeddings': {
-            const parsed = this.parseBooleanSetting(value);
-            if (parsed !== undefined) {
-              this.enableMessageEmbeddings = parsed;
-            }
-            break;
-          }
-          case 'ragSettings.enableDocumentEmbeddings': {
-            const parsed = this.parseBooleanSetting(value);
-            if (parsed !== undefined) {
-              this.enableDocumentEmbeddings = parsed;
-            }
-            break;
-          }
-          case 'ragSettings.enableScrapeEmbeddings': {
-            const parsed = this.parseBooleanSetting(value);
-            if (parsed !== undefined) {
-              this.enableScrapeEmbeddings = parsed;
             }
             break;
           }
@@ -664,9 +637,6 @@ export class SemanticSearchService {
         enableKeywordBoost: this.enableKeywordBoost,
         parallelLLMCount: this.parallelLLMCount,
         parallelLLMBatchSize: this.parallelLLMBatchSize,
-        enableMessageEmbeddings: this.enableMessageEmbeddings,
-        enableDocumentEmbeddings: this.enableDocumentEmbeddings,
-        enableScrapeEmbeddings: this.enableScrapeEmbeddings,
         enableUnifiedEmbeddings: this.enableUnifiedEmbeddings,
         unifiedEmbeddingsPriority: this.unifiedEmbeddingsPriority,
         databasePriority: this.databasePriority,
@@ -1329,11 +1299,11 @@ export class SemanticSearchService {
       // Refresh source table weights cache
       await this.refreshSourceTableWeights();
 
-      // Build WHERE clause based on enabled record types
+      // Build WHERE clause based on priority > 0 (no separate enable flags needed)
       const enabledTypes: string[] = [];
-      if (this.enableMessageEmbeddings) enabledTypes.push('message_embeddings');
-      if (this.enableDocumentEmbeddings) enabledTypes.push('document_embeddings');
-      if (this.enableScrapeEmbeddings) enabledTypes.push('scrape_embeddings');
+      if (this.chatPriority > 0) enabledTypes.push('message_embeddings');
+      if (this.documentsPriority > 0) enabledTypes.push('document_embeddings');
+      if (this.webPriority > 0) enabledTypes.push('scrape_embeddings');
 
       // DYNAMIC: Add all unified record types from database (not hardcoded!)
       // IMPORTANT: Filter out tables with weight = 0 (disabled by user)
@@ -1360,10 +1330,10 @@ export class SemanticSearchService {
         console.log('[SemanticSearch] All record types are disabled in settings', {
           enableUnifiedEmbeddings: this.enableUnifiedEmbeddings,
           unifiedRecordTypesCount: this.unifiedRecordTypes.length,
-          unifiedRecordTypes: this.unifiedRecordTypes,
-          enableMessageEmbeddings: this.enableMessageEmbeddings,
-          enableDocumentEmbeddings: this.enableDocumentEmbeddings,
-          enableScrapeEmbeddings: this.enableScrapeEmbeddings
+          databasePriority: this.databasePriority,
+          documentsPriority: this.documentsPriority,
+          chatPriority: this.chatPriority,
+          webPriority: this.webPriority
         });
         return [];
       }
@@ -1371,8 +1341,6 @@ export class SemanticSearchService {
       console.log('[SemanticSearch] Searching with enabled types:', enabledTypes, {
         enableUnifiedEmbeddings: this.enableUnifiedEmbeddings,
         unifiedRecordTypesCount: this.unifiedRecordTypes.length,
-        enableDocumentEmbeddings: this.enableDocumentEmbeddings,
-        enableScrapeEmbeddings: this.enableScrapeEmbeddings,
         // 🔧 NEW: Log priorities for debugging
         databasePriority: this.databasePriority,
         documentsPriority: this.documentsPriority,
@@ -1421,8 +1389,8 @@ export class SemanticSearchService {
         }
       }
 
-      // Include document_embeddings if enabled
-      if (this.enableDocumentEmbeddings && enabledTypes.includes('document_embeddings')) {
+      // Include document_embeddings if priority > 0
+      if (enabledTypes.includes('document_embeddings')) {
         unionParts.push(`
           SELECT
             de.id,
@@ -1440,7 +1408,8 @@ export class SemanticSearchService {
 
       // Include scrape_embeddings if enabled - use unified_embeddings with source_table = 'scrapes'
       // (scrape_embeddings table has been migrated to unified_embeddings)
-      if (this.enableScrapeEmbeddings && enabledTypes.includes('scrape_embeddings')) {
+      // Include scrape_embeddings if priority > 0
+      if (enabledTypes.includes('scrape_embeddings')) {
         unionParts.push(`
           SELECT
             ue.id,
