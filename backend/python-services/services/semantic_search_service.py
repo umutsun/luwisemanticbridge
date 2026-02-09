@@ -1483,10 +1483,10 @@ class SemanticSearchService:
                 if len(groups) == 2:
                     # Check which group is the code vs article number
                     g1, g2 = groups
-                    if g1 and g1.upper() in query_upper and any(g1.upper() in variations for variations in self.LAW_CODES.values()):
+                    if g1 and g1.upper() in query_upper and any(g1.upper() in [v.upper() for v in variations] for variations in self.LAW_CODES.values()):
                         law_code_raw = g1.upper()
                         article_number = g2
-                    elif g2 and g2.upper() in query_upper and any(g2.upper() in variations for variations in self.LAW_CODES.values()):
+                    elif g2 and g2.upper() in query_upper and any(g2.upper() in [v.upper() for v in variations] for variations in self.LAW_CODES.values()):
                         law_code_raw = g2.upper()
                         article_number = g1
                     else:
@@ -1643,6 +1643,8 @@ class SemanticSearchService:
         r'(?:vergi|kdv|kurumlar|gelir)\s*(?:oran[ıi])',  # "vergi oranı", "kdv oranı"
         r'hangi\s*oran',  # "hangi oran"
         r'oran[ıi]?\s*(?:nedir|ne)',  # "oranı nedir"
+        r'(?:vergi\s*)?dilim(?:ler)?[ıi]?\s*(?:ve\s*)?oran',  # "vergi dilimleri ve oranları"
+        r'(?:vergi|kdv|kurumlar|gelir).*?oran(?:lar)?[ıi]',  # "gelir vergisi ... oranları" (non-adjacent)
     ]
 
     # Patterns for direct rate answers in content
