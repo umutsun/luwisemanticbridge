@@ -2793,15 +2793,35 @@ ${questionLabel}: ${message}`;
           content = `Bu kaynak "${title}" başlıklı bir belgedir.`;
         }
 
-        // 🎯 v12.45: Determine source priority from table weight or authority level
-        // High priority sources (table_weight >= 1.0 or _hierarchyWeight >= 80) get ⭐ indicator
-        const tableWeight = r.table_weight || r._tableWeight || 0.5;
-        const hierarchyWeight = r._hierarchyWeight || 0;
-        const isHighPriority = tableWeight >= 1.0 || hierarchyWeight >= 80;
-        const priorityIndicator = enablePriorityHints && isHighPriority ? ' ⭐' : '';
+        // 🎯 v12.45: Determine source priority from table name or authority level
+        // High priority sources (kanun, mevzuat) get ⭐ indicator
+        // FIX: Calculate hierarchy weight HERE using domainConfig.authorityLevels
+        const sourceTable = r.source_table || r.sourceTable || '';
+        const sourceTypeLower = sourceTable.toLowerCase()
+          .replace(/^csv_/, '')
+          .replace(/_/g, '')
+          .replace(/arsiv.*/, '');
+
+        // Look up hierarchy weight from domainConfig (same logic as later scoring)
+        let hierarchyWeight = domainConfig.authorityLevels[sourceTypeLower] || 0;
+        if (hierarchyWeight === 0) {
+          // Try partial matches for source types like "danistaykararlari" -> "danistay"
+          for (const [key, weight] of Object.entries(domainConfig.authorityLevels)) {
+            if (sourceTypeLower.includes(key) || key.includes(sourceTypeLower)) {
+              hierarchyWeight = weight;
+              break;
+            }
+          }
+        }
+
+        // Also check for law-related keywords in source table name
+        const isLawSource = /kanun|mevzuat|law/i.test(sourceTable);
+        const isHighPriority = hierarchyWeight >= 80 || isLawSource;
+        const priorityIndicator = enablePriorityHints && isHighPriority ? ' ⭐[BİRİNCİL KAYNAK]' : '';
 
         if (isHighPriority) {
           highPrioritySources.push(idx + 1);
+          console.log(`🎯 High-priority source [${idx + 1}]: ${sourceTable} (weight=${hierarchyWeight})`);
         }
 
         // Add schema metadata for richer context (tarih, kurum, makam, konu, kategori, yil)
@@ -2832,8 +2852,11 @@ ${questionLabel}: ${message}`;
       let priorityHint = '';
       if (enablePriorityHints && highPrioritySources.length > 0) {
         const priorityList = highPrioritySources.slice(0, 5).map(n => `[${n}]`).join(', ');
-        priorityHint = `[ÖNCELİKLİ KAYNAKLAR: ${priorityList} - Bu kaynaklar daha yüksek otorite seviyesine sahiptir, mümkünse bunlara öncelik ver.]\n\n`;
-        console.log(`🎯 Priority hint: ${highPrioritySources.length} high-priority sources marked`);
+        priorityHint = `⚠️ ÖNEMLİ: Aşağıdaki kaynaklar BİRİNCİL KAYNAKLARDIR (kanun/mevzuat metni): ${priorityList}
+Bu kaynaklara MUTLAKA atıf yapmalısın. Makale/özelge gibi ikincil kaynaklar sadece ek açıklama için kullanılabilir.
+
+`;
+        console.log(`🎯 Priority hint: ${highPrioritySources.length} high-priority sources marked: ${priorityList}`);
       }
 
       const enhancedContext = priorityHint + contextParts.join('\n');
@@ -3247,6 +3270,7 @@ Lütfen "beyanname" veya "ödeme" yazarak belirtin.`;
 
         // Default medium-mode prompts (better recall, still requires citation)
         // If article format is enabled, use schema-driven academic article format
+        // v12.45: Added rule 5 for mandatory primary source citation
         const defaultMediumPromptTr = useArticleFormat
           ? this.buildArticleFormatPrompt(routingSchema, 'tr', articleLength)
           : `Aşağıda numaralanmış kaynaklar var.
@@ -3256,6 +3280,7 @@ CEVAPLAMA KURALLARI:
 2. Her iddiayı [Kaynak X] ile referansla
 3. Kaynak metninden doğrudan alıntı yap
 4. Kaynaklarda yoksa "Bu konuda kaynaklarda bilgi bulunamadı" de
+5. ⭐ işaretli kaynaklar (kanun, mevzuat) BİRİNCİL KAYNAKTIR - varsa MUTLAKA bunlara atıf yap
 
 FORMAT:
 **CEVAP**
@@ -3270,6 +3295,7 @@ ANSWERING RULES:
 2. Reference every claim with [Source X]
 3. Quote directly from source text
 4. If not in sources, say "No information found on this topic in the sources"
+5. Sources marked with ⭐ (laws, legislation) are PRIMARY SOURCES - you MUST cite them if available
 
 FORMAT:
 **ANSWER**
