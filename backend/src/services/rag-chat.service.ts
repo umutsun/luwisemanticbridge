@@ -5980,33 +5980,23 @@ Yani beyanname ile ödeme arasında **2 günlük** bir fark vardır.`;
       return match;
     });
 
-    // 3. Fix inline numbered lists: "...text: 1. item 2. item 3. item" → proper markdown list
-    // Detect sequences of 3+ inline numbered items and convert to markdown list
-    fixed = fixed.replace(/([.:;])\s+(1\.\s+[^\n]+?)(?=\s+2\.\s)/g, (match, punct, firstItem) => {
-      return `${punct}\n\n${firstItem}`;
-    });
+    // 3. Remove orphaned numbered items BEFORE list formatting (bare "3." or "3. 4." with no text)
+    // These appear when LLM generates empty list items
+    fixed = fixed.replace(/\b(\d{1,2})\.\s*(?=\d{1,2}\.\s)/g, '');
+    fixed = fixed.replace(/\s+\d{1,2}\.\s*(?=\n|$)/g, '');
 
-    // 4. Fix inline numbered items after punctuation: "text. 2. item" → "text.\n\n2. item"
-    // Now also catches "1." (changed from >=2 to >=1) after colon/semicolon
-    fixed = fixed.replace(/([.;:,])\s+(\d+)\.\s+/g, (match, punct, num) => {
+    // 4. Convert inline numbered lists to proper markdown lists
+    // Find "N. text" patterns inline (not at line start) and add line breaks BEFORE the number
+    // Only match when followed by actual text content (3+ chars) to avoid orphaning "N." alone
+    fixed = fixed.replace(/(?<=[^\n])[ \t]+(\d{1,2})\.\s+(?=[A-ZÇĞİÖŞÜa-zçğıöşü]{3,})/g, (match, num) => {
       const numInt = parseInt(num, 10);
       if (numInt >= 1 && numInt <= 30) {
-        return `${punct}\n\n${num}. `;
+        return `\n\n${num}. `;
       }
       return match;
     });
 
-    // 5. Fix consecutive inline numbered items: "...text 2. item text 3. item"
-    // When a numbered item (2+) appears mid-sentence, break before it
-    fixed = fixed.replace(/([.!?])(\s*(?:\[\d+\])*)(\s+)(\d+)\.\s+/g, (match, punct, citations, _space, num) => {
-      const numInt = parseInt(num, 10);
-      if (numInt >= 1 && numInt <= 30) {
-        return `${punct}${citations || ''}\n\n${num}. `;
-      }
-      return match;
-    });
-
-    // 4. Remove hallucinated citations (beyond available sources)
+    // 5. Remove hallucinated citations (beyond available sources)
     const maxCitations = sources.length;
     if (maxCitations > 0) {
       for (let i = maxCitations + 1; i <= 20; i++) {

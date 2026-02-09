@@ -248,15 +248,17 @@ function preprocessMarkdown(content: string): string {
 
   let result = content;
 
-  // FIX INLINE NUMBERED LISTS: "...text: 1. item 2. item" → proper markdown list
-  // Detect inline numbered sequences and add line breaks to convert to markdown list
-  // Pattern: punctuation + space + "1." followed by text and then "2." etc.
-  result = result.replace(/([.:;])\s+(1\.\s+)/g, '$1\n\n$2');
-  // Break before numbered items 2-30 that appear mid-line after text
-  result = result.replace(/([.!?:;,])(\s*(?:\[\d+\])*)\s+(\d{1,2})\.\s+/g, (match, punct, citations, num) => {
+  // Remove orphaned numbered items FIRST (bare "3." or "3. 4." with no text content)
+  result = result.replace(/\b(\d{1,2})\.\s*(?=\d{1,2}\.\s)/g, '');
+  result = result.replace(/\s+\d{1,2}\.\s*(?=\n|$)/g, '');
+
+  // FIX INLINE NUMBERED LISTS: "...text 1. item text 2. item" → proper markdown list
+  // Find "N. text" patterns inline and add line breaks BEFORE the number
+  // Only match when followed by actual text (3+ chars) to avoid orphaning "N." alone
+  result = result.replace(/ (\d{1,2})\.\s+(?=[A-ZÇĞİÖŞÜa-zçğıöşü]{3,})/g, (match, num) => {
     const numInt = parseInt(num, 10);
-    if (numInt >= 2 && numInt <= 30) {
-      return `${punct}${citations || ''}\n\n${num}. `;
+    if (numInt >= 1 && numInt <= 30) {
+      return `\n\n${num}. `;
     }
     return match;
   });
