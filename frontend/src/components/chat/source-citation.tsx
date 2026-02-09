@@ -34,25 +34,34 @@ function cleanCitationText(text: string): string {
 
   // 3. Turkish morphological suffix boundaries (case insensitive)
   // After these suffixes, a new word likely begins
+  // Order matters: longer suffixes first to avoid partial matches
   const suffixBoundaries = [
-    // Case suffixes (locative, ablative, dative)
-    /(NDA|NDE|NDAN|NDEN)(?=[A-ZÇĞİÖŞÜ])/gi,
-    /(DAN|DEN|TAN|TEN)(?=[A-ZÇĞİÖŞÜ])/gi,
-    /(DA|DE|TA|TE)(?=[A-ZÇĞİÖŞÜ]{3,})/gi,
-    // Genitive / possessive
-    /(NIN|NİN|NUN|NÜN|ININ|İNİN|UNUN|ÜNÜN)(?=[A-ZÇĞİÖŞÜ])/gi,
-    // Plural + case
-    /(LARI|LERİ|LARIN|LERİN|LARDAN|LERDEN)(?=[A-ZÇĞİÖŞÜ])/gi,
-    // Verbal noun suffixes
-    /(MASI|MESİ|MASINA|MESİNE|MASINDA|MESİNDE)(?=[A-ZÇĞİÖŞÜ])/gi,
-    // Instrumental
+    // Derivational suffixes (longest first)
+    /(SİNDEN|SİNDE|SİNE|SİNİ|SİNİN)(?=[A-ZÇĞİÖŞÜ])/gi,
+    // Verbal noun + case
+    /(MASINDA|MESİNDE|MASINA|MESİNE|MASI|MESİ)(?=[A-ZÇĞİÖŞÜ])/gi,
+    // Plural + case (long forms first)
+    /(LARINDA|LERİNDE|LARINDAN|LERİNDEN|LARINA|LERİNE)(?=[A-ZÇĞİÖŞÜ])/gi,
+    /(LARIN|LERİN|LARDAN|LERDEN|LARI|LERİ)(?=[A-ZÇĞİÖŞÜ])/gi,
+    // Genitive / possessive (long forms)
+    /(ININ|İNİN|UNUN|ÜNÜN)(?=[A-ZÇĞİÖŞÜ])/gi,
+    /(NIN|NİN|NUN|NÜN)(?=[A-ZÇĞİÖŞÜ])/gi,
+    // Possessive -Sİ (vergisi, kanunu etc.) - CRITICAL for "VERGİSİKANUNU"
+    // Require 4+ following chars to avoid false splits
+    /(Sİ|SI|SU|SÜ)(?=[A-ZÇĞİÖŞÜ]{4,})/gi,
+    // Accusative/possessive -NU/-NÜ etc. - require 4+ following chars
+    /(NU|NÜ|NI|Nİ)(?=[A-ZÇĞİÖŞÜ]{4,})/gi,
+    // Case suffixes (locative, ablative)
+    /(NDAN|NDEN|NDA|NDE)(?=[A-ZÇĞİÖŞÜ])/gi,
+    /(DAN|DEN|TAN|TEN)(?=[A-ZÇĞİÖŞÜ]{3,})/gi,
+    // DA/DE/TA/TE - very short, require 5+ following chars to reduce false positives
+    /(DA|DE|TA|TE)(?=[A-ZÇĞİÖŞÜ]{5,})/gi,
+    // Relative / adjective
+    /(DAKİ|DEKİ|TAKİ|TEKİ)(?=[A-ZÇĞİÖŞÜ])/gi,
+    // Instrumental / comitative
     /(YLA|YLE|İLE)(?=[A-ZÇĞİÖŞÜ]{3,})/gi,
     // Dative
     /(INA|İNE|UNA|ÜNE)(?=[A-ZÇĞİÖŞÜ]{3,})/gi,
-    // Derivational
-    /(SİNDEN|SİNDE|SİNE|SİNİ|SİNİN)(?=[A-ZÇĞİÖŞÜ])/gi,
-    // Relative
-    /(DAKİ|DEKİ|TAKİ|TEKİ)(?=[A-ZÇĞİÖŞÜ])/gi,
   ];
 
   for (const pattern of suffixBoundaries) {

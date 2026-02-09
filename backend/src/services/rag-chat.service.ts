@@ -10575,8 +10575,9 @@ DÜZELTILMIŞ METİN:`;
 
         // Use LLM-normalized text if available (for concatenated OCR text)
         // Apply toSentenceCase since raw input was uppercase
-        if (ocrResults.has(i)) {
-          processedContent = this.toSentenceCase(ocrResults.get(i)!);
+        const ocrNorm = ocrResults.get(i);
+        if (ocrNorm?.excerpt) {
+          processedContent = this.toSentenceCase(ocrNorm.excerpt);
         }
 
         // Create natural language title and excerpt from processed content
@@ -10587,6 +10588,16 @@ DÜZELTILMIŞ METİN:`;
         const naturalTitle = this.truncateExcerpt(displayContent, Math.min(excerptMaxLength, 120));
         const naturalExcerpt = this.truncateExcerpt(displayContent, summaryMaxLength);
         const naturalContent = this.truncateExcerpt(displayContent, summaryMaxLength * 2);
+
+        // Apply LLM-normalized title and baslik to metadata for frontend display
+        const finalMetadata = { ...(r.metadata || {}) };
+        if (ocrNorm?.baslik) {
+          finalMetadata.baslik = this.toSentenceCase(ocrNorm.baslik);
+        }
+        if (ocrNorm?.title) {
+          // Override the citation with normalized title
+          prep.citation = this.toSentenceCase(ocrNorm.title);
+        }
 
         formattedResults.push({
           id: r.id,
@@ -10606,7 +10617,7 @@ DÜZELTILMIŞ METİN:`;
             hasMetadata: !!r.metadata
           },
           index: prep.idx + 1,
-          metadata: r.metadata || {},
+          metadata: finalMetadata,
           priority: prep.idx + 1,
           hasContent: !!(r.content || r.excerpt),
           contentLength: (r.content || r.excerpt || '').length,

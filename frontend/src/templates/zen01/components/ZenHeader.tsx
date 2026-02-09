@@ -250,20 +250,20 @@ export const ZenHeader: React.FC<ZenHeaderProps> = ({
             </DropdownMenuTrigger>
             <DropdownMenuContent
               align="end"
-              className="w-48 zen01-dropdown"
+              className={`w-48 zen01-dropdown ${isDark ? 'zen01-dark' : 'zen01-light'}`}
             >
               <Link href="/profile">
                 <DropdownMenuItem
-                  className="zen01-dropdown-item cursor-pointer text-slate-700 dark:text-slate-200"
+                  className="zen01-dropdown-item cursor-pointer"
                 >
                   <UserCircle className="h-4 w-4 mr-2" />
                   Profil Düzenle
                 </DropdownMenuItem>
               </Link>
-              <DropdownMenuSeparator className="bg-slate-200 dark:bg-[#1e3a5f]/50" />
+              <DropdownMenuSeparator className={isDark ? "bg-[#1e3a5f]/50" : "bg-slate-200"} />
               <DropdownMenuItem
                 onClick={onLogout}
-                className="text-rose-600 hover:text-rose-700 dark:text-rose-400 dark:hover:text-rose-300 cursor-pointer"
+                className={`cursor-pointer ${isDark ? 'text-rose-400 hover:text-rose-300' : 'text-rose-600 hover:text-rose-700'}`}
               >
                 <LogOut className="h-4 w-4 mr-2" />
                 Çıkış Yap
