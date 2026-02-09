@@ -27,6 +27,7 @@ const MODEL_PRICING: Record<string, Record<string, { input: number; output: numb
   },
   google: {
     'gemini-2.0-flash-exp': { input: 0.1, output: 0.4 },
+    'gemini-2.0-flash': { input: 0.1, output: 0.4 },
     'gemini-1.5-flash': { input: 0.075, output: 0.3 },
     'gemini-1.5-pro': { input: 1.25, output: 5 },
     'gemini-pro': { input: 0.5, output: 1.5 },
@@ -201,8 +202,8 @@ router.post('/test/:provider', async (req: Request, res: Response) => {
 
           // Try different model names in order of preference (updated for 2025)
           const modelNames = [
+            'gemini-2.0-flash',
             'gemini-2.0-flash-exp',
-            'gemini-1.5-flash',
             'gemini-1.5-pro',
             'gemini-pro'
           ];
@@ -254,7 +255,7 @@ router.post('/test/:provider', async (req: Request, res: Response) => {
           } else if (error.message?.includes('quota') || error.message?.includes('RESOURCE_EXHAUSTED')) {
             errorMessage = 'Google AI API quota exceeded. Please check your billing or wait.';
           } else if (error.message?.includes('not found') || error.message?.includes('NOT_FOUND')) {
-            errorMessage = 'Google AI model not found. Try gemini-1.5-flash or gemini-pro.';
+            errorMessage = 'Google AI model not found. Try gemini-2.0-flash or gemini-pro.';
           } else if (error.message?.includes('permission') || error.message?.includes('PERMISSION_DENIED')) {
             errorMessage = 'Permission denied. Enable Generative Language API in Google Cloud Console.';
           } else if (error.message?.includes('AIza')) {
@@ -870,7 +871,7 @@ router.get('/models/:provider', async (req: Request, res: Response) => {
     const models = {
       openai: ['gpt-4o', 'gpt-4o-mini', 'gpt-4-turbo', 'gpt-3.5-turbo'],
       anthropic: ['claude-sonnet-4-5-20250929', 'claude-opus-4-20250514', 'claude-haiku-4-5-20251001'],  // Claude 4.x series (3.x RETIRED)
-      google: ['gemini-2.0-flash-exp', 'gemini-1.5-flash', 'gemini-1.5-pro', 'gemini-pro'],
+      google: ['gemini-2.0-flash', 'gemini-2.0-flash-exp', 'gemini-1.5-pro', 'gemini-pro'],
       deepseek: ['deepseek-chat', 'deepseek-coder'],
       deepl: ['deepl-free', 'deepl-pro'],
       googleTranslate: ['google-translate'],

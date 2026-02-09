@@ -278,9 +278,9 @@ export class LLMManager {
       } else if (this.actualModel === 'gemini-1.5-pro' || this.actualModel === 'gemini-pro') {
         // Keep as is - Gemini API no longer uses -latest suffix
         this.actualModel = 'gemini-1.5-pro';
-      } else if (this.actualModel === 'gemini-1.5-flash') {
+      } else if (this.actualModel === 'gemini-2.0-flash') {
         // Keep as is - Gemini API no longer uses -latest suffix
-        this.actualModel = 'gemini-1.5-flash';
+        this.actualModel = 'gemini-2.0-flash';
       }
 
       // Store configuration
@@ -355,7 +355,7 @@ export class LLMManager {
         // This is required for embeddings which may use Google/Gemini
         this.updateProviderSettings('gemini', {
           apiKey: googleApiKey,
-          model: geminiModel || 'gemini-1.5-flash'  // Default model for chat if none configured
+          model: geminiModel || 'gemini-2.0-flash'  // Default model for chat if none configured
         });
 
         if (geminiModel) {
@@ -1047,7 +1047,7 @@ export class LLMManager {
           // Validate model name
           if (!geminiModelName || !geminiModelName.includes('gemini-')) {
             // Fallback to flash if invalid model
-            geminiModelName = 'gemini-1.5-flash';
+            geminiModelName = 'gemini-2.0-flash';
           }
           // Remove -latest suffix if present (deprecated)
           geminiModelName = geminiModelName.replace('-latest', '');
