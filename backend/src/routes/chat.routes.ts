@@ -15,6 +15,7 @@ import { settingsService } from '../services/settings.service';
 import crypto from 'crypto';
 import fs from 'fs/promises';
 import path from 'path';
+import { reorderCitations } from '../utils/citation-utils';
 
 const router = Router();
 const subscriptionService = new SubscriptionService();
@@ -164,6 +165,16 @@ router.post('/api/v2/chat', authenticateToken, async (req: AuthenticatedRequest,
       hasResponse: !!result.response,
       sourcesCount: result.sources?.length || 0
     });
+
+    // 📑 Citation reorder: Sort by usage frequency and remove unused
+    if (result.response && result.sources?.length > 0) {
+      const reordered = reorderCitations(result.response, result.sources, {
+        removeUnused: true,
+        sortByUsage: true
+      });
+      result.response = reordered.response;
+      result.sources = reordered.sources;
+    }
 
     // Save enhanced chat interaction with search results and sources
     // This is done asynchronously to not block the response
@@ -831,6 +842,16 @@ async function streamChatResponse(
 
     // Generate the full response
     const result = await ragChat.processMessage(message, conversationId, userId, options);
+
+    // 📑 Citation reorder: Sort by usage frequency and remove unused
+    if (result.response && result.sources?.length > 0) {
+      const reordered = reorderCitations(result.response, result.sources, {
+        removeUnused: true,
+        sortByUsage: true
+      });
+      result.response = reordered.response;
+      result.sources = reordered.sources;
+    }
 
     // Send final response
     if (ws.readyState === ws.OPEN) {
