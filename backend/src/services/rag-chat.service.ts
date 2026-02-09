@@ -2774,6 +2774,57 @@ ${questionLabel}: ${message}`;
       const maxExcerptLength = parseInt(settingsMap.get('ragSettings.maxExcerptLength') || '600');
       const enablePriorityHints = settingsMap.get('ragSettings.enablePriorityHints') !== 'false'; // Default: true
 
+      // 🎯 v12.46: PRE-SORT searchResults to ensure high-priority sources are in context
+      // Problem: Kanun at position 10 won't be in context if initialDisplayCount=7
+      // Solution: Move high-priority sources to the front BEFORE context building
+      // This ensures they're included in context AND properly tracked in later processing
+      const getHierarchyWeight = (r: any): number => {
+        const sourceTable = r.source_table || r.sourceTable || '';
+        const sourceTypeLower = sourceTable.toLowerCase()
+          .replace(/^csv_/, '')
+          .replace(/_/g, '')
+          .replace(/arsiv.*/, '');
+
+        let weight = domainConfig.authorityLevels[sourceTypeLower] || 0;
+        if (weight === 0) {
+          for (const [key, w] of Object.entries(domainConfig.authorityLevels)) {
+            if (sourceTypeLower.includes(key) || key.includes(sourceTypeLower)) {
+              weight = w;
+              break;
+            }
+          }
+        }
+        // Law sources get max weight
+        if (/kanun|mevzuat|law/i.test(sourceTable)) {
+          weight = Math.max(weight, 100);
+        }
+        return weight;
+      };
+
+      // Sort: high-priority first, then by original similarity
+      const presortedResults = [...searchResults].sort((a, b) => {
+        const weightA = getHierarchyWeight(a);
+        const weightB = getHierarchyWeight(b);
+        // High priority (>= 80) comes first
+        const isHighA = weightA >= 80 ? 1 : 0;
+        const isHighB = weightB >= 80 ? 1 : 0;
+        if (isHighB !== isHighA) return isHighB - isHighA; // High priority first
+        // Within same priority tier, keep original order (by similarity)
+        return searchResults.indexOf(a) - searchResults.indexOf(b);
+      });
+
+      // Log if reordering happened
+      const firstHighPriorityInOriginal = searchResults.findIndex(r => getHierarchyWeight(r) >= 80);
+      if (firstHighPriorityInOriginal > 0) {
+        const sourceTable = searchResults[firstHighPriorityInOriginal]?.source_table || 'unknown';
+        console.log(`🎯 [v12.46] Pre-sorted: High-priority source moved from [${firstHighPriorityInOriginal + 1}] to [1]: ${sourceTable}`);
+      }
+
+      // 🎯 v12.46: Replace searchResults with presorted version
+      // This ensures high-priority sources are included in context AND tracked correctly
+      // in later processing (formattedSources, citationRemap, etc.)
+      searchResults = presortedResults;
+
       let contextParts: string[] = [];
       let currentContextLength = 0;
       let highPrioritySources: number[] = []; // Track sources with high authority
