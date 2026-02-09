@@ -8,9 +8,15 @@ Target: Vergilex production (localhost:8003)
 import json
 import time
 import sys
+import io
 import urllib.request
 import urllib.parse
 from datetime import datetime
+
+# Fix Windows encoding for Turkish characters
+if sys.platform == 'win32':
+    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
+    sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8', errors='replace')
 
 BASE_URL = "http://localhost:8003/api/python/semantic-search/search"
 RESULTS_LIMIT = 15
@@ -572,6 +578,10 @@ def main():
         group = test["group"]
         if group not in group_stats:
             group_stats[group] = {"pass": 0, "fail": 0, "error": 0}
+
+        # Rate limit: wait between queries to avoid Jina 429 errors
+        if i > 0:
+            time.sleep(2)  # 2s delay between queries
 
         print("-" * 80)
         print("[%s] %s | Group: %s" % (test["id"], test["query"][:65], group))

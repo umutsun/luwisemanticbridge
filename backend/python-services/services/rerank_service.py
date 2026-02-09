@@ -281,8 +281,8 @@ class RerankService:
 
         except Exception as e:
             logger.error(f"Jina rerank failed: {e}. Falling back to original order.")
-            # Return original documents on error
-            return documents
+            # Return empty list to signal failure - caller keeps original scored_results
+            return []
 
     async def _call_jina_api(
         self,
