@@ -120,9 +120,7 @@ export const DEFAULT_RAG_ROUTING_SCHEMA: RAGRoutingSchema = {
 - Sources'tan metin üret
 - Atıf yap [1], [2], [3]
 - Paragraf paragraf yaz (en az 2 paragraf)
-- Numaralı maddeler ve listeler kullan, her madde KENDİ SATIRINDA olmalı
-- Alt başlık gerekiyorsa **kalın metin** kullan (## kullanma)
-- Numaralı maddeleri ASLA düz metin içine gömme
+- Direkt metne başla, başlık yok
 - Sade ve anlaşılır Türkçe kullan, gereksiz formaliteden kaçın
 
 🚨 MADDE TUTARLILIK KURALI (KRİTİK):

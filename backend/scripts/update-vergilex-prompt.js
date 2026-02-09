@@ -1,5 +1,5 @@
 /**
- * Vergilex System Prompt v12.45 - Update Script
+ * Vergilex System Prompt v12.46 - Update Script
  *
  * Bu script, Vergilex için yeni system prompt'u database'e ekler.
  *
@@ -16,7 +16,7 @@ require("dotenv").config();
 const { Pool } = require("pg");
 const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 
-// Vergilex System Prompt v12.45 - Direct Answer + Clear Language
+// Vergilex System Prompt v12.46 - Direct Answer + Simplified Formatting
 const systemPrompt = `Sen Vergilex, Türk vergi mevzuatı konusunda uzmanlaşmış bir yapay zeka asistanısın. Görevin, kullanıcıların vergi sorularına veritabanındaki güncel mevzuat bilgilerine dayanarak doğru ve güvenilir yanıtlar vermektir.
 
 ## KİMLİĞİN
@@ -62,19 +62,8 @@ const systemPrompt = `Sen Vergilex, Türk vergi mevzuatı konusunda uzmanlaşmı
 - Gereksiz tekrarlardan kaçın
 - Paragraflar arası mantıksal bağlantı kur
 - "değerlendirilmektedir", "mütalaa edilmektedir" gibi aşırı resmi ifadeler yerine daha sade karşılıklarını tercih et
-- **Yapılandırılmış formatlama ZORUNLU:**
-  - Numaralı maddeler varsa her madde KENDİ SATIRINDA olmalı (1. 2. 3.)
-  - Alt başlık gerekiyorsa **kalın metin** kullan (## kullanma)
-  - Oran, süre, tutar listesi varsa madde işareti veya numaralı liste kullan
-  - Paragraflar arasında boş satır bırak
-  - Bold (**kalın**) ile önemli kavramları vurgula
-- ASLA numaralı maddeleri düz metin içine gömme
-- Yanlış: "...fiiller: 1. X yapma 2. Y yapma 3. Z yapma"
-- Doğru:
-  "...fiiller:
-  1. X yapma
-  2. Y yapma
-  3. Z yapma"
+- Bold (**kalın**) ile önemli kavramları vurgula
+- Paragraflar arasında boş satır bırak
 
 ### 6. EKSİK BİLGİ
 - Kaynaklarda sorunun DOĞRUDAN cevabı yoksa bunu AÇIKÇA belirt
@@ -151,8 +140,8 @@ Hangisi hakkında bilgi almak istiyorsunuz - **beyanname tarihi mi** yoksa **öd
 
 // Prompt Library için nesne
 const newPromptObject = {
-  id: 'vergilex-v12.45',
-  name: 'Vergilex v12.45 - Direct Answer + Clear Language',
+  id: 'vergilex-v12.46',
+  name: 'Vergilex v12.46 - Direct Answer + Simplified Formatting',
   systemPrompt: systemPrompt,
   temperature: 0.3,
   maxTokens: 4096,
@@ -162,7 +151,7 @@ const newPromptObject = {
 
 async function main() {
   try {
-    console.log('🔄 Vergilex System Prompt v12.45 güncelleniyor...\n');
+    console.log('🔄 Vergilex System Prompt v12.46 güncelleniyor...\n');
 
     // 1. chatbot.system_prompt güncelle
     const chatbotResult = await pool.query("SELECT value FROM settings WHERE key = $1", ["chatbot"]);
