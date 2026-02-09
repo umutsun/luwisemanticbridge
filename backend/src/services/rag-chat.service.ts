@@ -853,10 +853,12 @@ export class RAGChatService {
 
       // Schema-driven citation instructions (overrides hardcoded INLINE CITATION RULES)
       const citationInstructions = foundFormat.citationInstructions ||
-        `- Her ifadeden hemen sonra kaynak numarası ekle: "...vergi oranı %18'dir [1]."
+        `- Kaynak numarası SADECE spesifik bilgi verirken ekle (oran, tarih, madde numarası, süre, tutar): "...vergi oranı %18'dir [1]."
+- Genel açıklama ve yorumlarda citation EKLEME - sadece kaynaktan gelen somut bilgiler için kullan
 - Aynı bilgi için birden fazla kaynak: "...kabul edilmektedir [1][3]."
 - Metin içinde [1], [2] dipnot formatını kullan
-- Kaynak sırasını değiştirme`;
+- Her paragrafın sonuna zorunlu citation KOYMA, sadece gerçekten o kaynaktan alınan bilgiler için kullan
+- Citation olmadan genel değerlendirme yazabilirsin`;
 
       const prompt = `🚨 CRITICAL: FOLLOW THIS OUTPUT FORMAT EXACTLY
 
@@ -910,10 +912,11 @@ PROHIBITED:
       // Schema-driven citation instructions (English)
       const citationInstructions = foundFormat.citationInstructionsEn ||
         foundFormat.citationInstructions ||
-        `- Add source number IMMEDIATELY after each statement: "...tax rate is 18% [1]."
+        `- Add source number ONLY when stating specific facts (rates, dates, article numbers, amounts): "...tax rate is 18% [1]."
+- Do NOT add citations to general explanations or commentary - only cite specific sourced facts
 - Multiple sources for same info: "...is accepted [1][3]."
 - Use footnote format [1], [2] in text
-- Keep source order (do not reorder sources)`;
+- Do NOT force a citation at the end of every paragraph - only cite when referencing actual source content`;
 
       const prompt = `🚨 CRITICAL: FOLLOW THIS OUTPUT FORMAT EXACTLY
 
@@ -12994,15 +12997,15 @@ UNUT: ${conversationTone} üslubunda YORUMLA, kopyalama. KENDI KELİMELERİNLE a
         tablePatterns: [/kdv/i, /katma/i, /3065/i]
       },
       'GVK': {
-        keywords: ['gelir vergisi', 'gvk', '193', 'yıllık beyan', 'stopaj', 'tevkifat', 'ücret', 'serbest meslek', 'menkul', 'gayrimenkul sermaye iradı'],
+        keywords: ['gelir vergisi', 'gvk', '193', 'yıllık beyan', 'stopaj', 'tevkifat', 'ücret', 'serbest meslek', 'menkul', 'gayrimenkul sermaye iradı', 'gelir vergisi kanunu', 'vergi dilimleri', 'vergi dilimi'],
         tablePatterns: [/gvk/i, /gelir/i, /193/i]
       },
       'KVK': {
-        keywords: ['kurumlar vergisi', 'kvk', '5520', 'kurum kazancı', 'kar dağıtımı'],
+        keywords: ['kurumlar vergisi', 'kvk', '5520', 'kurum kazancı', 'kar dağıtımı', 'kurumlar vergisi kanunu', 'istisna kazanç'],
         tablePatterns: [/kvk/i, /kurumlar/i, /5520/i]
       },
       'VUK': {
-        keywords: ['vergi usul', 'vuk', '213', 'usul', 'yoklama', 'inceleme', 'zamanaşımı', 'tebliğ', 'uzlaşma', 'izaha davet'],
+        keywords: ['vergi usul', 'vuk', '213', 'usul', 'yoklama', 'inceleme', 'zamanaşımı', 'tebliğ', 'uzlaşma', 'izaha davet', 'vergi usul kanunu', 'gecikme zammı', 'gecikme faizi', 'ceza indirimi'],
         tablePatterns: [/vuk/i, /usul/i, /213/i]
       },
       'DVK': {
@@ -13021,6 +13024,10 @@ UNUT: ${conversationTone} üslubunda YORUMLA, kopyalama. KENDI KELİMELERİNLE a
         keywords: ['6183', 'amme alacağı', 'kamu alacağı', 'haciz', 'ödeme emri', 'teminat', 'tecil', 'taksit'],
         tablePatterns: [/aatuhk/i, /6183/i, /amme/i]
       },
+      'IYUK': {
+        keywords: ['idari yargı', 'vergi mahkemesi', 'danıştay', 'itiraz', 'idari yargılama usulü', 'iyuk', '2577', 'vergi davası', 'dava açma süresi', 'temyiz'],
+        tablePatterns: [/iyuk/i, /danistay/i, /mahkeme/i, /dava/i]
+      },
       'CVOA': {
         keywords: ['çifte vergilendirme', 'çvöa', 'uluslararası', 'stopaj anlaşma', 'dar mükellef'],
         tablePatterns: [/cvoa/i, /cifte/i, /anlas/i]
@@ -13031,7 +13038,7 @@ UNUT: ${conversationTone} üslubunda YORUMLA, kopyalama. KENDI KELİMELERİNLE a
     for (const [domain, config] of Object.entries(DOMAIN_ROUTING)) {
       const matchedKeywords = config.keywords.filter(k => queryLower.includes(k));
       if (matchedKeywords.length > 0) {
-        console.log(`🎯 [v12.44] DOMAIN_DETECTED: ${domain} (matched: ${matchedKeywords.join(', ')})`);
+        console.log(`🎯 [v12.52] DOMAIN_DETECTED: ${domain} (matched: ${matchedKeywords.join(', ')})`);
         return { domain, keywords: matchedKeywords, tablePatterns: config.tablePatterns };
       }
     }
@@ -13064,6 +13071,7 @@ UNUT: ${conversationTone} üslubunda YORUMLA, kopyalama. KENDI KELİMELERİNLE a
       'OTVK': [/vivk/i, /veraset/i, /kdv(?!.*otv)/i],
       'MTVK': [/vivk/i, /veraset/i],
       'AATUHK': [], // AATUHK is cross-cutting
+      'IYUK': [], // IYUK cross-domain (court decisions relate to all laws)
       'CVOA': [/vivk/i, /veraset/i]
     };
 
@@ -13088,7 +13096,7 @@ UNUT: ${conversationTone} üslubunda YORUMLA, kopyalama. KENDI KELİMELERİNLE a
       // Keep if: matches target OR doesn't match excluded
       if (matchesTarget) return true; // Always keep target domain sources
       if (matchesExcluded) {
-        console.log(`🚫 [v12.44] DOMAIN_FILTER: Excluding "${title.substring(0, 50)}..." (wrong domain for ${queryDomain.domain})`);
+        console.log(`🚫 [v12.52] DOMAIN_FILTER: Excluding "${title.substring(0, 50)}..." (wrong domain for ${queryDomain.domain})`);
         return false;
       }
       return true; // Keep generic sources
@@ -13096,7 +13104,7 @@ UNUT: ${conversationTone} üslubunda YORUMLA, kopyalama. KENDI KELİMELERİNLE a
 
     const removedCount = beforeCount - filteredSources.length;
     if (removedCount > 0) {
-      console.log(`🎯 [v12.44] DOMAIN_ROUTING: Filtered ${removedCount}/${beforeCount} sources for domain ${queryDomain.domain}`);
+      console.log(`🎯 [v12.52] DOMAIN_ROUTING: Filtered ${removedCount}/${beforeCount} sources for domain ${queryDomain.domain}`);
     }
 
     return filteredSources;
