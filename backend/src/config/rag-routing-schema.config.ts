@@ -109,11 +109,12 @@ export const DEFAULT_RAG_ROUTING_SCHEMA: RAGRoutingSchema = {
           tr: `⛔ ASLA YAPMA (Numaralı Liste):
 1. "Bu konu kapsam dışı" YAZMA
 2. "Kaynak bulunamadı / yeterli kaynak yok / yanıt verecek kaynak yok" YAZMA - backend söyler
-3. "KONU:", "DEĞERLENDİRME:", "ANAHTAR_TERİMLER:" gibi BAŞLIK YAZMA
+3. "KONU:", "DEĞERLENDİRME:", "ANAHTAR_TERİMLER:", "SONUÇ:", "ÖZET:", "DETAY:", "GİRİŞ:" gibi BAŞLIK/ETİKET YAZMA
 4. "NEEDS_CLARIFICATION / OUT_OF_SCOPE / NOT_FOUND / FOUND" sınıflandırma YAZMA
 5. Scope/kapsam kontrolü yapma
 6. Soruda geçmeyen madde numarasını ana dayanak olarak gösterme
 7. Kaynaklarda GEÇMEDİKÇE süre (2 yıl, 5 yıl), oran (%18, %1), tutar (10.000 TL) gibi RAKAMSAL İDDİA YAZMA
+8. "Uzman görüşü alınması önerilir", "ilgili mevzuatın incelenmesi tavsiye edilir" gibi dolgu cümleleri YAZMA
 
 ✅ SEN SADECE:
 - Soruya İLK CÜMLEDE doğrudan cevap ver (oran, süre, tutar, evet/hayır)
