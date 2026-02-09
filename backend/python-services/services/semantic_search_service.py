@@ -3813,25 +3813,43 @@ class SemanticSearchService:
                     )
 
                     if reranked_results and len(reranked_results) > 0:
-                        # v12.48: Combine rerank_score with our custom boosts
-                        # Reranker provides semantic relevance, we add our domain boosts
+                        # v12.50: Combine rerank_score with source_priority, table_weight, and domain boosts
+                        # Reranker provides semantic relevance, we multiply by priority/weight and add domain boosts
                         for r in reranked_results:
                             rerank_score = r.get('rerank_score', 0) * 100  # Normalize to percentage
-                            rate_boost = r.get('rate_article_boost', 0)  # Already in percentage
-                            direct_boost = r.get('direct_answer_boost', 0)  # Already in percentage
 
-                            # Combined score: rerank (semantic) + rate boost + direct answer boost
-                            # Rate and direct boosts are important for rate questions
-                            combined_score = rerank_score + rate_boost + direct_boost
+                            # Apply source_priority and table_weight as multiplicative factors
+                            src_priority = r.get('source_priority', 1.0)
+                            tbl_weight = r.get('table_weight', 1.0)
+                            priority_weighted_rerank = rerank_score * src_priority * tbl_weight
+
+                            # Domain-specific additive boosts (already in percentage)
+                            rate_boost = r.get('rate_article_boost', 0)
+                            direct_boost = r.get('direct_answer_boost', 0)
+
+                            # Combined score: rerank * priority * weight + domain boosts
+                            combined_score = priority_weighted_rerank + rate_boost + direct_boost
                             r['final_score'] = round(combined_score, 2)
                             r['rerank_base'] = round(rerank_score, 2)
+                            r['rerank_priority_weighted'] = round(priority_weighted_rerank, 2)
 
                         # Re-sort by combined final_score
                         reranked_results.sort(key=lambda x: x.get('final_score', 0), reverse=True)
                         scored_results = reranked_results
                         reranked = True
                         timings["rerank_ms"] = (datetime.now() - rerank_start).total_seconds() * 1000
-                        logger.info(f"🔄 Jina rerank applied: {len(reranked_results)} results in {timings['rerank_ms']:.1f}ms")
+
+                        # Log top 3 reranked results with priority info
+                        top3_log = []
+                        for i, r in enumerate(reranked_results[:3]):
+                            top3_log.append(
+                                f"#{i+1} {r.get('source_table', '?')} "
+                                f"(rerank={r.get('rerank_base', 0):.1f}, "
+                                f"pri={r.get('source_priority', 0):.2f}, "
+                                f"tw={r.get('table_weight', 0):.2f}, "
+                                f"final={r.get('final_score', 0):.1f})"
+                            )
+                        logger.info(f"🔄 Jina rerank applied: {len(reranked_results)} results in {timings['rerank_ms']:.1f}ms\n  " + "\n  ".join(top3_log))
                     else:
                         logger.warning("Reranker returned empty results, using original order")
                         timings["rerank_ms"] = 0
