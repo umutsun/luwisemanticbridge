@@ -2462,8 +2462,10 @@ ${questionLabel}: ${message}`;
         console.log(`[RAG] 🎯 Article query detected: ${articleQuery.law_code} Madde ${articleQuery.article_number}, exact_match=${articleQuery.exact_match_found}`);
       }
 
-      // 🎯 KEYWORD BOOST: Boost results with exact query term matches
-      // This helps surface relevant özelge/tebliğ when embedding similarity is close
+      // 🎯 DOMAIN TERM BOOST: Apply schema-driven domain term boost
+      // NOTE: Python semantic search already applies keyword_boost (phrase matching, n-grams, title matching).
+      // This Node.js step ONLY applies domain-specific boosts from schema keyTerms (özelge relevance etc.)
+      // to avoid double-boosting the same keywords.
       const queryTerms = searchQuery.toLowerCase().split(/\s+/).filter(t => t.length > 2);
       // Use keyTerms from DB domain config (no hardcoding)
       const highValueTerms = domainConfig.keyTerms.length > 0
@@ -2472,38 +2474,42 @@ ${questionLabel}: ${message}`;
       const queryHighValueTerms = queryTerms.filter(t => highValueTerms.some(hv => t.includes(hv)));
 
       allResults = allResults.map(result => {
-        let keywordBoost = 0;
+        // Skip domain boost if Python already applied keyword_boost (avoid double-boosting)
+        const pythonKeywordBoost = result.keyword_boost || 0;
+        if (pythonKeywordBoost > 0 && highValueTerms.length === 0) {
+          // Python already boosted and no domain-specific terms configured - skip
+          return result;
+        }
+
+        let domainBoost = 0;
         const title = (result.title || '').toLowerCase();
-        const content = (result.content || result.text || result.excerpt || '').toLowerCase();
         const sourceType = (result.source_type || result.metadata?.source_type || '').toLowerCase();
 
-        // Boost for each high-value query term found in title (strongest signal)
-        for (const term of queryHighValueTerms) {
-          if (title.includes(term)) keywordBoost += 15; // Title match = +15%
-        }
+        // Only apply domain-specific boosts (not general keyword matching which Python already did)
+        if (highValueTerms.length > 0) {
+          // Boost for domain-specific high-value terms in title (schema-driven, not duplicating Python)
+          for (const term of queryHighValueTerms) {
+            if (title.includes(term)) domainBoost += 10; // Domain term in title
+          }
 
-        // Boost for each query term found in content
-        for (const term of queryTerms) {
-          if (content.includes(term)) keywordBoost += 3; // Content match = +3%
-        }
-
-        // Extra boost for özelge sources when query contains official-document terms
-        if (sourceType.includes('ozelge') && queryHighValueTerms.length > 0) {
-          keywordBoost += 10; // özelge relevance boost
+          // Extra boost for özelge sources when query contains domain terms
+          if (sourceType.includes('ozelge') && queryHighValueTerms.length > 0) {
+            domainBoost += 10; // özelge relevance boost
+          }
         }
 
         // Apply boost to score
         const originalScore = result.score || (result.similarity_score * 100) || 0;
-        const boostedScore = Math.min(originalScore + keywordBoost, 100);
+        const boostedScore = Math.min(originalScore + domainBoost, 100);
 
-        if (keywordBoost > 0) {
-          console.log(`🎯 KEYWORD_BOOST: "${title.substring(0, 40)}..." +${keywordBoost}% (${originalScore.toFixed(1)} -> ${boostedScore.toFixed(1)})`);
+        if (domainBoost > 0) {
+          console.log(`🎯 DOMAIN_BOOST: "${title.substring(0, 40)}..." +${domainBoost}% (${originalScore.toFixed(1)} -> ${boostedScore.toFixed(1)}) [python_kw_boost: ${pythonKeywordBoost}]`);
         }
 
         return {
           ...result,
           score: boostedScore,
-          _keywordBoost: keywordBoost
+          _domainBoost: domainBoost
         };
       });
 
