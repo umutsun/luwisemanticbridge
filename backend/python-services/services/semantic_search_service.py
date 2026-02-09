@@ -1588,13 +1588,15 @@ class SemanticSearchService:
 
                 if is_definitive and not is_indirect:
                     details["boost_reason"] = "definitive_rate_statement"
-                    logger.info(f"📊 Direct answer boost: definitive rate {rate_value}% found in '{title[:50]}...'")
+                    logger.info(f"📊 Direct answer boost: definitive rate {rate_value}% found in '{title[:80]}...'")
                     return 0.15, details  # Strong boost for definitive rates
                 elif not is_indirect:
                     details["boost_reason"] = "rate_mentioned"
+                    logger.debug(f"📊 Rate mentioned (no definitive pattern): {rate_value}% in '{title[:50]}...'")
                     return 0.08, details  # Moderate boost for rate mentions
                 else:
                     details["boost_reason"] = "indirect_rate"
+                    logger.debug(f"📊 Indirect rate skipped: {rate_value}% in '{title[:50]}...' (min/max pattern)")
                     return 0.0, details  # No boost for min/max/conditional rates
 
         return 0.0, details
@@ -3335,6 +3337,15 @@ class SemanticSearchService:
 
             # Sort by final score and limit
             scored_results.sort(key=lambda x: x["final_score"], reverse=True)
+
+            # Log top 5 results for debugging rate questions
+            if is_rate_question and scored_results:
+                top5_debug = []
+                for i, r in enumerate(scored_results[:5]):
+                    da_boost = r.get("direct_answer_boost", 0)
+                    title_short = (r.get("title") or r.get("source_name", ""))[:60]
+                    top5_debug.append(f"#{i+1} {title_short} (score={r['final_score']:.1f}, da_boost={da_boost:.1f})")
+                logger.info(f"📊 Rate question top 5:\n  " + "\n  ".join(top5_debug))
 
             # 🎯 ARTICLE FILTERING: When article anchoring is enabled,
             # filter law chunks to prevent LLM from citing wrong articles
