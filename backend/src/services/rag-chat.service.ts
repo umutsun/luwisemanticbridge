@@ -852,6 +852,13 @@ INLINE CITATION RULES:
 - Use footnote format [1], [2] in text
 - Keep source order (do not reorder sources)
 
+MARKDOWN FORMATTING (MANDATORY):
+- Use numbered lists (1. 2. 3.) for sequential items - NEVER embed them inline as "1. X 2. Y 3. Z"
+- Use ## headings for distinct categories or sections
+- Use **bold** for key terms, law names, and important concepts
+- Each numbered item MUST be on its own line with a blank line before the list
+- Leave blank lines between paragraphs
+
 LENGTH:
 - TARGET: ${articleLength} chars
 - MINIMUM: ${minLength} chars
@@ -895,6 +902,13 @@ INLINE CITATION RULES:
 - Multiple sources for same info: "...is accepted [1][3]."
 - Use footnote format [1], [2] in text
 - Keep source order (do not reorder sources)
+
+MARKDOWN FORMATTING (MANDATORY):
+- Use numbered lists (1. 2. 3.) for sequential items - NEVER embed them inline as "1. X 2. Y 3. Z"
+- Use ## headings for distinct categories or sections
+- Use **bold** for key terms, law names, and important concepts
+- Each numbered item MUST be on its own line with a blank line before the list
+- Leave blank lines between paragraphs
 
 LENGTH:
 - TARGET: ${articleLength} chars
