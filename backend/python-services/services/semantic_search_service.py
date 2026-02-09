@@ -100,6 +100,22 @@ class PromptSettings:
 
 
 @dataclass
+class RateArticleConfig:
+    """
+    v12.48: Rate article configuration for tax rate questions.
+    Maps law codes to their rate-defining articles.
+    """
+    article_number: str  # e.g., "32" for KVK
+    keywords: List[str]  # e.g., ["oran", "yüzde", "%"]
+    boost_score: float = 0.2  # Extra boost for rate questions
+    related_articles: List[str] = None  # e.g., ["32/A", "32/B"]
+
+    def __post_init__(self):
+        if self.related_articles is None:
+            self.related_articles = []
+
+
+@dataclass
 class LawCodeConfig:
     """
     Law code configuration for article anchoring.
@@ -114,6 +130,8 @@ class LawCodeConfig:
     law_name_to_code: Dict[str, str] = None
     # Patterns for matching law codes
     law_code_patterns: List[Dict[str, str]] = None
+    # v12.48: Rate articles for each law code
+    rate_articles: Dict[str, RateArticleConfig] = None
 
     def __post_init__(self):
         """Initialize with defaults if None"""
@@ -125,6 +143,8 @@ class LawCodeConfig:
             self.law_name_to_code = {}
         if self.law_code_patterns is None:
             self.law_code_patterns = []
+        if self.rate_articles is None:
+            self.rate_articles = {}
 
 
 class SemanticSearchService:
@@ -220,13 +240,27 @@ class SemanticSearchService:
 
             # Build config from database or use defaults
             if law_config_data:
+                # Parse rate articles if present (v12.48)
+                rate_articles_raw = law_config_data.get('rateArticles', {})
+                rate_articles = {}
+                for law_code, article_data in rate_articles_raw.items():
+                    if isinstance(article_data, dict):
+                        rate_articles[law_code] = RateArticleConfig(
+                            article_number=article_data.get('articleNumber', ''),
+                            keywords=article_data.get('keywords', []),
+                            boost_score=float(article_data.get('boostScore', 0.2)),
+                            related_articles=article_data.get('relatedArticles', [])
+                        )
+
                 config = LawCodeConfig(
                     law_codes=law_config_data.get('lawCodes', {}),
                     law_number_to_code=law_config_data.get('lawNumberToCode', {}),
                     law_name_to_code=law_config_data.get('lawNameToCode', {}),
-                    law_code_patterns=law_config_data.get('lawCodePatterns', [])
+                    law_code_patterns=law_config_data.get('lawCodePatterns', []),
+                    rate_articles=rate_articles
                 )
-                logger.info(f"[LawCodeConfig] Loaded from database: {len(config.law_codes)} codes, {len(config.law_number_to_code)} numbers, {len(config.law_name_to_code)} names")
+                rate_articles_count = len(rate_articles)
+                logger.info(f"[LawCodeConfig] Loaded from database: {len(config.law_codes)} codes, {len(config.law_number_to_code)} numbers, {len(config.law_name_to_code)} names, {rate_articles_count} rate articles")
             else:
                 # Use class-level defaults
                 config = LawCodeConfig(
@@ -1484,6 +1518,64 @@ class SemanticSearchService:
 
         return None
 
+    # === LAW CODE DETECTION FROM NATURAL LANGUAGE (v12.48) ===
+    # Maps natural language patterns to law codes for rate question boosting
+    LAW_CODE_NATURAL_PATTERNS = {
+        "KVK": [
+            r'kurumlar\s*vergisi',  # "kurumlar vergisi oranı"
+            r'kurumlar\s*v\.',      # "kurumlar v."
+        ],
+        "GVK": [
+            r'gelir\s*vergisi',     # "gelir vergisi oranı"
+            r'gelir\s*v\.',         # "gelir v."
+        ],
+        "KDVK": [
+            r'katma\s*değer\s*vergisi',  # "katma değer vergisi"
+            r'kdv\s*oran',               # "KDV oranı"
+            r'\bkdv\b',                  # standalone "KDV"
+        ],
+        "ÖTVK": [
+            r'özel\s*tüketim\s*vergisi',  # "özel tüketim vergisi"
+            r'ötv\s*oran',                # "ÖTV oranı"
+            r'\bötv\b',                   # standalone "ÖTV"
+            r'\botv\b',                   # "OTV" without Turkish characters
+        ],
+        "DVK": [
+            r'damga\s*vergisi',     # "damga vergisi"
+        ],
+        "VUK": [
+            r'vergi\s*usul',        # "vergi usul kanunu"
+        ],
+    }
+
+    def _detect_law_code_from_query(self, query: str) -> Optional[str]:
+        """
+        v12.48: Detect law code from natural language query.
+
+        This is used for rate questions where the user doesn't explicitly
+        mention an article number but asks about a specific tax rate.
+
+        Examples:
+        - "kurumlar vergisi oranı kaçtır?" → KVK
+        - "KDV oranı ne kadar?" → KDVK
+        - "gelir vergisi yüzde kaç?" → GVK
+
+        Returns:
+            Law code (e.g., "KVK") if detected, None otherwise
+        """
+        if not query:
+            return None
+
+        query_lower = query.lower()
+
+        for law_code, patterns in self.LAW_CODE_NATURAL_PATTERNS.items():
+            for pattern in patterns:
+                if re.search(pattern, query_lower, re.IGNORECASE):
+                    logger.debug(f"📊 Law code detected from query: {law_code} (pattern: {pattern})")
+                    return law_code
+
+        return None
+
     # === DIRECT ANSWER DETECTION (v12.47) ===
     # Patterns for "what is the rate/amount?" type questions
     RATE_QUESTION_PATTERNS = [
@@ -1598,6 +1690,82 @@ class SemanticSearchService:
                     details["boost_reason"] = "indirect_rate"
                     logger.debug(f"📊 Indirect rate skipped: {rate_value}% in '{title[:50]}...' (min/max pattern)")
                     return 0.0, details  # No boost for min/max/conditional rates
+
+        return 0.0, details
+
+    def _apply_rate_article_boost(
+        self,
+        result: Dict[str, Any],
+        detected_law_code: Optional[str],
+        law_code_config: LawCodeConfig
+    ) -> Tuple[float, Dict[str, Any]]:
+        """
+        v12.48: Apply schema-based boost for rate-defining articles.
+
+        When user asks "kurumlar vergisi oranı kaçtır?" and we detect law code KVK,
+        check if schema has rateArticles["KVK"].articleNumber = "32".
+        If so, boost results containing "Madde 32" in their source_name or content.
+
+        Args:
+            result: Search result
+            detected_law_code: Law code detected from query (e.g., "KVK")
+            law_code_config: Law code configuration with rate_articles
+
+        Returns:
+            Tuple of (boost_value, details_dict)
+        """
+        details = {
+            "rate_article_boost": False,
+            "target_article": None,
+            "matched_in": None,
+            "boost_value": 0.0
+        }
+
+        if not detected_law_code:
+            return 0.0, details
+
+        # Check if schema has rate article config for this law code
+        rate_config = law_code_config.rate_articles.get(detected_law_code)
+        if not rate_config:
+            return 0.0, details
+
+        target_article = rate_config.article_number
+        if not target_article:
+            return 0.0, details
+
+        details["target_article"] = f"{detected_law_code} Madde {target_article}"
+
+        # Check source_name and content for the target article
+        source_name = (result.get("source_name") or result.get("title") or "").lower()
+        content = (result.get("content") or "").lower()
+
+        # Article patterns to match
+        article_patterns = [
+            rf'madde\s*{target_article}\b',           # "Madde 32"
+            rf'{detected_law_code.lower()}\s*{target_article}\b',  # "KVK 32"
+            rf'{detected_law_code.lower()}\s*madde\s*{target_article}\b',  # "KVK Madde 32"
+        ]
+
+        # Also check related articles
+        for related in (rate_config.related_articles or []):
+            article_patterns.append(rf'madde\s*{related}\b')
+
+        matched_in = []
+        for pattern in article_patterns:
+            if re.search(pattern, source_name, re.IGNORECASE):
+                matched_in.append("source_name")
+                break
+            if re.search(pattern, content, re.IGNORECASE):
+                matched_in.append("content")
+                break
+
+        if matched_in:
+            boost = rate_config.boost_score
+            details["rate_article_boost"] = True
+            details["matched_in"] = matched_in[0]
+            details["boost_value"] = boost
+            logger.info(f"📊 Rate article boost: +{boost:.2f} for {detected_law_code} Madde {target_article} (matched in {matched_in[0]})")
+            return boost, details
 
         return 0.0, details
 
@@ -3079,6 +3247,21 @@ class SemanticSearchService:
         if is_rate_question:
             logger.info(f"📊 Rate question detected: '{query[:60]}...' - will boost direct rate answers")
 
+        # === RATE ARTICLE BOOST (v12.48): Detect law code from natural language ===
+        # For rate questions like "kurumlar vergisi oranı kaçtır?", detect the law code
+        # and prepare to boost the rate-defining article from schema configuration
+        rate_question_law_code: Optional[str] = None
+        law_code_config: Optional[LawCodeConfig] = None
+        if is_rate_question:
+            rate_question_law_code = self._detect_law_code_from_query(query)
+            if rate_question_law_code:
+                law_code_config = await self.get_law_code_config()
+                rate_article_config = law_code_config.rate_articles.get(rate_question_law_code)
+                if rate_article_config:
+                    logger.info(f"📊 Rate article target: {rate_question_law_code} Madde {rate_article_config.article_number} (boost: {rate_article_config.boost_score})")
+                else:
+                    logger.debug(f"📊 No rate article config for {rate_question_law_code} in schema")
+
         # Check search result cache
         if use_cache:
             cache_key = self._get_search_cache_key(query, limit)
@@ -3266,9 +3449,27 @@ class SemanticSearchService:
                         penalty_stats["direct_answer_count"] += 1
                         penalty_stats["direct_answer_boost_total"] += direct_answer_boost
 
-                # Calculate final score (includes keyword boost, penalties, metadata boost, article boost, AND direct answer boost)
-                # Penalty is negative, metadata_boost, article_boost, and direct_answer_boost can be positive or negative
-                final_score = max(0, weighted_similarity + keyword_boost + retrieval_penalty + metadata_boost + article_boost + direct_answer_boost)
+                # === RATE ARTICLE BOOST (v12.48) ===
+                # When rate question + law code detected, boost results containing the rate-defining article
+                rate_article_boost = 0.0
+                rate_article_details = {"rate_article_boost": False}
+
+                if is_rate_question and rate_question_law_code and law_code_config:
+                    rate_article_boost, rate_article_details = self._apply_rate_article_boost(
+                        result, rate_question_law_code, law_code_config
+                    )
+
+                    # Track rate article statistics
+                    if "rate_article_count" not in penalty_stats:
+                        penalty_stats["rate_article_count"] = 0
+                        penalty_stats["rate_article_boost_total"] = 0.0
+                    if rate_article_boost > 0:
+                        penalty_stats["rate_article_count"] += 1
+                        penalty_stats["rate_article_boost_total"] += rate_article_boost
+
+                # Calculate final score (includes keyword boost, penalties, metadata boost, article boost, direct answer boost, AND rate article boost)
+                # Penalty is negative, other boosts can be positive or negative
+                final_score = max(0, weighted_similarity + keyword_boost + retrieval_penalty + metadata_boost + article_boost + direct_answer_boost + rate_article_boost)
 
                 scored_results.append({
                     "id": result["id"],
@@ -3284,6 +3485,7 @@ class SemanticSearchService:
                     "metadata_boost": round(metadata_boost * 100, 2),
                     "article_boost": round(article_boost * 100, 2),
                     "direct_answer_boost": round(direct_answer_boost * 100, 2),  # v12.47
+                    "rate_article_boost": round(rate_article_boost * 100, 2),  # v12.48
                     "source_priority": round(source_priority, 2),
                     "table_weight": round(table_weight, 2),
                     "final_score": round(final_score * 100, 2),
@@ -3334,6 +3536,11 @@ class SemanticSearchService:
             if is_rate_question and penalty_stats.get("direct_answer_count", 0) > 0:
                 avg_boost = penalty_stats["direct_answer_boost_total"] / penalty_stats["direct_answer_count"]
                 logger.info(f"📊 Direct answer boost: {penalty_stats['direct_answer_count']} results boosted, avg={avg_boost*100:.1f}%")
+
+            # Log rate article boost statistics (v12.48)
+            if is_rate_question and penalty_stats.get("rate_article_count", 0) > 0:
+                avg_boost = penalty_stats["rate_article_boost_total"] / penalty_stats["rate_article_count"]
+                logger.info(f"📊 Rate article boost: {penalty_stats['rate_article_count']} results boosted for {rate_question_law_code}, avg={avg_boost*100:.1f}%")
 
             # Sort by final score and limit
             scored_results.sort(key=lambda x: x["final_score"], reverse=True)
@@ -3534,7 +3741,11 @@ class SemanticSearchService:
                     "rerank_applied": reranked if 'reranked' in dir() else False,
                     # Direct answer boost (v12.47)
                     "rate_question_detected": is_rate_question,
-                    "direct_answer_boost_applied": penalty_stats.get("direct_answer_count", 0) > 0 if is_rate_question else False
+                    "direct_answer_boost_applied": penalty_stats.get("direct_answer_count", 0) > 0 if is_rate_question else False,
+                    # Rate article boost (v12.48)
+                    "rate_question_law_code": rate_question_law_code,
+                    "rate_article_boost_applied": penalty_stats.get("rate_article_count", 0) > 0 if is_rate_question else False,
+                    "rate_article_boost_count": penalty_stats.get("rate_article_count", 0)
                 },
                 # Article anchoring context for LLM
                 "article_query": {
