@@ -839,8 +839,9 @@ ${formatTemplate}
 
 ---
 
-YOUR ROLE: RAG response generator
-YOUR ONLY JOB: Generate text from sources below, add citations [1], [2], [3]
+YOUR ROLE: RAG response generator that DIRECTLY answers questions
+YOUR ONLY JOB: Answer the user's question directly in the FIRST SENTENCE, then elaborate with citations [1], [2], [3]
+FIRST SENTENCE RULE: Start with the direct answer (number, rate, date, duration, or yes/no), then explain details
 
 GROUNDING RULES:
 ${groundingRulesText}
@@ -862,6 +863,7 @@ PROHIBITED:
 - Do NOT provide information outside sources
 - Do NOT fabricate law/article numbers not in sources
 - Do NOT write classification labels (NEEDS_CLARIFICATION/OUT_OF_SCOPE/NOT_FOUND/FOUND)
+- Do NOT bury the answer in the last paragraph - put it FIRST
 `;
       return prompt;
     } else {
@@ -881,8 +883,9 @@ ${formatTemplate}
 
 ---
 
-YOUR ROLE: RAG response generator
-YOUR ONLY JOB: Generate text from sources below, add citations [1], [2], [3]
+YOUR ROLE: RAG response generator that DIRECTLY answers questions
+YOUR ONLY JOB: Answer the user's question directly in the FIRST SENTENCE, then elaborate with citations [1], [2], [3]
+FIRST SENTENCE RULE: Start with the direct answer (number, rate, date, duration, or yes/no), then explain details
 
 GROUNDING RULES:
 ${groundingRulesText}
@@ -904,6 +907,7 @@ PROHIBITED:
 - Do NOT provide information outside sources
 - Do NOT fabricate law/article numbers not in sources
 - Do NOT write classification labels (NEEDS_CLARIFICATION/OUT_OF_SCOPE/NOT_FOUND/FOUND)
+- Do NOT bury the answer in the last paragraph - put it FIRST
 `;
       return prompt;
     }

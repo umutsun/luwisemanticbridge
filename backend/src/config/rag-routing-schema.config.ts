@@ -99,8 +99,8 @@ export const DEFAULT_RAG_ROUTING_SCHEMA: RAGRoutingSchema = {
             titleEn: 'Assessment',
             required: true,
             systemGenerated: false,  // LLM yazar
-            description: 'SADECE sources\'tan hareketle değerlendirme yaz. Birden fazla paragraf kullan (en az 2 paragraf). Her önemli bilgiden sonra dipnot ekle [1], [2]. Paragraflar şık bir şekilde formatla. VERDICT SORULARINDA (zorunda mıyım/yapabilir miyim/yasak mı/gerekir mi): Eğer kaynaklarda AÇIK ve NET hüküm cümlesi yoksa, "Kaynaklarda bu konuda açık bir düzenleme bulunamamıştır" cümlesini mutlaka yaz ve kesin hüküm verme.',
-            descriptionEn: 'Evaluate based ONLY on sources. Use multiple paragraphs (min 2). Add footnotes [1], [2] after important information. Format paragraphs elegantly. VERDICT QUESTIONS (must I/can I/is it prohibited/is it required): If sources have NO EXPLICIT ruling, MUST write "No clear regulation found in sources on this matter" and do NOT give definitive ruling.'
+            description: 'Soruya İLK CÜMLEDE doğrudan cevap ver. SADECE sources\'tan hareketle yaz. Birden fazla paragraf kullan (en az 2 paragraf). Her önemli bilgiden sonra dipnot ekle [1], [2]. Sayısal sorularda (oran, süre, tutar) ilk cümlede rakamı ver. VERDICT SORULARINDA (zorunda mıyım/yapabilir miyim/yasak mı/gerekir mi): Eğer kaynaklarda AÇIK ve NET hüküm cümlesi yoksa, "Kaynaklarda bu konuda açık bir düzenleme bulunamamıştır" cümlesini mutlaka yaz ve kesin hüküm verme.',
+            descriptionEn: 'Answer the question DIRECTLY in the FIRST SENTENCE. Write based ONLY on sources. Use multiple paragraphs (min 2). Add footnotes [1], [2] after important information. For numerical questions (rates, durations, amounts), state the number in the first sentence. VERDICT QUESTIONS (must I/can I/is it prohibited/is it required): If sources have NO EXPLICIT ruling, MUST write "No clear regulation found in sources on this matter" and do NOT give definitive ruling.'
           }
         ],
 
@@ -116,10 +116,12 @@ export const DEFAULT_RAG_ROUTING_SCHEMA: RAGRoutingSchema = {
 7. Kaynaklarda GEÇMEDİKÇE süre (2 yıl, 5 yıl), oran (%18, %1), tutar (10.000 TL) gibi RAKAMSAL İDDİA YAZMA
 
 ✅ SEN SADECE:
+- Soruya İLK CÜMLEDE doğrudan cevap ver (oran, süre, tutar, evet/hayır)
 - Sources'tan metin üret
 - Atıf yap [1], [2], [3]
 - Paragraf paragraf yaz (en az 2 paragraf)
 - Direkt metne başla, başlık yok
+- Sade ve anlaşılır Türkçe kullan, gereksiz formaliteden kaçın
 
 🚨 MADDE TUTARLILIK KURALI (KRİTİK):
 Soru spesifik bir madde içeriyorsa (örn: "VUK 114", "KDVK 29", "GVK 40"):

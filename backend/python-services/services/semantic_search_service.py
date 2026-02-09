@@ -1740,13 +1740,14 @@ class SemanticSearchService:
         content = (result.get("content") or "").lower()
 
         # Article patterns to match
+        # v12.45: Use negative lookahead to exclude sub-articles (e.g., "Madde 32/C" when searching for "Madde 32")
         article_patterns = [
-            rf'madde\s*{target_article}\b',           # "Madde 32"
-            rf'{detected_law_code.lower()}\s*{target_article}\b',  # "KVK 32"
-            rf'{detected_law_code.lower()}\s*madde\s*{target_article}\b',  # "KVK Madde 32"
+            rf'madde\s*{target_article}(?!\s*/[A-Za-zÇçĞğİıÖöŞşÜü])\b',           # "Madde 32" but NOT "Madde 32/C"
+            rf'{detected_law_code.lower()}\s*{target_article}(?!\s*/[A-Za-zÇçĞğİıÖöŞşÜü])\b',  # "KVK 32" but NOT "KVK 32/C"
+            rf'{detected_law_code.lower()}\s*madde\s*{target_article}(?!\s*/[A-Za-zÇçĞğİıÖöŞşÜü])\b',  # "KVK Madde 32" but NOT "KVK Madde 32/C"
         ]
 
-        # Also check related articles
+        # Also check related articles (these can match sub-articles freely)
         for related in (rate_config.related_articles or []):
             article_patterns.append(rf'madde\s*{related}\b')
 
@@ -2404,6 +2405,7 @@ class SemanticSearchService:
                 law_patterns_sql = f"metadata->>'law_name' ILIKE '%{law_code}%'"
 
             # Query for exact rate article match
+            # v12.45: Expanded metadata matching + source_name fallback for different article_number formats
             query_sql = f"""
                 SELECT id::text, content, source_table, source_type, source_id, source_name, metadata,
                        1 - (embedding <=> $1::vector) as similarity_score
@@ -2416,8 +2418,12 @@ class SemanticSearchService:
                 AND ({law_patterns_sql})
                 AND (
                     metadata->>'article_number' = $2
+                    OR metadata->>'article_number' = $2 || '.'
                     OR metadata->>'madde_numarasi' = $2
                     OR metadata->>'madde_no' = $2
+                    OR source_name ILIKE '%Madde ' || $2 || ' %'
+                    OR source_name ILIKE '%Madde ' || $2 || '(%'
+                    OR source_name ILIKE '%Madde ' || $2
                 )
                 AND embedding IS NOT NULL
                 ORDER BY similarity_score DESC
