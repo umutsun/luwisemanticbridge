@@ -843,55 +843,33 @@ export class RAGChatService {
 3. Use definitive statements ("required", "prohibited", "allowed") ONLY if explicitly stated in sources.
 4. When uncertain, use hedged language: "According to sources..." or "may be considered as..."`;
 
+      // All format rules from schema - no hardcoded fallbacks
       const formatTemplate = foundFormat.formatTemplate ||
-        foundFormat.formatTemplateEn ||
-        'Write structured response with ## headings, blank lines between paragraphs, and [1][2] citations after each statement.';
+        foundFormat.formatTemplateEn || '';
 
-      // Schema-driven answer instruction (overrides hardcoded FIRST SENTENCE RULE)
-      const answerInstruction = foundFormat.answerInstruction ||
-        `Yanıta kullanıcının sorusunu anladığını gösteren KISA bir giriş cümlesiyle başla (örn: "GVK'nın 94. maddesi uyarınca...", "İlgili mevzuata göre...", "Bu konuda vergi kanunu gereği...").\nSoruya İLK PARAGRAFTA doğrudan cevap ver (oran, süre, tutar, evet/hayır), ardından [1], [2], [3] atıflarıyla detaylandır.\nListe sorulan sorularda (hangi belgeler, hangi şartlar, neler gerekli) tüm maddeleri sırala, eksik bırakma.`;
+      const answerInstruction = foundFormat.answerInstruction || '';
 
-      // Schema-driven citation instructions (overrides hardcoded INLINE CITATION RULES)
-      const citationInstructions = foundFormat.citationInstructions ||
-        `- Kaynak numarası SADECE spesifik bilgi verirken ekle (oran, tarih, madde numarası, süre, tutar): "...vergi oranı %18'dir [1]."
-- Genel açıklama ve yorumlarda citation EKLEME - sadece kaynaktan gelen somut bilgiler için kullan
-- Aynı bilgi için birden fazla kaynak: "...kabul edilmektedir [1][3]."
-- Metin içinde [1], [2] dipnot formatını kullan
-- Her paragrafın sonuna zorunlu citation KOYMA, sadece gerçekten o kaynaktan alınan bilgiler için kullan
-- Citation olmadan genel değerlendirme yazabilirsin`;
+      const citationInstructions = foundFormat.citationInstructions || '';
 
-      const prompt = `🚨 CRITICAL: FOLLOW THIS OUTPUT FORMAT EXACTLY
-
-${formatTemplate}
-
----
-
-YOUR ROLE: RAG response generator that DIRECTLY answers questions
-${answerInstruction}
-
-GROUNDING RULES:
-${groundingRulesText}
-
-INLINE CITATION RULES:
-${citationInstructions}
-
-FORMATTING:
-- Use **bold** for key terms
-- Leave blank lines between paragraphs
-
-LENGTH:
-- TARGET: ${articleLength} chars
-- MINIMUM: ${minLength} chars
-
-PROHIBITED:
+      // Build prompt with only non-empty schema-driven sections
+      const sections: string[] = [];
+      sections.push('YOUR ROLE: RAG response generator that DIRECTLY answers questions');
+      if (formatTemplate) sections.push(formatTemplate);
+      if (answerInstruction) sections.push(answerInstruction);
+      if (groundingRulesText) sections.push(`GROUNDING RULES:\n${groundingRulesText}`);
+      if (citationInstructions) sections.push(`INLINE CITATION RULES:\n${citationInstructions}`);
+      sections.push(`FORMATTING:\n- Use **bold** for key terms\n- Leave blank lines between paragraphs`);
+      sections.push(`LENGTH:\n- TARGET: ${articleLength} chars\n- MINIMUM: ${minLength} chars`);
+      sections.push(`PROHIBITED:
 - Do NOT write "This is out of scope" or "No sources found" (backend handles this)
 - Do NOT write meta headers like "TOPIC:", "ASSESSMENT:", "KEYWORDS:" (use ## for content headings)
 - Do NOT do scope checking (you are a RAG generator, not a classifier)
 - Do NOT provide information outside sources
 - Do NOT fabricate law/article numbers not in sources
 - Do NOT write classification labels (NEEDS_CLARIFICATION/OUT_OF_SCOPE/NOT_FOUND/FOUND)
-- Do NOT bury the answer in the last paragraph - put it FIRST
-`;
+- Do NOT bury the answer in the last paragraph - put it FIRST`);
+
+      const prompt = sections.join('\n\n---\n\n');
       return prompt;
     } else {
       const groundingRulesText = groundingRules.en || `
@@ -900,56 +878,35 @@ PROHIBITED:
 3. Use definitive statements ("required", "prohibited", "allowed") ONLY if explicitly stated in sources.
 4. When uncertain, use hedged language: "According to sources..." or "may be considered as..."`;
 
+      // All format rules from schema - no hardcoded fallbacks
       const formatTemplate = foundFormat.formatTemplateEn ||
-        foundFormat.formatTemplate ||
-        'Write structured response with ## headings, blank lines between paragraphs, and [1][2] citations after each statement.';
+        foundFormat.formatTemplate || '';
 
-      // Schema-driven answer instruction (English)
       const answerInstruction = foundFormat.answerInstructionEn ||
-        foundFormat.answerInstruction ||
-        'Answer the user\'s question directly in the FIRST SENTENCE, then elaborate with citations [1], [2], [3]';
+        foundFormat.answerInstruction || '';
 
-      // Schema-driven citation instructions (English)
       const citationInstructions = foundFormat.citationInstructionsEn ||
-        foundFormat.citationInstructions ||
-        `- Add source number ONLY when stating specific facts (rates, dates, article numbers, amounts): "...tax rate is 18% [1]."
-- Do NOT add citations to general explanations or commentary - only cite specific sourced facts
-- Multiple sources for same info: "...is accepted [1][3]."
-- Use footnote format [1], [2] in text
-- Do NOT force a citation at the end of every paragraph - only cite when referencing actual source content`;
+        foundFormat.citationInstructions || '';
 
-      const prompt = `🚨 CRITICAL: FOLLOW THIS OUTPUT FORMAT EXACTLY
-
-${formatTemplate}
-
----
-
-YOUR ROLE: RAG response generator that DIRECTLY answers questions
-${answerInstruction}
-
-GROUNDING RULES:
-${groundingRulesText}
-
-INLINE CITATION RULES:
-${citationInstructions}
-
-FORMATTING:
-- Use **bold** for key terms
-- Leave blank lines between paragraphs
-
-LENGTH:
-- TARGET: ${articleLength} chars
-- MINIMUM: ${minLength} chars
-
-PROHIBITED:
+      // Build prompt with only non-empty schema-driven sections
+      const sections: string[] = [];
+      sections.push('YOUR ROLE: RAG response generator that DIRECTLY answers questions');
+      if (formatTemplate) sections.push(formatTemplate);
+      if (answerInstruction) sections.push(answerInstruction);
+      if (groundingRulesText) sections.push(`GROUNDING RULES:\n${groundingRulesText}`);
+      if (citationInstructions) sections.push(`INLINE CITATION RULES:\n${citationInstructions}`);
+      sections.push(`FORMATTING:\n- Use **bold** for key terms\n- Leave blank lines between paragraphs`);
+      sections.push(`LENGTH:\n- TARGET: ${articleLength} chars\n- MINIMUM: ${minLength} chars`);
+      sections.push(`PROHIBITED:
 - Do NOT write "This is out of scope" or "No sources found" (backend handles this)
 - Do NOT write meta headers like "TOPIC:", "ASSESSMENT:", "KEYWORDS:" (use ## for content headings)
 - Do NOT do scope checking (you are a RAG generator, not a classifier)
 - Do NOT provide information outside sources
 - Do NOT fabricate law/article numbers not in sources
 - Do NOT write classification labels (NEEDS_CLARIFICATION/OUT_OF_SCOPE/NOT_FOUND/FOUND)
-- Do NOT bury the answer in the last paragraph - put it FIRST
-`;
+- Do NOT bury the answer in the last paragraph - put it FIRST`);
+
+      const prompt = sections.join('\n\n---\n\n');
       return prompt;
     }
   }
