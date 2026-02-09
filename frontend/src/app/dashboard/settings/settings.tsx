@@ -226,7 +226,7 @@ function LLMSettings() {
           fallbackEnabled: data?.ocrSettings?.fallbackEnabled !== false,
           cacheEnabled: data?.ocrSettings?.cacheEnabled !== false
         },
-        rerankProvider: data?.llmSettings?.rerankProvider || 'none',
+        rerankProvider: data?.ragSettings?.rerankEnabled ? (data?.ragSettings?.rerankProvider || 'jina') : 'none',
         // Load API keys from database with model selection
         openai: {
           ...data?.openai,
@@ -1915,13 +1915,11 @@ function LLMSettings() {
                         };
                         updateTempConfig('rerankProvider', value);
                         setTempConfig(updatedConfig);
-                        // Auto-save when provider changes
+                        // Auto-save when provider changes - save to ragSettings for backend compatibility
                         try {
-                          await updateSettingsCategory('llm', {
-                            llmSettings: {
-                              ...tempConfig?.llmSettings,
-                              rerankProvider: value
-                            }
+                          await updateSettingsCategory('rag', {
+                            rerankEnabled: value !== 'none',
+                            rerankProvider: value === 'none' ? 'jina' : value
                           });
                           toast({
                             title: "Başarılı",
