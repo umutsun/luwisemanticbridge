@@ -43,7 +43,7 @@ logger.add(
 )
 
 # Import routers
-from routers import crawl_router, pgai_router, health_router, whisper_router, import_router, worker_router, pdf_router, csv_transform_router, embedding_router, document_analyzer_router, semantic_search_router, devops_router, semantic_analyzer_router, pdf_vision_router
+from routers import crawl_router, pgai_router, health_router, whisper_router, import_router, worker_router, pdf_router, csv_transform_router, embedding_router, document_analyzer_router, semantic_search_router, devops_router, semantic_analyzer_router, pdf_vision_router, rag_pipeline_router
 from routers.scheduler_router import router as scheduler_router
 from routers.data_health_router import router as data_health_router
 
@@ -244,6 +244,12 @@ app.include_router(
     data_health_router,
     tags=["data-health"]
     # Data health: orphan cleanup, metadata fix, duplicate removal
+)
+app.include_router(
+    rag_pipeline_router,
+    prefix="/api/python/rag-pipeline",
+    tags=["rag-pipeline"]
+    # RAG Pipeline: query analysis, domain filter, ranking, validation
 )
 
 # Global exception handler

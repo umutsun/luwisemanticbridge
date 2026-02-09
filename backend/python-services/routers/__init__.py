@@ -13,6 +13,7 @@ from .semantic_search_router import router as semantic_search_router
 from .devops_router import router as devops_router
 from .semantic_analyzer_router import router as semantic_analyzer_router
 from .pdf_vision_router import router as pdf_vision_router
+from .rag_pipeline_router import router as rag_pipeline_router
 
 __all__ = [
     'crawl_router',
@@ -28,5 +29,6 @@ __all__ = [
     'semantic_search_router',
     'devops_router',
     'semantic_analyzer_router',
-    'pdf_vision_router'
+    'pdf_vision_router',
+    'rag_pipeline_router'
 ]
