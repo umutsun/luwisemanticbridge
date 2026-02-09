@@ -3549,35 +3549,12 @@ FORMAT:
       console.log(`️ Sending temperature to LLM Manager: ${options.temperature} (type: ${typeof options.temperature})`);
       console.log(` Context length: ${enhancedContext.length}, sources: ${initialDisplayCount}`);
 
-      // 🛡️ v12.9: SCENARIO PROMPT INJECTION
-      // For complex scenario queries (MURAT tests), inject article-format instructions
+      // 🛡️ v12.9: SCENARIO PROMPT INJECTION - DISABLED in v12.47
+      // This injected hardcoded ÖZET/DEĞERLENDİRME/SONUÇ format into system prompt,
+      // conflicting with the dynamic composition structure from DB.
+      // Scenario queries now follow the same composition format as all other queries.
       if (this.isScenarioQuery(message)) {
-        const scenarioInstruction = `
-
-🔴 SENARYO SORUSU TESPİT EDİLDİ - AKADEMİK MAKALE FORMATI ZORUNLU:
-
-Bu soru karmaşık bir vergisel senaryo içermektedir. Yanıtını AŞAĞIDAKİ FORMAT'ta ver:
-
-**ÖZET:**
-(2-3 cümle ile konunun özeti)
-
-**DEĞERLENDİRME:**
-(En az 3 paragraf detaylı analiz:
-- İlgili mevzuat hükümleri
-- Uygulama esasları
-- Dikkat edilmesi gereken hususlar)
-
-**SONUÇ:**
-(Somut öneriler ve sonuç)
-
-⚠️ ZORUNLU KURALLAR:
-- Minimum 800 kelime yanıt ver
-- Her bölümde kaynaklara atıf yap [1], [2], vb.
-- Mevzuat maddelerini açıkça belirt
-- Genel ifadelerden kaçın, somut bilgi ver
-`;
-        systemPrompt = systemPrompt + scenarioInstruction;
-        console.log(`🛡️ [v12.9] SCENARIO_PROMPT_INJECTION: Added article format instructions (${scenarioInstruction.length} chars)`);
+        console.log(`🛡️ [v12.47] SCENARIO query detected but format injection DISABLED - using DB composition structure`);
       }
 
       console.log(` System prompt length: ${systemPrompt?.length || 0} chars`);
@@ -4012,10 +3989,11 @@ Bu soru karmaşık bir vergisel senaryo içermektedir. Yanıtını AŞAĞIDAKİ 
         console.log(`[v12.7-DEBUG] SHORT_RESPONSE skipped for deadline query (deadlineFixApplied=true)`);
       }
 
-      // 🛡️ v12.9: ARTICLE FORMAT VALIDATOR for scenario queries
-      // Ensures proper sections (ÖZET, DEĞERLENDİRME, SONUÇ) for complex scenario questions
-      // Now passes sources to generate substantial content if response is too short
-      response.content = this.ensureArticleFormat(response.content, message, searchResults);
+      // 🛡️ v12.9: ARTICLE FORMAT VALIDATOR - DISABLED in v12.47
+      // This was adding hardcoded ÖZET/DEĞERLENDİRME/SONUÇ sections + filler sentences
+      // which conflicted with the dynamic composition structure from DB system prompt.
+      // Response structure is now controlled by system prompt + grounding rules in DB.
+      // response.content = this.ensureArticleFormat(response.content, message, searchResults);
 
       // Strip citation markers when disableCitationText is enabled AND strict mode is OFF
       // In strict mode, we NEED the [Kaynak X] references for source verification
@@ -5960,7 +5938,19 @@ Bu soru karmaşık bir vergisel senaryo içermektedir. Yanıtını AŞAĞIDAKİ 
       }
     }
 
-    // 5. Clean up excessive blank lines (max 2 consecutive)
+    // 5. Fix orphaned ** bold markers at start of response
+    // e.g., "** İzaha davet..." → "İzaha davet..." (broken bold with space)
+    fixed = fixed.replace(/^\*\*\s+/, '');
+
+    // 6. Fix orphaned ** bold markers anywhere (unpaired)
+    // Count ** occurrences - if odd number, remove the first orphaned one
+    const boldCount = (fixed.match(/\*\*/g) || []).length;
+    if (boldCount % 2 !== 0) {
+      // Remove the first ** that is followed by a space (likely orphaned opening)
+      fixed = fixed.replace(/\*\*\s+/, '');
+    }
+
+    // 7. Clean up excessive blank lines (max 2 consecutive)
     fixed = fixed.replace(/\n{4,}/g, '\n\n\n');
 
     return fixed;
