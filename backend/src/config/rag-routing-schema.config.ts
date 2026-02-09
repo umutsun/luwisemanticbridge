@@ -99,8 +99,8 @@ export const DEFAULT_RAG_ROUTING_SCHEMA: RAGRoutingSchema = {
             titleEn: 'Assessment',
             required: true,
             systemGenerated: false,  // LLM yazar
-            description: 'Soruya İLK CÜMLEDE doğrudan cevap ver. SADECE sources\'tan hareketle yaz. Birden fazla paragraf kullan (en az 2 paragraf). Her önemli bilgiden sonra dipnot ekle [1], [2]. Sayısal sorularda (oran, süre, tutar) ilk cümlede rakamı ver. VERDICT SORULARINDA (zorunda mıyım/yapabilir miyim/yasak mı/gerekir mi): Eğer kaynaklarda AÇIK ve NET hüküm cümlesi yoksa, "Kaynaklarda bu konuda açık bir düzenleme bulunamamıştır" cümlesini mutlaka yaz ve kesin hüküm verme.',
-            descriptionEn: 'Answer the question DIRECTLY in the FIRST SENTENCE. Write based ONLY on sources. Use multiple paragraphs (min 2). Add footnotes [1], [2] after important information. For numerical questions (rates, durations, amounts), state the number in the first sentence. VERDICT QUESTIONS (must I/can I/is it prohibited/is it required): If sources have NO EXPLICIT ruling, MUST write "No clear regulation found in sources on this matter" and do NOT give definitive ruling.'
+            description: 'Kompozisyon yapısında yaz: 1) Giriş paragrafı - soruya doğrudan cevap ver ve konuyu çerçevele [1]. 2) Açıklama paragrafları - kapsam, koşullar, istisnalar, her paragraf YENİ bilgi eklemeli. 3) Pratik bilgi - uygulama detayları, süreler, usul (varsa). SADECE sources\'tan hareketle yaz. Her önemli bilgiden sonra dipnot ekle [1], [2]. Sayısal sorularda (oran, süre, tutar) ilk cümlede rakamı ver. Aynı bilgiyi tekrarlama, soyut yerine somut yaz. VERDICT SORULARINDA: Kaynaklarda AÇIK hüküm yoksa "Kaynaklarda bu konuda açık bir düzenleme bulunamamıştır" yaz.',
+            descriptionEn: 'Write in composition structure: 1) Opening paragraph - answer directly and frame the topic [1]. 2) Explanation paragraphs - scope, conditions, exceptions, each paragraph adds NEW info. 3) Practical info - deadlines, procedures (if available). Write based ONLY on sources. Add footnotes [1], [2]. For numerical questions, state the number in first sentence. No repetition, prefer concrete over abstract. VERDICT QUESTIONS: If no explicit ruling in sources, write "No clear regulation found in sources on this matter."'
           }
         ],
 
@@ -116,13 +116,14 @@ export const DEFAULT_RAG_ROUTING_SCHEMA: RAGRoutingSchema = {
 7. Kaynaklarda GEÇMEDİKÇE süre (2 yıl, 5 yıl), oran (%18, %1), tutar (10.000 TL) gibi RAKAMSAL İDDİA YAZMA
 8. "Uzman görüşü alınması önerilir", "ilgili mevzuatın incelenmesi tavsiye edilir" gibi dolgu cümleleri YAZMA
 
-✅ SEN SADECE:
-- Soruya İLK CÜMLEDE doğrudan cevap ver (oran, süre, tutar, evet/hayır)
-- Sources'tan metin üret
-- Atıf yap [1], [2], [3]
-- Paragraf paragraf yaz (en az 2 paragraf)
+✅ SEN SADECE (KOMPOZİSYON YAPISI):
+1. GİRİŞ: Soruya İLK CÜMLEDE doğrudan cevap ver (oran, süre, tutar, evet/hayır) ve konuyu çerçevele
+2. AÇIKLAMA: Kapsam, koşullar, istisnalar - her paragraf YENİ bilgi eklemeli
+3. PRATİK: Uygulama detayları, süreler, usul bilgisi (kaynaklarda varsa)
+- Sources'tan metin üret, atıf yap [1], [2], [3]
 - Direkt metne başla, başlık yok
-- Sade ve anlaşılır Türkçe kullan, gereksiz formaliteden kaçın
+- Sade ve anlaşılır Türkçe kullan
+- Aynı bilgiyi tekrarlama, soyut yerine somut yaz
 
 🚨 MADDE TUTARLILIK KURALI (KRİTİK):
 Soru spesifik bir madde içeriyorsa (örn: "VUK 114", "KDVK 29", "GVK 40"):
