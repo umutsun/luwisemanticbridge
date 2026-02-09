@@ -2350,6 +2350,118 @@ class SemanticSearchService:
             logger.error(f"Error injecting target article: {e}")
             return False
 
+    async def _inject_rate_article(
+        self,
+        raw_results: List[Dict[str, Any]],
+        law_code: str,
+        rate_config: RateArticleConfig,
+        query_embedding: List[float]
+    ) -> bool:
+        """
+        v12.48: Inject rate-defining article when rate question is detected.
+
+        When user asks "kurumlar vergisi oranı kaçtır?" and we detect:
+        - law_code = KVK
+        - rate_config.article_number = 32
+
+        We inject "KVK Madde 32" even if vector search didn't find it.
+
+        Args:
+            raw_results: Current search results (will be modified in place)
+            law_code: Detected law code (e.g., "KVK")
+            rate_config: Rate article configuration from schema
+            query_embedding: Query embedding for similarity calculation
+
+        Returns:
+            True if article was injected, False otherwise
+        """
+        target_article = rate_config.article_number
+        if not target_article:
+            return False
+
+        # Check if target article already in results
+        existing_ids = {r["id"] for r in raw_results}
+
+        try:
+            pool = await get_db()
+
+            # Build law name patterns to search for
+            law_name_patterns = []
+            if law_code in self.LAW_CODES:
+                law_name_patterns.extend(self.LAW_CODES[law_code])
+
+            # Also add reverse lookup from LAW_NAME_TO_CODE
+            for full_name, code in self.LAW_NAME_TO_CODE.items():
+                if code == law_code:
+                    law_name_patterns.append(full_name)
+
+            # Create SQL pattern for law name matching
+            law_patterns_sql = " OR ".join([
+                f"metadata->>'law_name' ILIKE '%{p}%'" for p in law_name_patterns if p
+            ])
+
+            if not law_patterns_sql:
+                law_patterns_sql = f"metadata->>'law_name' ILIKE '%{law_code}%'"
+
+            # Query for exact rate article match
+            query_sql = f"""
+                SELECT id::text, content, source_table, source_type, source_id, source_name, metadata,
+                       1 - (embedding <=> $1::vector) as similarity_score
+                FROM unified_embeddings
+                WHERE (
+                    source_table LIKE '%kanun%chunks%'
+                    OR source_table = 'maddeler'
+                    OR source_type = 'kanun'
+                )
+                AND ({law_patterns_sql})
+                AND (
+                    metadata->>'article_number' = $2
+                    OR metadata->>'madde_numarasi' = $2
+                    OR metadata->>'madde_no' = $2
+                )
+                AND embedding IS NOT NULL
+                ORDER BY similarity_score DESC
+                LIMIT 3
+            """
+
+            # Execute query
+            embedding_str = f"[{','.join(map(str, query_embedding))}]"
+            rows = await pool.fetch(query_sql, embedding_str, target_article)
+
+            injected_count = 0
+            for row in rows:
+                row_id = str(row['id'])
+                if row_id not in existing_ids:
+                    # Parse metadata
+                    metadata = row['metadata']
+                    if isinstance(metadata, str):
+                        try:
+                            metadata = json.loads(metadata)
+                        except:
+                            metadata = {}
+
+                    # Add to results with high priority
+                    raw_results.insert(0, {
+                        "id": row_id,
+                        "content": row['content'],
+                        "source_table": row['source_table'],
+                        "source_type": row['source_type'],
+                        "source_id": row['source_id'],
+                        "source_name": row.get('source_name', ''),
+                        "metadata": metadata,
+                        "similarity_score": float(row['similarity_score']),
+                        "search_source": "rate_article_injection"
+                    })
+                    existing_ids.add(row_id)
+                    injected_count += 1
+                    logger.info(f"📊 Injected rate article: {law_code} Madde {target_article} (id={row_id})")
+
+            return injected_count > 0
+
+        except Exception as e:
+            logger.error(f"Error injecting rate article: {e}")
+            return False
+
     def _get_source_priority(self, source_table: str, settings: RAGSettings) -> float:
         """Get priority multiplier for source table"""
         table_lower = (source_table or '').lower()
@@ -3333,6 +3445,22 @@ class SemanticSearchService:
                 timings["article_inject_ms"] = (datetime.now() - article_inject_start).total_seconds() * 1000
                 if injected:
                     logger.info(f"🎯 Injected target article: {article_query['law_code']} Madde {article_query['article_number']}")
+
+            # === RATE ARTICLE INJECTION (v12.48): Ensure rate-defining article is included ===
+            # When user asks for rate (kurumlar vergisi oranı?), inject the rate article from schema
+            if is_rate_question and rate_question_law_code and law_code_config and not use_keyword_fallback:
+                rate_article_config = law_code_config.rate_articles.get(rate_question_law_code)
+                if rate_article_config:
+                    rate_inject_start = datetime.now()
+                    rate_injected = await self._inject_rate_article(
+                        raw_results,
+                        rate_question_law_code,
+                        rate_article_config,
+                        query_embedding
+                    )
+                    timings["rate_inject_ms"] = (datetime.now() - rate_inject_start).total_seconds() * 1000
+                    if rate_injected:
+                        logger.info(f"📊 Injected rate article: {rate_question_law_code} Madde {rate_article_config.article_number}")
 
             # Apply hybrid scoring with table weights and retrieval-level penalties
             score_start = datetime.now()
