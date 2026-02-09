@@ -853,11 +853,18 @@ INLINE CITATION RULES:
 - Keep source order (do not reorder sources)
 
 MARKDOWN FORMATTING (MANDATORY):
-- Use numbered lists (1. 2. 3.) for sequential items - NEVER embed them inline as "1. X 2. Y 3. Z"
-- Use ## headings for distinct categories or sections
-- Use **bold** for key terms, law names, and important concepts
-- Each numbered item MUST be on its own line with a blank line before the list
-- Leave blank lines between paragraphs
+- Use numbered lists (1. 2. 3.) for sequential items - NEVER embed them as inline text
+- Each numbered item MUST start on its OWN LINE with a blank line before the list
+- Use **bold text on its own line** for section headers (NOT ## headings)
+- Use **bold** inline for key terms and important concepts
+- Leave blank lines between paragraphs and before/after lists
+- WRONG: "...fiiller şunlardır: 1. X yapma 2. Y yapma 3. Z yapma"
+- CORRECT:
+  "...fiiller şunlardır:
+
+  1. X yapma
+  2. Y yapma
+  3. Z yapma"
 
 LENGTH:
 - TARGET: ${articleLength} chars
@@ -904,11 +911,18 @@ INLINE CITATION RULES:
 - Keep source order (do not reorder sources)
 
 MARKDOWN FORMATTING (MANDATORY):
-- Use numbered lists (1. 2. 3.) for sequential items - NEVER embed them inline as "1. X 2. Y 3. Z"
-- Use ## headings for distinct categories or sections
-- Use **bold** for key terms, law names, and important concepts
-- Each numbered item MUST be on its own line with a blank line before the list
-- Leave blank lines between paragraphs
+- Use numbered lists (1. 2. 3.) for sequential items - NEVER embed them as inline text
+- Each numbered item MUST start on its OWN LINE with a blank line before the list
+- Use **bold text on its own line** for section headers (NOT ## headings)
+- Use **bold** inline for key terms and important concepts
+- Leave blank lines between paragraphs and before/after lists
+- WRONG: "...fiiller şunlardır: 1. X yapma 2. Y yapma 3. Z yapma"
+- CORRECT:
+  "...fiiller şunlardır:
+
+  1. X yapma
+  2. Y yapma
+  3. Z yapma"
 
 LENGTH:
 - TARGET: ${articleLength} chars
@@ -5935,11 +5949,37 @@ Bu soru karmaşık bir vergisel senaryo içermektedir. Yanıtını AŞAĞIDAKİ 
   private fixMarkdownAndCitations(response: string, sources: any[]): string {
     let fixed = response;
 
-    // 1. Ensure blank lines before ## headings
-    fixed = fixed.replace(/([^\n])\n?(##\s)/g, '$1\n\n$2');
+    // v12.45: Aggressive markdown structure fix
+    // Fix inline ## headings - ensure blank line before ANY ## that's not at line start
+    fixed = fixed.replace(/([^\n])\s*(##\s)/g, '$1\n\n$2');
 
-    // 2. Ensure blank lines after ## headings
+    // Fix ## headings that need blank line after them
     fixed = fixed.replace(/(##[^\n]+)\n([^\n])/g, '$1\n\n$2');
+
+    // v12.45: Fix inline numbered items (e.g., "text 1. item 2. item 3. item")
+    // Only match when a numbered item appears mid-sentence (not at line start)
+    // Pattern: non-newline char + space + digit + period + space
+    fixed = fixed.replace(/([.;:,])\s+(\d+)\.\s+/g, (match, punct, num) => {
+      // Only break if it looks like a list item (not a regular number like "madde 32. ")
+      const numInt = parseInt(num, 10);
+      if (numInt >= 1 && numInt <= 20) {
+        return `${punct}\n\n${num}. `;
+      }
+      return match;
+    });
+
+    // v12.45: Fix **bold text** that should be on its own line (section headers)
+    // Pattern: end of sentence + **Bold Section Header** + text
+    fixed = fixed.replace(/([.!?])\s*(\*\*[a-zçğıöşüA-ZÇĞİÖŞÜ0-9)]+[^*]*\*\*)\s*(?=[A-ZÇĞİÖŞÜa-zçğıöşü0-9])/g, (match, punct, bold, offset) => {
+      // Check if this looks like a section header (starts with letter/number, contains ")")
+      if (bold.includes(')') || /^\*\*[0-9]/.test(bold) || /^\*\*[a-zçA-ZÇ]\)/.test(bold)) {
+        return `${punct}\n\n${bold}\n`;
+      }
+      return match;
+    });
+
+    // v12.45: Ensure blank line before bold-only lines (already on own line but missing blank before)
+    fixed = fixed.replace(/([^\n])\n(\*\*[^*]+\*\*)\n/g, '$1\n\n$2\n');
 
     // 3. Remove hallucinated citations (beyond available sources)
     const maxCitations = sources.length;
@@ -5949,6 +5989,9 @@ Bu soru karmaşık bir vergisel senaryo içermektedir. Yanıtını AŞAĞIDAKİ 
         fixed = fixed.replace(pattern, '');
       }
     }
+
+    // v12.45: Clean up excessive blank lines (max 2 consecutive)
+    fixed = fixed.replace(/\n{4,}/g, '\n\n\n');
 
     return fixed;
   }
