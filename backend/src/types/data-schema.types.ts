@@ -222,6 +222,29 @@ export interface LawCodeConfig {
    * Example: [{ pattern: "G\\.V\\.K", code: "GVK" }, { pattern: "\\(GVK\\)", code: "GVK" }]
    */
   lawCodePatterns?: Array<{ pattern: string; code: string }>;
+
+  /**
+   * v12.48: Rate article configuration for tax rate questions
+   * Maps law codes to their rate-defining articles
+   * Used to boost relevant articles when rate questions are detected
+   * Example: { "KVK": { articleNumber: "32", keywords: ["oran", "yüzde"] } }
+   */
+  rateArticles?: Record<string, RateArticleConfig>;
+}
+
+/**
+ * v12.48: Rate Article Configuration
+ * Defines which article contains rate/percentage information for a given law
+ */
+export interface RateArticleConfig {
+  /** Article number that defines the rate (e.g., "32" for KVK) */
+  articleNumber: string;
+  /** Keywords that indicate a rate question (e.g., ["oran", "yüzde", "%"]) */
+  keywords: string[];
+  /** Boost score to add when rate question detected (0.0-0.5, default 0.2) */
+  boostScore?: number;
+  /** Additional article numbers for rate-related content (e.g., ["32/A", "32/B"]) */
+  relatedArticles?: string[];
 }
 
 /**
@@ -849,7 +872,7 @@ export interface DeadlineConfig {
  */
 export const DEFAULT_FOLLOWUP_CONFIG: FollowUpConfig = {
   enabled: true,
-  maxDepth: 1,  // v12.36: Single follow-up only
+  maxDepth: 2,  // v12.44: Allow disambiguation(1) + resolution(2)
   exceptionalMaxDepth: 3,
   exceptionalIntents: ['iade', 'istisna', 'tevkifat'],
   closingMessage: {
