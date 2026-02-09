@@ -835,7 +835,7 @@ export class RAGChatService {
 
       // Schema-driven answer instruction (overrides hardcoded FIRST SENTENCE RULE)
       const answerInstruction = foundFormat.answerInstruction ||
-        'Soruya İLK CÜMLEDE doğrudan cevap ver (oran, süre, tutar, evet/hayır), ardından [1], [2], [3] atıflarıyla detaylandır';
+        `Yanıta kullanıcının sorusunu anladığını gösteren KISA bir giriş cümlesiyle başla (örn: "GVK'nın 94. maddesi uyarınca...", "İlgili mevzuata göre...", "Bu konuda vergi kanunu gereği...").\nSoruya İLK PARAGRAFTA doğrudan cevap ver (oran, süre, tutar, evet/hayır), ardından [1], [2], [3] atıflarıyla detaylandır.\nListe sorulan sorularda (hangi belgeler, hangi şartlar, neler gerekli) tüm maddeleri sırala, eksik bırakma.`;
 
       // Schema-driven citation instructions (overrides hardcoded INLINE CITATION RULES)
       const citationInstructions = foundFormat.citationInstructions ||
@@ -9397,75 +9397,72 @@ Please verify the article number or check official sources.`;
   private fixTurkishWordSpacing(text: string): string {
     if (!text || text.length < 20) return text;
 
-    // Check if text needs fixing (low space ratio + long uppercase sequences)
+    // Check if text needs fixing (low space ratio + long letter sequences without spaces)
     const spaceRatio = (text.match(/\s/g) || []).length / text.length;
     const hasLongUppercase = /[A-ZÇĞİÖŞÜ]{20,}/.test(text);
-    if (spaceRatio > 0.1 && !hasLongUppercase) return text;
+    const hasLongLowercase = /[a-zçğıöşüA-ZÇĞİÖŞÜ]{25,}/.test(text); // Also catch lowercase concatenated
+    if (spaceRatio > 0.1 && !hasLongUppercase && !hasLongLowercase) return text;
 
     let result = text;
 
-    // 1. Add space before common Turkish words/particles (case insensitive matching, preserve case)
-    const particles = [
-      'VE', 'VEYA', 'İLE', 'İÇİN', 'OLAN', 'OLARAK', 'OLMAK', 'KADAR',
-      'DAHA', 'ANCAK', 'AMA', 'FAKAT', 'ÇÜNKÜ', 'EĞER', 'GİBİ', 'GÖRE',
-      'HAKKINDA', 'KARŞI', 'SONRA', 'ÖNCE', 'SIRASINDA', 'DOLAYI',
-      'DAHİL', 'HARİÇ', 'AYRICA', 'BU', 'ŞU', 'O', 'HER', 'BİR',
-      'KANUN', 'KANUNU', 'KANUNLARDA', 'MADDE', 'MADDESİ', 'SAYILI', 'TARİHLİ',
-      'GELİR', 'VERGİ', 'VERGİSİ', 'ÖDEME', 'ÖDEMESİ', 'BEYAN', 'BEYANI',
-      'AMACI', 'AMACIYLA', 'DAİR', 'İLİŞKİN', 'BAZI', 'DEĞİŞİKLİK',
-      'YAPILMASI', 'YAPILMASINA', 'ORTAMININ', 'ORTAMIN',
-      'YATIRIM', 'İYİLEŞTİRİLMESİ', 'KATMA', 'DEĞER', 'KURUMLAR', 'GELİR',
-      'USUL', 'HARÇLAR', 'DAMGA', 'EMLAK', 'MOTORLU', 'TAŞITLAR',
-      'HAKKINDA', 'HÜKÜMLER', 'GENEL', 'ÖZEL', 'GEÇİCİ',
-      'KABUL', 'TARİHİ', 'NUMARASI', 'YAYIMLANDIĞI', 'RESMİ', 'GAZETE', 'SAYI'
+    // APPROACH: Morphology-based splitting using Turkish suffix patterns
+    // Instead of a hardcoded word list, we detect word boundaries via suffixes.
+    // Turkish is agglutinative - suffixes like -NIN, -DEN, -LARI mark word endings.
+    // This is fast (<1ms), zero-cost, and handles unknown words.
+
+    // 1. Add space between number and word (any case)
+    result = result.replace(/(\d)([A-ZÇĞİÖŞÜa-zçğıöşü]{2,})/g, '$1 $2');
+
+    // 2. Add space between lowercase ending and uppercase start (camelCase)
+    result = result.replace(/([a-zçğıöşü]{2,})([A-ZÇĞİÖŞÜ]{2,})/g, '$1 $2');
+
+    // 3. Turkish morphological suffix boundaries (case insensitive)
+    // After these suffixes, a new word likely begins
+    const suffixBoundaries = [
+      // Case suffixes (locative, ablative, dative, accusative)
+      /(NDA|NDE|NDAN|NDEN)(?=[A-ZÇĞİÖŞÜ])/gi,
+      /(DAN|DEN|TAN|TEN)(?=[A-ZÇĞİÖŞÜ])/gi,
+      /(DA|DE|TA|TE)(?=[A-ZÇĞİÖŞÜ]{3,})/gi,
+      // Genitive / possessive
+      /(NIN|NİN|NUN|NÜN|ININ|İNİN|UNUN|ÜNÜN)(?=[A-ZÇĞİÖŞÜ])/gi,
+      // Plural + case
+      /(LARI|LERİ|LARIN|LERİN|LARDAN|LERDEN)(?=[A-ZÇĞİÖŞÜ])/gi,
+      // Verbal noun suffixes
+      /(MASI|MESİ|MASINA|MESİNE|MASINDA|MESİNDE)(?=[A-ZÇĞİÖŞÜ])/gi,
+      // Instrumental / comitative
+      /(YLA|YLE|İLE)(?=[A-ZÇĞİÖŞÜ]{3,})/gi,
+      // Dative
+      /(INA|İNE|UNA|ÜNE)(?=[A-ZÇĞİÖŞÜ]{3,})/gi,
+      // Derivational suffixes
+      /(SİNDEN|SİNDE|SİNE|SİNİ|SİNİN)(?=[A-ZÇĞİÖŞÜ])/gi,
+      // Relative / adjective
+      /(DAKİ|DEKİ|TAKİ|TEKİ)(?=[A-ZÇĞİÖŞÜ])/gi,
     ];
 
-    // Add space before particles when preceded by letters
-    for (const p of particles) {
-      // Match lowercase/uppercase letter followed by particle
-      const regex = new RegExp(`([a-zçğıöşüA-ZÇĞİÖŞÜ])(?=${p}[^a-zçğıöşü])`, 'g');
+    for (const pattern of suffixBoundaries) {
+      result = result.replace(pattern, '$& ');
+    }
+
+    // 4. Common conjunctions/postpositions as word boundary markers (case insensitive)
+    // Only short, unambiguous particles to avoid false splits
+    const conjunctions = ['VE', 'VEYA', 'İLE', 'İÇİN', 'OLAN', 'OLARAK', 'GÖRE', 'DAİR', 'HAKKINDA', 'İLİŞKİN'];
+    for (const c of conjunctions) {
+      const regex = new RegExp(`([a-zçğıöşüA-ZÇĞİÖŞÜ])(?=${c}(?=[A-ZÇĞİÖŞÜ]))`, 'gi');
       result = result.replace(regex, '$1 ');
     }
 
-    // 2. Add space between number and uppercase word
-    result = result.replace(/(\d)([A-ZÇĞİÖŞÜ]{2,})/g, '$1 $2');
+    // 5. Add space before uppercase word that follows a suffix-ending lowercase word
+    result = result.replace(/([a-zçğıöşü]{3,}(?:da|de|dan|den|nda|nde|nın|nin|nun|nün|yla|yle))([A-ZÇĞİÖŞÜ])/g, '$1 $2');
 
-    // 3. Add space between lowercase ending and uppercase start (camelCase fix)
-    // e.g., "metinVERGİ" -> "metin VERGİ"
-    result = result.replace(/([a-zçğıöşü]{2,})([A-ZÇĞİÖŞÜ]{2,})/g, '$1 $2');
-
-    // 4. Add space before common suffixed words
-    // e.g., "KONSOLOSLUKLARDAçalışan" -> "KONSOLOSLUKLARDA çalışan"
-    result = result.replace(/([A-ZÇĞİÖŞÜ]{3,}(?:DA|DE|DAN|DEN|TA|TE|NDA|NDE))([a-zçğıöşü])/g, '$1 $2');
-
-    // 5. Fix common Turkish suffix patterns (uppercase context)
-    // Add space after common word endings before new uppercase word
-    const suffixPatterns = [
-      /([İI]N)([A-ZÇĞİÖŞÜ]{3,})/g,      // -İN, -IN before uppercase
-      /([Sİ]İ)([A-ZÇĞİÖŞÜ]{3,})/g,       // -Sİ before uppercase
-      /(LARI|LERİ)([A-ZÇĞİÖŞÜ]{3,})/g,   // -LARI, -LERİ before uppercase
-      /(MASI|MESİ)([A-ZÇĞİÖŞÜ]{3,})/g,   // -MASI, -MESİ before uppercase
-      /(ININ|İNİN|UNUN|ÜNÜN)([A-ZÇĞİÖŞÜ]{2,})/g, // Genitive before uppercase
-      /(NIN|NİN|NUN|NÜN)([A-ZÇĞİÖŞÜ]{3,})/g, // Genitive -NIN before uppercase
-      /(YLA|YLE)([A-ZÇĞİÖŞÜ]{3,})/g,     // -YLA, -YLE before uppercase
-      /(INA|İNE)([A-ZÇĞİÖŞÜ]{3,})/g,     // -INA, -İNE dative before uppercase
-    ];
-
-    for (const pattern of suffixPatterns) {
-      result = result.replace(pattern, '$1 $2');
-    }
-
-    // 6. Aggressive split for remaining long uppercase sequences (>25 chars without space)
-    // This catches cases missed by particle/suffix matching
-    result = result.replace(/[A-ZÇĞİÖŞÜ]{25,}/g, (match) => {
-      // Try to split on common Turkish suffix boundaries within the match
-      let split = match
-        .replace(/(MESİ|MASI|LARI|LERİ|ININ|İNİN|UNUN|ÜNÜN)()/g, '$1 ')
-        .replace(/(NIN|NİN|NUN|NÜN)([A-ZÇĞİÖŞÜ])/g, '$1 $2')
-        .replace(/(YLA|YLE)([A-ZÇĞİÖŞÜ])/g, '$1 $2')
-        .replace(/(INA|İNE)([A-ZÇĞİÖŞÜ])/g, '$1 $2')
-        .replace(/(DA|DE)([A-ZÇĞİÖŞÜ]{3,})/g, '$1 $2');
-      return split;
+    // 6. For remaining long sequences (>20 chars without space), try aggressive suffix split
+    result = result.replace(/[a-zçğıöşüA-ZÇĞİÖŞÜ]{20,}/g, (match) => {
+      return match
+        .replace(/(ması|mesi|ları|leri|ının|inin|unun|ünün|sından|sinden|sinde|sine|sini|sinin)/gi, '$1 ')
+        .replace(/(ndan|nden|nda|nde|dan|den|nin|nın|nun|nün)/gi, (m, p1, offset, str) => {
+          // Only add space if followed by 3+ chars (avoid splitting short suffixes)
+          const after = str.substring(offset + m.length);
+          return after.length >= 3 ? m + ' ' : m;
+        });
     });
 
     // 7. Clean up multiple spaces
@@ -10402,7 +10399,36 @@ DÜZELTILMIŞ METİN:`;
         }
       }
 
-      // STEP 3: Build final formatted results
+      // STEP 3: LLM-based OCR text normalization for concatenated texts (batch, parallel)
+      // Only normalize texts that detectConcatenatedText returns true for
+      const ocrNormPromises: Array<{ index: number; promise: Promise<string> }> = [];
+      for (let i = 0; i < preparedResults.length; i++) {
+        const rawContent = preparedResults[i].cleanExcerpt;
+        if (this.detectConcatenatedText(rawContent)) {
+          ocrNormPromises.push({
+            index: i,
+            promise: this.normalizeOCRTextWithLLM(rawContent)
+          });
+        }
+      }
+      // Run OCR normalization in parallel (max 3 concurrent to protect LLM rate limits)
+      const ocrResults = new Map<number, string>();
+      if (ocrNormPromises.length > 0) {
+        console.log(`🔧 [OCR] Normalizing ${ocrNormPromises.length}/${preparedResults.length} concatenated excerpts via LLM...`);
+        const batchSize = 3;
+        for (let b = 0; b < ocrNormPromises.length; b += batchSize) {
+          const batch = ocrNormPromises.slice(b, b + batchSize);
+          const results = await Promise.allSettled(batch.map(p => p.promise));
+          results.forEach((res, idx) => {
+            if (res.status === 'fulfilled' && res.value) {
+              ocrResults.set(batch[idx].index, res.value);
+            }
+          });
+        }
+        console.log(`🔧 [OCR] Normalized ${ocrResults.size} excerpts successfully`);
+      }
+
+      // STEP 4: Build final formatted results
       for (let i = 0; i < preparedResults.length; i++) {
         const prep = preparedResults[i];
         const r = prep.originalResult;
@@ -10416,9 +10442,13 @@ DÜZELTILMIŞ METİN:`;
           generatedQuestion = batchLLMResults[i].generatedQuestion || generatedQuestion;
         }
 
-        // Create natural language title and excerpt from LLM-processed content (if available)
-        // Uses processedContent which is either LLM-generated or falls back to cleanExcerpt
-        // Apply Turkish word spacing fix for OCR/PDF content, then metadata spacing fix
+        // Use LLM-normalized text if available (for concatenated OCR text)
+        if (ocrResults.has(i)) {
+          processedContent = ocrResults.get(i)!;
+        }
+
+        // Create natural language title and excerpt from processed content
+        // Apply regex-based spacing fix as fallback, then metadata spacing fix
         const rawContent = processedContent || prep.cleanExcerpt;
         const spacedContent = this.fixTurkishWordSpacing(rawContent);
         const displayContent = this.fixMetadataSpacing(spacedContent);

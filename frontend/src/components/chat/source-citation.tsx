@@ -15,57 +15,73 @@ interface SourceCitationProps {
 
 /**
  * Clean citation text for readable display
- * Fixes concatenated uppercase words, metadata spacing, and formatting
+ * Uses Turkish morphological suffix patterns to split concatenated words.
+ * Works with both uppercase and lowercase text (case insensitive).
  */
 function cleanCitationText(text: string): string {
   if (!text) return '';
 
   let result = text;
 
-  // 1. Split concatenated uppercase Turkish text (>20 chars without space)
-  result = result.replace(/[A-ZÇĞİÖŞÜ]{20,}/g, (match) => {
-    // Common Turkish particles to split on
-    const particles = [
-      'AMACIYLA', 'AMACI', 'DAİR', 'İLİŞKİN', 'HAKKINDA',
-      'KANUNLARDA', 'KANUNU', 'KANUN',
-      'YAPILMASINA', 'YAPILMASI',
-      'İYİLEŞTİRİLMESİ', 'DEĞİŞİKLİK',
-      'ORTAMININ', 'BAZI', 'YATIRIM',
-      'VERGİSİ', 'VERGİ', 'USUL',
-      'KABUL', 'TARİHİ', 'NUMARASI',
-      'YAYIMLANDIĞI', 'RESMİ', 'GAZETE',
-    ];
-    let split = match;
-    for (const p of particles) {
-      // Add space before particle when preceded by letters
-      split = split.replace(new RegExp(`([A-ZÇĞİÖŞÜa-zçğıöşü])(?=${p})`, 'g'), '$1 ');
-    }
-    // Suffix-based splitting
-    split = split
-      .replace(/(MESİ|MASI|LARI|LERİ)([A-ZÇĞİÖŞÜ])/g, '$1 $2')
-      .replace(/(NIN|NİN|NUN|NÜN)([A-ZÇĞİÖŞÜ])/g, '$1 $2')
-      .replace(/(YLA|YLE)([A-ZÇĞİÖŞÜ])/g, '$1 $2')
-      .replace(/(INA|İNE)([A-ZÇĞİÖŞÜ])/g, '$1 $2');
-    return split;
-  });
-
-  // 2. Fix metadata-style concatenated text (6728Kabul -> 6728 Kabul)
+  // 1. Number-word boundaries
   result = result
     .replace(/(\d{2,})([A-ZÇĞİÖŞÜ][a-zçğıöşü])/g, '$1 $2')
     .replace(/(\d{2,})([A-ZÇĞİÖŞÜ]{2,})/g, '$1 $2')
     .replace(/(\d{1,2}\/\d{1,2}\/\d{4})([A-ZÇĞİÖŞÜa-zçğıöşü])/g, '$1 $2');
 
-  // 3. Format known metadata labels with separator
+  // 2. camelCase / lowercase-UPPERCASE transitions
+  result = result.replace(/([a-zçğıöşü]{2,})([A-ZÇĞİÖŞÜ]{2,})/g, '$1 $2');
+
+  // 3. Turkish morphological suffix boundaries (case insensitive)
+  // After these suffixes, a new word likely begins
+  const suffixBoundaries = [
+    // Case suffixes (locative, ablative, dative)
+    /(NDA|NDE|NDAN|NDEN)(?=[A-ZÇĞİÖŞÜ])/gi,
+    /(DAN|DEN|TAN|TEN)(?=[A-ZÇĞİÖŞÜ])/gi,
+    /(DA|DE|TA|TE)(?=[A-ZÇĞİÖŞÜ]{3,})/gi,
+    // Genitive / possessive
+    /(NIN|NİN|NUN|NÜN|ININ|İNİN|UNUN|ÜNÜN)(?=[A-ZÇĞİÖŞÜ])/gi,
+    // Plural + case
+    /(LARI|LERİ|LARIN|LERİN|LARDAN|LERDEN)(?=[A-ZÇĞİÖŞÜ])/gi,
+    // Verbal noun suffixes
+    /(MASI|MESİ|MASINA|MESİNE|MASINDA|MESİNDE)(?=[A-ZÇĞİÖŞÜ])/gi,
+    // Instrumental
+    /(YLA|YLE|İLE)(?=[A-ZÇĞİÖŞÜ]{3,})/gi,
+    // Dative
+    /(INA|İNE|UNA|ÜNE)(?=[A-ZÇĞİÖŞÜ]{3,})/gi,
+    // Derivational
+    /(SİNDEN|SİNDE|SİNE|SİNİ|SİNİN)(?=[A-ZÇĞİÖŞÜ])/gi,
+    // Relative
+    /(DAKİ|DEKİ|TAKİ|TEKİ)(?=[A-ZÇĞİÖŞÜ])/gi,
+  ];
+
+  for (const pattern of suffixBoundaries) {
+    result = result.replace(pattern, '$& ');
+  }
+
+  // 4. Common conjunctions as boundary markers (case insensitive)
+  const conjunctions = ['VE', 'VEYA', 'İLE', 'İÇİN', 'OLAN', 'OLARAK', 'GÖRE', 'DAİR', 'HAKKINDA', 'İLİŞKİN'];
+  for (const c of conjunctions) {
+    result = result.replace(new RegExp(`([a-zçğıöşüA-ZÇĞİÖŞÜ])(?=${c}(?=[A-ZÇĞİÖŞÜ]))`, 'gi'), '$1 ');
+  }
+
+  // 5. Remaining long sequences (>20 chars) - aggressive suffix split
+  result = result.replace(/[a-zçğıöşüA-ZÇĞİÖŞÜ]{20,}/g, (match) => {
+    return match
+      .replace(/(ması|mesi|ları|leri|ının|inin|unun|ünün|sından|sinden|sinde|sine|sini|sinin)/gi, '$1 ')
+      .replace(/(ndan|nden|nda|nde|dan|den|nin|nın|nun|nün)/gi, (m, _p1, offset, str) => {
+        const after = str.substring(offset + m.length);
+        return after.length >= 3 ? m + ' ' : m;
+      });
+  });
+
+  // 6. Metadata label formatting
   result = result
     .replace(/(Kanun Numarası\s*:\s*\d+)\s*(?=[A-ZÇĞİÖŞÜ])/g, '$1 · ')
     .replace(/(Kabul Tarihi\s*:\s*[\d\/]+)\s*(?=[A-ZÇĞİÖŞÜ])/g, '$1 · ')
-    .replace(/(Yayımlandığı)\s*(Resmî Gazete)/g, '$1 $2')
     .replace(/(Resmî Gazete\s*:\s*Tarih\s*:\s*[\d\/]+\s*Sayı\s*:\s*\d+)\s*(?=[A-ZÇĞİÖŞÜ])/g, '$1 · ');
 
-  // 4. Add space between lowercase and uppercase transitions
-  result = result.replace(/([a-zçğıöşü]{2,})([A-ZÇĞİÖŞÜ]{2,})/g, '$1 $2');
-
-  // 5. Clean up
+  // 7. Clean up
   result = result.replace(/\s{2,}/g, ' ').trim();
 
   return result;

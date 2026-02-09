@@ -268,8 +268,8 @@ Otherwise use: "may be interpreted as", "suggests", "indicates", "could be consi
 
         // Answer style instruction - configurable per schema
         // Override to change how the LLM opens its response
-        answerInstruction: 'Soruya İLK CÜMLEDE doğrudan cevap ver (oran, süre, tutar, evet/hayır), ardından [1], [2], [3] atıflarıyla detaylandır.\nListe sorulan sorularda (hangi belgeler, hangi şartlar, neler gerekli) tüm maddeleri sırala, eksik bırakma.',
-        answerInstructionEn: 'Answer the user\'s question directly in the FIRST SENTENCE (number, rate, date, duration, or yes/no), then elaborate with citations [1], [2], [3].\nFor list questions (which documents, which conditions, what is required) enumerate ALL items comprehensively, do not omit.',
+        answerInstruction: 'Yanıta kullanıcının sorusunu anladığını gösteren KISA bir giriş cümlesiyle başla (örn: "GVK\'nın 94. maddesi uyarınca...", "İlgili mevzuata göre...", "Bu konuda vergi kanunu gereği...").\nSoruya İLK PARAGRAFTA doğrudan cevap ver (oran, süre, tutar, evet/hayır), ardından [1], [2], [3] atıflarıyla detaylandır.\nListe sorulan sorularda (hangi belgeler, hangi şartlar, neler gerekli) tüm maddeleri sırala, eksik bırakma.',
+        answerInstructionEn: 'Start the response with a SHORT introductory sentence that acknowledges the user\'s question (e.g., "According to Article 94 of the Income Tax Law...", "Under the relevant legislation...").\nAnswer the user\'s question directly in the FIRST PARAGRAPH (number, rate, date, duration, or yes/no), then elaborate with citations [1], [2], [3].\nFor list questions (which documents, which conditions, what is required) enumerate ALL items comprehensively, do not omit.',
 
         template: '' // Article format uses articleSections
       }
