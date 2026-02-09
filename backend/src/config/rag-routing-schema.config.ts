@@ -266,6 +266,11 @@ Otherwise use: "may be interpreted as", "suggests", "indicates", "could be consi
           'Kaynaklar listesi'
         ],
 
+        // Answer style instruction - configurable per schema
+        // Override to change how the LLM opens its response
+        answerInstruction: 'Soruya İLK CÜMLEDE doğrudan cevap ver (oran, süre, tutar, evet/hayır), ardından [1], [2], [3] atıflarıyla detaylandır.\nListe sorulan sorularda (hangi belgeler, hangi şartlar, neler gerekli) tüm maddeleri sırala, eksik bırakma.',
+        answerInstructionEn: 'Answer the user\'s question directly in the FIRST SENTENCE (number, rate, date, duration, or yes/no), then elaborate with citations [1], [2], [3].\nFor list questions (which documents, which conditions, what is required) enumerate ALL items comprehensively, do not omit.',
+
         template: '' // Article format uses articleSections
       }
     }

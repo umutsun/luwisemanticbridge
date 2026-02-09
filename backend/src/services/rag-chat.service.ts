@@ -833,6 +833,17 @@ export class RAGChatService {
         foundFormat.formatTemplateEn ||
         'Write structured response with ## headings, blank lines between paragraphs, and [1][2] citations after each statement.';
 
+      // Schema-driven answer instruction (overrides hardcoded FIRST SENTENCE RULE)
+      const answerInstruction = foundFormat.answerInstruction ||
+        'Soruya İLK CÜMLEDE doğrudan cevap ver (oran, süre, tutar, evet/hayır), ardından [1], [2], [3] atıflarıyla detaylandır';
+
+      // Schema-driven citation instructions (overrides hardcoded INLINE CITATION RULES)
+      const citationInstructions = foundFormat.citationInstructions ||
+        `- Her ifadeden hemen sonra kaynak numarası ekle: "...vergi oranı %18'dir [1]."
+- Aynı bilgi için birden fazla kaynak: "...kabul edilmektedir [1][3]."
+- Metin içinde [1], [2] dipnot formatını kullan
+- Kaynak sırasını değiştirme`;
+
       const prompt = `🚨 CRITICAL: FOLLOW THIS OUTPUT FORMAT EXACTLY
 
 ${formatTemplate}
@@ -840,17 +851,13 @@ ${formatTemplate}
 ---
 
 YOUR ROLE: RAG response generator that DIRECTLY answers questions
-YOUR ONLY JOB: Answer the user's question directly in the FIRST SENTENCE, then elaborate with citations [1], [2], [3]
-FIRST SENTENCE RULE: Start with the direct answer (number, rate, date, duration, or yes/no), then explain details
+${answerInstruction}
 
 GROUNDING RULES:
 ${groundingRulesText}
 
 INLINE CITATION RULES:
-- Add source number IMMEDIATELY after each statement: "...tax rate is 18% [1]."
-- Multiple sources for same info: "...is accepted [1][3]."
-- Use footnote format [1], [2] in text
-- Keep source order (do not reorder sources)
+${citationInstructions}
 
 FORMATTING:
 - Use **bold** for key terms
@@ -881,6 +888,19 @@ PROHIBITED:
         foundFormat.formatTemplate ||
         'Write structured response with ## headings, blank lines between paragraphs, and [1][2] citations after each statement.';
 
+      // Schema-driven answer instruction (English)
+      const answerInstruction = foundFormat.answerInstructionEn ||
+        foundFormat.answerInstruction ||
+        'Answer the user\'s question directly in the FIRST SENTENCE, then elaborate with citations [1], [2], [3]';
+
+      // Schema-driven citation instructions (English)
+      const citationInstructions = foundFormat.citationInstructionsEn ||
+        foundFormat.citationInstructions ||
+        `- Add source number IMMEDIATELY after each statement: "...tax rate is 18% [1]."
+- Multiple sources for same info: "...is accepted [1][3]."
+- Use footnote format [1], [2] in text
+- Keep source order (do not reorder sources)`;
+
       const prompt = `🚨 CRITICAL: FOLLOW THIS OUTPUT FORMAT EXACTLY
 
 ${formatTemplate}
@@ -888,17 +908,13 @@ ${formatTemplate}
 ---
 
 YOUR ROLE: RAG response generator that DIRECTLY answers questions
-YOUR ONLY JOB: Answer the user's question directly in the FIRST SENTENCE, then elaborate with citations [1], [2], [3]
-FIRST SENTENCE RULE: Start with the direct answer (number, rate, date, duration, or yes/no), then explain details
+${answerInstruction}
 
 GROUNDING RULES:
 ${groundingRulesText}
 
 INLINE CITATION RULES:
-- Add source number IMMEDIATELY after each statement: "...tax rate is 18% [1]."
-- Multiple sources for same info: "...is accepted [1][3]."
-- Use footnote format [1], [2] in text
-- Keep source order (do not reorder sources)
+${citationInstructions}
 
 FORMATTING:
 - Use **bold** for key terms
@@ -2850,9 +2866,9 @@ ${questionLabel}: ${message}`;
         const r = searchResults[idx];
         const score = Math.round(r.score || (r.similarity_score * 100) || 0);
         const title = r.title || `Kaynak ${idx + 1}`;
-        // Get content - use excerpt, content, or title as fallback
+        // Get content - prefer full_content (untrimmed), fall back to excerpt/content
         // Clean raw metadata content (handles crawler records with listing_id/url format)
-        const rawContent = r.excerpt || r.content || '';
+        const rawContent = r.full_content || r.excerpt || r.content || '';
         const cleanedContent = this.cleanRawMetadataContent(rawContent, r.metadata);
         // 🔧 Use configurable excerpt length (smaller for smaller models)
         let content = this.truncateExcerpt(cleanedContent, maxExcerptLength);
@@ -3443,7 +3459,7 @@ FORMAT:
           const rawSourceType = r.source_type || r.source_table || 'Unknown';
           // Normalize source type using database configuration
           const sourceType = typeNormalizations[rawSourceType.toLowerCase()] || rawSourceType;
-          let content = r.excerpt || r.content || '';
+          let content = r.full_content || r.excerpt || r.content || '';
 
           // Detect TOC using database-configured patterns
           const isTOC = this.isTableOfContents(title, content, settingsMap);
@@ -4643,7 +4659,8 @@ FORMAT:
       const formattedSources = await this.formatSources(searchResults, {
         enableParallelLLM: settingsMap.get('enable_parallel_llm') === 'true',
         parallelCount: Math.min(parseInt(settingsMap.get('parallel_llm_count') || '3'), 5),
-        batchSize: batchSize
+        batchSize: batchSize,
+        query: message // Pass user query for smart snippet extraction
       });
 
       // ========================================
@@ -9294,6 +9311,69 @@ Please verify the article number or check official sources.`;
   /**
    * Truncate excerpt intelligently
    */
+  /**
+   * Extract the most relevant snippet from content based on query keywords.
+   * Instead of showing the beginning of a document, finds the section
+   * with highest keyword density from the user's query.
+   */
+  private extractRelevantSnippet(content: string, query: string, maxLength: number = 300): string {
+    if (!content || !query || content.length <= maxLength) return content || '';
+
+    // Turkish stopwords to ignore
+    const stopWords = new Set([
+      'bir', 'bu', 'şu', 've', 'veya', 'ile', 'için', 'den', 'dan', 'de', 'da',
+      'mi', 'mı', 'ne', 'nasıl', 'hangi', 'nedir', 'kaç', 'olan', 'olarak',
+      'gibi', 'daha', 'hem', 'ise', 'çok', 'sonra', 'önce', 'kadar', 'üzere'
+    ]);
+
+    // Extract meaningful keywords from query (3+ chars, not stopwords)
+    const queryWords = query.toLowerCase()
+      .replace(/[?!.,;:'"]/g, '')
+      .split(/\s+/)
+      .filter(w => w.length >= 3 && !stopWords.has(w));
+
+    if (queryWords.length === 0) return content.substring(0, maxLength);
+
+    const contentLower = content.toLowerCase();
+
+    // Sliding window: find position with most keyword matches
+    const windowSize = maxLength;
+    const step = 50;
+    let bestPos = 0;
+    let bestScore = 0;
+
+    for (let pos = 0; pos <= Math.max(0, content.length - windowSize); pos += step) {
+      const window = contentLower.substring(pos, pos + windowSize);
+      let score = 0;
+      for (const word of queryWords) {
+        if (window.includes(word)) score++;
+      }
+      if (score > bestScore) {
+        bestScore = score;
+        bestPos = pos;
+      }
+    }
+
+    // If no keywords found anywhere, return beginning
+    if (bestScore === 0) return content.substring(0, maxLength);
+
+    // Adjust to start at a sentence boundary
+    let startPos = bestPos;
+    if (startPos > 0) {
+      const lookBack = content.substring(Math.max(0, startPos - 150), startPos);
+      const sentenceEnd = Math.max(
+        lookBack.lastIndexOf('. '),
+        lookBack.lastIndexOf('.\n'),
+        lookBack.lastIndexOf('.) ')
+      );
+      if (sentenceEnd >= 0) {
+        startPos = Math.max(0, startPos - 150) + sentenceEnd + 2;
+      }
+    }
+
+    return content.substring(startPos, startPos + maxLength);
+  }
+
   private truncateExcerpt(text: string, maxLength: number): string {
     if (!text || text.length <= maxLength) return text;
 
@@ -10140,6 +10220,7 @@ DÜZELTILMIŞ METİN:`;
       enableParallelLLM?: boolean;
       parallelCount?: number;
       batchSize?: number;
+      query?: string; // User query for smart snippet extraction
     }
   ): Promise<any[]> {
     const formattedResults = [];
@@ -10235,9 +10316,14 @@ DÜZELTILMIŞ METİN:`;
         const rawTitle = r.title?.replace(/ \(Part \d+\/\d+\)/g, '') || citation;
         const cleanTitle = this.toSentenceCase(this.stripHtml(this.fixTurkishWordSpacing(rawTitle)));
         // Clean raw metadata content (handles crawler records with listing_id/url format)
-        const rawExcerpt = r.excerpt || r.content || '';
+        // Prefer full_content for richer snippet extraction
+        const rawExcerpt = r.full_content || r.excerpt || r.content || '';
         const cleanedContent = this.cleanRawMetadataContent(rawExcerpt, r.metadata);
-        const cleanExcerpt = this.toSentenceCase(this.stripHtml(this.fixTurkishWordSpacing(cleanedContent)));
+        // Smart snippet: extract the most relevant section based on user query
+        const smartSnippet = settings?.query
+          ? this.extractRelevantSnippet(cleanedContent, settings.query, excerptMaxLength * 2)
+          : cleanedContent;
+        const cleanExcerpt = this.toSentenceCase(this.stripHtml(this.fixTurkishWordSpacing(smartSnippet)));
 
         return {
           originalResult: r,
@@ -10298,8 +10384,8 @@ DÜZELTILMIŞ METİN:`;
         const spacedContent = this.fixTurkishWordSpacing(rawContent);
         const displayContent = this.fixMetadataSpacing(spacedContent);
         const naturalTitle = this.truncateExcerpt(displayContent, Math.min(excerptMaxLength, 120));
-        const naturalExcerpt = this.truncateExcerpt(displayContent, excerptMaxLength);
-        const naturalContent = this.truncateExcerpt(displayContent, summaryMaxLength);
+        const naturalExcerpt = this.truncateExcerpt(displayContent, summaryMaxLength);
+        const naturalContent = this.truncateExcerpt(displayContent, summaryMaxLength * 2);
 
         formattedResults.push({
           id: r.id,

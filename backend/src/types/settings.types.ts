@@ -308,6 +308,13 @@ export interface RouteFormat {
     // Response structure template (markdown format with examples)
     formatTemplate?: string;
     formatTemplateEn?: string;
+    // Citation formatting instructions (overrides hardcoded INLINE CITATION RULES)
+    citationInstructions?: string;
+    citationInstructionsEn?: string;
+    // Answer style instruction (overrides hardcoded FIRST SENTENCE RULE)
+    // e.g., "Start with a direct answer" or "List items comprehensively" or "Provide detailed explanation"
+    answerInstruction?: string;
+    answerInstructionEn?: string;
 }
 
 /**

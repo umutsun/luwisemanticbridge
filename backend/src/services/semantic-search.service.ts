@@ -1747,7 +1747,7 @@ export class SemanticSearchService {
               'DANI?TAY - ' || LEFT(konu, 100) as title,
               'danistaykararlari' as source_table,
               id::text as source_id,
-              LEFT(karar, 500) as excerpt
+              LEFT(karar, ${this.maxExcerptLength}) as excerpt
             FROM ${TABLE_NAMES.DANISTAYKARARLARI}
             WHERE konu ILIKE $1 OR karar ILIKE $1
             ORDER BY id DESC

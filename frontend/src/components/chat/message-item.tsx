@@ -2,7 +2,8 @@
 
 import { useState, useEffect } from 'react';
 import { cn } from '@/lib/utils';
-import { User, Bot, FileText, Volume2, Pause, Loader2 } from 'lucide-react';
+import { User, Bot, FileText, Volume2, Pause, Loader2, AlertTriangle } from 'lucide-react';
+import React from 'react';
 import { Message } from '@/types/chat';
 import { SourceCitation } from './source-citation';
 import { MessageSkeleton } from './message-skeleton';
@@ -39,6 +40,46 @@ function highlightRepeatingKeywords(text: string, keywords: string[]): string {
   });
 
   return highlightedText;
+}
+
+/**
+ * Processes React children to make inline citation references [1], [2] clickable.
+ * Scrolls to the corresponding source in the citation section when clicked.
+ */
+function processCitationRefs(children: React.ReactNode): React.ReactNode {
+  return React.Children.map(children, (child) => {
+    if (typeof child !== 'string') return child;
+
+    // Split text on citation patterns like [1], [2], [1][3]
+    const parts = child.split(/(\[\d+\])/g);
+    if (parts.length === 1) return child;
+
+    return parts.map((part, i) => {
+      const match = part.match(/^\[(\d+)\]$/);
+      if (match) {
+        const num = match[1];
+        return (
+          <sup
+            key={i}
+            className="inline-flex items-center justify-center min-w-[1.1rem] h-[1.1rem] px-0.5 mx-[1px] text-[10px] font-semibold rounded bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 cursor-pointer hover:bg-blue-200 dark:hover:bg-blue-800/60 transition-colors align-top"
+            title={`Kaynak ${num}`}
+            onClick={() => {
+              const el = document.getElementById(`source-ref-${num}`);
+              if (el) {
+                el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+                // Brief highlight animation
+                el.classList.add('ring-2', 'ring-blue-400', 'ring-offset-1');
+                setTimeout(() => el.classList.remove('ring-2', 'ring-blue-400', 'ring-offset-1'), 2000);
+              }
+            }}
+          >
+            {num}
+          </sup>
+        );
+      }
+      return part;
+    });
+  });
 }
 
 interface MessageItemProps {
@@ -202,6 +243,17 @@ export function MessageItem({ message }: MessageItemProps) {
             )}
           </div>
         )}
+
+        {/* Article anchoring warning - when user asked about specific law article but it wasn't found */}
+        {!isUser && message.articleQuery?.detected && !message.articleQuery?.exactMatchFound && (
+          <div className="flex items-center gap-2 mb-3 p-2 rounded-lg bg-amber-50 dark:bg-amber-900/30 border border-amber-200 dark:border-amber-800">
+            <AlertTriangle className="w-4 h-4 text-amber-600 dark:text-amber-400 flex-shrink-0" />
+            <span className="text-xs text-amber-800 dark:text-amber-200">
+              <strong>{message.articleQuery.lawCode} Madde {message.articleQuery.articleNumber}</strong> kanun metni veritabanında bulunamadı.
+              Aşağıdaki yanıt ilgili kaynaklardan derlenmiştir.
+            </span>
+          </div>
+        )}
         
         {isUser ? (
           <div>
@@ -252,16 +304,16 @@ export function MessageItem({ message }: MessageItemProps) {
                     {children}
                   </h3>
                 ),
-                // Paragraphs
+                // Paragraphs - with clickable citation refs
                 p: ({ children }) => (
                   <p className="text-gray-700 dark:text-gray-300 my-2 leading-relaxed">
-                    {children}
+                    {processCitationRefs(children)}
                   </p>
                 ),
-                // Bold text
+                // Bold text - with clickable citation refs
                 strong: ({ children }) => (
                   <strong className="font-semibold text-gray-900 dark:text-white">
-                    {children}
+                    {processCitationRefs(children)}
                   </strong>
                 ),
                 // Unordered lists
@@ -276,10 +328,10 @@ export function MessageItem({ message }: MessageItemProps) {
                     {children}
                   </ol>
                 ),
-                // List items
+                // List items - with clickable citation refs
                 li: ({ children }) => (
                   <li className="text-gray-700 dark:text-gray-300 pl-1">
-                    {children}
+                    {processCitationRefs(children)}
                   </li>
                 ),
                 // Blockquotes (for warnings/notes)

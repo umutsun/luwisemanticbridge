@@ -2,8 +2,9 @@
 
 import { useState } from 'react';
 import { Source } from '@/types/chat';
-import { ChevronDown, ChevronUp, Plus } from 'lucide-react';
+import { ChevronDown, ChevronUp, Plus, MessageSquareText } from 'lucide-react';
 import { stripHtml } from '@/utils/html-utils';
+import { cn } from '@/lib/utils';
 
 interface SourceCitationProps {
   sources: Source[];
@@ -17,7 +18,20 @@ export function SourceCitation({ sources, onLoadMore, hasMore = false, showLoadM
   if (!sources || sources.length === 0) return null;
 
   const [showAllSources, setShowAllSources] = useState(false);
+  const [expandedExcerpts, setExpandedExcerpts] = useState<Set<number>>(new Set());
   const initialSourcesToShow = 7;
+
+  const toggleExcerpt = (index: number) => {
+    setExpandedExcerpts(prev => {
+      const next = new Set(prev);
+      if (next.has(index)) {
+        next.delete(index);
+      } else {
+        next.add(index);
+      }
+      return next;
+    });
+  };
   const sourcesToDisplay = showAllSources ? sources : sources.slice(0, initialSourcesToShow);
 
   // Helper to map source table to display name with hierarchy and marker color
@@ -122,6 +136,11 @@ export function SourceCitation({ sources, onLoadMore, hasMore = false, showLoadM
 
   return (
     <div className="mt-4 pt-3 border-t border-white/5">
+      <div className="flex items-center gap-2 mb-2">
+        <span className="text-[11px] font-medium text-gray-400">
+          Atıflar ({sources.length} kaynak)
+        </span>
+      </div>
       <div className="space-y-1">
         {sourcesToDisplay.map((source, index) => {
           // Get display title - prioritize metadata fields
@@ -166,6 +185,7 @@ export function SourceCitation({ sources, onLoadMore, hasMore = false, showLoadM
           return (
             <div
               key={source.id}
+              id={`source-ref-${index + 1}`}
               className="group flex items-start gap-2 py-2 px-2 rounded-lg hover:bg-white/[0.02] transition-colors"
             >
               {/* Content */}
@@ -233,28 +253,54 @@ export function SourceCitation({ sources, onLoadMore, hasMore = false, showLoadM
                   </div>
                 )}
 
-                {/* Excerpt - only if different from title, clickable for follow-up */}
+                {/* Excerpt - expandable with follow-up button */}
                 {(() => {
                   if (!source.excerpt) return null;
                   const excerpt = stripHtml(source.excerpt);
                   // Only show if different from title
                   if (excerpt && excerpt.length > 20 && !displayTitle.includes(excerpt.slice(0, 50)) && !excerpt.includes(displayTitle.slice(0, 50))) {
+                    const isExpanded = expandedExcerpts.has(index);
+                    const isLong = excerpt.length > 150;
                     return (
-                      <p
-                        className="text-xs text-gray-500 mt-2 line-clamp-3 leading-relaxed cursor-pointer hover:text-gray-400 transition-colors"
-                        onClick={() => {
-                          if (onExcerptClick) {
-                            const question = generateFollowUpQuestion(
-                              excerpt,
-                              stripHtml(source.citation || source.title || 'Bu kaynak')
-                            );
-                            onExcerptClick(question);
-                          }
-                        }}
-                        title="Bu konuyla ilgili detaylı araştırma yap"
-                      >
-                        {excerpt}
-                      </p>
+                      <div className="mt-2">
+                        <p
+                          className={cn(
+                            'text-xs text-gray-500 leading-relaxed transition-all duration-200',
+                            !isExpanded && isLong && 'line-clamp-3',
+                            isLong && 'cursor-pointer hover:text-gray-400'
+                          )}
+                          onClick={() => isLong && toggleExcerpt(index)}
+                          title={isLong ? (isExpanded ? 'Daralt' : 'Devamını oku') : undefined}
+                        >
+                          {excerpt}
+                        </p>
+                        <div className="flex items-center gap-2 mt-1.5">
+                          {isLong && (
+                            <button
+                              onClick={() => toggleExcerpt(index)}
+                              className="text-[10px] text-blue-400 hover:text-blue-300 transition-colors"
+                            >
+                              {isExpanded ? 'Daralt' : 'Devamını oku...'}
+                            </button>
+                          )}
+                          {onExcerptClick && (
+                            <button
+                              onClick={() => {
+                                const question = generateFollowUpQuestion(
+                                  excerpt,
+                                  stripHtml(source.citation || source.title || 'Bu kaynak')
+                                );
+                                onExcerptClick(question);
+                              }}
+                              className="flex items-center gap-1 text-[10px] text-purple-400 hover:text-purple-300 transition-colors"
+                              title="Bu konuyla ilgili soru sor"
+                            >
+                              <MessageSquareText className="w-3 h-3" />
+                              Soru sor
+                            </button>
+                          )}
+                        </div>
+                      </div>
                     );
                   }
                   return null;
