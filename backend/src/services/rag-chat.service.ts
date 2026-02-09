@@ -3058,7 +3058,13 @@ Bu kaynaklara MUTLAKA atıf yapmalısın. Makale/özelge gibi ikincil kaynaklar 
       console.log(`   Top3 scores: [${scoreDebug.join(', ')}], qualityPassing: ${qualityChunks.length}/${searchResults.length}, gate=${passesEvidenceGate ? 'PASS' : 'FAIL'}`);
 
       // If evidence gate is enabled and fails, return clean refusal
-      if (evidenceGateEnabled && !passesEvidenceGate && !citationsDisabled) {
+      // v12.52: Bypass evidence gate for specific article queries (e.g., "VUK 114")
+      // Article queries have their own rescue/not-found mechanism and should not be gate-rejected
+      const articleGateBypass = !!articleQuery?.detected;
+      if (articleGateBypass) {
+        console.log(`🚪 EVIDENCE GATE BYPASS: Article query detected (${articleQuery!.law_code} m.${articleQuery!.article_number}), skipping gate`);
+      }
+      if (evidenceGateEnabled && !passesEvidenceGate && !citationsDisabled && !articleGateBypass) {
         const refusalTr = settingsMap.get('ragSettings.evidenceGateRefusalTr') ||
           'Bu konuda yeterince güvenilir kaynak bulunamadı. Sorunuzu farklı anahtar kelimelerle veya daha spesifik şekilde sormayı deneyin.';
         const refusalEn = settingsMap.get('ragSettings.evidenceGateRefusalEn') ||
@@ -5688,6 +5694,7 @@ Yani beyanname ile ödeme arasında **2 günlük** bir fark vardır.`;
     // ========================================
     if (queryLower.split(/\s+/).length === 1 && !numberMatch) {
       const singleWordExpansions: Record<string, string[]> = {
+        'vergi': ['Vergi türleri nelerdir?', 'Gelir vergisi beyannamesi ne zaman verilir?', 'KDV oranı nedir?'],
         'kdv': ['KDV oranı nedir?', 'KDV iadesi nasıl alınır?', 'KDV beyannamesi ne zaman verilir?'],
         'fatura': ['E-fatura zorunluluğu', 'Fatura düzenleme süresi', 'Fatura iptal prosedürü'],
         'beyanname': ['KDV beyannamesi', 'Muhtasar beyanname', 'Yıllık gelir vergisi beyannamesi'],
@@ -9514,25 +9521,34 @@ Please verify the article number or check official sources.`;
 
     // 3. Turkish morphological suffix boundaries (case insensitive)
     // After these suffixes, a new word likely begins
+    // Order matters: longer suffixes first to avoid partial matches
     const suffixBoundaries = [
-      // Case suffixes (locative, ablative, dative, accusative)
-      /(NDA|NDE|NDAN|NDEN)(?=[A-ZÇĞİÖŞÜ])/gi,
-      /(DAN|DEN|TAN|TEN)(?=[A-ZÇĞİÖŞÜ])/gi,
-      /(DA|DE|TA|TE)(?=[A-ZÇĞİÖŞÜ]{3,})/gi,
-      // Genitive / possessive
-      /(NIN|NİN|NUN|NÜN|ININ|İNİN|UNUN|ÜNÜN)(?=[A-ZÇĞİÖŞÜ])/gi,
+      // Derivational suffixes (longest first)
+      /(SİNDEN|SİNDE|SİNE|SİNİ|SİNİN)(?=[A-ZÇĞİÖŞÜ])/gi,
+      // Verbal noun + case
+      /(MASINDA|MESİNDE|MASINA|MESİNE|MASI|MESİ)(?=[A-ZÇĞİÖŞÜ])/gi,
       // Plural + case
-      /(LARI|LERİ|LARIN|LERİN|LARDAN|LERDEN)(?=[A-ZÇĞİÖŞÜ])/gi,
-      // Verbal noun suffixes
-      /(MASI|MESİ|MASINA|MESİNE|MASINDA|MESİNDE)(?=[A-ZÇĞİÖŞÜ])/gi,
+      /(LARINDA|LERİNDE|LARINDAN|LERİNDEN|LARINA|LERİNE)(?=[A-ZÇĞİÖŞÜ])/gi,
+      /(LARIN|LERİN|LARDAN|LERDEN|LARI|LERİ)(?=[A-ZÇĞİÖŞÜ])/gi,
+      // Genitive / possessive (long forms)
+      /(ININ|İNİN|UNUN|ÜNÜN)(?=[A-ZÇĞİÖŞÜ])/gi,
+      /(NIN|NİN|NUN|NÜN)(?=[A-ZÇĞİÖŞÜ])/gi,
+      // Possessive -Sİ (vergisi, kanunu etc.) - CRITICAL for "VERGİSİKANUNU"
+      // Require 4+ following chars to avoid false splits on short words
+      /(Sİ|SI|SU|SÜ)(?=[A-ZÇĞİÖŞÜ]{4,})/gi,
+      // Accusative/possessive -NU/-NÜ etc. - require 4+ following chars
+      /(NU|NÜ|NI|Nİ)(?=[A-ZÇĞİÖŞÜ]{4,})/gi,
+      // Case suffixes (locative, ablative)
+      /(NDAN|NDEN|NDA|NDE)(?=[A-ZÇĞİÖŞÜ])/gi,
+      /(DAN|DEN|TAN|TEN)(?=[A-ZÇĞİÖŞÜ]{3,})/gi,
+      // DA/DE/TA/TE - very short, require 5+ following chars to reduce false positives
+      /(DA|DE|TA|TE)(?=[A-ZÇĞİÖŞÜ]{5,})/gi,
+      // Relative / adjective
+      /(DAKİ|DEKİ|TAKİ|TEKİ)(?=[A-ZÇĞİÖŞÜ])/gi,
       // Instrumental / comitative
       /(YLA|YLE|İLE)(?=[A-ZÇĞİÖŞÜ]{3,})/gi,
       // Dative
       /(INA|İNE|UNA|ÜNE)(?=[A-ZÇĞİÖŞÜ]{3,})/gi,
-      // Derivational suffixes
-      /(SİNDEN|SİNDE|SİNE|SİNİ|SİNİN)(?=[A-ZÇĞİÖŞÜ])/gi,
-      // Relative / adjective
-      /(DAKİ|DEKİ|TAKİ|TEKİ)(?=[A-ZÇĞİÖŞÜ])/gi,
     ];
 
     for (const pattern of suffixBoundaries) {
@@ -10446,7 +10462,9 @@ DÜZELTILMIŞ METİN:`;
         // Clean HTML from title and excerpt, convert ALL CAPS to sentence case
         // Apply Turkish word spacing fix for OCR/PDF content
         const rawTitle = r.title?.replace(/ \(Part \d+\/\d+\)/g, '') || citation;
-        const cleanTitle = this.toSentenceCase(this.stripHtml(this.fixTurkishWordSpacing(rawTitle)));
+        const rawTitleStripped = this.stripHtml(rawTitle);
+        const titleNeedsOCR = this.detectConcatenatedText(rawTitleStripped);
+        const cleanTitle = this.toSentenceCase(this.fixTurkishWordSpacing(rawTitleStripped));
         // Clean raw metadata content (handles crawler records with listing_id/url format)
         // Prefer full_content for richer snippet extraction
         const rawExcerpt = r.full_content || r.excerpt || r.content || '';
@@ -10461,6 +10479,10 @@ DÜZELTILMIŞ METİN:`;
         const needsOCRNormalization = this.detectConcatenatedText(rawStripped);
         const cleanExcerpt = this.toSentenceCase(this.fixTurkishWordSpacing(rawStripped));
 
+        // Also detect concatenated text in metadata fields (baslik, konusu)
+        const rawBaslik = r.metadata?.baslik ? this.stripHtml(r.metadata.baslik) : '';
+        const baslikNeedsOCR = rawBaslik ? this.detectConcatenatedText(rawBaslik) : false;
+
         return {
           originalResult: r,
           idx,
@@ -10469,7 +10491,9 @@ DÜZELTILMIŞ METİN:`;
           citation,
           cleanTitle,
           cleanExcerpt,
-          rawExcerptForOCR: needsOCRNormalization ? rawStripped : undefined
+          rawExcerptForOCR: needsOCRNormalization ? rawStripped : undefined,
+          rawTitleForOCR: titleNeedsOCR ? rawTitleStripped : undefined,
+          rawBaslikForOCR: baslikNeedsOCR ? rawBaslik : undefined
         };
       });
 
@@ -10502,31 +10526,37 @@ DÜZELTILMIŞ METİN:`;
 
       // STEP 3: LLM-based OCR text normalization for concatenated texts (batch, parallel)
       // Uses pre-detected flag from STEP 1 (detection on raw uppercase text, before toSentenceCase)
-      const ocrNormPromises: Array<{ index: number; promise: Promise<string> }> = [];
+      // Normalizes excerpts, titles, and baslik fields
+      const ocrNormPromises: Array<{ index: number; field: 'excerpt' | 'title' | 'baslik'; promise: Promise<string> }> = [];
       for (let i = 0; i < preparedResults.length; i++) {
-        const rawForOCR = preparedResults[i].rawExcerptForOCR;
-        if (rawForOCR) {
-          ocrNormPromises.push({
-            index: i,
-            promise: this.normalizeOCRTextWithLLM(rawForOCR)
-          });
+        const prep = preparedResults[i];
+        if (prep.rawExcerptForOCR) {
+          ocrNormPromises.push({ index: i, field: 'excerpt', promise: this.normalizeOCRTextWithLLM(prep.rawExcerptForOCR) });
+        }
+        if (prep.rawTitleForOCR) {
+          ocrNormPromises.push({ index: i, field: 'title', promise: this.normalizeOCRTextWithLLM(prep.rawTitleForOCR) });
+        }
+        if (prep.rawBaslikForOCR) {
+          ocrNormPromises.push({ index: i, field: 'baslik', promise: this.normalizeOCRTextWithLLM(prep.rawBaslikForOCR) });
         }
       }
       // Run OCR normalization in parallel (max 3 concurrent to protect LLM rate limits)
-      const ocrResults = new Map<number, string>();
+      const ocrResults = new Map<number, { excerpt?: string; title?: string; baslik?: string }>();
       if (ocrNormPromises.length > 0) {
-        console.log(`🔧 [OCR] Normalizing ${ocrNormPromises.length}/${preparedResults.length} concatenated excerpts via LLM...`);
+        console.log(`🔧 [OCR] Normalizing ${ocrNormPromises.length} concatenated texts (excerpts+titles+baslik) via LLM...`);
         const batchSize = 3;
         for (let b = 0; b < ocrNormPromises.length; b += batchSize) {
           const batch = ocrNormPromises.slice(b, b + batchSize);
           const results = await Promise.allSettled(batch.map(p => p.promise));
           results.forEach((res, idx) => {
             if (res.status === 'fulfilled' && res.value) {
-              ocrResults.set(batch[idx].index, res.value);
+              const { index, field } = batch[idx];
+              if (!ocrResults.has(index)) ocrResults.set(index, {});
+              ocrResults.get(index)![field] = res.value;
             }
           });
         }
-        console.log(`🔧 [OCR] Normalized ${ocrResults.size} excerpts successfully`);
+        console.log(`🔧 [OCR] Normalized texts for ${ocrResults.size} sources successfully`);
       }
 
       // STEP 4: Build final formatted results

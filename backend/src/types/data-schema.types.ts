@@ -546,10 +546,14 @@ export const DEFAULT_SANITIZER_CONFIG: SanitizerConfig = {
     'madde', 'fıkra', 'bent', 'kanun', 'yönetmelik', 'tebliğ',
     // Tax terms (specific nouns)
     'matrah', 'vergi', 'kdv', 'stopaj', 'tevkifat', 'istisna', 'muafiyet',
+    // v12.52: ÖTV/OTV - both Turkish and ASCII forms
+    'ötv', 'otv', 'özel tüketim', 'ozel tuketim',
     // Process terms (specific actions that can be verified)
     'tahakkuk', 'tahsil', 'iade', 'indirim', 'mahsup',
     // Temporal terms - CRITICAL for duration/deadline claim verification
     'süre', 'gün', 'ay', 'yıl', 'tarih', 'vade', 'dönem', 'takvim',
+    // v12.52: Zamanaşımı terms (VUK 114 etc.)
+    'zamanaşımı', 'zamanasimi', 'zaman aşımı',
     // Storage/retention terms - for document retention claims
     'saklama', 'muhafaza', 'ibraz', 'arşiv', 'dosya',
     // Declaration/notification terms - for deadline claims

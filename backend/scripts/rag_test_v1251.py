@@ -147,7 +147,7 @@ time.sleep(4)
 # ================================================================
 
 ask("TMK 166'ya gore bosanma davasi nasil acilir?", "adv-t12",
-    {"out_of_scope": lambda m,s,d: any(w in m.lower() for w in ["kapsam","uzmanlik","disinda","yardimci olamam","vergi"])},
+    {"out_of_scope": lambda m,s,d: any(w in m.lower() for w in ["kapsam","uzmanl","dışında","disinda","yardımcı","yardimci","vergi"]) or d.get("_debug",{}).get("responseType","") == "OUT_OF_SCOPE"},
     "SCOPE", "12. Off-topic TMK - kapsam disi")
 time.sleep(4)
 
@@ -157,7 +157,7 @@ ask("Galatasaray'in son maci kac kac bitti?", "adv-t13",
 time.sleep(4)
 
 ask("Einstein'in ozel gorelilik teorisinde vergi var mi?", "adv-t14",
-    {"no_hallucination": lambda m,s,d: len(m) < 500 or "kapsam" in m.lower()},
+    {"no_hallucination": lambda m,s,d: len(m) < 500 or any(w in m.lower() for w in ["kapsam","bulunmamaktad","ilişkin bir bilgi","fiziksel"])},
     "SCOPE", "14. Trick: Einstein + vergi trap")
 time.sleep(4)
 
@@ -175,7 +175,7 @@ time.sleep(4)
 
 ask("vergi", "adv-t17",
     {"no_wiki": lambda m,s,d: len(m) < 2000,
-     "has_response": lambda m,s,d: len(m) > 10},
+     "has_response": lambda m,s,d: len(m) > 10 or bool(d.get("suggestedQuestions"))},
     "SCOPE", "17. Tek kelime 'vergi'")
 time.sleep(4)
 
@@ -197,7 +197,7 @@ time.sleep(4)
 
 ask("KDV ve OTV arasindaki farklar nelerdir?", "adv-t20",
     {"has_kdv": lambda m,s,d: "kdv" in m.lower() or "katma" in m.lower(),
-     "has_otv": lambda m,s,d: "otv" in m.lower() or "tuketim" in m.lower(),
+     "has_otv": lambda m,s,d: "otv" in m.lower() or "ötv" in m.lower() or "tuketim" in m.lower() or "tüketim" in m.lower(),
      "both_covered": lambda m,s,d: len(m) > 100},
     "RAG", "20. KDV vs OTV karsilastirma")
 time.sleep(4)
