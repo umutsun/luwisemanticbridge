@@ -1484,6 +1484,121 @@ class SemanticSearchService:
 
         return None
 
+    # === DIRECT ANSWER DETECTION (v12.47) ===
+    # Patterns for "what is the rate/amount?" type questions
+    RATE_QUESTION_PATTERNS = [
+        r'(?:oran[ıi]?\s*)?(?:kaç(?:t[ıi]r)?|ne\s*kadar)',  # "oranı kaçtır", "ne kadar"
+        r'(?:yüzde|%)\s*kaç',  # "yüzde kaç", "% kaç"
+        r'(?:vergi|kdv|kurumlar|gelir)\s*(?:oran[ıi])',  # "vergi oranı", "kdv oranı"
+        r'hangi\s*oran',  # "hangi oran"
+        r'oran[ıi]?\s*(?:nedir|ne)',  # "oranı nedir"
+    ]
+
+    # Patterns for direct rate answers in content
+    RATE_ANSWER_PATTERNS = [
+        r'%\s*(\d+(?:[.,]\d+)?)',  # %25, %20, %18
+        r'yüzde\s*(\d+(?:[.,]\d+)?)',  # yüzde 25
+        r'(\d+(?:[.,]\d+)?)\s*(?:oranında|oranında)',  # 25 oranında
+        r'oran[ıi]?\s*%?\s*(\d+(?:[.,]\d+)?)',  # oranı %25, oranı 25
+    ]
+
+    def _detect_rate_question(self, query: str) -> bool:
+        """
+        Detect if query is asking for a specific rate/amount.
+
+        Examples that return True:
+        - "Kurumlar vergisi oranı 2024 yılında kaçtır?"
+        - "KDV oranı ne kadar?"
+        - "Gelir vergisi yüzde kaç?"
+
+        Returns:
+            True if question is asking for a rate/amount
+        """
+        if not query:
+            return False
+
+        query_lower = query.lower()
+
+        for pattern in self.RATE_QUESTION_PATTERNS:
+            if re.search(pattern, query_lower, re.IGNORECASE):
+                logger.debug(f"📊 Rate question detected: {query[:50]}...")
+                return True
+
+        return False
+
+    def _calculate_direct_answer_boost(
+        self,
+        result: Dict[str, Any],
+        is_rate_question: bool
+    ) -> Tuple[float, Dict[str, Any]]:
+        """
+        Calculate boost for sources that contain direct answers to rate questions.
+
+        When user asks "kurumlar vergisi oranı kaçtır?":
+        - Boost sources that contain "%25 oranında alınır" (direct answer)
+        - Don't boost sources that contain "%10'undan az olamaz" (indirect/related)
+
+        Args:
+            result: Search result with content
+            is_rate_question: Whether the query is asking for a rate
+
+        Returns:
+            Tuple of (boost_value, details_dict)
+        """
+        details = {
+            "is_rate_question": is_rate_question,
+            "has_direct_rate": False,
+            "rate_value": None,
+            "boost_reason": None
+        }
+
+        if not is_rate_question:
+            return 0.0, details
+
+        content = (result.get("content") or "").lower()
+        title = (result.get("source_name") or result.get("title") or "").lower()
+
+        # Check for direct rate statements
+        for pattern in self.RATE_ANSWER_PATTERNS:
+            match = re.search(pattern, content, re.IGNORECASE)
+            if match:
+                rate_value = match.group(1)
+                details["has_direct_rate"] = True
+                details["rate_value"] = rate_value
+
+                # Check if this is a DIRECT rate statement vs conditional/minimum
+                # Patterns that indicate indirect answers (don't boost as much)
+                indirect_patterns = [
+                    r'(?:az|fazla)\s*olam[az]',  # "az olamaz", "fazla olamaz" (min/max)
+                    r'asgari|minimum|azami|maximum',  # Minimum/maximum rates
+                    r'geçemez|aşamaz',  # "cannot exceed"
+                    r'en\s*(?:az|çok|düşük|yüksek)',  # "at least", "at most"
+                ]
+
+                is_indirect = any(re.search(p, content, re.IGNORECASE) for p in indirect_patterns)
+
+                # Check for definitive rate statements
+                definitive_patterns = [
+                    r'%?\s*' + rate_value + r'\s*(?:oranında|olarak)\s*(?:alınır|uygulanır|hesaplanır)',
+                    r'oran[ıi]?\s*%?\s*' + rate_value + r'\s*(?:olarak|\'?d[ıiuü]r)',
+                    r'%?\s*' + rate_value + r'\s*\'?d[ıiuü]r',  # "%25'tir", "%25'dir"
+                ]
+
+                is_definitive = any(re.search(p, content, re.IGNORECASE) for p in definitive_patterns)
+
+                if is_definitive and not is_indirect:
+                    details["boost_reason"] = "definitive_rate_statement"
+                    logger.info(f"📊 Direct answer boost: definitive rate {rate_value}% found in '{title[:50]}...'")
+                    return 0.15, details  # Strong boost for definitive rates
+                elif not is_indirect:
+                    details["boost_reason"] = "rate_mentioned"
+                    return 0.08, details  # Moderate boost for rate mentions
+                else:
+                    details["boost_reason"] = "indirect_rate"
+                    return 0.0, details  # No boost for min/max/conditional rates
+
+        return 0.0, details
+
     def _normalize_law_code(self, code: str) -> Optional[str]:
         """Normalize law code variations to standard form (e.g., KDV -> KDVK)"""
         code_upper = code.upper().strip()
@@ -2957,6 +3072,11 @@ class SemanticSearchService:
             intent_str = f" | Intent: {intent_info.get('intent', 'none')}" if intent_info else ""
             logger.info(f"🎯 Article-specific query: {article_query['law_code']} Madde {article_query['article_number']}{intent_str}")
 
+        # === DIRECT ANSWER DETECTION (v12.47): Detect rate/amount questions ===
+        is_rate_question = self._detect_rate_question(query)
+        if is_rate_question:
+            logger.info(f"📊 Rate question detected: '{query[:60]}...' - will boost direct rate answers")
+
         # Check search result cache
         if use_cache:
             cache_key = self._get_search_cache_key(query, limit)
@@ -3126,9 +3246,27 @@ class SemanticSearchService:
                     elif article_details.get("article_anchoring") == "reference":
                         penalty_stats["article_reference_count"] += 1
 
-                # Calculate final score (includes keyword boost, penalties, metadata boost, AND article boost)
-                # Penalty is negative, metadata_boost and article_boost can be positive or negative
-                final_score = max(0, weighted_similarity + keyword_boost + retrieval_penalty + metadata_boost + article_boost)
+                # === DIRECT ANSWER BOOST (v12.47) ===
+                # When query asks for a rate, boost sources with direct rate statements
+                direct_answer_boost = 0.0
+                direct_answer_details = {"is_rate_question": False}
+
+                if is_rate_question:
+                    direct_answer_boost, direct_answer_details = self._calculate_direct_answer_boost(
+                        result, is_rate_question
+                    )
+
+                    # Track direct answer statistics
+                    if "direct_answer_count" not in penalty_stats:
+                        penalty_stats["direct_answer_count"] = 0
+                        penalty_stats["direct_answer_boost_total"] = 0.0
+                    if direct_answer_boost > 0:
+                        penalty_stats["direct_answer_count"] += 1
+                        penalty_stats["direct_answer_boost_total"] += direct_answer_boost
+
+                # Calculate final score (includes keyword boost, penalties, metadata boost, article boost, AND direct answer boost)
+                # Penalty is negative, metadata_boost, article_boost, and direct_answer_boost can be positive or negative
+                final_score = max(0, weighted_similarity + keyword_boost + retrieval_penalty + metadata_boost + article_boost + direct_answer_boost)
 
                 scored_results.append({
                     "id": result["id"],
@@ -3143,6 +3281,7 @@ class SemanticSearchService:
                     "keyword_boost": round(keyword_boost * 100, 2),
                     "metadata_boost": round(metadata_boost * 100, 2),
                     "article_boost": round(article_boost * 100, 2),
+                    "direct_answer_boost": round(direct_answer_boost * 100, 2),  # v12.47
                     "source_priority": round(source_priority, 2),
                     "table_weight": round(table_weight, 2),
                     "final_score": round(final_score * 100, 2),
@@ -3159,6 +3298,8 @@ class SemanticSearchService:
                         "keyword_boost": round(keyword_boost * 100, 2),
                         "metadata_boost": round(metadata_boost * 100, 2),
                         "article_boost": round(article_boost * 100, 2),
+                        "direct_answer_boost": round(direct_answer_boost * 100, 2),  # v12.47
+                        "direct_answer_details": direct_answer_details,  # v12.47
                         "article_anchoring": article_details,
                         "metadata_quality": metadata_details,
                         "retrieval_penalty": round(retrieval_penalty * 100, 2),
@@ -3186,6 +3327,11 @@ class SemanticSearchService:
                 logger.info(f"🎯 Article anchoring: exact={exact_count}, wrong={wrong_count}, references={ref_count}")
                 if exact_count == 0:
                     logger.warning(f"⚠️ No exact article match found for {article_query['law_code']} Madde {article_query['article_number']}")
+
+            # Log direct answer boost statistics (v12.47)
+            if is_rate_question and penalty_stats.get("direct_answer_count", 0) > 0:
+                avg_boost = penalty_stats["direct_answer_boost_total"] / penalty_stats["direct_answer_count"]
+                logger.info(f"📊 Direct answer boost: {penalty_stats['direct_answer_count']} results boosted, avg={avg_boost*100:.1f}%")
 
             # Sort by final score and limit
             scored_results.sort(key=lambda x: x["final_score"], reverse=True)
@@ -3374,7 +3520,10 @@ class SemanticSearchService:
                     # Reranking settings
                     "rerank_enabled": settings.rerank_enabled,
                     "rerank_provider": settings.rerank_provider if settings.rerank_enabled else None,
-                    "rerank_applied": reranked if 'reranked' in dir() else False
+                    "rerank_applied": reranked if 'reranked' in dir() else False,
+                    # Direct answer boost (v12.47)
+                    "rate_question_detected": is_rate_question,
+                    "direct_answer_boost_applied": penalty_stats.get("direct_answer_count", 0) > 0 if is_rate_question else False
                 },
                 # Article anchoring context for LLM
                 "article_query": {
