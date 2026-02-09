@@ -5962,11 +5962,28 @@ FORMAT:
       return match;
     });
 
-    // 3. Fix inline numbered items after punctuation: "text. 2. item" → "text.\n\n2. item"
+    // 3. Fix inline numbered lists: "...text: 1. item 2. item 3. item" → proper markdown list
+    // Detect sequences of 3+ inline numbered items and convert to markdown list
+    fixed = fixed.replace(/([.:;])\s+(1\.\s+[^\n]+?)(?=\s+2\.\s)/g, (match, punct, firstItem) => {
+      return `${punct}\n\n${firstItem}`;
+    });
+
+    // 4. Fix inline numbered items after punctuation: "text. 2. item" → "text.\n\n2. item"
+    // Now also catches "1." (changed from >=2 to >=1) after colon/semicolon
     fixed = fixed.replace(/([.;:,])\s+(\d+)\.\s+/g, (match, punct, num) => {
       const numInt = parseInt(num, 10);
-      if (numInt >= 2 && numInt <= 30) {
+      if (numInt >= 1 && numInt <= 30) {
         return `${punct}\n\n${num}. `;
+      }
+      return match;
+    });
+
+    // 5. Fix consecutive inline numbered items: "...text 2. item text 3. item"
+    // When a numbered item (2+) appears mid-sentence, break before it
+    fixed = fixed.replace(/([.!?])(\s*(?:\[\d+\])*)(\s+)(\d+)\.\s+/g, (match, punct, citations, _space, num) => {
+      const numInt = parseInt(num, 10);
+      if (numInt >= 1 && numInt <= 30) {
+        return `${punct}${citations || ''}\n\n${num}. `;
       }
       return match;
     });

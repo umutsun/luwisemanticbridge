@@ -248,6 +248,19 @@ function preprocessMarkdown(content: string): string {
 
   let result = content;
 
+  // FIX INLINE NUMBERED LISTS: "...text: 1. item 2. item" → proper markdown list
+  // Detect inline numbered sequences and add line breaks to convert to markdown list
+  // Pattern: punctuation + space + "1." followed by text and then "2." etc.
+  result = result.replace(/([.:;])\s+(1\.\s+)/g, '$1\n\n$2');
+  // Break before numbered items 2-30 that appear mid-line after text
+  result = result.replace(/([.!?:;,])(\s*(?:\[\d+\])*)\s+(\d{1,2})\.\s+/g, (match, punct, citations, num) => {
+    const numInt = parseInt(num, 10);
+    if (numInt >= 2 && numInt <= 30) {
+      return `${punct}${citations || ''}\n\n${num}. `;
+    }
+    return match;
+  });
+
   // CRITICAL FIX: Convert single newlines between sentences to paragraph breaks
   // Pattern: sentence ending (. ! ?) + optional citation [1][2] + single newline + capital letter
   // This fixes LLM output that has single newlines instead of double newlines between paragraphs
