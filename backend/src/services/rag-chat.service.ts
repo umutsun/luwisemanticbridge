@@ -6056,8 +6056,8 @@ Yani beyanname ile ödeme arasında **2 günlük** bir fark vardır.`;
     // Citation pattern
     const hasCitation = /\[\d+\]/;
 
-    // Split into sentences
-    const sentences = response.split(/(?<=[.!?])\s+/);
+    // Split into sentences (v12.52: list-aware - don't break on "1. ", "2. ")
+    const sentences = response.split(/(?<=(?<!\d)[.!?])\s+/);
     let fixCount = 0;
 
     const fixedSentences = sentences.map(sentence => {
@@ -7230,7 +7230,9 @@ Please verify the article number or check official sources.`;
       .replace(/\s+/g, ' ');
 
     // Split response into sentences for granular removal
-    const sentences = response.split(/(?<=[.!?])\s+/);
+    // v12.52: List-aware splitting - don't break on "1. ", "2. " etc.
+    // Lookbehind: sentence ends with [.!?] but NOT preceded by a digit (which would be a list marker like "1.")
+    const sentences = response.split(/(?<=(?<!\d)[.!?])\s+/);
     const processedSentences: string[] = [];
 
     let removedCount = 0;
@@ -7281,7 +7283,17 @@ Please verify the article number or check official sources.`;
 
       // Extract numeric values (dates, durations, percentages)
       // CRITICAL for claim verification: "10 yıl" must have "10" in source
-      const numbers = sentence.match(/\d+/g) || [];
+      // v12.52: Exclude list item numbers (e.g., "1. ", "2. ") from claim detection
+      const trimmedSentence = sentence.trim();
+      const startsWithListNumber = /^\d+\.\s/.test(trimmedSentence);
+      let numbers = sentence.match(/\d+/g) || [];
+      if (startsWithListNumber && numbers.length > 0) {
+        // First number is a list marker, not a claim
+        numbers = numbers.slice(1);
+      }
+      // Also exclude citation numbers [1], [2] etc. from claims
+      const citationNums = new Set((sentence.match(/\[(\d+)\]/g) || []).map(c => c.replace(/[\[\]]/g, '')));
+      numbers = numbers.filter(n => !citationNums.has(n));
       claims.push(...numbers);
 
       // Extract Turkish number words (universal, not domain-specific)
@@ -11056,17 +11068,22 @@ YAPAY ZEKANIN YANITI (özet): ${responseSummary}
 KURALLAR:
 1. Sorular KENDİ BAŞINA ANLAMLI olmalı - konuyu içermeli, bağlam olmadan da anlaşılmalı
 2. Sorular konuşulan konuyu DERİNLEŞTİRMELİ - alakasız konulara geçmemeli
-3. Sorular SPESIFIK ve UYGULANABİLİR olmalı
+3. Sorular SPESİFİK ve UYGULANABİLİR olmalı
 4. "Daha fazla bilgi verir misiniz?" gibi MUĞLAK sorular YASAK
 5. Her soru konunun FARKLI bir yönünü keşfetmeli
+6. TÜRKÇE KARAKTERLER ZORUNLU: ş, ç, ğ, ü, ö, ı, İ kullan. ASCII karakter YASAK (yapilir→yapılır, odeme→ödeme, islem→işlem, suresi→süresi, orani→oranı)
 
 SADECE 3 soruluk bir JSON dizisi döndür. Örnek format:
 ["Kurumlar vergisi beyanname süreleri nelerdir?", "Yurt dışı gelirler için %50 oranı nasıl uygulanır?", "Vergi muafiyeti başvurusu için hangi belgeler gerekli?"]`;
 
+      const systemPrompt = language === 'tr'
+        ? 'You are a helpful assistant that generates follow-up questions in Turkish. CRITICAL: Use proper Turkish characters (ş, ç, ğ, ü, ö, ı, İ) - NEVER use ASCII equivalents. Return ONLY valid JSON array, no other text.'
+        : 'You are a helpful assistant that generates follow-up questions. Return ONLY valid JSON array, no other text.';
+
       const response = await llmManager.generateChatResponse(prompt, {
         temperature: 0.7,
         maxTokens: 500,
-        systemPrompt: 'You are a helpful assistant that generates follow-up questions. Return ONLY valid JSON array, no other text.'
+        systemPrompt
       });
 
       // Parse JSON from response
@@ -11077,8 +11094,12 @@ SADECE 3 soruluk bir JSON dizisi döndür. Örnek format:
         if (jsonMatch) {
           const questions = JSON.parse(jsonMatch[0]);
           if (Array.isArray(questions) && questions.length > 0) {
-            console.log(`[FOLLOW-UP] Generated ${questions.length} contextual questions`);
-            return questions.slice(0, 4); // Max 4 questions
+            // v12.52: Fix Turkish character issues from LLM output
+            const fixedQuestions = language === 'tr'
+              ? questions.map((q: string) => this.fixTurkishCharacters(q))
+              : questions;
+            console.log(`[FOLLOW-UP] Generated ${fixedQuestions.length} contextual questions`);
+            return fixedQuestions.slice(0, 4); // Max 4 questions
           }
         }
       } catch (parseError) {
@@ -11188,6 +11209,47 @@ SADECE 3 soruluk bir JSON dizisi döndür. Örnek format:
     }
 
     return questions.slice(0, 3);
+  }
+
+  /**
+   * v12.52: Fix common Turkish character issues in LLM-generated text
+   * Some LLM providers return ASCII equivalents instead of proper Turkish chars
+   * Only fixes high-confidence, unambiguous word-level replacements
+   */
+  private fixTurkishCharacters(text: string): string {
+    // Only fix words where ASCII→Turkish mapping is unambiguous
+    // These are the most common LLM errors in tax/legal domain
+    const fixes: [RegExp, string][] = [
+      [/\byapilir\b/g, 'yapılır'],
+      [/\byapilmali\b/g, 'yapılmalı'],
+      [/\bodeme\b/g, 'ödeme'],
+      [/\bodemesi\b/g, 'ödemesi'],
+      [/\bislem\b/g, 'işlem'],
+      [/\bislemi\b/g, 'işlemi'],
+      [/\bislemleri\b/g, 'işlemleri'],
+      [/\bsuresi\b/g, 'süresi'],
+      [/\bsureleri\b/g, 'süreleri'],
+      [/\borani\b/g, 'oranı'],
+      [/\boranlari\b/g, 'oranları'],
+      [/\bnasil\b/g, 'nasıl'],
+      [/\bdeger\b/g, 'değer'],
+      [/\bdegeri\b/g, 'değeri'],
+      [/\bduzenleme\b/g, 'düzenleme'],
+      [/\bsekilde\b/g, 'şekilde'],
+      [/\bkapsaminda\b/g, 'kapsamında'],
+      [/\bcercevesinde\b/g, 'çerçevesinde'],
+      [/\bhukumleri\b/g, 'hükümleri'],
+      [/\bozelge\b/g, 'özelge'],
+      [/\bteblig\b/g, 'tebliğ'],
+      [/\bmukellef\b/g, 'mükellef'],
+      [/\byukumluluk\b/g, 'yükümlülük'],
+    ];
+
+    let result = text;
+    for (const [pattern, replacement] of fixes) {
+      result = result.replace(pattern, replacement);
+    }
+    return result;
   }
 
 
