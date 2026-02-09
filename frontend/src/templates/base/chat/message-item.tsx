@@ -104,21 +104,24 @@ export function MessageItem({ message }: MessageItemProps) {
 
   return (
     <div className={cn(
-      'flex gap-3 group animate-in slide-in-from-bottom-2 duration-300',
+      'flex group animate-in slide-in-from-bottom-2 duration-300',
       isUser ? 'justify-end' : 'justify-start'
     )}>
-      {!isUser && (
-        <div className="w-8 h-8 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-white shadow-lg flex-shrink-0 ring-2 ring-blue-100 dark:ring-blue-900/30">
-          <Bot className="w-4 h-4" />
-        </div>
-      )}
-
       <div className={cn(
-        'rounded-2xl px-4 py-3 max-w-[80%] shadow-md transition-all duration-200 hover:shadow-lg',
+        'rounded-2xl px-3 py-2.5 sm:px-4 sm:py-3 min-w-0 max-w-[90%] sm:max-w-[80%] shadow-md transition-all duration-200 hover:shadow-lg',
         isUser
           ? 'bg-gradient-to-r from-blue-500 to-blue-600 text-white shadow-blue-500/25'
           : 'bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 border border-gray-100 dark:border-gray-700 hover:border-gray-200 dark:hover:border-gray-600'
       )}>
+        {/* Inline bot avatar */}
+        {!isUser && (
+          <div className="flex items-center gap-1.5 mb-1.5">
+            <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 shadow-sm">
+              <Bot className="w-3 h-3 text-white" />
+            </span>
+            <span className="text-[11px] font-medium text-gray-400 dark:text-gray-500">{t('chatInterface.assistant', 'Asistan')}</span>
+          </div>
+        )}
         {/* Response quality indicator for assistant messages */}
         {responseQuality && (
           <div className="flex items-center gap-2 mb-2 pb-2 border-b border-gray-100 dark:border-gray-700">
@@ -167,12 +170,6 @@ export function MessageItem({ message }: MessageItemProps) {
           })}
         </div>
       </div>
-
-      {isUser && (
-        <div className="w-8 h-8 rounded-full bg-gradient-to-br from-gray-500 to-gray-600 flex items-center justify-center text-white shadow-lg flex-shrink-0 ring-2 ring-gray-200 dark:ring-gray-700">
-          <User className="w-4 h-4" />
-        </div>
-      )}
     </div>
   );
 }

@@ -1,7 +1,8 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { ChevronDown, LogOut, Trash2, MessageSquare, Sun, Moon } from 'lucide-react';
+import { ChevronDown, LogOut, UserCircle, MessageSquare, Sun, Moon } from 'lucide-react';
+import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import {
@@ -251,20 +252,21 @@ export const ZenHeader: React.FC<ZenHeaderProps> = ({
               align="end"
               className="w-48 zen01-dropdown"
             >
-              <DropdownMenuItem
-                onClick={onClearChat}
-                className="zen01-dropdown-item cursor-pointer text-slate-700 dark:text-slate-200"
-              >
-                <Trash2 className="h-4 w-4 mr-2" />
-                Clear Chat
-              </DropdownMenuItem>
+              <Link href="/profile">
+                <DropdownMenuItem
+                  className="zen01-dropdown-item cursor-pointer text-slate-700 dark:text-slate-200"
+                >
+                  <UserCircle className="h-4 w-4 mr-2" />
+                  Profil Düzenle
+                </DropdownMenuItem>
+              </Link>
               <DropdownMenuSeparator className="bg-slate-200 dark:bg-[#1e3a5f]/50" />
               <DropdownMenuItem
                 onClick={onLogout}
                 className="text-rose-600 hover:text-rose-700 dark:text-rose-400 dark:hover:text-rose-300 cursor-pointer"
               >
                 <LogOut className="h-4 w-4 mr-2" />
-                Logout
+                Çıkış Yap
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>

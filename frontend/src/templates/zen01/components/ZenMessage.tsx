@@ -128,17 +128,11 @@ function cleanCitationTitle(title: string): string {
     .replace(/\s+gün\s+ve\s+$/i, '')
     // Fix spaced letters like "D A N I Ş T A Y" -> "DANIŞTAY"
     .replace(/([A-ZÇĞİÖŞÜ])\s+(?=[A-ZÇĞİÖŞÜ]\s*[A-ZÇĞİÖŞÜ])/g, '$1')
-    .replace(/([A-ZÇĞİÖŞÜ])\s+([A-ZÇĞİÖŞÜ])\s+([A-ZÇĞİÖŞÜ])\s+([A-ZÇĞİÖŞÜ])\s+([A-ZÇĞİÖŞÜ])\s+([A-ZÇĞİÖŞÜ])\s+([A-ZÇĞİÖŞÜ])\s+([A-ZÇĞİÖŞÜ])/g, '$1$2$3$4$5$6$7$8')
-    .replace(/([A-ZÇĞİÖŞÜ])\s+([A-ZÇĞİÖŞÜ])\s+([A-ZÇĞİÖŞÜ])\s+([A-ZÇĞİÖŞÜ])\s+([A-ZÇĞİÖŞÜ])\s+([A-ZÇĞİÖŞÜ])\s+([A-ZÇĞİÖŞÜ])/g, '$1$2$3$4$5$6$7')
-    .replace(/([A-ZÇĞİÖŞÜ])\s+([A-ZÇĞİÖŞÜ])\s+([A-ZÇĞİÖŞÜ])\s+([A-ZÇĞİÖŞÜ])\s+([A-ZÇĞİÖŞÜ])\s+([A-ZÇĞİÖŞÜ])/g, '$1$2$3$4$5$6')
-    .replace(/([A-ZÇĞİÖŞÜ])\s+([A-ZÇĞİÖŞÜ])\s+([A-ZÇĞİÖŞÜ])\s+([A-ZÇĞİÖŞÜ])\s+([A-ZÇĞİÖŞÜ])/g, '$1$2$3$4$5')
-    // Fix missing space after lowercase letter followed by uppercase (e.g., "MüdürlüğüILGİ" -> "Müdürlüğü İLGİ")
+    // Fix missing space after lowercase letter followed by uppercase
     .replace(/([a-zçğıöşü])([A-ZÇĞİÖŞÜ]{2,})/g, '$1 $2')
     // Fix camelCase merged words: "HukukDairesi" -> "Hukuk Dairesi"
     .replace(/([a-zçğıöşü])([A-ZÇĞİÖŞÜ][a-zçğıöşü])/g, '$1 $2')
-    // Fix ALL CAPS merged words: "BAŞVURUSAMI" -> "BAŞVURUSU AMI" - be careful
-    .replace(/([A-ZÇĞİÖŞÜ]{3,})([A-ZÇĞİÖŞÜ][a-zçğıöşü]{2,})/g, '$1 $2')
-    // Fix "T.C.D" -> "T.C. D" (add space after T.C.)
+    // Fix "T.C.D" -> "T.C. D"
     .replace(/T\.C\.D/g, 'T.C. D')
     .replace(/T\.C\.Y/g, 'T.C. Y')
     // Fix merged words: "DAİREEsas" -> "DAİRE Esas"
@@ -148,15 +142,8 @@ function cleanCitationTitle(title: string): string {
     .replace(/No:(\d)/g, 'No: $1')
     // Fix "2018/280Karar" -> "2018/280 Karar"
     .replace(/(\d{4}\/\d+)([A-ZÇĞİÖŞÜ])/g, '$1 $2')
-    // Fix "TEMYİZ EDEN" spacing
-    .replace(/(\d+)TEMYİZ/g, '$1 TEMYİZ')
-    .replace(/(\d+)TEMYIZ/g, '$1 TEMYİZ')
-    // Fix "(DAVALI):" spacing
-    .replace(/\(DAVALI\):/g, '(DAVALI): ')
-    .replace(/\(DAVACI\):/g, '(DAVACI): ')
-    // Fix "Tarih:" spacing
-    .replace(/DAİRETarih:/g, 'DAİRE Tarih:')
-    .replace(/DAIRETarih:/g, 'DAİRE Tarih:')
+    // Fix number-word joins
+    .replace(/(\d+)([A-ZÇĞİÖŞÜ]{2,})/g, '$1 $2')
     // Clean multiple spaces
     .replace(/\s{2,}/g, ' ')
     .trim();
@@ -413,29 +400,37 @@ export const ZenMessage: React.FC<ZenMessageProps> = ({
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.3, ease: 'easeOut' }}
-      className={`flex gap-2 sm:gap-3 ${isUser ? 'justify-end' : 'justify-start'} zen01-fade-in`}
+      className={`flex ${isUser ? 'justify-end' : 'justify-start'} zen01-fade-in`}
     >
-      {/* Assistant Avatar - smaller on mobile, always inline */}
-      {!isUser && (
-        <div className="zen01-avatar zen01-avatar-assistant flex-shrink-0 flex items-center justify-center w-6 h-6 sm:w-8 sm:h-8">
-          <Bot className="h-3 w-3 sm:h-4 sm:w-4" />
-        </div>
-      )}
-
-      <div className={`max-w-[75%] sm:max-w-[80%] ${isUser ? 'order-first' : ''}`}>
+      <div className={`max-w-[90%] sm:max-w-[80%]`}>
         {/* Message Bubble */}
         <div className={isUser ? 'zen01-message-user' : 'zen01-message-assistant'}>
           <div className="p-4">
             {message.isStreaming ? (
               <div className="flex items-center gap-2">
+                <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-gradient-to-br from-cyan-500 to-blue-600 flex-shrink-0">
+                  <Bot className="h-3 w-3 text-white" />
+                </span>
                 <ZenTypingIndicator />
                 <span className="text-cyan-400/60 text-sm">Değerlendiriliyor...</span>
               </div>
             ) : isUser ? (
               <div className="text-slate-700 dark:text-slate-200 leading-relaxed whitespace-pre-wrap">
+                <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-white/20 mr-1.5 align-middle flex-shrink-0">
+                  <User className="h-2.5 w-2.5" />
+                </span>
                 {message.content}
               </div>
-            ) : useSchemaRenderer ? (
+            ) : (
+              <>
+                {/* Inline bot avatar label */}
+                <div className="flex items-center gap-1.5 mb-2">
+                  <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-gradient-to-br from-cyan-500 to-blue-600 shadow-sm flex-shrink-0">
+                    <Bot className="h-3 w-3 text-white" />
+                  </span>
+                  <span className="text-[11px] font-medium text-slate-400 dark:text-slate-500">Asistan</span>
+                </div>
+                {useSchemaRenderer ? (
               // Schema-based structured response rendering
               // Use displayContent to support translation toggle
               <SchemaRenderer
@@ -645,6 +640,8 @@ export const ZenMessage: React.FC<ZenMessageProps> = ({
                   {preprocessMarkdown(cleanLLMResponse(displayContent))}
                 </ReactMarkdown>
               </div>
+            )}
+              </>
             )}
           </div>
 
@@ -917,12 +914,6 @@ export const ZenMessage: React.FC<ZenMessageProps> = ({
         )}
       </div>
 
-      {/* User Avatar - smaller on mobile, always inline */}
-      {isUser && (
-        <div className="zen01-avatar zen01-avatar-user flex-shrink-0 flex items-center justify-center w-6 h-6 sm:w-8 sm:h-8">
-          <User className="h-3 w-3 sm:h-4 sm:w-4" />
-        </div>
-      )}
     </motion.div>
   );
 };

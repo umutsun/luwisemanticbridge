@@ -9476,24 +9476,21 @@ Please verify the article number or check official sources.`;
    * Examples: "İŞEİADEBAŞVURUSU" should be "İŞE İADE BAŞVURUSU"
    */
   private detectConcatenatedText(text: string): boolean {
-    if (!text || text.length < 30) return false;
+    if (!text || text.length < 20) return false;
 
-    // Count spaces vs total length
+    // 1. Any long uppercase sequence (12+ chars) without spaces = concatenated
+    // e.g. "VERASETİNTİKALVERGİSİKANUNU" even if rest of text has spaces
+    if (/[A-ZÇĞİÖŞÜ]{12,}/.test(text)) return true;
+
+    // 2. Overall low space ratio (text is mostly concatenated)
     const spaceCount = (text.match(/\s/g) || []).length;
     const spaceRatio = spaceCount / text.length;
+    if (spaceRatio < 0.05 && text.length > 40) return true;
 
-    // Normal Turkish text has ~15-20% spaces, OCR-broken text has <5%
-    if (spaceRatio > 0.08) return false;
-
-    // Look for long sequences of uppercase Turkish letters without spaces (25+ chars)
-    const longUppercasePattern = /[A-ZÇĞİÖŞÜ]{25,}/;
-    if (longUppercasePattern.test(text)) return true;
-
-    // Look for mixed case concatenation patterns (lowercase followed by uppercase)
-    // Normal: "kelime Kelime" | OCR-broken: "kelimeKelime"
-    const concatenatedPattern = /[a-zçğıöşü][A-ZÇĞİÖŞÜ][a-zçğıöşü]/;
-    const concatenatedCount = (text.match(new RegExp(concatenatedPattern, 'g')) || []).length;
-    if (concatenatedCount > 5) return true;
+    // 3. Mixed case concatenation patterns (lowercase followed by uppercase without space)
+    const concatenatedPattern = /[a-zçğıöşü][A-ZÇĞİÖŞÜ][a-zçğıöşü]/g;
+    const concatenatedCount = (text.match(concatenatedPattern) || []).length;
+    if (concatenatedCount > 3) return true;
 
     return false;
   }
@@ -9504,8 +9501,8 @@ Please verify the article number or check official sources.`;
    */
   private async normalizeOCRTextWithLLM(text: string): Promise<string> {
     try {
-      // Skip if text is too short or already looks normal
-      if (!text || text.length < 30 || !this.detectConcatenatedText(text)) {
+      // Skip if text is too short
+      if (!text || text.length < 20) {
         return text;
       }
 
@@ -9525,13 +9522,16 @@ GÖREV: Kelimeleri ayır ve doğru boşlukları ekle. Türkçe dil bilgisi kural
 - Sayıları ve tarihleri koru
 
 ÖRNEK:
-GİRDİ: "İŞEİADEBAŞVURUSUSAMİMİOLMAYANİŞÇİ"
-ÇIKTI: "İŞE İADE BAŞVURUSU SAMİMİ OLMAYAN İŞÇİ"
+GİRDİ: "VERASETİNTİKALVERGİSİKANUNU Madde 13"
+ÇIKTI: "VERASET İNTİKAL VERGİSİ KANUNU Madde 13"
 
-GİRDİ: "VERGİKANUNUNUN193SAYILI"
-ÇIKTI: "VERGİ KANUNUNUN 193 SAYILI"
+GİRDİ: "KURUMLARVERGİSİNDENİSTİSNAKAZANÇLARÜZERİNDENYAPILACAKSTOPAJINORANIİLEBEYANVEÖDEMEZAMANIGVK"
+ÇIKTI: "KURUMLAR VERGİSİNDEN İSTİSNA KAZANÇLAR ÜZERİNDEN YAPILACAK STOPAJIN ORANI İLE BEYAN VE ÖDEME ZAMANI GVK"
 
-ŞİMDİ BU METNİ DÜZELt:
+GİRDİ: "GELİRVERGİSİKANUNU"
+ÇIKTI: "GELİR VERGİSİ KANUNU"
+
+ŞİMDİ BU METNİ DÜZELT:
 ${textToNormalize}
 
 DÜZELTILMIŞ METİN:`;
@@ -10359,7 +10359,11 @@ DÜZELTILMIŞ METİN:`;
         const smartSnippet = settings?.query
           ? this.extractRelevantSnippet(cleanedContent, settings.query, excerptMaxLength * 2)
           : cleanedContent;
-        const cleanExcerpt = this.toSentenceCase(this.stripHtml(this.fixTurkishWordSpacing(smartSnippet)));
+
+        // Detect concatenated text BEFORE toSentenceCase (uppercase is easier to detect)
+        const rawStripped = this.stripHtml(smartSnippet);
+        const needsOCRNormalization = this.detectConcatenatedText(rawStripped);
+        const cleanExcerpt = this.toSentenceCase(this.fixTurkishWordSpacing(rawStripped));
 
         return {
           originalResult: r,
@@ -10368,7 +10372,8 @@ DÜZELTILMIŞ METİN:`;
           score,
           citation,
           cleanTitle,
-          cleanExcerpt
+          cleanExcerpt,
+          rawExcerptForOCR: needsOCRNormalization ? rawStripped : undefined
         };
       });
 
@@ -10400,14 +10405,14 @@ DÜZELTILMIŞ METİN:`;
       }
 
       // STEP 3: LLM-based OCR text normalization for concatenated texts (batch, parallel)
-      // Only normalize texts that detectConcatenatedText returns true for
+      // Uses pre-detected flag from STEP 1 (detection on raw uppercase text, before toSentenceCase)
       const ocrNormPromises: Array<{ index: number; promise: Promise<string> }> = [];
       for (let i = 0; i < preparedResults.length; i++) {
-        const rawContent = preparedResults[i].cleanExcerpt;
-        if (this.detectConcatenatedText(rawContent)) {
+        const rawForOCR = preparedResults[i].rawExcerptForOCR;
+        if (rawForOCR) {
           ocrNormPromises.push({
             index: i,
-            promise: this.normalizeOCRTextWithLLM(rawContent)
+            promise: this.normalizeOCRTextWithLLM(rawForOCR)
           });
         }
       }
@@ -10443,8 +10448,9 @@ DÜZELTILMIŞ METİN:`;
         }
 
         // Use LLM-normalized text if available (for concatenated OCR text)
+        // Apply toSentenceCase since raw input was uppercase
         if (ocrResults.has(i)) {
-          processedContent = ocrResults.get(i)!;
+          processedContent = this.toSentenceCase(ocrResults.get(i)!);
         }
 
         // Create natural language title and excerpt from processed content
