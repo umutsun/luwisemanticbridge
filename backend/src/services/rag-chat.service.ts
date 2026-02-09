@@ -3695,11 +3695,29 @@ FORMAT:
 
         console.log(`🔍 [v12.32] AMBIGUOUS_CITATIONS: beyan=${beyanCitation}, odeme=${odemeCitation}`);
 
-        // v12.34: Clean disambiguation - ONLY ask the question, don't give away the answer
-        // User requested: First turn should NOT show 24/26 values
-        response.content = `KDV'de beyanname ve ödeme için farklı son tarihler bulunmaktadır.
+        // v12.52: Check if this is a COMPARISON query (user explicitly asks about both)
+        // e.g., "beyanname suresi ile odeme suresi arasindaki fark nedir?"
+        const messageLower = message.toLowerCase();
+        const isComparisonQuery = /fark|karsilastir|karşılaştır|mukayese/i.test(messageLower) &&
+                                   (/beyanname|beyan|bildirim/i.test(messageLower)) &&
+                                   (/[öo]deme|[öo]den|yatır/i.test(messageLower));
+
+        if (isComparisonQuery) {
+          // v12.52: For comparison queries, give BOTH answers directly
+          response.content = `KDV'de beyanname ve ödeme için farklı son tarihler bulunmaktadır:
+
+- **Beyanname:** Vergilendirme dönemini takip eden ayın **24'ü** akşamına kadar verilmelidir, KDVK madde 41, ${beyanCitation}.
+- **Ödeme:** Vergilendirme dönemini takip eden ayın **26'sı** akşamına kadar ödenmelidir, KDVK madde 46, ${odemeCitation}.
+
+Yani beyanname ile ödeme arasında **2 günlük** bir fark vardır.`;
+          console.log(`🛡️ [v12.52] COMPARISON_RESPONSE: Both deadlines provided directly`);
+        } else {
+          // v12.34: Clean disambiguation - ONLY ask the question, don't give away the answer
+          // User requested: First turn should NOT show 24/26 values
+          response.content = `KDV'de beyanname ve ödeme için farklı son tarihler bulunmaktadır.
 
 **Beyanname için mi, yoksa ödeme için mi** soruyorsunuz?`;
+        }
 
         deadlineFixApplied = true;
         deadlineHardcodedApplied = true; // Skip sanitizer for this response
