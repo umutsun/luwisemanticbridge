@@ -408,41 +408,44 @@ export const ZenMessage: React.FC<ZenMessageProps> = ({
           <div className="p-4">
             {message.isStreaming ? (
               <div className="flex items-center gap-2">
-                <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-gradient-to-br from-cyan-500 to-blue-600 flex-shrink-0">
-                  <Bot className="h-3 w-3 text-white" />
+                <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-gradient-to-br from-cyan-500 to-blue-600 flex-shrink-0">
+                  <Bot className="h-3.5 w-3.5 text-white" />
                 </span>
                 <ZenTypingIndicator />
                 <span className="text-cyan-400/60 text-sm">Değerlendiriliyor...</span>
               </div>
             ) : isUser ? (
               <div className="text-slate-700 dark:text-slate-200 leading-relaxed whitespace-pre-wrap">
-                <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-white/20 mr-1.5 align-middle flex-shrink-0">
-                  <User className="h-2.5 w-2.5" />
+                <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-white/20 mr-1.5 align-middle flex-shrink-0">
+                  <User className="h-3 w-3" />
                 </span>
                 {message.content}
               </div>
             ) : (
               <>
-                {/* Inline bot avatar label */}
-                <div className="flex items-center gap-1.5 mb-2">
-                  <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-gradient-to-br from-cyan-500 to-blue-600 shadow-sm flex-shrink-0">
-                    <Bot className="h-3 w-3 text-white" />
-                  </span>
-                  <span className="text-[11px] font-medium text-slate-400 dark:text-slate-500">Asistan</span>
-                </div>
                 {useSchemaRenderer ? (
               // Schema-based structured response rendering
-              // Use displayContent to support translation toggle
-              <SchemaRenderer
-                content={cleanLLMResponse(displayContent)}
-                schemaId={responseSchemaId}
-                keywords={backendKeywords}
-                dayanaklar={backendDayanaklar}
-                className="zen01-schema-response"
-                messageId={message.id}
-              />
+              <div className="flex gap-2">
+                <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-gradient-to-br from-cyan-500 to-blue-600 shadow-sm flex-shrink-0 mt-0.5">
+                  <Bot className="h-3.5 w-3.5 text-white" />
+                </span>
+                <div className="flex-1 min-w-0">
+                  <SchemaRenderer
+                    content={cleanLLMResponse(displayContent)}
+                    schemaId={responseSchemaId}
+                    keywords={backendKeywords}
+                    dayanaklar={backendDayanaklar}
+                    className="zen01-schema-response"
+                    messageId={message.id}
+                  />
+                </div>
+              </div>
             ) : (
-              <div className="zen01-markdown prose prose-sm max-w-none dark:prose-invert">
+              <div className="flex gap-2">
+                <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-gradient-to-br from-cyan-500 to-blue-600 shadow-sm flex-shrink-0 mt-0.5">
+                  <Bot className="h-3.5 w-3.5 text-white" />
+                </span>
+                <div className="flex-1 min-w-0 zen01-markdown prose prose-sm max-w-none dark:prose-invert">
                 <ReactMarkdown
                   remarkPlugins={[remarkGfm]}
                   components={{
@@ -639,6 +642,7 @@ export const ZenMessage: React.FC<ZenMessageProps> = ({
                 >
                   {preprocessMarkdown(cleanLLMResponse(displayContent))}
                 </ReactMarkdown>
+                </div>
               </div>
             )}
               </>

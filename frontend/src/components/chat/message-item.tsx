@@ -219,15 +219,7 @@ export function MessageItem({ message }: MessageItemProps) {
           ? 'bg-gradient-to-r from-blue-500 to-blue-600 text-white shadow-blue-500/25'
           : 'bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 border border-gray-100 dark:border-gray-700 hover:border-gray-200 dark:hover:border-gray-600'
       )}>
-        {/* Inline bot avatar */}
-        {!isUser && (
-          <div className="flex items-center gap-1.5 mb-1.5">
-            <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 shadow-sm">
-              <Bot className="w-3 h-3 text-white" />
-            </span>
-            <span className="text-[11px] font-medium text-gray-400 dark:text-gray-500">Asistan</span>
-          </div>
-        )}
+        {/* Inline bot avatar - removed, now inline with content */}
         {/* Response quality indicator for assistant messages */}
         {responseQuality && (
           <div className="flex items-center gap-2 mb-2 pb-2 border-b border-gray-100 dark:border-gray-700">
@@ -261,7 +253,7 @@ export function MessageItem({ message }: MessageItemProps) {
         {isUser ? (
           <div>
             <div className="text-sm whitespace-pre-wrap">
-              <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-white/20 mr-1.5 align-middle">
+              <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-white/20 mr-1.5 align-middle">
                 <User className="w-3 h-3" />
               </span>
               {message.content}
