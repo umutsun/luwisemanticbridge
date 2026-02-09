@@ -89,12 +89,14 @@ export function reorderCitations(
   const usageCount = countCitationUsage(response);
 
   // Build usage data for each source (0-indexed)
-  // v12.45: Include priority info for secondary sorting
+  // v12.49: Include rerank_score and similarity_score for composite sorting
   const sourceUsage = sources.map((source, index) => ({
     originalIndex: index,
     citationNum: index + 1,  // 1-indexed citation number
     count: usageCount.get(index + 1) || 0,
     priority: source.table_weight ?? source._hierarchyWeight ?? 0.5,  // v12.45: Priority weight
+    rerankScore: source.rerank_score ?? 0,  // Jina rerank score
+    similarityScore: source.similarity_score ?? 0,  // Semantic similarity
     source
   }));
 
@@ -102,19 +104,34 @@ export function reorderCitations(
   let processedSources = [...sourceUsage];
 
   // Remove unused if requested
+  // v12.49: Safety net - if removeUnused would remove ALL sources, keep them all
+  // This prevents the case where sanitizer strips all citations but response exists
   if (removeUnused) {
-    processedSources = processedSources.filter(s => s.count > 0);
+    const cited = processedSources.filter(s => s.count > 0);
+    if (cited.length > 0) {
+      processedSources = cited;
+    } else {
+      // No citations found in response - keep all sources as context
+      console.log(`📑 [Citation reorder] No citations found in response, keeping all ${processedSources.length} sources`);
+    }
   }
 
   // Sort by usage frequency if requested (highest first)
-  // v12.45: Added priority as secondary criterion when usage is equal
-  if (sortByUsage && processedSources.some(s => s.count > 0)) {
+  // v12.49: Multi-signal sort: citation usage > rerank score > table priority > similarity
+  const hasCitedSources = processedSources.some(s => s.count > 0);
+  if (sortByUsage) {
     processedSources.sort((a, b) => {
-      // Primary: usage count (descending)
-      if (b.count !== a.count) return b.count - a.count;
-      // Secondary: priority (descending) - higher priority sources first
+      if (hasCitedSources) {
+        // Primary: usage count (descending) - most cited first
+        if (b.count !== a.count) return b.count - a.count;
+      }
+      // Secondary: Jina rerank score (descending) - semantic relevance
+      if (b.rerankScore !== a.rerankScore) return b.rerankScore - a.rerankScore;
+      // Tertiary: table priority (descending) - Kanun > Tebliğ > Özelge etc.
       if (b.priority !== a.priority) return b.priority - a.priority;
-      // Tertiary: original order (ascending) for unused or equal usage/priority
+      // Quaternary: similarity score (descending)
+      if (b.similarityScore !== a.similarityScore) return b.similarityScore - a.similarityScore;
+      // Final: original order (ascending) for equal scores
       return a.originalIndex - b.originalIndex;
     });
   }

@@ -7683,12 +7683,14 @@ Please verify the article number or check official sources.`;
             console.log(`[SANITIZER] KEPT (verified): "${trimmedSentence.substring(0, 60)}..." - ${verification.reason}`);
           }
         } else {
-          // CITATION LAUNDERING DETECTED → REMOVE
-          removedCount++;
-          if (sanitizerConfig.logRemovals) {
-            console.log(`[SANITIZER] REMOVED (laundering): "${trimmedSentence.substring(0, 80)}..."`);
-            console.log(`   ${verification.reason}`);
-          }
+          // CITATION LAUNDERING DETECTED → KEEP with warning (v12.49)
+          // Previously removed, but this caused ALL citations to disappear
+          // when claim matching fails (truncated sources, format mismatch).
+          // Now we keep the sentence but log the warning for monitoring.
+          processedSentences.push(trimmedSentence);
+          keptWithGroundingCount++;
+          console.log(`[SANITIZER] KEPT (citation-present, unverified): "${trimmedSentence.substring(0, 80)}..."`);
+          console.log(`   ${verification.reason}`);
         }
         continue;
       }
