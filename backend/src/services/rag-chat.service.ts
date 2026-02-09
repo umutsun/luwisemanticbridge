@@ -6525,16 +6525,27 @@ FORMAT:
         /\bm46\b/i           // "m46"
       ];
 
+      // v12.51 FIX: Prioritize the INTENT-CORRECT article reference
+      // For beyanname → prefer madde 41, for ödeme → prefer madde 46
+      // This prevents ödeme responses from showing "madde 41" just because source contains it
       const combinedText = sourceContent + ' ' + sourceTitle;
-      if (article41Patterns.some(p => p.test(combinedText))) {
-        articleRef = 'KDVK m.41';
-      } else if (article46Patterns.some(p => p.test(combinedText))) {
-        articleRef = 'KDVK m.46';
+      const has41 = article41Patterns.some(p => p.test(combinedText));
+      const has46 = article46Patterns.some(p => p.test(combinedText));
+
+      if (intentType === 'beyanname') {
+        // Beyanname: prefer 41, fallback to 46
+        if (has41) articleRef = 'KDVK m.41';
+        else if (has46) articleRef = 'KDVK m.46';
+      } else {
+        // Ödeme: prefer 46, fallback to 41
+        if (has46) articleRef = 'KDVK m.46';
+        else if (has41) articleRef = 'KDVK m.41';
       }
-      // v12.16: Fallback to intent-based article if extraction fails
+
+      // Fallback to intent-based article if extraction fails
       if (!articleRef) {
         articleRef = intentType === 'beyanname' ? 'KDVK m.41' : 'KDVK m.46';
-        console.log(`[v12.16] ARTICLE_EXTRACT_FALLBACK: Using intent-based article "${articleRef}" for ${intentType}`);
+        console.log(`[v12.51] ARTICLE_EXTRACT_FALLBACK: Using intent-based article "${articleRef}" for ${intentType}`);
       }
 
       // Check Turkish word tokens
