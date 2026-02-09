@@ -199,14 +199,36 @@ class RerankService:
                 # Merge cached scores back to documents
                 return self._merge_cached_results(documents, cached)
 
-        # Extract document texts for reranking
+        # Extract document texts for reranking, filtering empty content
         doc_texts = []
-        for doc in documents:
+        valid_indices = []  # Maps doc_texts index -> original documents index
+        empty_count = 0
+        for i, doc in enumerate(documents):
             text = doc.get(content_field, "") or ""
+            # Also try full_content and excerpt as fallbacks
+            if not text.strip():
+                text = doc.get("full_content", "") or ""
+            if not text.strip():
+                text = doc.get("excerpt", "") or ""
+            if not text.strip():
+                text = doc.get("title", "") or ""
+            # Skip documents with no meaningful content (Jina returns 0.0 for empty)
+            if not text.strip() or len(text.strip()) < 10:
+                empty_count += 1
+                continue
             # Truncate long documents (Jina has 1024 token limit per doc)
             if len(text) > 4000:
                 text = text[:4000]
             doc_texts.append(text)
+            valid_indices.append(i)
+
+        if empty_count > 0:
+            logger.warning(f"Rerank: skipped {empty_count}/{len(documents)} documents with empty/short content")
+
+        # If all documents were filtered out, return originals
+        if not doc_texts:
+            logger.warning("Rerank: all documents had empty content, returning original order")
+            return documents
 
         # Call Jina API
         try:
@@ -215,26 +237,39 @@ class RerankService:
                 documents=doc_texts,
                 model=config.model,
                 api_key=config.api_key,
-                top_n=min(config.top_n, len(documents))
+                top_n=min(config.top_n, len(doc_texts))
             )
 
             elapsed = (datetime.now() - start_time).total_seconds() * 1000
-            logger.info(f"Jina rerank completed: {len(reranked)} results in {elapsed:.1f}ms")
+            logger.info(f"Jina rerank completed: {len(reranked)} results in {elapsed:.1f}ms (sent {len(doc_texts)}/{len(documents)} docs)")
 
             # Build result list with rerank scores
+            # Map Jina indices back to original document indices via valid_indices
             result_docs = []
             for item in reranked:
-                idx = item['index']
+                jina_idx = item['index']
                 score = item['relevance_score']
 
                 # Skip if below minimum score
                 if score < config.min_score:
                     continue
 
-                doc = documents[idx].copy()
+                # Map back to original document index
+                original_idx = valid_indices[jina_idx]
+                doc = documents[original_idx].copy()
                 doc['rerank_score'] = score
-                doc['_original_index'] = idx
+                doc['_original_index'] = original_idx
                 result_docs.append(doc)
+
+            # Add skipped (empty content) documents at the end with score 0
+            reranked_original_indices = {valid_indices[item['index']] for item in reranked}
+            for i, doc in enumerate(documents):
+                if i not in reranked_original_indices and i not in valid_indices:
+                    doc_copy = doc.copy()
+                    doc_copy['rerank_score'] = 0.0
+                    doc_copy['_original_index'] = i
+                    doc_copy['_rerank_skipped'] = True
+                    result_docs.append(doc_copy)
 
             # Cache results
             if config.use_cache and result_docs:
@@ -285,12 +320,22 @@ class RerankService:
 
         if response.status_code != 200:
             error_text = response.text
+            logger.error(f"Jina API error {response.status_code}: {error_text[:500]}")
             raise Exception(f"Jina API error {response.status_code}: {error_text}")
 
         data = response.json()
 
         # Parse response
         results = data.get('results', [])
+
+        # Log score distribution for debugging
+        if results:
+            scores = [r.get('relevance_score', 0) for r in results]
+            zero_count = sum(1 for s in scores if s == 0.0)
+            if zero_count > 0:
+                logger.warning(f"Jina rerank: {zero_count}/{len(scores)} results have score=0.0")
+            logger.debug(f"Jina score distribution: min={min(scores):.4f}, max={max(scores):.4f}, avg={sum(scores)/len(scores):.4f}")
+
         return results
 
     def _merge_cached_results(

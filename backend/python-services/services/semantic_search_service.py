@@ -837,6 +837,10 @@ class SemanticSearchService:
             embedding_str = f"[{','.join(map(str, query_embedding))}]"
             all_results = []
 
+            # Global dedup sets - shared across all embedding tables
+            seen_ids = set()       # embedding row IDs (prevent exact row duplicates)
+            seen_source_ids = set()  # source_id values (prevent same source from different chunks)
+
             # 1. Query unified_embeddings (main source)
             # 🔧 FIX: Skip unified_embeddings when database_priority = 0
             if settings.enable_unified_embeddings and settings.database_priority > 0:
@@ -852,8 +856,6 @@ class SemanticSearchService:
                             if weight >= 1.0
                         ]
                         logger.info(f"[VectorSearch] Priority sources from settings: {priority_sources}")
-
-                    seen_ids = set()
 
                     # First, query priority sources to ensure they're represented
                     for priority_source in priority_sources:
@@ -871,9 +873,15 @@ class SemanticSearchService:
                         try:
                             priority_rows = await pool.fetch(priority_query, embedding_str, priority_source)
                             for row in priority_rows:
+                                source_id = row.get('source_id')
                                 if float(row['similarity_score']) >= similarity_threshold and row['id'] not in seen_ids:
+                                    # Skip if we already have a result from the same source_id (higher similarity)
+                                    if source_id and source_id in seen_source_ids:
+                                        continue
                                     all_results.append(dict(row))
                                     seen_ids.add(row['id'])
+                                    if source_id:
+                                        seen_source_ids.add(source_id)
                             if priority_rows:
                                 logger.info(f"[VectorSearch] Priority source {priority_source}: {len(priority_rows)} results")
                         except Exception as e:
@@ -894,9 +902,14 @@ class SemanticSearchService:
                     unified_limit = max(50, limit * 2)
                     rows = await pool.fetch(unified_query, embedding_str, unified_limit)
                     for row in rows:
+                        source_id = row.get('source_id')
                         if float(row['similarity_score']) >= similarity_threshold and row['id'] not in seen_ids:
+                            if source_id and source_id in seen_source_ids:
+                                continue
                             all_results.append(dict(row))
                             seen_ids.add(row['id'])
+                            if source_id:
+                                seen_source_ids.add(source_id)
                 except Exception as e:
                     logger.warning(f"unified_embeddings query error: {e}")
             elif settings.database_priority == 0:
@@ -924,8 +937,15 @@ class SemanticSearchService:
                     doc_limit = max(15, limit)
                     rows = await pool.fetch(doc_query, embedding_str, doc_limit)
                     for row in rows:
-                        if float(row['similarity_score']) >= similarity_threshold:
-                            all_results.append(dict(row))
+                        row_dict = dict(row)
+                        source_id = row_dict.get('source_id')
+                        if float(row['similarity_score']) >= similarity_threshold and row['id'] not in seen_ids:
+                            if source_id and source_id in seen_source_ids:
+                                continue
+                            all_results.append(row_dict)
+                            seen_ids.add(row['id'])
+                            if source_id:
+                                seen_source_ids.add(source_id)
                 except Exception as e:
                     logger.debug(f"document_embeddings query skipped: {e}")
 
@@ -947,8 +967,15 @@ class SemanticSearchService:
                     """
                     rows = await pool.fetch(scrape_query, embedding_str, limit // 2 + 5)
                     for row in rows:
-                        if float(row['similarity_score']) >= similarity_threshold:
-                            all_results.append(dict(row))
+                        row_dict = dict(row)
+                        source_id = row_dict.get('source_id')
+                        if float(row['similarity_score']) >= similarity_threshold and row['id'] not in seen_ids:
+                            if source_id and source_id in seen_source_ids:
+                                continue
+                            all_results.append(row_dict)
+                            seen_ids.add(row['id'])
+                            if source_id:
+                                seen_source_ids.add(source_id)
                 except Exception as e:
                     logger.debug(f"scrape_embeddings query skipped: {e}")
 
@@ -970,26 +997,58 @@ class SemanticSearchService:
                     """
                     rows = await pool.fetch(msg_query, embedding_str, limit // 4 + 3)
                     for row in rows:
-                        if float(row['similarity_score']) >= similarity_threshold:
-                            all_results.append(dict(row))
+                        row_dict = dict(row)
+                        source_id = row_dict.get('source_id')
+                        if float(row['similarity_score']) >= similarity_threshold and row['id'] not in seen_ids:
+                            if source_id and source_id in seen_source_ids:
+                                continue
+                            all_results.append(row_dict)
+                            seen_ids.add(row['id'])
+                            if source_id:
+                                seen_source_ids.add(source_id)
                 except Exception as e:
                     logger.debug(f"message_embeddings query skipped: {e}")
 
-            # Sort all results by weighted score (similarity + source weight bonus)
-            # This ensures priority sources like kanun get boosted even with lower similarity
+            dedup_stats = f"seen_ids={len(seen_ids)}, seen_source_ids={len(seen_source_ids)}"
+            logger.info(f"[VectorSearch] Cross-table dedup: {dedup_stats}")
+
+            # Sort by similarity-dominant weighted score with capped source weight bonus
+            # Similarity is 0-1 range, source weight adds up to 15% bonus (capped)
             def get_weighted_score(result):
                 sim = float(result['similarity_score'])
                 source_table = result.get('source_table', '')
-                # Get source weight from settings (default 0.5 for unknown)
-                source_weight = 0.5
-                if settings.source_table_weights and source_table in settings.source_table_weights:
-                    source_weight = settings.source_table_weights[source_table]
-                # Weighted score: 70% similarity + 30% source weight bonus
-                # Source weight is 0-1 range, multiply by 100 to match similarity scale
-                return sim * 0.7 + (source_weight * 100) * 0.3
+                # Use _get_table_weight which handles csv_ prefix mismatch
+                source_weight = self._get_table_weight(source_table, settings) if settings.source_table_weights else 0.5
+                # Cap source weight bonus to prevent single table domination
+                # Weight 2.0 → 0.15 bonus, weight 0.5 → 0.0375 bonus (on 0-1 scale)
+                weight_bonus = min(source_weight * 0.075, 0.15)
+                return sim + weight_bonus
 
             all_results.sort(key=get_weighted_score, reverse=True)
-            rows = all_results[:limit]
+
+            # Diversity enforcement: max N results per source_table before final limit
+            MAX_PER_TABLE = max(limit // 2, 5)  # At most half of limit from any single table
+            table_counts = {}
+            diversified_results = []
+            overflow = []
+            for r in all_results:
+                table = r.get('source_table', 'unknown')
+                count = table_counts.get(table, 0)
+                if count < MAX_PER_TABLE:
+                    diversified_results.append(r)
+                    table_counts[table] = count + 1
+                else:
+                    overflow.append(r)
+
+            # Fill remaining slots with overflow if needed
+            while len(diversified_results) < limit and overflow:
+                diversified_results.append(overflow.pop(0))
+
+            rows = diversified_results[:limit]
+
+            if table_counts:
+                table_dist = ", ".join(f"{t}={c}" for t, c in sorted(table_counts.items(), key=lambda x: -x[1])[:5])
+                logger.info(f"[VectorSearch] Source diversity: {table_dist}")
 
             elapsed = (datetime.now() - start_time).total_seconds() * 1000
             logger.info(f"Multi-source vector search: {len(rows)} results in {elapsed:.1f}ms")
@@ -2482,7 +2541,7 @@ class SemanticSearchService:
             return max(0.1, settings.database_priority)
 
     def _get_table_weight(self, source_table: str, settings: RAGSettings) -> float:
-        """Get individual table weight from settings"""
+        """Get individual table weight from settings, handling csv_ prefix mismatch"""
         if not settings.source_table_weights:
             return 1.0
 
@@ -2490,10 +2549,22 @@ class SemanticSearchService:
         if source_table in settings.source_table_weights:
             return settings.source_table_weights[source_table]
 
-        # Check case-insensitive
         table_lower = (source_table or '').lower()
+
+        # Check case-insensitive exact match
         for key, weight in settings.source_table_weights.items():
             if key.lower() == table_lower:
+                return weight
+
+        # Handle csv_ prefix mismatch:
+        # source_table might be "csv_kanun_madde" but weight key is "kanun_madde" or vice versa
+        table_no_prefix = table_lower.removeprefix('csv_')
+        table_with_prefix = f'csv_{table_lower}' if not table_lower.startswith('csv_') else table_lower
+
+        for key, weight in settings.source_table_weights.items():
+            key_lower = key.lower()
+            key_no_prefix = key_lower.removeprefix('csv_')
+            if key_no_prefix == table_no_prefix or key_lower == table_with_prefix:
                 return weight
 
         return 1.0  # Default weight
@@ -3372,6 +3443,11 @@ class SemanticSearchService:
         law_code_config: Optional[LawCodeConfig] = None
         if is_rate_question:
             rate_question_law_code = self._detect_law_code_from_query(query)
+            # Fallback: use article_query's law_code if natural language detection failed
+            if not rate_question_law_code and article_query:
+                rate_question_law_code = article_query.get("law_code")
+                if rate_question_law_code:
+                    logger.info(f"📊 Rate law code from article detection fallback: {rate_question_law_code}")
             if rate_question_law_code:
                 law_code_config = await self.get_law_code_config()
                 rate_article_config = law_code_config.rate_articles.get(rate_question_law_code)
@@ -3379,6 +3455,8 @@ class SemanticSearchService:
                     logger.info(f"📊 Rate article target: {rate_question_law_code} Madde {rate_article_config.article_number} (boost: {rate_article_config.boost_score})")
                 else:
                     logger.debug(f"📊 No rate article config for {rate_question_law_code} in schema")
+            else:
+                logger.debug(f"📊 Rate question detected but no law code could be determined from query")
 
         # Check search result cache
         if use_cache:
@@ -3507,8 +3585,9 @@ class SemanticSearchService:
 
                 # Additive boost for priority sources that are EXPLICITLY in settings with weight >= 1.0
                 priority_boost = 0.0
-                explicit_weight = settings.source_table_weights.get(source_table) if settings.source_table_weights else None
-                if explicit_weight is not None and explicit_weight >= 1.0:
+                # Use _get_table_weight which handles csv_ prefix mismatch
+                explicit_weight = self._get_table_weight(source_table, settings) if settings.source_table_weights else 1.0
+                if explicit_weight >= 1.0 and settings.source_table_weights:
                     priority_boost = 0.25  # 25% boost for explicitly configured priority sources
 
                 weighted_similarity = base_weighted + priority_boost
@@ -3913,6 +3992,9 @@ class SemanticSearchService:
                     "rate_article_boost_applied": penalty_stats.get("rate_article_count", 0) > 0 if is_rate_question else False,
                     "rate_article_boost_count": penalty_stats.get("rate_article_count", 0)
                 },
+                # Explicit boolean flags for Node.js consumption
+                "is_article_query": article_anchoring_enabled,
+                "is_rate_question": is_rate_question,
                 # Article anchoring context for LLM
                 "article_query": {
                     "detected": article_anchoring_enabled,

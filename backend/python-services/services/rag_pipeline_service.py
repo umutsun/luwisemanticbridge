@@ -1,5 +1,5 @@
 """
-RAG Pipeline Microservice - v12.44
+RAG Pipeline Microservice - v12.52
 Orchestrates the full RAG pipeline as middleware chain.
 
 Pipeline Steps:
@@ -108,45 +108,61 @@ class QueryAnalyzer:
     """
 
     # Domain -> keywords mapping for query intent detection
+    # v12.52: Added full law name variants for T05 fix
     DOMAIN_ROUTING = {
         "VIVK": {
-            "keywords": ["veraset", "intikal", "miras", "vasiyet", "veraset vergisi", "tereke"],
+            "keywords": ["veraset", "intikal", "miras", "vasiyet", "veraset vergisi", "tereke",
+                         "veraset ve intikal vergisi kanunu"],
             "exclude": [r"kdv", r"gvk", r"kvk", r"otv"],
         },
         "KDVK": {
-            "keywords": ["kdv", "katma değer", "kdvk", "3065", "kdv beyanname", "kdv iade"],
+            "keywords": ["kdv", "katma değer", "kdvk", "3065", "kdv beyanname", "kdv iade",
+                         "katma değer vergisi kanunu"],
             "exclude": [r"vivk", r"veraset", r"miras", r"intikal"],
         },
         "GVK": {
             "keywords": ["gelir vergisi", "gvk", "193", "yıllık beyan", "stopaj", "tevkifat",
-                         "serbest meslek", "menkul", "gayrimenkul sermaye iradı"],
+                         "serbest meslek", "menkul", "gayrimenkul sermaye iradı",
+                         "gelir vergisi kanunu", "vergi dilimleri", "vergi dilimi"],
             "exclude": [r"vivk", r"veraset", r"kvk"],
         },
         "KVK": {
-            "keywords": ["kurumlar vergisi", "kvk", "5520", "kurum kazancı", "kar dağıtımı"],
+            "keywords": ["kurumlar vergisi", "kvk", "5520", "kurum kazancı", "kar dağıtımı",
+                         "kurumlar vergisi kanunu", "istisna kazanç"],
             "exclude": [r"vivk", r"veraset"],
         },
         "VUK": {
             "keywords": ["vergi usul", "vuk", "213", "yoklama", "inceleme", "zamanaşımı",
-                         "uzlaşma", "izaha davet"],
+                         "uzlaşma", "izaha davet", "vergi usul kanunu",
+                         "gecikme zammı", "gecikme faizi", "ceza indirimi"],
             "exclude": [],  # VUK is cross-cutting
         },
         "DVK": {
-            "keywords": ["damga vergisi", "dvk", "488", "damga", "nispi", "maktu"],
+            "keywords": ["damga vergisi", "dvk", "488", "damga", "nispi", "maktu",
+                         "damga vergisi kanunu"],
             "exclude": [r"vivk", r"veraset"],
         },
         "OTVK": {
-            "keywords": ["özel tüketim", "ötv", "ötvk", "4760"],
+            "keywords": ["özel tüketim", "ötv", "ötvk", "4760",
+                         "özel tüketim vergisi kanunu"],
             "exclude": [r"vivk", r"veraset"],
         },
         "MTVK": {
-            "keywords": ["motorlu taşıt", "mtv", "mtvk", "197"],
+            "keywords": ["motorlu taşıt", "mtv", "mtvk", "197",
+                         "motorlu taşıtlar vergisi kanunu"],
             "exclude": [r"vivk", r"veraset"],
         },
         "AATUHK": {
             "keywords": ["6183", "amme alacağı", "kamu alacağı", "haciz", "ödeme emri",
-                         "teminat", "tecil", "taksit"],
+                         "teminat", "tecil", "taksit",
+                         "amme alacaklarının tahsil usulü"],
             "exclude": [],  # AATUHK is cross-cutting
+        },
+        "IYUK": {
+            "keywords": ["idari yargı", "vergi mahkemesi", "danıştay", "itiraz",
+                         "idari yargılama usulü", "iyuk", "2577",
+                         "vergi davası", "dava açma süresi", "temyiz"],
+            "exclude": [],
         },
         "CVOA": {
             "keywords": ["çifte vergilendirme", "çvöa", "uluslararası", "dar mükellef"],
@@ -154,19 +170,48 @@ class QueryAnalyzer:
         },
     }
 
-    # Article detection patterns
+    # Article detection patterns - abbreviated law codes
     ARTICLE_PATTERN = re.compile(
         r"\b(VUK|GVK|KVK|KDVK|ÖTVK|MTV|DVK|HMK|SGK|İYUK|AATUHK|VİVK|VIVK)"
         r"\s*(?:madde\s*)?\.?\s*(\d+)",
         re.IGNORECASE
     )
 
-    # Rate question patterns
+    # v12.52: Full law name -> article detection (T05 fix)
+    # Maps full law names to their abbreviations
+    FULL_LAW_NAMES = {
+        "kurumlar vergisi kanunu": "KVK",
+        "gelir vergisi kanunu": "GVK",
+        "katma değer vergisi kanunu": "KDVK",
+        "vergi usul kanunu": "VUK",
+        "damga vergisi kanunu": "DVK",
+        "özel tüketim vergisi kanunu": "OTVK",
+        "motorlu taşıtlar vergisi kanunu": "MTVK",
+        "veraset ve intikal vergisi kanunu": "VIVK",
+        "amme alacaklarının tahsil usulü": "AATUHK",
+        "idari yargılama usulü kanunu": "IYUK",
+    }
+
+    FULL_LAW_ARTICLE_PATTERN = re.compile(
+        r"(" + "|".join(re.escape(name) for name in FULL_LAW_NAMES.keys()) + r")"
+        r"(?:nun|nın|nün|nin|'n[ıiuü]n)?\s*"
+        r"(?:(\d+)\s*\.?\s*(?:madde\w*)?|(?:madde\s*)?(\d+))",
+        re.IGNORECASE
+    )
+
+    # Rate question patterns - v12.52: expanded for T07/T09
     RATE_PATTERNS = [
         re.compile(r"oran[ıi]\s*(kaç|nedir|ne\s*kadar)", re.IGNORECASE),
+        re.compile(r"oranlar[ıi]\s*(nedir|nelerdir|kaç)", re.IGNORECASE),
         re.compile(r"yüzde\s*kaç", re.IGNORECASE),
         re.compile(r"vergi\s*oran", re.IGNORECASE),
         re.compile(r"ne\s*kadar.*vergi", re.IGNORECASE),
+        re.compile(r"dilim\w*\s*(ve|,)\s*oran", re.IGNORECASE),  # T09: "dilimleri ve oranları"
+        re.compile(r"oran\w*\s*(ve|,)\s*dilim", re.IGNORECASE),  # reverse order
+        re.compile(r"vergi\s*dilim", re.IGNORECASE),              # "vergi dilimleri"
+        re.compile(r"tarife\w*\s*(nedir|kaç)", re.IGNORECASE),   # "tarifesi nedir"
+        re.compile(r"gecikme\s*(?:zammı|faizi)\s*oran", re.IGNORECASE),  # T07: "gecikme zammı oranı"
+        re.compile(r"gecikme\s*(?:zammı|faizi)\s*(?:ne\s*kadar|kaç)", re.IGNORECASE),  # T07 variant
     ]
 
     async def execute(self, ctx: PipelineContext) -> PipelineContext:
