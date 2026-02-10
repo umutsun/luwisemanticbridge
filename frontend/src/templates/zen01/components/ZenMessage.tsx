@@ -761,7 +761,37 @@ export const ZenMessage: React.FC<ZenMessageProps> = ({
 
                 const metaInfo = getMetadataInfo();
 
-                // Get excerpt/summary
+                // Build display title from best available source
+                const getDisplayTitle = () => {
+                  const m = source.metadata as any;
+                  // Priority: metadata.baslik > metadata.konu > source.title > first sentence of content
+                  const candidates = [
+                    m?.baslik,
+                    m?.konu,
+                    m?.konusu,
+                    source.title
+                  ].filter(Boolean);
+
+                  for (const candidate of candidates) {
+                    const cleaned = cleanCitationTitle(String(candidate))
+                      .replace(/^(KONU|İLGİ|SORU|CEVAP|Dilekçenizde|konusu|BAŞLIK)[:.\s]*/gi, '')
+                      .replace(/\.{2,}/g, '.')
+                      .trim();
+                    if (cleaned.length >= 10 && cleaned.length <= 200) {
+                      return cleaned.length > 120 ? cleaned.substring(0, 120).trim() + '...' : cleaned;
+                    }
+                  }
+
+                  // Fallback: extract first meaningful sentence from content
+                  const raw = source.excerpt || source.content || '';
+                  const cleaned = cleanCitationTitle(raw)
+                    .replace(/^(KONU|İLGİ|SORU|CEVAP|Dilekçenizde|konusu)[:.\s]*/gi, '')
+                    .trim();
+                  const firstSentence = cleaned.match(/^[^.!?]+[.!?]/)?.[0] || cleaned.substring(0, 100);
+                  return firstSentence.length > 120 ? firstSentence.substring(0, 120).trim() + '...' : firstSentence;
+                };
+
+                // Get excerpt/summary - separate from title
                 const getExcerpt = () => {
                   const raw = source.summary || source.excerpt || source.content || '';
                   const cleaned = cleanCitationTitle(raw)
@@ -769,25 +799,54 @@ export const ZenMessage: React.FC<ZenMessageProps> = ({
                     .replace(/\.{2,}/g, '.')
                     .trim();
 
-                  if (cleaned.length > 200) {
-                    return cleaned.substring(0, 200).trim() + '...';
+                  // Extract first 2-3 meaningful sentences instead of raw truncation
+                  const sentences = cleaned.match(/[^.!?]+[.!?]+/g);
+                  if (sentences && sentences.length > 0) {
+                    let result = '';
+                    for (const s of sentences) {
+                      if (result.length + s.length > 250) break;
+                      result += s;
+                    }
+                    return result.trim() || cleaned.substring(0, 250).trim() + '...';
+                  }
+
+                  if (cleaned.length > 250) {
+                    return cleaned.substring(0, 250).trim() + '...';
                   }
                   return cleaned;
                 };
 
+                const displayTitle = getDisplayTitle();
                 const excerpt = getExcerpt();
+                // Don't show excerpt if it's too similar to title
+                const showExcerpt = excerpt && excerpt.length > 20 &&
+                  (!displayTitle || !excerpt.startsWith(displayTitle.replace('...', '')));
+
+                // Build metadata subtitle: Kurum | Sayı | Tarih
+                const getMetaSubtitle = () => {
+                  const m = source.metadata as any;
+                  if (!m) return '';
+                  const parts: string[] = [];
+                  if (m.kurum) parts.push(cleanCitationTitle(String(m.kurum)));
+                  if (m.sayi) parts.push(`Sayı: ${cleanCitationTitle(String(m.sayi))}`);
+                  if (m.yazar) parts.push(cleanCitationTitle(String(m.yazar)));
+                  if (m.dergi) parts.push(cleanCitationTitle(String(m.dergi)));
+                  if (m.madde_no) parts.push(`Madde ${cleanCitationTitle(String(m.madde_no))}`);
+                  return parts.slice(0, 3).join(' · ');
+                };
+                const metaSubtitle = getMetaSubtitle();
 
                 return (
                   <div
                     key={idx}
                     id={`citation-${message.id}-${idx + 1}`}
-                    className={`zen01-source-item scroll-mt-20 ${enableSourceClick ? 'cursor-pointer hover:bg-slate-800/30' : 'cursor-default'}`}
+                    className={`zen01-source-item scroll-mt-20 ${enableSourceClick ? 'cursor-pointer hover:bg-slate-800/30 dark:hover:bg-slate-800/30' : 'cursor-default'}`}
                     {...(enableSourceClick && {
                       onClick: () => onSourceClick(source, message.sources || [])
                     })}
                   >
                     {/* Header Row: [1] + Type + Daire + Karar + Yıl */}
-                    <div className="flex items-center gap-2 flex-wrap mb-2">
+                    <div className="flex items-center gap-2 flex-wrap">
                       <span className="text-xs font-semibold text-cyan-500 dark:text-cyan-400">
                         [{idx + 1}]
                       </span>
@@ -811,9 +870,23 @@ export const ZenMessage: React.FC<ZenMessageProps> = ({
                       )}
                     </div>
 
+                    {/* Display Title */}
+                    {displayTitle && displayTitle.length > 10 && (
+                      <p className="text-[11.5px] font-medium text-slate-700 dark:text-slate-200 mt-1.5 leading-snug line-clamp-2">
+                        {displayTitle}
+                      </p>
+                    )}
+
+                    {/* Metadata Subtitle: Kurum · Sayı · Yazar */}
+                    {metaSubtitle && (
+                      <p className="text-[10px] text-slate-400 dark:text-slate-500 mt-0.5">
+                        {metaSubtitle}
+                      </p>
+                    )}
+
                     {/* Excerpt/Summary */}
-                    {excerpt && excerpt.length > 20 && (
-                      <p className="text-[11px] text-slate-500/90 dark:text-slate-300/80 line-clamp-2 leading-relaxed">
+                    {showExcerpt && (
+                      <p className="text-[10.5px] text-slate-500/80 dark:text-slate-400/70 line-clamp-2 leading-relaxed mt-1">
                         {excerpt}
                       </p>
                     )}
