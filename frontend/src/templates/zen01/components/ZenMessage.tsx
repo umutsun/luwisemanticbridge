@@ -153,22 +153,15 @@ function cleanLLMResponse(content: string): string {
   if (!content) return '';
 
   return content
-    // Remove NEW format section labels (KONU:, ANAHTAR_TERIMLER:, etc.)
+    // Remove legacy plain-text section labels ONLY (not bold markdown headers)
+    // These are from old prompt versions that used UPPERCASE: labels without markdown
     .replace(/^KONU:\s*\n?/gim, '')
     .replace(/^ANAHTAR_TERIMLER:\s*\n?[^\n]*\n?/gim, '')
-    .replace(/^DAYANAKLAR:\s*\n?[\s\S]*?(?=^DEGERLENDIRME:|$)/gim, '')
     .replace(/^DEGERLENDIRME:\s*\n?/gim, '')
-    // Remove numbered format section headers
-    .replace(/1\)\s*SORUNUN\s*KONUSU[:\s]*/gi, '')
-    .replace(/2\)\s*ANAHTAR\s*KELİMELER[:\s]*[^\n]*\n?/gi, '')
-    .replace(/3\)\s*(?:İLGİLİ\s*)?YASAL\s*DÜZENLEMELER[^\n]*[\s\S]*?(?=4\)|$)/gi, '')
-    .replace(/4\)\s*(?:VERGİLEX\s*)?DEĞERLENDİRME[Sİ]?[:\s]*/gi, '')
-    // Remove Dipnotlar sections entirely
-    .replace(/SON\s*BÖLÜM[:\s]*DİPNOTLAR[\s\S]*$/gi, '')
-    .replace(/5\)\s*DİPNOTLAR[\s\S]*$/gi, '')
+    // Remove Dipnotlar sections (LLM sometimes generates these unbidden)
     .replace(/##\s*Dipnotlar[\s\S]*$/gi, '')
     .replace(/\*\*Dipnotlar:?\*\*[\s\S]*$/gi, '')
-    // Remove standalone [1] [2] reference lists at the end
+    // Remove standalone [1] [2] reference lists at the end (bibliography-style)
     .replace(/\n\s*\[\d+\]\s+[^\n]+(?:\n\s*\[\d+\]\s+[^\n]+)*\s*$/gi, '')
     // Clean up multiple newlines
     .replace(/\n{3,}/g, '\n\n')
@@ -248,40 +241,15 @@ function preprocessMarkdown(content: string): string {
 
   let result = content;
 
-  // Remove orphaned numbered items FIRST (bare "3." or "3. 4." with no text content)
-  result = result.replace(/\b(\d{1,2})\.\s*(?=\d{1,2}\.\s)/g, '');
-  result = result.replace(/\s+\d{1,2}\.\s*(?=\n|$)/g, '');
-
-  // FIX INLINE NUMBERED LISTS: "...text 1. item text 2. item" → proper markdown list
-  // Detect sequences like "şunlardır: 1. Xxx 2. Yyy 3. Zzz" or "1. Xxx. 2. Yyy. 3. Zzz."
-  // First check if there's a sequence of 3+ inline numbers (strong signal of a list)
+  // FIX INLINE NUMBERED LISTS (fallback for poorly formatted LLM output)
+  // Only intervene when 3+ numbered items are crammed into a single line/paragraph
+  // e.g., "şunlardır: 1. Xxx 2. Yyy 3. Zzz" → each on its own line
   const inlineListPattern = /(?:[.!?:;]\s*)(\d{1,2})\.\s+\S[\s\S]*?(?:\s)(\d{1,2})\.\s+\S[\s\S]*?(?:\s)(\d{1,2})\.\s+\S/;
-  const hasInlineList = inlineListPattern.test(result);
-
-  if (hasInlineList) {
-    // Strong inline list detected - break ALL numbered items onto new lines
-    // Match: sentence-ending punctuation or colon/space + number + period + text
+  if (inlineListPattern.test(result)) {
     result = result.replace(/([.!?:;,])\s+(\d{1,2})\.\s+/g, (match, punct, num) => {
       const numInt = parseInt(num, 10);
       if (numInt >= 1 && numInt <= 30) {
         return `${punct}\n\n${num}. `;
-      }
-      return match;
-    });
-    // Also catch mid-sentence numbered items (space before number, not after colon)
-    result = result.replace(/ (\d{1,2})\.\s+(?=[A-ZÇĞİÖŞÜa-zçğıöşü]{3,})/g, (match, num) => {
-      const numInt = parseInt(num, 10);
-      if (numInt >= 1 && numInt <= 30) {
-        return `\n\n${num}. `;
-      }
-      return match;
-    });
-  } else {
-    // Weaker signal - only break when clearly inline (original logic)
-    result = result.replace(/ (\d{1,2})\.\s+(?=[A-ZÇĞİÖŞÜa-zçğıöşü]{3,})/g, (match, num) => {
-      const numInt = parseInt(num, 10);
-      if (numInt >= 1 && numInt <= 30) {
-        return `\n\n${num}. `;
       }
       return match;
     });
@@ -299,20 +267,18 @@ function preprocessMarkdown(content: string): string {
   // PARAGRAPH SPLITTING: Count existing paragraphs and sentences
   const paragraphCount = (result.match(/\n\n/g) || []).length;
   const sentenceCount = (result.match(/[.!?](?:\s*\[\d+\])*\s/g) || []).length;
+  // Check if content has bold section headers (structured output from v4+ prompt)
+  const hasBoldHeaders = (result.match(/\*\*[^*]+:\*\*/g) || []).length >= 2;
 
-  // Debug paragraph analysis
-  console.log('[ZenMessage] 📝 Paragraph analysis:', { sentenceCount, paragraphCount, contentLength: result.length });
-
-  // AGGRESSIVE PARAGRAPH BREAKING: If few or no paragraphs, add breaks after sentences
-  // This handles LLM responses that come as a single block of text
-  if (sentenceCount >= 2 && paragraphCount < Math.ceil(sentenceCount / 3)) {
+  // AGGRESSIVE PARAGRAPH BREAKING: Only for unstructured single-block text
+  // Skip if content already has bold headers (well-formatted LLM output)
+  if (!hasBoldHeaders && sentenceCount >= 4 && paragraphCount < 2) {
     let sentenceCounter = 0;
-    // Match: sentence ending + optional citations + space + next word starting with capital
     result = result.replace(/([.!?])(\s*(?:\[\d+\]|\[Kaynak\s*\d+\]|\[Source\s*\d+\])*)(\s+)([A-ZÇĞİÖŞÜ])/g,
       (match, punct, citations, _space, nextChar) => {
         sentenceCounter++;
-        // Add paragraph break every 2-3 sentences
-        if (sentenceCounter % 2 === 0) {
+        // Add paragraph break every 3 sentences
+        if (sentenceCounter % 3 === 0) {
           return `${punct}${citations || ''}\n\n${nextChar}`;
         }
         return `${punct}${citations || ''} ${nextChar}`;
