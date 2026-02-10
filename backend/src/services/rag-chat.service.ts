@@ -5871,27 +5871,41 @@ Yani beyanname ile ödeme arasında **2 günlük** bir fark vardır.`;
       }
     }
 
-    // ═══ Schema-driven section header fix (dynamic, not hardcoded) ═══
-    // If section headers were extracted from system prompt, ensure they're bold in response
+    // ═══ Schema-driven section header reconstruction (dynamic, not hardcoded) ═══
+    // v12.53.5: Aggressively reconstruct broken headers using canonical titles from system prompt
+    // LLM produces many broken patterns: "**1. [1] Title:2.", "**3.\nTitle ve Bold:**", etc.
+    // Strategy: find section number + first word of title → rewrite entire header to canonical form
     if (sectionHeaders && sectionHeaders.length > 0) {
       for (const header of sectionHeaders) {
-        // Extract the section number and title from "**N. Title:**"
         const headerMatch = header.match(/\*\*(\d+)\.\s+(.+?):\*\*/);
         if (!headerMatch) continue;
         const [, num, title] = headerMatch;
-        // Escape regex special chars in title
         const escapedTitle = title.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-        // Fix non-bold version: "N. Title:" → "**N. Title:**"
+        // Get first significant word of the title (at least 3 chars) for fuzzy matching
+        const titleWords = title.split(/\s+/);
+        const firstWord = titleWords.find(w => w.length >= 3) || titleWords[0];
+        const escapedFirstWord = firstWord.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+        // Pattern A: Any mangled bold header containing the section number and first word
+        // Catches: "**1. [1] Konu Başlığı:2.", "**3.\nMevzuat Analizi ve Bold:**", "**4.\nYasal Dayanaklar:**"
+        const mangledBoldPattern = new RegExp(
+          `\\*\\*${num}\\.\\s*(?:\\[\\d+\\]\\s*)?(?:[\\s\\S]*?)${escapedFirstWord}[^\\n]*?(?::\\*\\*|:\\d+\\.?|:\\s*\\n)`,
+          'gm'
+        );
+        fixed = fixed.replace(mangledBoldPattern, `**${num}. ${title}:**`);
+
+        // Pattern B: Non-bold version: "N. Title:" → "**N. Title:**"
         const nonBoldPattern = new RegExp(
           `(?:^|\\n)\\s*${num}\\.\\s+${escapedTitle}[^:\\n]*:(?!\\*\\*)`,
           'gm'
         );
         fixed = fixed.replace(nonBoldPattern, (match) => {
-          if (match.includes('**')) return match; // already bold
+          if (match.includes('**')) return match;
           const leadingWhitespace = match.match(/^(\s*)/)?.[1] || '';
           return `${leadingWhitespace}\n\n**${num}. ${title}:**`;
         });
-        // Fix citation leak in header: "N. [X] Title:" → "**N. Title:**"
+
+        // Pattern C: Citation leak in non-bold: "N. [X] Title:" → "**N. Title:**"
         const citationLeakPattern = new RegExp(
           `(?:^|\\n)\\s*${num}\\.\\s+\\[\\d+\\]\\s*${escapedTitle}[^:\\n]*:`,
           'gm'
@@ -5899,6 +5913,9 @@ Yani beyanname ile ödeme arasında **2 günlük** bir fark vardır.`;
         fixed = fixed.replace(citationLeakPattern, `\n\n**${num}. ${title}:**`);
       }
     }
+
+    // Ensure reconstructed bold section headers get their own line (re-apply after reconstruction)
+    fixed = fixed.replace(/([^\n])\s*(\*\*[1-9]\.\s+[^*]+:\*\*)/g, '$1\n\n$2');
 
     // ═══ Fix orphaned bold markers ═══
     fixed = fixed.replace(/^\*\*\s+/, '');

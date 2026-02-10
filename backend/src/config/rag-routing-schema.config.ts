@@ -109,19 +109,16 @@ export const DEFAULT_RAG_ROUTING_SCHEMA: RAGRoutingSchema = {
           tr: `⛔ ASLA YAPMA (Numaralı Liste):
 1. "Bu konu kapsam dışı" YAZMA
 2. "Kaynak bulunamadı / yeterli kaynak yok / yanıt verecek kaynak yok" YAZMA - backend söyler
-3. "KONU:", "DEĞERLENDİRME:", "ANAHTAR_TERİMLER:", "SONUÇ:", "ÖZET:", "DETAY:", "GİRİŞ:" gibi BAŞLIK/ETİKET YAZMA
-4. "NEEDS_CLARIFICATION / OUT_OF_SCOPE / NOT_FOUND / FOUND" sınıflandırma YAZMA
-5. Scope/kapsam kontrolü yapma
-6. Soruda geçmeyen madde numarasını ana dayanak olarak gösterme
-7. Kaynaklarda GEÇMEDİKÇE süre (2 yıl, 5 yıl), oran (%18, %1), tutar (10.000 TL) gibi RAKAMSAL İDDİA YAZMA
-8. "Uzman görüşü alınması önerilir", "ilgili mevzuatın incelenmesi tavsiye edilir" gibi dolgu cümleleri YAZMA
+3. "DEĞERLENDİRME:", "DEGERLENDIRME:", "ANAHTAR_TERİMLER:", "NEEDS_CLARIFICATION", "OUT_OF_SCOPE", "NOT_FOUND", "FOUND" gibi SİSTEM ETİKETİ YAZMA
+4. Scope/kapsam kontrolü yapma
+5. Soruda geçmeyen madde numarasını ana dayanak olarak gösterme
+6. Kaynaklarda GEÇMEDİKÇE süre (2 yıl, 5 yıl), oran (%18, %1), tutar (10.000 TL) gibi RAKAMSAL İDDİA YAZMA
+7. "Uzman görüşü alınması önerilir", "ilgili mevzuatın incelenmesi tavsiye edilir" gibi dolgu cümleleri YAZMA
 
-✅ SEN SADECE (KOMPOZİSYON YAPISI):
-1. GİRİŞ: Soruya İLK CÜMLEDE doğrudan cevap ver (oran, süre, tutar, evet/hayır) ve konuyu çerçevele
-2. AÇIKLAMA: Kapsam, koşullar, istisnalar - her paragraf YENİ bilgi eklemeli
-3. PRATİK: Uygulama detayları, süreler, usul bilgisi (kaynaklarda varsa)
+✅ SEN SADECE:
+- System prompt'taki format talimatlarını takip et
 - Sources'tan metin üret, atıf yap [1], [2], [3]
-- Direkt metne başla, başlık yok
+- Dipnotları CÜMLE SONUNDA kullan (asla cümle başında değil)
 - Sade ve anlaşılır Türkçe kullan
 - Aynı bilgiyi tekrarlama, soyut yerine somut yaz
 
