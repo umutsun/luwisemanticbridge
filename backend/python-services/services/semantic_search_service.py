@@ -872,47 +872,11 @@ class SemanticSearchService:
                         ]
                         logger.info(f"[VectorSearch] Priority sources (filtered): {priority_sources}")
 
-                    # v12.55: Query priority sources in PARALLEL for speed
-                    # Sequential: 11 queries x ~130ms = ~1430ms
-                    # Parallel:   11 queries in ~200ms (pool handles concurrency)
-                    priority_query = """
-                        SELECT
-                            id, content, source_table, source_type, source_id, metadata,
-                            1 - (embedding <=> $1::vector) as similarity_score,
-                            'unified' as search_source
-                        FROM unified_embeddings
-                        WHERE embedding IS NOT NULL
-                        AND source_table = $2
-                        ORDER BY embedding <=> $1::vector
-                        LIMIT 3
-                    """
-
-                    async def _fetch_priority(table_name):
-                        try:
-                            rows = await pool.fetch(priority_query, embedding_str, table_name)
-                            return table_name, rows
-                        except Exception as e:
-                            logger.debug(f"Priority source {table_name} query skipped: {e}")
-                            return table_name, []
-
-                    priority_results = await asyncio.gather(
-                        *[_fetch_priority(t) for t in priority_sources]
-                    )
-
-                    for table_name, priority_rows in priority_results:
-                        for row in priority_rows:
-                            source_id = row.get('source_id')
-                            if float(row['similarity_score']) >= similarity_threshold and row['id'] not in seen_ids:
-                                if source_id and source_id in seen_source_ids:
-                                    continue
-                                all_results.append(dict(row))
-                                seen_ids.add(row['id'])
-                                if source_id:
-                                    seen_source_ids.add(source_id)
-                        if priority_rows:
-                            logger.info(f"[VectorSearch] Priority source {table_name}: {len(priority_rows)} results")
-
-                    # Then query all sources for general results
+                    # v12.55: General-first strategy for speed
+                    # 1. Run general query first (1 query, covers most tables)
+                    # 2. Check which priority tables are missing from results
+                    # 3. Only run backfill queries for missing high-priority tables
+                    # Typical: 1 general + 0-3 backfill = much faster than 11 priority queries
                     unified_query = """
                         SELECT
                             id, content, source_table, source_type, source_id, metadata,
@@ -935,6 +899,47 @@ class SemanticSearchService:
                             seen_ids.add(row['id'])
                             if source_id:
                                 seen_source_ids.add(source_id)
+
+                    # v12.55: Backfill missing high-priority tables
+                    # Check which priority tables (tw >= 1.5) are missing from general results
+                    tables_found = {r.get('source_table') for r in all_results}
+                    high_priority_tables = [
+                        t for t in priority_sources
+                        if t not in tables_found and settings.source_table_weights.get(t, 0) >= 1.5
+                    ]
+                    if high_priority_tables:
+                        logger.info(f"[VectorSearch] Backfilling {len(high_priority_tables)} missing high-priority tables: {high_priority_tables}")
+                        backfill_query = """
+                            SELECT
+                                id, content, source_table, source_type, source_id, metadata,
+                                1 - (embedding <=> $1::vector) as similarity_score,
+                                'unified' as search_source
+                            FROM unified_embeddings
+                            WHERE embedding IS NOT NULL
+                            AND source_table = $2
+                            ORDER BY embedding <=> $1::vector
+                            LIMIT 3
+                        """
+                        for backfill_table in high_priority_tables:
+                            try:
+                                bf_rows = await pool.fetch(backfill_query, embedding_str, backfill_table)
+                                added = 0
+                                for row in bf_rows:
+                                    source_id = row.get('source_id')
+                                    if float(row['similarity_score']) >= similarity_threshold and row['id'] not in seen_ids:
+                                        if source_id and source_id in seen_source_ids:
+                                            continue
+                                        all_results.append(dict(row))
+                                        seen_ids.add(row['id'])
+                                        if source_id:
+                                            seen_source_ids.add(source_id)
+                                        added += 1
+                                if added > 0:
+                                    logger.info(f"[VectorSearch] Backfill {backfill_table}: +{added} results")
+                            except Exception as e:
+                                logger.debug(f"Backfill {backfill_table} skipped: {e}")
+                    else:
+                        logger.info(f"[VectorSearch] All priority tables covered in general results")
                 except Exception as e:
                     logger.warning(f"unified_embeddings query error: {e}")
             elif settings.database_priority == 0:
