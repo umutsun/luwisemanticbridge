@@ -110,33 +110,65 @@ function highlightKeywordsInText(text: string, keywords: string[]): React.ReactN
  * Clean citation/source title from database formatting issues
  * v12.53: Uses Unicode ranges instead of hardcoded Turkish characters
  */
+/**
+ * Fix Turkish OCR/PDF spacing: "çal ı şanlara" → "çalışanlara"
+ * OCR engines often break words around Turkish special chars (ı ş ğ ç ü ö İ Ş Ğ Ç Ü Ö)
+ */
+function fixTurkishOCRSpacing(text: string): string {
+  if (!text) return '';
+  const trChars = 'ıİşŞğĞçÇüÜöÖ';
+  const letters = `a-zA-Z${trChars}`;
+  // letter + space + Turkish special char(s) + letter → merge
+  // e.g. "çal ı şanlara" → "çalışanlara", "f ıkras" → "fıkras"
+  let result = text;
+  // Pass 1: "x ı", "x ş", etc. — letter, space, single Turkish char, followed by letter
+  result = result.replace(
+    new RegExp(`([${letters}]) ([${trChars}])(?=[${letters}])`, 'g'),
+    '$1$2'
+  );
+  // Pass 2: "ş x", "ğ x", etc. — Turkish char, space, letter
+  result = result.replace(
+    new RegExp(`([${trChars}]) ([${letters}])`, 'g'),
+    (match, p1, p2) => {
+      // Don't merge if it creates an unlikely combination (two capitals, etc.)
+      // Only merge if at least one side is lowercase
+      if (p1 === p1.toLowerCase() || p2 === p2.toLowerCase()) {
+        return p1 + p2;
+      }
+      return match;
+    }
+  );
+  // Pass 3: remaining isolated single Turkish chars: "say ılı" → "sayılı"
+  result = result.replace(
+    new RegExp(`([${letters}]) ([${trChars}][${letters}])`, 'g'),
+    '$1$2'
+  );
+  return result;
+}
+
 function cleanCitationTitle(title: string): string {
   if (!title) return '';
 
-  return title
-    // Remove time portion from dates (00:00:00, 12:30:45, etc.)
-    .replace(/\s+\d{2}:\d{2}:\d{2}$/g, '')
-    .replace(/\s+\d{2}:\d{2}:\d{2}\s/g, ' ')
-    // Remove long sequences of dots/periods (likely placeholder text)
-    .replace(/\.{4,}/g, '')
-    // Fix single-letter OCR spacing: "D A N I Ş T A Y" -> "DANIŞTAY" (3+ consecutive single letters)
-    .replace(/\b([A-Z\u00C0-\u024F]) ([A-Z\u00C0-\u024F]) ([A-Z\u00C0-\u024F](?:\s[A-Z\u00C0-\u024F])*)\b/g,
-      (m) => m.replace(/ /g, ''))
-    // Fix missing space: lowercase followed by 2+ uppercase
-    .replace(/([a-z\u00E0-\u024F])([A-Z\u00C0-\u024F]{2,})/g, '$1 $2')
-    // Fix camelCase merged words
-    .replace(/([a-z\u00E0-\u024F])([A-Z\u00C0-\u024F][a-z\u00E0-\u024F])/g, '$1 $2')
-    // Fix abbreviations: "T.C.D" -> "T.C. D"
-    .replace(/(\.[A-Z])\.([A-Z])/g, '$1. $2')
-    // Fix "No:2018" -> "No: 2018"
-    .replace(/No:(\d)/g, 'No: $1')
-    // Fix "2018/280Word" -> "2018/280 Word"
-    .replace(/(\d{4}\/\d+)([A-Z\u00C0-\u024F])/g, '$1 $2')
-    // Fix number-word joins
-    .replace(/(\d+)([A-Z\u00C0-\u024F]{2,})/g, '$1 $2')
-    // Clean multiple spaces
-    .replace(/\s{2,}/g, ' ')
-    .trim();
+  return fixTurkishOCRSpacing(
+    title
+      // Remove time portion from dates (00:00:00, 12:30:45, etc.)
+      .replace(/\s+\d{2}:\d{2}:\d{2}$/g, '')
+      .replace(/\s+\d{2}:\d{2}:\d{2}\s/g, ' ')
+      // Remove long sequences of dots/periods (likely placeholder text)
+      .replace(/\.{4,}/g, '')
+      // Fix single-letter OCR spacing: "D A N I Ş T A Y" -> "DANIŞTAY" (3+ consecutive single letters)
+      .replace(/\b([A-Z\u00C0-\u024F]) ([A-Z\u00C0-\u024F]) ([A-Z\u00C0-\u024F](?:\s[A-Z\u00C0-\u024F])*)\b/g,
+        (m) => m.replace(/ /g, ''))
+      // Fix abbreviations: "T.C.D" -> "T.C. D"
+      .replace(/(\.[A-Z])\.([A-Z])/g, '$1. $2')
+      // Fix "No:2018" -> "No: 2018"
+      .replace(/No:(\d)/g, 'No: $1')
+      // Fix "2018/280Word" -> "2018/280 Word"
+      .replace(/(\d{4}\/\d+)([A-Z\u00C0-\u024F])/g, '$1 $2')
+      // Clean multiple spaces
+      .replace(/\s{2,}/g, ' ')
+      .trim()
+  );
 }
 
 function cleanLLMResponse(content: string): string {
@@ -761,80 +793,44 @@ export const ZenMessage: React.FC<ZenMessageProps> = ({
 
                 const metaInfo = getMetadataInfo();
 
-                // Build display title from best available source
-                const getDisplayTitle = () => {
+                // Build a single clean description paragraph (200-300 chars)
+                const getDescription = () => {
                   const m = source.metadata as any;
-                  // Priority: metadata.baslik > metadata.konu > source.title > first sentence of content
-                  const candidates = [
-                    m?.baslik,
-                    m?.konu,
-                    m?.konusu,
-                    source.title
-                  ].filter(Boolean);
-
-                  for (const candidate of candidates) {
-                    const cleaned = cleanCitationTitle(String(candidate))
-                      .replace(/^(KONU|İLGİ|SORU|CEVAP|Dilekçenizde|konusu|BAŞLIK)[:.\s]*/gi, '')
-                      .replace(/\.{2,}/g, '.')
-                      .trim();
-                    if (cleaned.length >= 10 && cleaned.length <= 200) {
-                      return cleaned.length > 120 ? cleaned.substring(0, 120).trim() + '...' : cleaned;
-                    }
-                  }
-
-                  // Fallback: extract first meaningful sentence from content
-                  const raw = source.excerpt || source.content || '';
-                  const cleaned = cleanCitationTitle(raw)
-                    .replace(/^(KONU|İLGİ|SORU|CEVAP|Dilekçenizde|konusu)[:.\s]*/gi, '')
+                  // Start with konu/baslik if available for context
+                  const konu = cleanCitationTitle(String(m?.konu || m?.baslik || m?.konusu || ''))
+                    .replace(/^(KONU|İLGİ|SORU|CEVAP|Dilekçenizde|konusu|BAŞLIK)[:.\s]*/gi, '')
                     .trim();
-                  const firstSentence = cleaned.match(/^[^.!?]+[.!?]/)?.[0] || cleaned.substring(0, 100);
-                  return firstSentence.length > 120 ? firstSentence.substring(0, 120).trim() + '...' : firstSentence;
-                };
 
-                // Get excerpt/summary - separate from title
-                const getExcerpt = () => {
+                  // Get content for the body
                   const raw = source.summary || source.excerpt || source.content || '';
                   const cleaned = cleanCitationTitle(raw)
-                    .replace(/^(KONU|İLGİ|SORU|CEVAP|Dilekçenizde|konusu)[:.\s]*/gi, '')
+                    .replace(/^(KONU|İLGİ|SORU|CEVAP|Dilekçenizde|konusu|VERGİ\s*Sİ\s*KANUNU[^.]*\.)[:.\s]*/gi, '')
                     .replace(/\.{2,}/g, '.')
                     .trim();
 
-                  // Extract first 2-3 meaningful sentences instead of raw truncation
-                  const sentences = cleaned.match(/[^.!?]+[.!?]+/g);
-                  if (sentences && sentences.length > 0) {
-                    let result = '';
-                    for (const s of sentences) {
-                      if (result.length + s.length > 250) break;
-                      result += s;
+                  // If konu is good and different from content, prefix it
+                  let combined = '';
+                  if (konu.length >= 15 && !cleaned.toLowerCase().startsWith(konu.toLowerCase().substring(0, 20))) {
+                    combined = konu + '. ' + cleaned;
+                  } else if (konu.length >= 10) {
+                    combined = konu + '. ' + cleaned;
+                  } else {
+                    combined = cleaned;
+                  }
+
+                  // Truncate to 300 chars at sentence boundary
+                  if (combined.length > 300) {
+                    const truncated = combined.substring(0, 300);
+                    const lastPeriod = truncated.lastIndexOf('.');
+                    if (lastPeriod > 150) {
+                      return truncated.substring(0, lastPeriod + 1);
                     }
-                    return result.trim() || cleaned.substring(0, 250).trim() + '...';
+                    return truncated.trim() + '...';
                   }
-
-                  if (cleaned.length > 250) {
-                    return cleaned.substring(0, 250).trim() + '...';
-                  }
-                  return cleaned;
+                  return combined;
                 };
 
-                const displayTitle = getDisplayTitle();
-                const excerpt = getExcerpt();
-                // Don't show excerpt if it's too similar to title
-                const showExcerpt = excerpt && excerpt.length > 20 &&
-                  (!displayTitle || !excerpt.startsWith(displayTitle.replace('...', '')));
-
-                // Build metadata subtitle: Kurum | Sayı | Tarih
-                const getMetaSubtitle = () => {
-                  const m = source.metadata as any;
-                  if (!m) return '';
-                  const parts: string[] = [];
-                  if (m.kurum) parts.push(cleanCitationTitle(String(m.kurum)));
-                  if (m.sayi) parts.push(`Sayı: ${cleanCitationTitle(String(m.sayi))}`);
-                  if (m.yazar) parts.push(cleanCitationTitle(String(m.yazar)));
-                  if (m.dergi) parts.push(cleanCitationTitle(String(m.dergi)));
-                  if (m.madde_no) parts.push(`Madde ${cleanCitationTitle(String(m.madde_no))}`);
-                  return parts.slice(0, 3).join(' · ');
-                };
-                const metaSubtitle = getMetaSubtitle();
+                const description = getDescription();
 
                 return (
                   <div
@@ -846,7 +842,7 @@ export const ZenMessage: React.FC<ZenMessageProps> = ({
                     })}
                   >
                     {/* Header Row: [1] + Type + Daire + Karar + Yıl */}
-                    <div className="flex items-center gap-2 flex-wrap">
+                    <div className="flex items-center gap-2 flex-wrap mb-1.5">
                       <span className="text-xs font-semibold text-cyan-500 dark:text-cyan-400">
                         [{idx + 1}]
                       </span>
@@ -870,24 +866,10 @@ export const ZenMessage: React.FC<ZenMessageProps> = ({
                       )}
                     </div>
 
-                    {/* Display Title */}
-                    {displayTitle && displayTitle.length > 10 && (
-                      <p className="text-[11.5px] font-medium text-slate-700 dark:text-slate-200 mt-1.5 leading-snug line-clamp-2">
-                        {displayTitle}
-                      </p>
-                    )}
-
-                    {/* Metadata Subtitle: Kurum · Sayı · Yazar */}
-                    {metaSubtitle && (
-                      <p className="text-[10px] text-slate-400 dark:text-slate-500 mt-0.5">
-                        {metaSubtitle}
-                      </p>
-                    )}
-
-                    {/* Excerpt/Summary */}
-                    {showExcerpt && (
-                      <p className="text-[10.5px] text-slate-500/80 dark:text-slate-400/70 line-clamp-2 leading-relaxed mt-1">
-                        {excerpt}
+                    {/* Single clean description paragraph */}
+                    {description && description.length > 15 && (
+                      <p className="text-[11px] text-slate-600/90 dark:text-slate-300/80 line-clamp-3 leading-relaxed">
+                        {description}
                       </p>
                     )}
                   </div>

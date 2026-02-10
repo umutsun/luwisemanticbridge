@@ -439,13 +439,8 @@
   color: var(--zen-text-primary);
 }
 
-/* Citation card title - slightly emphasized */
-.zen01-source-item p:first-of-type {
-  color: var(--zen-text-primary);
-}
-
-.zen01-container.light .zen01-source-item p:first-of-type {
-  color: #1e293b;
+.zen01-container.light .zen01-source-item p {
+  color: #475569;
 }
 
 .zen01-source-item .text-cyan-300\/90 {
