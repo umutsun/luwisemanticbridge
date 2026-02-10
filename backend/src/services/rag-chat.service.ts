@@ -4460,11 +4460,19 @@ Yani beyanname ile ödeme arasında **2 günlük** bir fark vardır.`;
         const hasArticleSections = routingSchema.routes.FOUND.format.articleSections &&
                                    routingSchema.routes.FOUND.format.articleSections.length > 0;
 
-        // Use 'legacy' format for deadline queries to preserve full response
-        const formatType = (hasArticleSections && !isDeadlineQuery) ? 'article' : 'legacy';
+        // v4.2: Detect v4 prompt format (numbered bold sections) and skip article format enforcement
+        // v4 prompt generates its own structured format - enforceResponseFormat would destroy it
+        const isV4Format = /\*\*[1-5]\.\s+(?:Konu|Özet|Mevzuat|Yasal|Kritik)/i.test(response.content) ||
+                          /^[1-5]\.\s+(?:Konu|Özet|Mevzuat|Yasal|Kritik)/m.test(response.content);
+
+        // Use 'legacy' format for deadline queries or v4-formatted responses to preserve structure
+        const formatType = (hasArticleSections && !isDeadlineQuery && !isV4Format) ? 'article' : 'legacy';
 
         if (isDeadlineQuery) {
           console.log(`🛡️ [v12.10] DEADLINE_FORMAT_SKIP: Using legacy format for deadline query (preserves content)`);
+        }
+        if (isV4Format) {
+          console.log(`🛡️ [v4.2] V4_FORMAT_DETECTED: Skipping article format enforcement (v4 prompt has its own structure)`);
         }
 
         response.content = this.enforceResponseFormat(
@@ -5300,6 +5308,9 @@ Yani beyanname ile ödeme arasında **2 günlük** bir fark vardır.`;
         finalResponse = this.sanitizeProsedurClaims(finalResponse, limitedSources, domainConfig.sanitizerConfig, domainConfig.lawCodes);
       }
 
+      // v4.2: Re-apply markdown fixes AFTER sanitizer (sanitizer may affect formatting)
+      finalResponse = this.fixMarkdownAndCitations(finalResponse, limitedSources);
+
       // 🔍 DEBUG v12: Log response AFTER sanitizer
       const has24After = /24|yirmidört/i.test(finalResponse);
       if (message.toLowerCase().includes('kaç') || message.toLowerCase().includes('deadline') || message.toLowerCase().includes('beyanname')) {
@@ -5903,27 +5914,34 @@ Yani beyanname ile ödeme arasında **2 günlük** bir fark vardır.`;
   private fixMarkdownAndCitations(response: string, sources: any[]): string {
     let fixed = response;
 
-    // ═══ v4 FORMAT FIX: Numbered section headers ═══
+    // ═══ v4.2 FORMAT FIX: Numbered section headers ═══
+    const sectionKeywords = ['Konu Başlığı', 'Özet Yanıt', 'Mevzuat Analizi', 'Yasal Dayanaklar', 'Kritik Notlar'];
+    const sectionKeywordsJoined = sectionKeywords.join('|');
+
     // Fix broken bold headers: "**2.\nÖzet Yanıt:**" → "**2. Özet Yanıt:**"
     fixed = fixed.replace(/\*\*(\d)\.\s*\n\s*/g, '**$1. ');
+
+    // Fix non-bold numbered section headers ANYWHERE in text
+    // Match: N. <section keyword><optional extra text>:  (with or without bold)
+    // This handles: "1. Konu Başlığı:" at start, "...text [1]. 3. Mevzuat Analizi:" inline
+    const nonBoldSectionPattern = new RegExp(
+      `(?:^|[.!?\\]\\n]\\s*)(${['1','2','3','4','5'].join('|')})\\.\\s+(${sectionKeywordsJoined})[^:\\n]*:`,
+      'gm'
+    );
+    fixed = fixed.replace(nonBoldSectionPattern, (match, num, keyword) => {
+      // If already bold, skip
+      if (match.includes('**')) return match;
+      // Extract the prefix character (period, bracket, newline) and preserve it
+      const prefixMatch = match.match(/^([.!?\]\n]\s*)/);
+      const prefix = prefixMatch ? prefixMatch[1].trim() : '';
+      return `${prefix}\n\n**${num}. ${keyword}:**`;
+    });
 
     // Ensure bold numbered section headers get their own line
     fixed = fixed.replace(/([^\n])\s*(\*\*[1-5]\.\s+[^*]+:\*\*)/g, '$1\n\n$2');
 
-    // Fix non-bold numbered section headers ANYWHERE in text (not just at line start)
-    // LLM often writes: "...text [1]. 3. Mevzuat Analizi ve Detaylar:" inline
-    // Match: N. <section keyword><optional extra text>:
-    const sectionKeywords = ['Konu Başlığı', 'Özet Yanıt', 'Mevzuat Analizi', 'Yasal Dayanaklar', 'Kritik Notlar'];
-    const sectionPattern = new RegExp(
-      `([.!?\\]]\\s*)(${['1','2','3','4','5'].join('|')})\\.\\s+(${sectionKeywords.join('|')})[^:]*:`,
-      'g'
-    );
-    fixed = fixed.replace(sectionPattern, (match, before, num, keyword) => {
-      return `${before.trim()}\n\n**${num}. ${keyword}:**`;
-    });
-    // Also handle at line start
-    fixed = fixed.replace(/^(\d)\.\s+(Konu Başlığı|Özet Yanıt|Mevzuat Analizi|Yasal Dayanaklar|Kritik Notlar)[^:\n]*:/gm,
-      '**$1. $2:**');
+    // Normalize section 3 title: "**3. Mevzuat Analizi ve XYZ:**" → "**3. Mevzuat Analizi ve Detaylar:**"
+    fixed = fixed.replace(/\*\*3\.\s+Mevzuat Analizi[^*]*:\*\*/g, '**3. Mevzuat Analizi ve Detaylar:**');
 
     // Ensure bold sub-headers get their own line: "...text **İşveren Seçimi:** ..." → new line
     fixed = fixed.replace(/([^\n])(\s)(\*\*[^*]{2,50}:\*\*)/g, '$1\n\n$3');
@@ -7176,11 +7194,11 @@ Please verify the article number or check official sources.`;
       .join(' ')
       .replace(/\s+/g, ' ');
 
-    // Split response into sentences for granular removal
-    // v12.52: List-aware splitting - don't break on "1. ", "2. " etc.
-    // Lookbehind: sentence ends with [.!?] but NOT preceded by a digit (which would be a list marker like "1.")
-    const sentences = response.split(/(?<=(?<!\d)[.!?])\s+/);
-    const processedSentences: string[] = [];
+    // v4.2 FIX: Paragraph-aware splitting to preserve markdown structure
+    // Previously: split entire response into sentences → join(' ') destroyed all \n\n paragraph breaks
+    // Now: split into paragraphs first, process each paragraph separately, then rejoin with \n\n
+    const paragraphs = response.split(/\n{2,}/);
+    const processedParagraphs: string[] = [];
 
     let removedCount = 0;
     let keptWithGroundingCount = 0;
@@ -7703,80 +7721,90 @@ Please verify the article number or check official sources.`;
     //    b. Check for forbidden pattern → REMOVE if found (v8 rule)
     //    c. Neither → KEEP
     // ═════════��═════════════════════════════════════════════════════
-    for (const sentence of sentences) {
-      const trimmedSentence = sentence.trim();
-      if (!trimmedSentence) continue;
+    // v4.2: Process each paragraph separately to preserve structure
+    for (const paragraph of paragraphs) {
+      const trimmedParagraph = paragraph.trim();
+      if (!trimmedParagraph) continue;
 
-      // PHASE 1: Extract citations
-      const citationNums = extractCitations(trimmedSentence);
-      const hasCitations = citationNums.length > 0;
+      // Skip structural elements (headers, list items, warning lines) - never sanitize these
+      const isStructural = /^\*\*[^*]+\*\*/.test(trimmedParagraph) ||  // Bold headers
+                          /^[-•]\s/.test(trimmedParagraph) ||          // Bullet lists
+                          /^⚠️/.test(trimmedParagraph) ||             // Warning emoji
+                          /^\d+\.\s+\*\*/.test(trimmedParagraph);     // Numbered bold headers
+      if (isStructural) {
+        processedParagraphs.push(trimmedParagraph);
+        continue;
+      }
 
-      // ═══════════════════════════════════════════════════════════════
-      // PHASE 2: CITATION EXISTS → Verify claim-source alignment
-      // v9: This applies to ALL sentences with citations (not just forbidden)
-      // ═══════════════════════════════════════════════════════════════
-      if (hasCitations) {
-        const verification = verifyCitationSupport(trimmedSentence, citationNums);
+      // Split paragraph into sentences for claim verification
+      const sentences = trimmedParagraph.split(/(?<=(?<!\d)[.!?])\s+/);
+      const processedSentences: string[] = [];
 
-        if (verification.verified) {
-          processedSentences.push(trimmedSentence);
-          keptWithGroundingCount++;
-          if (sanitizerConfig.logRemovals) {
-            console.log(`[SANITIZER] KEPT (verified): "${trimmedSentence.substring(0, 60)}..." - ${verification.reason}`);
+      for (const sentence of sentences) {
+        const trimmedSentence = sentence.trim();
+        if (!trimmedSentence) continue;
+
+        // PHASE 1: Extract citations
+        const citationNums = extractCitations(trimmedSentence);
+        const hasCitations = citationNums.length > 0;
+
+        // PHASE 2: CITATION EXISTS → Verify claim-source alignment
+        if (hasCitations) {
+          const verification = verifyCitationSupport(trimmedSentence, citationNums);
+
+          if (verification.verified) {
+            processedSentences.push(trimmedSentence);
+            keptWithGroundingCount++;
+            if (sanitizerConfig.logRemovals) {
+              console.log(`[SANITIZER] KEPT (verified): "${trimmedSentence.substring(0, 60)}..." - ${verification.reason}`);
+            }
+          } else {
+            // CITATION LAUNDERING DETECTED → KEEP with warning (v12.49)
+            processedSentences.push(trimmedSentence);
+            keptWithGroundingCount++;
+            console.log(`[SANITIZER] KEPT (citation-present, unverified): "${trimmedSentence.substring(0, 80)}..."`);
+            console.log(`   ${verification.reason}`);
           }
-        } else {
-          // CITATION LAUNDERING DETECTED → KEEP with warning (v12.49)
-          // Previously removed, but this caused ALL citations to disappear
-          // when claim matching fails (truncated sources, format mismatch).
-          // Now we keep the sentence but log the warning for monitoring.
-          processedSentences.push(trimmedSentence);
-          keptWithGroundingCount++;
-          console.log(`[SANITIZER] KEPT (citation-present, unverified): "${trimmedSentence.substring(0, 80)}..."`);
-          console.log(`   ${verification.reason}`);
+          continue;
         }
-        continue;
+
+        // PHASE 3: NO CITATION → Check for critical claims or forbidden patterns
+
+        // Check 3a: Critical claims without citation → REMOVE
+        const criticalClaims = detectCriticalClaims(trimmedSentence);
+        if (criticalClaims.length > 0) {
+          removedCount++;
+          if (sanitizerConfig.logRemovals) {
+            console.log(`[SANITIZER] REMOVED (critical-no-citation): "${trimmedSentence.substring(0, 80)}..."`);
+            console.log(`   Critical claims found: [${criticalClaims.map(c => `${c.type}:${c.value}`).join(', ')}]`);
+          }
+          continue;
+        }
+
+        // Check 3b: Forbidden pattern without citation → REMOVE (v8 rule)
+        const matchedPattern = forbiddenPatterns.find(p => p.test(trimmedSentence));
+        if (matchedPattern) {
+          removedCount++;
+          if (sanitizerConfig.logRemovals) {
+            console.log(`[SANITIZER] REMOVED (forbidden+no-citation): "${trimmedSentence.substring(0, 80)}..."`);
+          }
+          continue;
+        }
+
+        // Check 3c: No critical claims, no forbidden pattern → KEEP
+        processedSentences.push(trimmedSentence);
       }
 
-      // ═══════════════════════════════════════════════════════════════
-      // PHASE 3: NO CITATION → Check for critical claims or forbidden patterns
-      // v9: Critical claims without citations are removed (can't trust them)
-      // v8: Forbidden patterns without citations are removed (normative rule)
-      // ═══════════════════════════════════════════════════════════════
-
-      // Check 3a: Critical claims without citation → REMOVE
-      const criticalClaims = detectCriticalClaims(trimmedSentence);
-      if (criticalClaims.length > 0) {
-        removedCount++;
-        if (sanitizerConfig.logRemovals) {
-          console.log(`[SANITIZER] REMOVED (critical-no-citation): "${trimmedSentence.substring(0, 80)}..."`);
-          console.log(`   Critical claims found: [${criticalClaims.map(c => `${c.type}:${c.value}`).join(', ')}]`);
-          console.log(`   No citation present - critical claims require verified citation`);
-        }
-        continue;
+      // Rejoin sentences within this paragraph (preserve intra-paragraph structure)
+      if (processedSentences.length > 0) {
+        processedParagraphs.push(processedSentences.join(' '));
       }
-
-      // Check 3b: Forbidden pattern without citation → REMOVE (v8 rule)
-      const matchedPattern = forbiddenPatterns.find(p => p.test(trimmedSentence));
-      if (matchedPattern) {
-        removedCount++;
-        if (sanitizerConfig.logRemovals) {
-          const claims = extractClaims(trimmedSentence);
-          console.log(`[SANITIZER] REMOVED (forbidden+no-citation): "${trimmedSentence.substring(0, 80)}..."`);
-          console.log(`   Forbidden pattern matched: ${matchedPattern.source}`);
-          console.log(`   No citation present - normative claim requires citation to survive`);
-          console.log(`   Extracted claims for reference: [${claims.join(', ')}]`);
-        }
-        continue;
-      }
-
-      // Check 3c: No critical claims, no forbidden pattern → KEEP
-      processedSentences.push(trimmedSentence);
     }
 
     // ═══════════════════════════════════════════════════════════════
-    // RECONSTRUCTION & CLEANUP
+    // RECONSTRUCTION & CLEANUP - v4.2: Join with \n\n to preserve paragraph breaks
     // ═══════════════════════════════════════════════════════════════
-    let result = processedSentences.join(' ');
+    let result = processedParagraphs.join('\n\n');
 
     // Clean up artifacts from sentence removal
     result = result.replace(/\s{2,}/g, ' ');           // Double spaces
