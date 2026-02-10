@@ -858,7 +858,7 @@ export default function ChatInterface() {
           msg.id === messageId
             ? {
               ...msg,
-              content: accumulatedContent || finalData.response || msg.content,
+              content: finalData.response || accumulatedContent || msg.content,
               isStreaming: false,
               sources: finalData.fastMode ? [] : finalData.sources,
               relatedTopics: finalData.relatedTopics,
