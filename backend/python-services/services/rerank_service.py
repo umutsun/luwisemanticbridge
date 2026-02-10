@@ -230,14 +230,14 @@ class RerankService:
             logger.warning("Rerank: all documents had empty content, returning original order")
             return documents
 
-        # Call Jina API
+        # Call Jina API - send ALL documents to get scores for everything
         try:
             reranked = await self._call_jina_api(
                 query=query,
                 documents=doc_texts,
                 model=config.model,
                 api_key=config.api_key,
-                top_n=min(config.top_n, len(doc_texts))
+                top_n=len(doc_texts)  # Get scores for ALL docs, not just top_n
             )
 
             elapsed = (datetime.now() - start_time).total_seconds() * 1000
@@ -261,12 +261,22 @@ class RerankService:
                 doc['_original_index'] = original_idx
                 result_docs.append(doc)
 
-            # Add skipped (empty content) documents at the end with score 0
-            reranked_original_indices = {valid_indices[item['index']] for item in reranked}
+            # Add skipped (empty content) documents with fallback score
+            # Instead of 0.0, use their pre-rerank similarity score normalized to 0-1 range
+            reranked_original_indices = set()
+            for item in reranked:
+                if item['index'] < len(valid_indices):
+                    reranked_original_indices.add(valid_indices[item['index']])
+
             for i, doc in enumerate(documents):
-                if i not in reranked_original_indices and i not in valid_indices:
+                if i not in reranked_original_indices:
                     doc_copy = doc.copy()
-                    doc_copy['rerank_score'] = 0.0
+                    # Use pre-rerank similarity as fallback (already in 0-100 range, normalize to 0-1)
+                    pre_score = doc.get('final_score', 0) or doc.get('similarity_score', 0) or 0
+                    if pre_score > 1:
+                        pre_score = pre_score / 100.0  # Convert percentage to 0-1
+                    # Apply a penalty so reranked docs are preferred over fallback
+                    doc_copy['rerank_score'] = max(0, pre_score * 0.5)  # 50% of original as fallback
                     doc_copy['_original_index'] = i
                     doc_copy['_rerank_skipped'] = True
                     result_docs.append(doc_copy)

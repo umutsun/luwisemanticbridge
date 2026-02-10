@@ -3616,8 +3616,16 @@ class SemanticSearchService:
             score_start = datetime.now()
             scored_results = []
             penalty_stats = {"temporal_count": 0, "toc_count": 0}
+            scored_source_ids = set()  # Dedup by source_id in scoring phase
 
             for result in raw_results:
+                # Dedup: skip if same source_id already scored (keep highest similarity first)
+                source_id_val = result.get("source_id")
+                if source_id_val is not None:
+                    source_id_key = f"{result.get('source_table', '')}:{source_id_val}"
+                    if source_id_key in scored_source_ids:
+                        continue
+                    scored_source_ids.add(source_id_key)
                 # Format content for human-readable display
                 formatted = self._format_content(result)
 
@@ -3981,10 +3989,11 @@ class SemanticSearchService:
                     )
 
                     if reranked_results and len(reranked_results) > 0:
-                        # v12.50: Combine rerank_score with source_priority, table_weight, and domain boosts
-                        # Reranker provides semantic relevance, we multiply by priority/weight and add domain boosts
+                        # v12.51: Combine rerank_score with source_priority, table_weight, and domain boosts
+                        # Hybrid approach: blend rerank score with pre-rerank score for robustness
                         for r in reranked_results:
                             rerank_score = r.get('rerank_score', 0) * 100  # Normalize to percentage
+                            pre_rerank_score = r.get('final_score', 0)  # Pre-rerank final_score (already %)
 
                             # Apply source_priority and table_weight as multiplicative factors
                             src_priority = r.get('source_priority', 1.0)
@@ -3996,11 +4005,19 @@ class SemanticSearchService:
                             direct_boost = r.get('direct_answer_boost', 0)
                             law_affinity = r.get('law_affinity_boost', 0)
 
-                            # Combined score: rerank * priority * weight + domain boosts + law affinity
-                            combined_score = priority_weighted_rerank + rate_boost + direct_boost + law_affinity
+                            # Hybrid scoring: if rerank gave a real score, use it; otherwise blend with pre-rerank
+                            if rerank_score > 0.1:
+                                # Good rerank score: 70% rerank + 30% pre-rerank for stability
+                                blended = priority_weighted_rerank * 0.7 + pre_rerank_score * 0.3
+                            else:
+                                # Jina returned ~0: fall back to pre-rerank score with penalty
+                                blended = pre_rerank_score * 0.5
+
+                            combined_score = blended + rate_boost + direct_boost + law_affinity
                             r['final_score'] = round(combined_score, 2)
                             r['rerank_base'] = round(rerank_score, 2)
                             r['rerank_priority_weighted'] = round(priority_weighted_rerank, 2)
+                            r['pre_rerank_score'] = round(pre_rerank_score, 2)
 
                         # Re-sort by combined final_score
                         reranked_results.sort(key=lambda x: x.get('final_score', 0), reverse=True)
@@ -4029,6 +4046,30 @@ class SemanticSearchService:
                 except Exception as e:
                     logger.error(f"Reranking failed: {e}. Using original order.")
                     timings["rerank_ms"] = 0
+
+            # === SOURCE DIVERSITY: Prevent single-table domination ===
+            # Allow max 60% of results from any single source_table
+            if len(scored_results) >= 5:
+                max_per_table = max(3, int(limit * 0.6))  # At least 3, max 60%
+                table_counts = {}
+                diverse_results = []
+                overflow_results = []
+                for r in scored_results:
+                    tbl = r.get("source_table", "unknown")
+                    table_counts[tbl] = table_counts.get(tbl, 0) + 1
+                    if table_counts[tbl] <= max_per_table:
+                        diverse_results.append(r)
+                    else:
+                        overflow_results.append(r)
+                # Fill remaining slots with overflow if needed
+                remaining = limit - len(diverse_results)
+                if remaining > 0 and overflow_results:
+                    diverse_results.extend(overflow_results[:remaining])
+                scored_results = diverse_results
+                # Log if diversity was enforced
+                for tbl, cnt in table_counts.items():
+                    if cnt > max_per_table:
+                        logger.info(f"📊 Diversity cap: {tbl} had {cnt} results, capped to {max_per_table}")
 
             final_results = scored_results[:limit]
 
