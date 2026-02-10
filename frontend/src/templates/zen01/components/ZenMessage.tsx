@@ -174,77 +174,31 @@ function cleanLLMResponse(content: string): string {
  * Also converts single newlines between sentences into proper paragraph breaks
  */
 function preprocessMarkdown(content: string): string {
-  // Known section header patterns in Turkish legal/tax documents
-  const sectionHeaders = [
-    // Simple strict RAG mode headers (v2 - simplified)
-    'CEVAP',
-    'ALINTI',
-    'ANSWER',
-    'QUOTE',
-    // Previous strict RAG mode headers (v1)
-    'BULGU',
-    'KAYNAK BİLGİSİ',
-    'KAYNAK BILGISI',
-    'SONUÇ',
-    'SONUC',
-    'DOĞRUDAN ALINTI',
-    'DOGRUDAN ALINTI',
-    'KAYNAK SINIRLAMASI',
-    'HUKUKİ SONUÇ',
-    'HUKUKI SONUÇ',
-    'KAYNAK DEĞERLENDİRMESİ',
-    'KAYNAK DEGERLENDIRMESI',
-    'DOĞRUDAN ALINTILAR',
-    'DOGRUDAN ALINTILAR',
-    'SINIRLAR VE RİSKLER',
-    'SINIRLAR VE RISKLER',
-    'SINIRLAR',
-    'İLGİLİ MEVZUAT',
-    'ILGILI MEVZUAT',
-    'KAYNAK LİSTESİ',
-    'KAYNAK LISTESI',
-    'KAYNAK YETERSİZLİĞİ',
-    'KAYNAK YETERSIZLIGI',
-    // Legacy headers
-    'Hukuki Değerlendirme',
-    'Varsayımlar',
-    'İlgili Mevzuat ve Dayanaklar',
-    'Haklar ve Riskler',
-    'Yapılacaklar',
-    'Senaryolar',
-    'Özet',
-    'Sonuç',
-    'Tavsiyeler',
-    'Öneriler',
-    'Dikkat Edilmesi Gerekenler',
-    'Yasal Dayanak',
-    'Kanuni Düzenleme',
-    'Uygulama',
-    'Değerlendirme',
-    'Açıklama',
-    'Genel Bilgi',
-    'Detaylar',
-    'Önemli Notlar',
-    'Uyarı',
-    // English strict mode headers
-    'FINDING',
-    'SOURCE INFO',
-    'CONCLUSION',
-    'DIRECT QUOTE',
-    'SOURCE LIMITATION',
-    'LEGAL CONCLUSION',
-    'SOURCE EVALUATION',
-    'DIRECT QUOTES',
-    'LIMITATIONS',
-    'INSUFFICIENT SOURCES',
-  ];
-
   let result = content;
 
-  // FIX INLINE NUMBERED LISTS (fallback for poorly formatted LLM output)
-  // Only intervene when 3+ numbered items are crammed into a single line/paragraph
-  // e.g., "şunlardır: 1. Xxx 2. Yyy 3. Zzz" → each on its own line
-  const inlineListPattern = /(?:[.!?:;]\s*)(\d{1,2})\.\s+\S[\s\S]*?(?:\s)(\d{1,2})\.\s+\S[\s\S]*?(?:\s)(\d{1,2})\.\s+\S/;
+  // ═══ STEP 1: Fix v4 numbered section headers ═══
+  // LLM often outputs "...text **2.\nÖzet Yanıt (Hüküm):**" or "...text **3. Mevzuat:**"
+  // These numbered bold headers MUST be on their own line with blank line before
+
+  // Fix broken bold headers where ** wraps the number: "**2.\nÖzet Yanıt (Hüküm):**"
+  // Normalize newlines inside bold markers first: "**2.\n" → "**2. "
+  result = result.replace(/\*\*(\d)\.\s*\n\s*/g, '**$1. ');
+
+  // Ensure numbered section headers get their own line: "...text **N. Header:**" → "...text\n\n**N. Header:**"
+  result = result.replace(/([^\n])\s*(\*\*[1-5]\.\s+[^*]+:\*\*)/g, '$1\n\n$2');
+
+  // Also handle non-bold numbered headers: "...text 1. Konu Başlığı:" → "...text\n\n**1. Konu Başlığı:**"
+  // Convert "N. Header:" to bold if not already bold (common LLM omission)
+  result = result.replace(/(?:^|\n)(\d)\.\s+(Konu Başlığı|Özet Yanıt|Mevzuat Analizi|Yasal Dayanaklar|Kritik Notlar)[^:\n]*:/gm,
+    '\n\n**$1. $2:**');
+
+  // ═══ STEP 2: Fix inline bold sub-headers ═══
+  // "...text **İşveren Seçimi:** ..." → "...text\n\n**İşveren Seçimi:** ..."
+  result = result.replace(/([^\n])(\s)(\*\*[^*]{2,50}:\*\*)/g, '$1\n\n$3');
+
+  // ═══ STEP 3: Fix inline numbered lists ═══
+  // "...şunlardır: 1. Xxx 2. Yyy 3. Zzz" → each on its own line
+  const inlineListPattern = /(?:[.!?:;]\s*)\d{1,2}\.\s+\S[\s\S]*?(?:\s)\d{1,2}\.\s+\S[\s\S]*?(?:\s)\d{1,2}\.\s+\S/;
   if (inlineListPattern.test(result)) {
     result = result.replace(/([.!?:;,])\s+(\d{1,2})\.\s+/g, (match, punct, num) => {
       const numInt = parseInt(num, 10);
@@ -255,29 +209,26 @@ function preprocessMarkdown(content: string): string {
     });
   }
 
-  // CRITICAL FIX: Convert single newlines between sentences to paragraph breaks
-  // Pattern: sentence ending (. ! ?) + optional citation [1][2] + single newline + capital letter
-  // This fixes LLM output that has single newlines instead of double newlines between paragraphs
+  // ═══ STEP 4: Fix single newlines between paragraphs ═══
+  // "...sentence [1].\nNext sentence..." → double newline
   result = result
-    // Match: period/punctuation + optional citation + single newline + capital letter
     .replace(/([.!?])(\s*(?:\[\d+\]|\[Kaynak\s*\d+\]|\[Source\s*\d+\])+)?\n(?!\n)([A-ZÇĞİÖŞÜ])/gi, '$1$2\n\n$3')
-    // Also handle Turkish sentences ending with percentage or number
     .replace(/([0-9%])(\s*(?:\[\d+\]|\[Kaynak\s*\d+\]|\[Source\s*\d+\])+)?\.\s*\n(?!\n)([A-ZÇĞİÖŞÜ])/gi, '$1$2.\n\n$3');
 
-  // PARAGRAPH SPLITTING: Count existing paragraphs and sentences
+  // ═══ STEP 5: Handle warning emoji and dividers ═══
+  result = result.replace(/([^\n])(⚠️)/g, '$1\n\n$2');
+  result = result.replace(/([^\n])(---)/g, '$1\n\n$2');
+
+  // ═══ STEP 6: Paragraph breaking for wall-of-text (no structure) ═══
   const paragraphCount = (result.match(/\n\n/g) || []).length;
   const sentenceCount = (result.match(/[.!?](?:\s*\[\d+\])*\s/g) || []).length;
-  // Check if content has bold section headers (structured output from v4+ prompt)
   const hasBoldHeaders = (result.match(/\*\*[^*]+:\*\*/g) || []).length >= 2;
 
-  // AGGRESSIVE PARAGRAPH BREAKING: Only for unstructured single-block text
-  // Skip if content already has bold headers (well-formatted LLM output)
   if (!hasBoldHeaders && sentenceCount >= 4 && paragraphCount < 2) {
     let sentenceCounter = 0;
     result = result.replace(/([.!?])(\s*(?:\[\d+\]|\[Kaynak\s*\d+\]|\[Source\s*\d+\])*)(\s+)([A-ZÇĞİÖŞÜ])/g,
       (match, punct, citations, _space, nextChar) => {
         sentenceCounter++;
-        // Add paragraph break every 3 sentences
         if (sentenceCounter % 3 === 0) {
           return `${punct}${citations || ''}\n\n${nextChar}`;
         }
@@ -286,24 +237,7 @@ function preprocessMarkdown(content: string): string {
     );
   }
 
-  // Add line breaks before each known section header
-  sectionHeaders.forEach(header => {
-    // Match **Header** or **Header:** that's not at start of line
-    const pattern = new RegExp(`([^\\n])(\\s)(\\*\\*${header}:?\\*\\*)`, 'gi');
-    result = result.replace(pattern, '$1\n\n$3');
-  });
-
-  // Also handle generic bold text followed by colon as headers
-  // Pattern: space followed by **AnyText:** (with colon)
-  result = result.replace(/([^\n])(\s)(\*\*[^*]{2,30}:\*\*)/g, '$1\n\n$3');
-
-  // Handle ⚠️ warning emoji at start of sections
-  result = result.replace(/([^\n])(⚠️)/g, '$1\n\n$2');
-
-  // Handle --- section dividers
-  result = result.replace(/([^\n])(---)/g, '$1\n\n$2');
-
-  // Clean up excessive newlines (more than 2)
+  // ═══ STEP 7: Clean up ═══
   result = result.replace(/\n{3,}/g, '\n\n');
 
   return result;

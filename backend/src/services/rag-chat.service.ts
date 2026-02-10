@@ -5940,11 +5940,26 @@ Yani beyanname ile ödeme arasında **2 günlük** bir fark vardır.`;
   private fixMarkdownAndCitations(response: string, sources: any[]): string {
     let fixed = response;
 
-    // 1. Fix inline ## headings - ensure blank line before and after
+    // ═══ v4 FORMAT FIX: Numbered section headers ═══
+    // Fix broken bold headers: "**2.\nÖzet Yanıt:**" → "**2. Özet Yanıt:**"
+    fixed = fixed.replace(/\*\*(\d)\.\s*\n\s*/g, '**$1. ');
+
+    // Ensure numbered section headers get their own line
+    fixed = fixed.replace(/([^\n])\s*(\*\*[1-5]\.\s+[^*]+:\*\*)/g, '$1\n\n$2');
+
+    // Fix non-bold numbered headers: "1. Konu Başlığı:" → "\n\n**1. Konu Başlığı:**"
+    fixed = fixed.replace(/(?:^|\n)(\d)\.\s+(Konu Başlığı|Özet Yanıt|Mevzuat Analizi|Yasal Dayanaklar|Kritik Notlar)[^:\n]*:/gm,
+      '\n\n**$1. $2:**');
+
+    // Ensure bold sub-headers get their own line: "...text **İşveren Seçimi:** ..." → new line
+    fixed = fixed.replace(/([^\n])(\s)(\*\*[^*]{2,50}:\*\*)/g, '$1\n\n$3');
+
+    // ═══ Inline ## headings ═══
     fixed = fixed.replace(/([^\n])\s*(##\s)/g, '$1\n\n$2');
     fixed = fixed.replace(/(##[^\n]+)\n([^\n])/g, '$1\n\n$2');
 
-    // 2. Fix inline numbered items after citations: "[1] 2. item" → "[1]\n\n2. item"
+    // ═══ Inline numbered lists ═══
+    // "[1] 2. item" → "[1]\n\n2. item"
     fixed = fixed.replace(/(\[\d+\])\.?\s+(\d+)\.\s+/g, (match, citation, num) => {
       const numInt = parseInt(num, 10);
       if (numInt >= 1 && numInt <= 30) {
@@ -5953,23 +5968,7 @@ Yani beyanname ile ödeme arasında **2 günlük** bir fark vardır.`;
       return match;
     });
 
-    // 3. Remove orphaned numbered items BEFORE list formatting (bare "3." or "3. 4." with no text)
-    // These appear when LLM generates empty list items
-    fixed = fixed.replace(/\b(\d{1,2})\.\s*(?=\d{1,2}\.\s)/g, '');
-    fixed = fixed.replace(/\s+\d{1,2}\.\s*(?=\n|$)/g, '');
-
-    // 4. Convert inline numbered lists to proper markdown lists
-    // Find "N. text" patterns inline (not at line start) and add line breaks BEFORE the number
-    // Only match when followed by actual text content (3+ chars) to avoid orphaning "N." alone
-    fixed = fixed.replace(/(?<=[^\n])[ \t]+(\d{1,2})\.\s+(?=[A-ZÇĞİÖŞÜa-zçğıöşü]{3,})/g, (match, num) => {
-      const numInt = parseInt(num, 10);
-      if (numInt >= 1 && numInt <= 30) {
-        return `\n\n${num}. `;
-      }
-      return match;
-    });
-
-    // 5. Remove hallucinated citations (beyond available sources)
+    // ═══ Remove hallucinated citations ═══
     const maxCitations = sources.length;
     if (maxCitations > 0) {
       for (let i = maxCitations + 1; i <= 20; i++) {
@@ -5978,19 +5977,17 @@ Yani beyanname ile ödeme arasında **2 günlük** bir fark vardır.`;
       }
     }
 
-    // 5. Fix orphaned ** bold markers at start of response
-    // e.g., "** İzaha davet..." → "İzaha davet..." (broken bold with space)
+    // ═══ Fix orphaned bold markers ═══
     fixed = fixed.replace(/^\*\*\s+/, '');
-
-    // 6. Fix orphaned ** bold markers anywhere (unpaired)
-    // Count ** occurrences - if odd number, remove the first orphaned one
     const boldCount = (fixed.match(/\*\*/g) || []).length;
     if (boldCount % 2 !== 0) {
-      // Remove the first ** that is followed by a space (likely orphaned opening)
       fixed = fixed.replace(/\*\*\s+/, '');
     }
 
-    // 7. Clean up excessive blank lines (max 2 consecutive)
+    // ═══ Warning emoji on own line ═══
+    fixed = fixed.replace(/([^\n])(⚠️)/g, '$1\n\n$2');
+
+    // Clean up excessive blank lines
     fixed = fixed.replace(/\n{4,}/g, '\n\n\n');
 
     return fixed;
