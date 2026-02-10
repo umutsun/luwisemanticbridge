@@ -4308,14 +4308,15 @@ Yani beyanname ile ödeme arasında **2 günlük** bir fark vardır.`;
         const hasArticleSections = routingSchema.routes.FOUND.format.articleSections &&
                                    routingSchema.routes.FOUND.format.articleSections.length > 0;
 
-        // v12.53.1: Detect structured numbered-section format (language-agnostic)
-        // Any response with **N. SomeHeader:** pattern means the system prompt defined the format
+        // v12.53.5: Detect if system prompt defines its own format (few-shot example, format template, etc.)
+        // If so, skip enforceResponseFormat entirely - the prompt controls the output format
+        const promptDefinesFormat = /ÖRNEK YANIT|YANIT FORMATI|EXAMPLE RESPONSE|RESPONSE FORMAT/i.test(systemPrompt);
+        // Also detect structured numbered-section format in LLM output
         const isV4Format = /\*\*[1-5]\.\s+[^*]+:\*\*/m.test(response.content);
 
-        if (isV4Format) {
-          // v12.53.2: Skip enforceResponseFormat entirely for v4-formatted responses
-          // The system prompt defines the structure - post-processing should NOT restructure
-          console.log(`[v12.53.2] V4_FORMAT_DETECTED: Skipping enforceResponseFormat entirely (prompt defines structure)`);
+        if (promptDefinesFormat || isV4Format) {
+          // v12.53.5: Skip enforceResponseFormat when prompt defines its own format
+          console.log(`[v12.53.5] PROMPT_FORMAT_DETECTED: Skipping enforceResponseFormat (promptDefines=${promptDefinesFormat}, v4=${isV4Format})`);
           // Only strip ALINTI/QUOTE sections (UI shows citations separately)
           response.content = response.content.replace(/\*\*ALINTI\*\*[\s\S]*?(?=\*\*[A-Z\u00C7\u011E\u0130\u00D6\u015E\u00DC]|\n\n\n|$)/gi, '').trim();
           response.content = response.content.replace(/\*\*QUOTE\*\*[\s\S]*?(?=\*\*[A-Z]|\n\n\n|$)/gi, '').trim();
@@ -4429,11 +4430,12 @@ Yani beyanname ile ödeme arasında **2 günlük** bir fark vardır.`;
           const isDeadlineQueryFast = this.detectDeadlineIntent(message) !== null;
           const hasArticleSectionsFast = routingSchema.routes.FOUND.format.articleSections &&
                                          routingSchema.routes.FOUND.format.articleSections.length > 0;
+          const promptDefinesFormatFast = /ÖRNEK YANIT|YANIT FORMATI|EXAMPLE RESPONSE|RESPONSE FORMAT/i.test(systemPrompt);
           const isV4FormatFast = /\*\*[1-5]\.\s+[^*]+:\*\*/m.test(response.content);
 
-          if (isV4FormatFast) {
-            // v12.53.2: Skip enforceResponseFormat entirely for v4-formatted responses
-            console.log(`[v12.53.2] V4_FORMAT_DETECTED (fast): Skipping enforceResponseFormat`);
+          if (promptDefinesFormatFast || isV4FormatFast) {
+            // v12.53.5: Skip enforceResponseFormat when prompt defines its own format
+            console.log(`[v12.53.5] PROMPT_FORMAT_DETECTED (fast): Skipping enforceResponseFormat (promptDefines=${promptDefinesFormatFast}, v4=${isV4FormatFast})`);
             fastModeResponse = response.content
               .replace(/\*\*ALINTI\*\*[\s\S]*?(?=\*\*[A-Z\u00C7\u011E\u0130\u00D6\u015E\u00DC]|\n\n\n|$)/gi, '')
               .replace(/\*\*QUOTE\*\*[\s\S]*?(?=\*\*[A-Z]|\n\n\n|$)/gi, '').trim();
@@ -5786,8 +5788,9 @@ Yani beyanname ile ödeme arasında **2 günlük** bir fark vardır.`;
   private fixMarkdownAndCitations(response: string, sources: any[], sectionHeaders?: string[]): string {
     let fixed = response;
 
-    // ═══ Remove unwanted LLM wrapper headers (universal) ═══
+    // ═══ Remove unwanted LLM wrapper headers/labels (universal) ═══
     fixed = fixed.replace(/^\s*\*\*(?:CEVAP|ANSWER|RESPONSE|REPLY)\*\*\s*\n*/gi, '');
+    fixed = fixed.replace(/^\s*(?:DEGERLENDIRME|DEĞERLENDİRME)\s*:\s*/gi, '');
 
     // ═══ Fix broken bold headers ═══
     // "**2.\nHeader:**" or "**2.\n\nHeader:**" → "**2. Header:**"
