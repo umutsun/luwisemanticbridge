@@ -5790,8 +5790,9 @@ Yani beyanname ile ödeme arasında **2 günlük** bir fark vardır.`;
     fixed = fixed.replace(/^\s*\*\*(?:CEVAP|ANSWER|RESPONSE|REPLY)\*\*\s*\n*/gi, '');
 
     // ═══ Fix broken bold headers ═══
-    // "**2.\nHeader:**" → "**2. Header:**"
-    fixed = fixed.replace(/\*\*(\d)\.\s*\n\s*/g, '**$1. ');
+    // "**2.\nHeader:**" or "**2.\n\nHeader:**" → "**2. Header:**"
+    // LLM sometimes breaks section number from title with one or more newlines
+    fixed = fixed.replace(/\*\*(\d)\.\s*\n+\s*/g, '**$1. ');
 
     // Fix split bold headers: "**3. Title Part1 ve **\n**Part2:**" → "**3. Title Part1 ve Part2:**"
     // LLM sometimes wraps long titles causing bold to split across lines

@@ -1016,16 +1016,16 @@ class SemanticSearchService:
             dedup_stats = f"seen_ids={len(seen_ids)}, seen_source_ids={len(seen_source_ids)}"
             logger.info(f"[VectorSearch] Cross-table dedup: {dedup_stats}")
 
-            # Sort by similarity-dominant weighted score with capped source weight bonus
-            # Similarity is 0-1 range, source weight adds up to 15% bonus (capped)
+            # v12.54: Sort by similarity + hierarchy-aware weight bonus
+            # Similarity is 0-1 range, table_weight provides additive bonus
             def get_weighted_score(result):
                 sim = float(result['similarity_score'])
                 source_table = result.get('source_table', '')
                 # Use _get_table_weight which handles csv_ prefix mismatch
-                source_weight = self._get_table_weight(source_table, settings) if settings.source_table_weights else 0.5
-                # Cap source weight bonus to prevent single table domination
-                # Weight 2.0 → 0.15 bonus, weight 0.5 → 0.0375 bonus (on 0-1 scale)
-                weight_bonus = min(source_weight * 0.075, 0.15)
+                source_weight = self._get_table_weight(source_table, settings) if settings.source_table_weights else 1.0
+                # Hierarchy bonus: (weight - 1.0) * 0.10 on 0-1 scale
+                # kanun tw=2.0 → +0.10, sirkuler tw=1.8 → +0.08, makale tw=1.0 → 0, sorucevap tw=0.6 → -0.04
+                weight_bonus = (source_weight - 1.0) * 0.10
                 return sim + weight_bonus
 
             all_results.sort(key=get_weighted_score, reverse=True)
@@ -4101,8 +4101,10 @@ class SemanticSearchService:
                     )
 
                     if reranked_results and len(reranked_results) > 0:
-                        # v12.51: Combine rerank_score with source_priority, table_weight, and domain boosts
-                        # Hybrid approach: blend rerank score with pre-rerank score for robustness
+                        # v12.54: Combine rerank_score with source_priority, table_weight, and domain boosts
+                        # Hierarchy-aware scoring: table_weight acts as both multiplier AND additive bonus
+                        # This ensures high-authority sources (kanun, sirkuler) rank above lower ones
+                        # even when rerank scores are similar
                         for r in reranked_results:
                             rerank_score = r.get('rerank_score', 0) * 100  # Normalize to percentage
                             pre_rerank_score = r.get('final_score', 0)  # Pre-rerank final_score (already %)
@@ -4111,6 +4113,15 @@ class SemanticSearchService:
                             src_priority = r.get('source_priority', 1.0)
                             tbl_weight = r.get('table_weight', 1.0)
                             priority_weighted_rerank = rerank_score * src_priority * tbl_weight
+
+                            # v12.54: Additive hierarchy bonus based on table_weight
+                            # tw=2.0 (kanun, weight=100) → +15 points
+                            # tw=1.8 (sirkuler, weight=90) → +12 points
+                            # tw=1.4 (danistay, weight=70) → +6 points
+                            # tw=1.0 (makale, weight=50) → 0 points (baseline)
+                            # tw=0.6 (sorucevap, weight=30) → -6 points
+                            # Formula: (tbl_weight - 1.0) * 15 → centered at baseline 1.0
+                            hierarchy_bonus = (tbl_weight - 1.0) * 15.0
 
                             # Domain-specific additive boosts (already in percentage)
                             rate_boost = r.get('rate_article_boost', 0)
@@ -4125,11 +4136,12 @@ class SemanticSearchService:
                                 # Jina returned ~0: fall back to pre-rerank score with penalty
                                 blended = pre_rerank_score * 0.5
 
-                            combined_score = blended + rate_boost + direct_boost + law_affinity
+                            combined_score = blended + hierarchy_bonus + rate_boost + direct_boost + law_affinity
                             r['final_score'] = round(combined_score, 2)
                             r['rerank_base'] = round(rerank_score, 2)
                             r['rerank_priority_weighted'] = round(priority_weighted_rerank, 2)
                             r['pre_rerank_score'] = round(pre_rerank_score, 2)
+                            r['hierarchy_bonus'] = round(hierarchy_bonus, 2)
 
                         # Re-sort by combined final_score
                         reranked_results.sort(key=lambda x: x.get('final_score', 0), reverse=True)
@@ -4137,14 +4149,14 @@ class SemanticSearchService:
                         reranked = True
                         timings["rerank_ms"] = (datetime.now() - rerank_start).total_seconds() * 1000
 
-                        # Log top 3 reranked results with priority info
+                        # Log top 5 reranked results with priority info
                         top3_log = []
-                        for i, r in enumerate(reranked_results[:3]):
+                        for i, r in enumerate(reranked_results[:5]):
                             top3_log.append(
                                 f"#{i+1} {r.get('source_table', '?')} "
                                 f"(rerank={r.get('rerank_base', 0):.1f}, "
-                                f"pri={r.get('source_priority', 0):.2f}, "
                                 f"tw={r.get('table_weight', 0):.2f}, "
+                                f"hb={r.get('hierarchy_bonus', 0):+.1f}, "
                                 f"final={r.get('final_score', 0):.1f})"
                             )
                         logger.info(f"🔄 Jina rerank applied: {len(reranked_results)} results in {timings['rerank_ms']:.1f}ms\n  " + "\n  ".join(top3_log))
