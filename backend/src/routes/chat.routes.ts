@@ -163,7 +163,8 @@ router.post('/api/v2/chat', authenticateToken, async (req: AuthenticatedRequest,
 
     console.log('Chat response:', {
       hasResponse: !!result.response,
-      sourcesCount: result.sources?.length || 0
+      sourcesCount: result.sources?.length || 0,
+      responseFirst200: result.response?.substring(0, 200)
     });
 
     // 📑 Citation reorder: Sort by usage frequency and remove unused
