@@ -22,6 +22,13 @@ async def init_db() -> asyncpg.Pool:
         if not database_url:
             raise ValueError("DATABASE_URL not configured")
 
+        async def _init_connection(conn):
+            """Set session-level parameters for each new connection"""
+            # HNSW ef_search controls recall quality for vector similarity search
+            # Default (40) misses results in large tables (200K+ rows)
+            # 200 provides good recall without significant performance cost
+            await conn.execute("SET hnsw.ef_search = 200")
+
         _pool = await asyncpg.create_pool(
             database_url,
             min_size=5,
@@ -29,6 +36,7 @@ async def init_db() -> asyncpg.Pool:
             command_timeout=60,
             max_queries=50000,
             max_cached_statement_lifetime=300,
+            init=_init_connection,
         )
 
         # Test connection
