@@ -872,34 +872,45 @@ class SemanticSearchService:
                         ]
                         logger.info(f"[VectorSearch] Priority sources (filtered): {priority_sources}")
 
-                    # Query priority sources to ensure they're represented
-                    for priority_source in priority_sources:
-                        priority_query = """
-                            SELECT
-                                id, content, source_table, source_type, source_id, metadata,
-                                1 - (embedding <=> $1::vector) as similarity_score,
-                                'unified' as search_source
-                            FROM unified_embeddings
-                            WHERE embedding IS NOT NULL
-                            AND source_table = $2
-                            ORDER BY embedding <=> $1::vector
-                            LIMIT 3
-                        """
+                    # v12.55: Query priority sources in PARALLEL for speed
+                    # Sequential: 11 queries x ~130ms = ~1430ms
+                    # Parallel:   11 queries in ~200ms (pool handles concurrency)
+                    priority_query = """
+                        SELECT
+                            id, content, source_table, source_type, source_id, metadata,
+                            1 - (embedding <=> $1::vector) as similarity_score,
+                            'unified' as search_source
+                        FROM unified_embeddings
+                        WHERE embedding IS NOT NULL
+                        AND source_table = $2
+                        ORDER BY embedding <=> $1::vector
+                        LIMIT 3
+                    """
+
+                    async def _fetch_priority(table_name):
                         try:
-                            priority_rows = await pool.fetch(priority_query, embedding_str, priority_source)
-                            for row in priority_rows:
-                                source_id = row.get('source_id')
-                                if float(row['similarity_score']) >= similarity_threshold and row['id'] not in seen_ids:
-                                    if source_id and source_id in seen_source_ids:
-                                        continue
-                                    all_results.append(dict(row))
-                                    seen_ids.add(row['id'])
-                                    if source_id:
-                                        seen_source_ids.add(source_id)
-                            if priority_rows:
-                                logger.info(f"[VectorSearch] Priority source {priority_source}: {len(priority_rows)} results")
+                            rows = await pool.fetch(priority_query, embedding_str, table_name)
+                            return table_name, rows
                         except Exception as e:
-                            logger.debug(f"Priority source {priority_source} query skipped: {e}")
+                            logger.debug(f"Priority source {table_name} query skipped: {e}")
+                            return table_name, []
+
+                    priority_results = await asyncio.gather(
+                        *[_fetch_priority(t) for t in priority_sources]
+                    )
+
+                    for table_name, priority_rows in priority_results:
+                        for row in priority_rows:
+                            source_id = row.get('source_id')
+                            if float(row['similarity_score']) >= similarity_threshold and row['id'] not in seen_ids:
+                                if source_id and source_id in seen_source_ids:
+                                    continue
+                                all_results.append(dict(row))
+                                seen_ids.add(row['id'])
+                                if source_id:
+                                    seen_source_ids.add(source_id)
+                        if priority_rows:
+                            logger.info(f"[VectorSearch] Priority source {table_name}: {len(priority_rows)} results")
 
                     # Then query all sources for general results
                     unified_query = """
