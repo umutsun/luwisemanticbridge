@@ -3482,7 +3482,7 @@ Lütfen "beyanname" veya "ödeme" yazarak belirtin.`;
           const defaultSummaryFallback =
             `Sources are numbered [1], [2], etc. above.\n` +
             `• Cite claims with [1], [2], [3] at END of sentences\n` +
-            `• Follow the YANIT YAPISI format above — use bold section headers\n` +
+            `• Follow the FORMAT KURALLARI above — use bold section headers\n` +
             `• Synthesize {sourceCount} sources. Target ~{maxLength} chars.`;
 
           const defaultSummaryEn = defaultSummaryFallback;
@@ -4400,7 +4400,7 @@ Yani beyanname ile ödeme arasında **2 günlük** bir fark vardır.`;
           const isDeadlineQueryFast = this.detectDeadlineIntent(message) !== null;
           const hasArticleSectionsFast = routingSchema.routes.FOUND.format.articleSections &&
                                          routingSchema.routes.FOUND.format.articleSections.length > 0;
-          const promptDefinesFormatFast = /ÖRNEK YANIT|YANIT FORMATI|EXAMPLE RESPONSE|RESPONSE FORMAT/i.test(systemPrompt);
+          const promptDefinesFormatFast = /ÖRNEK YANIT|ÖRNEK:|YANIT FORMATI|FORMAT KURALLARI|EXAMPLE RESPONSE|EXAMPLE:|RESPONSE FORMAT/i.test(systemPrompt);
           const isV4FormatFast = /\*\*[1-5]\.\s+[^*]+:\*\*/m.test(response.content);
 
           if (promptDefinesFormatFast || isV4FormatFast) {
@@ -5762,11 +5762,16 @@ Yani beyanname ile ödeme arasında **2 günlük** bir fark vardır.`;
   private extractFormatReminder(systemPrompt: string): string {
     if (!systemPrompt) return '';
 
+    // Only extract from FORMAT KURALLARI section, not from ÖRNEK section
+    // This prevents example-specific sub-headers from leaking into the format reminder
+    const formatSectionMatch = systemPrompt.match(/FORMAT KURALLARI[^\n]*\n([\s\S]*?)(?=ÖRNEK|KAYNAK KULLANIMI|$)/i);
+    const formatSection = formatSectionMatch ? formatSectionMatch[1] : systemPrompt;
+
     // Extract numbered section labels from patterns like "1) BAŞLIK:", "2) ÖZET YANIT:", etc.
     const sectionPattern = /(\d+)\)\s+([A-ZÇĞİÖŞÜa-zçğıöşü\s]+?):/g;
     const sections: string[] = [];
     let match;
-    while ((match = sectionPattern.exec(systemPrompt)) !== null) {
+    while ((match = sectionPattern.exec(formatSection)) !== null) {
       sections.push(`**${match[1]}. ${match[2].trim()}:**`);
     }
 
@@ -5774,10 +5779,10 @@ Yani beyanname ile ödeme arasında **2 günlük** bir fark vardır.`;
       return `FORMAT REMINDER: ${sections.join(' > ')}\nBold headers, citations [1],[2] after claims, short paragraphs.\n\n`;
     }
 
-    // Fallback: check for bold-header patterns like "**1. Section:**" in system prompt
+    // Fallback: check for bold-header patterns like "**1. Section:**" in format section
     const boldPattern = /\*\*(\d+)\.\s+([^*:]+):\*\*/g;
     const boldSections: string[] = [];
-    while ((match = boldPattern.exec(systemPrompt)) !== null) {
+    while ((match = boldPattern.exec(formatSection)) !== null) {
       boldSections.push(`**${match[1]}. ${match[2].trim()}:**`);
     }
 
@@ -5785,12 +5790,11 @@ Yani beyanname ile ödeme arasında **2 günlük** bir fark vardır.`;
       return `FORMAT REMINDER: ${boldSections.join(' > ')}\nBold headers, citations [1],[2] after claims, short paragraphs.\n\n`;
     }
 
-    // Fallback 2: Extract standalone bold headers like **Mevzuat Analizi ve Detaylar:** from example
+    // Fallback 2: standalone bold headers from format section only
     const standaloneBoldPattern = /\*\*([A-ZÇĞİÖŞÜ][^*:]{3,50}):\*\*/g;
     const standaloneSections: string[] = [];
-    while ((match = standaloneBoldPattern.exec(systemPrompt)) !== null) {
+    while ((match = standaloneBoldPattern.exec(formatSection)) !== null) {
       const title = match[1].trim();
-      // Skip example content (sentences that happen to be bold)
       if (title.length > 50 || /\[|\]/g.test(title)) continue;
       if (!standaloneSections.includes(`**${title}:**`)) {
         standaloneSections.push(`**${title}:**`);
