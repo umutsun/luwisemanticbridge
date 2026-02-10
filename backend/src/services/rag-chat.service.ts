@@ -5949,6 +5949,19 @@ Yani beyanname ile ödeme arasında **2 günlük** bir fark vardır.`;
   private fixMarkdownAndCitations(response: string, sources: any[]): string {
     let fixed = response;
 
+    // ═══ v4.4: Remove unwanted legacy headers ═══
+    // LLM sometimes adds **CEVAP** header despite system prompt saying not to
+    fixed = fixed.replace(/^\s*\*\*CEVAP\*\*\s*\n*/gi, '');
+    fixed = fixed.replace(/^\s*\*\*ANSWER\*\*\s*\n*/gi, '');
+
+    // ═══ v4.4: Fix split section headers ═══
+    // LLM writes: "**3. Mevzuat Analizi ve ****Tanım ve Kapsam:**" (split bold)
+    // Fix to: "**3. Mevzuat Analizi ve Detaylar:**\n\n**Tanım ve Kapsam:**"
+    fixed = fixed.replace(
+      /\*\*(\d)\.\s+(Konu Başlığı|Özet Yanıt|Mevzuat Analizi|Yasal Dayanaklar|Kritik Notlar)[^*]*\*\*\s*\*\*([^*]+:\*\*)/g,
+      '**$1. $2 ve Detaylar:**\n\n**$3'
+    );
+
     // ═══ v4.2 FORMAT FIX: Numbered section headers ═══
     const sectionKeywords = ['Konu Başlığı', 'Özet Yanıt', 'Mevzuat Analizi', 'Yasal Dayanaklar', 'Kritik Notlar'];
     const sectionKeywordsJoined = sectionKeywords.join('|');

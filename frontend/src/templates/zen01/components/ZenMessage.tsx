@@ -153,6 +153,9 @@ function cleanLLMResponse(content: string): string {
   if (!content) return '';
 
   return content
+    // Remove unwanted **CEVAP** / **ANSWER** headers (v4.4)
+    .replace(/^\s*\*\*CEVAP\*\*\s*\n*/gi, '')
+    .replace(/^\s*\*\*ANSWER\*\*\s*\n*/gi, '')
     // Remove legacy plain-text section labels ONLY (not bold markdown headers)
     // These are from old prompt versions that used UPPERCASE: labels without markdown
     .replace(/^KONU:\s*\n?/gim, '')
@@ -175,6 +178,14 @@ function cleanLLMResponse(content: string): string {
  */
 function preprocessMarkdown(content: string): string {
   let result = content;
+
+  // ═══ STEP 0: Fix split bold section headers (v4.4) ═══
+  // LLM writes: "**3. Mevzuat Analizi ve ****Tanım ve Kapsam:**" (split bold)
+  // Fix to: "**3. Mevzuat Analizi ve Detaylar:**\n\n**Tanım ve Kapsam:**"
+  result = result.replace(
+    /\*\*(\d)\.\s+(Konu Başlığı|Özet Yanıt|Mevzuat Analizi|Yasal Dayanaklar|Kritik Notlar)[^*]*\*\*\s*\*\*([^*]+:\*\*)/g,
+    '**$1. $2 ve Detaylar:**\n\n**$3'
+  );
 
   // ═══ STEP 1: Fix v4 numbered section headers ═══
   // Fix broken bold headers: "**2.\nÖzet Yanıt:**" → "**2. Özet Yanıt:**"
