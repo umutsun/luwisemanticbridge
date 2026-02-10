@@ -1635,6 +1635,71 @@ class SemanticSearchService:
 
         return None
 
+    # === LAW CODE AFFINITY BOOST (v12.53) ===
+    def _calculate_law_code_affinity(
+        self,
+        result: Dict[str, Any],
+        detected_law_code: str
+    ) -> Tuple[float, Dict[str, Any]]:
+        """
+        v12.53: Boost/penalize results based on detected law code in query.
+
+        When user mentions a specific law (e.g., "Gelir Vergisi Kanunu") without
+        a specific article number, boost results from that law and penalize
+        results from other laws (e.g., Kurumlar Vergisi).
+
+        This is lighter than article anchoring - only affects kanun/mevzuat chunks,
+        not özelge/makale/sirküler (which can legitimately reference multiple laws).
+
+        Returns:
+            Tuple of (boost_value, details_dict)
+        """
+        source_table = (result.get("source_table") or "").lower()
+        title = (result.get("title") or "").upper()
+        content_preview = ((result.get("content") or "") + " " + (result.get("full_content") or ""))[:800].upper()
+
+        # Only apply affinity to kanun/mevzuat chunks - these are law texts
+        # Don't penalize özelge, makale, sirküler, sorucevap - they can reference any law
+        is_law_chunk = "kanunlar" in source_table or "mevzuat" in source_table
+
+        if not is_law_chunk:
+            return 0.0, {"law_affinity": "not_applicable", "reason": "non-law source"}
+
+        # Get all variations for the detected law code
+        target_variations = self.LAW_CODES.get(detected_law_code, [detected_law_code])
+        target_names_upper = [v.upper() for v in target_variations]
+
+        # Check if this chunk belongs to the target law
+        belongs_to_target = any(name in title for name in target_names_upper)
+        if not belongs_to_target:
+            # Also check content for law name
+            belongs_to_target = any(name in content_preview for name in target_names_upper)
+
+        if belongs_to_target:
+            # Boost: this is from the correct law
+            return 0.15, {"law_affinity": "match", "law_code": detected_law_code}
+
+        # Check if it belongs to a DIFFERENT law (not just unrelated content)
+        belongs_to_other = False
+        other_law = None
+        for code, variations in self.LAW_CODES.items():
+            if code == detected_law_code:
+                continue
+            for v in variations:
+                if v.upper() in title:
+                    belongs_to_other = True
+                    other_law = code
+                    break
+            if belongs_to_other:
+                break
+
+        if belongs_to_other:
+            # Penalize: this is from a different law
+            return -0.25, {"law_affinity": "wrong_law", "law_code": detected_law_code, "actual_law": other_law}
+
+        # Neutral: can't determine law from title
+        return 0.0, {"law_affinity": "unknown", "law_code": detected_law_code}
+
     # === DIRECT ANSWER DETECTION (v12.47) ===
     # Patterns for "what is the rate/amount?" type questions
     RATE_QUESTION_PATTERNS = [
@@ -3438,18 +3503,23 @@ class SemanticSearchService:
         if is_rate_question:
             logger.info(f"📊 Rate question detected: '{query[:60]}...' - will boost direct rate answers")
 
-        # === RATE ARTICLE BOOST (v12.48): Detect law code from natural language ===
-        # For rate questions like "kurumlar vergisi oranı kaçtır?", detect the law code
-        # and prepare to boost the rate-defining article from schema configuration
+        # === LAW CODE DETECTION (v12.53): Detect law code from natural language for ALL queries ===
+        # Used for: (1) Rate article boost, (2) Law code affinity boost/penalty
+        detected_law_code: Optional[str] = None
+        # First try: article_query already has the law code
+        if article_query:
+            detected_law_code = article_query.get("law_code")
+        # Second try: natural language detection (e.g., "Gelir Vergisi Kanunu" → GVK)
+        if not detected_law_code:
+            detected_law_code = self._detect_law_code_from_query(query)
+        if detected_law_code and not article_anchoring_enabled:
+            logger.info(f"📋 Law code affinity: {detected_law_code} (no article number, will boost matching law chunks)")
+
+        # === RATE ARTICLE BOOST (v12.48): Prepare rate-defining article boost ===
         rate_question_law_code: Optional[str] = None
         law_code_config: Optional[LawCodeConfig] = None
         if is_rate_question:
-            rate_question_law_code = self._detect_law_code_from_query(query)
-            # Fallback: use article_query's law_code if natural language detection failed
-            if not rate_question_law_code and article_query:
-                rate_question_law_code = article_query.get("law_code")
-                if rate_question_law_code:
-                    logger.info(f"📊 Rate law code from article detection fallback: {rate_question_law_code}")
+            rate_question_law_code = detected_law_code
             if rate_question_law_code:
                 law_code_config = await self.get_law_code_config()
                 rate_article_config = law_code_config.rate_articles.get(rate_question_law_code)
@@ -3682,9 +3752,24 @@ class SemanticSearchService:
                         penalty_stats["rate_article_count"] += 1
                         penalty_stats["rate_article_boost_total"] += rate_article_boost
 
-                # Calculate final score (includes keyword boost, penalties, metadata boost, article boost, direct answer boost, AND rate article boost)
+                # === LAW CODE AFFINITY BOOST (v12.53) ===
+                # When query mentions a specific law but no article number, boost/penalize law chunks
+                law_affinity_boost = 0.0
+                if detected_law_code and not article_anchoring_enabled:
+                    law_affinity_boost, law_affinity_details = self._calculate_law_code_affinity(
+                        result, detected_law_code
+                    )
+                    if "law_affinity_match_count" not in penalty_stats:
+                        penalty_stats["law_affinity_match_count"] = 0
+                        penalty_stats["law_affinity_wrong_count"] = 0
+                    if law_affinity_boost > 0:
+                        penalty_stats["law_affinity_match_count"] += 1
+                    elif law_affinity_boost < 0:
+                        penalty_stats["law_affinity_wrong_count"] += 1
+
+                # Calculate final score (includes keyword boost, penalties, metadata boost, article boost, direct answer boost, rate article boost, AND law affinity)
                 # Penalty is negative, other boosts can be positive or negative
-                final_score = max(0, weighted_similarity + keyword_boost + retrieval_penalty + metadata_boost + article_boost + direct_answer_boost + rate_article_boost)
+                final_score = max(0, weighted_similarity + keyword_boost + retrieval_penalty + metadata_boost + article_boost + direct_answer_boost + rate_article_boost + law_affinity_boost)
 
                 scored_results.append({
                     "id": result["id"],
@@ -3701,6 +3786,7 @@ class SemanticSearchService:
                     "article_boost": round(article_boost * 100, 2),
                     "direct_answer_boost": round(direct_answer_boost * 100, 2),  # v12.47
                     "rate_article_boost": round(rate_article_boost * 100, 2),  # v12.48
+                    "law_affinity_boost": round(law_affinity_boost * 100, 2),  # v12.53
                     "source_priority": round(source_priority, 2),
                     "table_weight": round(table_weight, 2),
                     "final_score": round(final_score * 100, 2),
@@ -3756,6 +3842,13 @@ class SemanticSearchService:
             if is_rate_question and penalty_stats.get("rate_article_count", 0) > 0:
                 avg_boost = penalty_stats["rate_article_boost_total"] / penalty_stats["rate_article_count"]
                 logger.info(f"📊 Rate article boost: {penalty_stats['rate_article_count']} results boosted for {rate_question_law_code}, avg={avg_boost*100:.1f}%")
+
+            # Log law code affinity statistics (v12.53)
+            if detected_law_code and not article_anchoring_enabled:
+                match_count = penalty_stats.get("law_affinity_match_count", 0)
+                wrong_count = penalty_stats.get("law_affinity_wrong_count", 0)
+                if match_count > 0 or wrong_count > 0:
+                    logger.info(f"📋 Law affinity ({detected_law_code}): {match_count} boosted, {wrong_count} penalized")
 
             # Sort by final score and limit
             scored_results.sort(key=lambda x: x["final_score"], reverse=True)
@@ -3992,7 +4085,12 @@ class SemanticSearchService:
                     # Rate article boost (v12.48)
                     "rate_question_law_code": rate_question_law_code,
                     "rate_article_boost_applied": penalty_stats.get("rate_article_count", 0) > 0 if is_rate_question else False,
-                    "rate_article_boost_count": penalty_stats.get("rate_article_count", 0)
+                    "rate_article_boost_count": penalty_stats.get("rate_article_count", 0),
+                    # Law code affinity (v12.53)
+                    "detected_law_code": detected_law_code,
+                    "law_affinity_applied": (detected_law_code is not None and not article_anchoring_enabled),
+                    "law_affinity_match_count": penalty_stats.get("law_affinity_match_count", 0),
+                    "law_affinity_wrong_count": penalty_stats.get("law_affinity_wrong_count", 0),
                 },
                 # Explicit boolean flags for Node.js consumption
                 "is_article_query": article_anchoring_enabled,
