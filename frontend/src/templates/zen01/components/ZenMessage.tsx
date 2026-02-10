@@ -177,24 +177,31 @@ function preprocessMarkdown(content: string): string {
   let result = content;
 
   // ═══ STEP 1: Fix v4 numbered section headers ═══
-  // LLM often outputs "...text **2.\nÖzet Yanıt (Hüküm):**" or "...text **3. Mevzuat:**"
-  // These numbered bold headers MUST be on their own line with blank line before
-
-  // Fix broken bold headers where ** wraps the number: "**2.\nÖzet Yanıt (Hüküm):**"
-  // Normalize newlines inside bold markers first: "**2.\n" → "**2. "
+  // Fix broken bold headers: "**2.\nÖzet Yanıt:**" → "**2. Özet Yanıt:**"
   result = result.replace(/\*\*(\d)\.\s*\n\s*/g, '**$1. ');
 
-  // Ensure numbered section headers get their own line: "...text **N. Header:**" → "...text\n\n**N. Header:**"
+  // Ensure bold numbered section headers get their own line
   result = result.replace(/([^\n])\s*(\*\*[1-5]\.\s+[^*]+:\*\*)/g, '$1\n\n$2');
 
-  // Also handle non-bold numbered headers: "...text 1. Konu Başlığı:" → "...text\n\n**1. Konu Başlığı:**"
-  // Convert "N. Header:" to bold if not already bold (common LLM omission)
-  result = result.replace(/(?:^|\n)(\d)\.\s+(Konu Başlığı|Özet Yanıt|Mevzuat Analizi|Yasal Dayanaklar|Kritik Notlar)[^:\n]*:/gm,
-    '\n\n**$1. $2:**');
+  // Fix non-bold numbered section headers ANYWHERE in text
+  // LLM writes: "...text [1]. 3. Mevzuat Analizi ve Detaylar:" inline without bold
+  const sectionKeywords = ['Konu Başlığı', 'Özet Yanıt', 'Mevzuat Analizi', 'Yasal Dayanaklar', 'Kritik Notlar'];
+  const sectionPattern = new RegExp(
+    `([.!?\\]]\\s*)(${['1','2','3','4','5'].join('|')})\\.\\s+(${sectionKeywords.join('|')})[^:]*:`,
+    'g'
+  );
+  result = result.replace(sectionPattern, (_match, before, num, keyword) => {
+    return `${before.trim()}\n\n**${num}. ${keyword}:**`;
+  });
+  // Also at line start
+  result = result.replace(/^(\d)\.\s+(Konu Başlığı|Özet Yanıt|Mevzuat Analizi|Yasal Dayanaklar|Kritik Notlar)[^:\n]*:/gm,
+    '**$1. $2:**');
 
   // ═══ STEP 2: Fix inline bold sub-headers ═══
-  // "...text **İşveren Seçimi:** ..." → "...text\n\n**İşveren Seçimi:** ..."
   result = result.replace(/([^\n])(\s)(\*\*[^*]{2,50}:\*\*)/g, '$1\n\n$3');
+
+  // Fix "N. -" list format → "N. " (remove redundant dash)
+  result = result.replace(/(\d{1,2})\.\s+-\s+/g, '$1. ');
 
   // ═══ STEP 3: Fix inline numbered lists ═══
   // "...şunlardır: 1. Xxx 2. Yyy 3. Zzz" → each on its own line

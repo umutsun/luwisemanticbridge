@@ -5907,15 +5907,29 @@ Yani beyanname ile ödeme arasında **2 günlük** bir fark vardır.`;
     // Fix broken bold headers: "**2.\nÖzet Yanıt:**" → "**2. Özet Yanıt:**"
     fixed = fixed.replace(/\*\*(\d)\.\s*\n\s*/g, '**$1. ');
 
-    // Ensure numbered section headers get their own line
+    // Ensure bold numbered section headers get their own line
     fixed = fixed.replace(/([^\n])\s*(\*\*[1-5]\.\s+[^*]+:\*\*)/g, '$1\n\n$2');
 
-    // Fix non-bold numbered headers: "1. Konu Başlığı:" → "\n\n**1. Konu Başlığı:**"
-    fixed = fixed.replace(/(?:^|\n)(\d)\.\s+(Konu Başlığı|Özet Yanıt|Mevzuat Analizi|Yasal Dayanaklar|Kritik Notlar)[^:\n]*:/gm,
-      '\n\n**$1. $2:**');
+    // Fix non-bold numbered section headers ANYWHERE in text (not just at line start)
+    // LLM often writes: "...text [1]. 3. Mevzuat Analizi ve Detaylar:" inline
+    // Match: N. <section keyword><optional extra text>:
+    const sectionKeywords = ['Konu Başlığı', 'Özet Yanıt', 'Mevzuat Analizi', 'Yasal Dayanaklar', 'Kritik Notlar'];
+    const sectionPattern = new RegExp(
+      `([.!?\\]]\\s*)(${['1','2','3','4','5'].join('|')})\\.\\s+(${sectionKeywords.join('|')})[^:]*:`,
+      'g'
+    );
+    fixed = fixed.replace(sectionPattern, (match, before, num, keyword) => {
+      return `${before.trim()}\n\n**${num}. ${keyword}:**`;
+    });
+    // Also handle at line start
+    fixed = fixed.replace(/^(\d)\.\s+(Konu Başlığı|Özet Yanıt|Mevzuat Analizi|Yasal Dayanaklar|Kritik Notlar)[^:\n]*:/gm,
+      '**$1. $2:**');
 
     // Ensure bold sub-headers get their own line: "...text **İşveren Seçimi:** ..." → new line
     fixed = fixed.replace(/([^\n])(\s)(\*\*[^*]{2,50}:\*\*)/g, '$1\n\n$3');
+
+    // Fix "N. -" list format (LLM writes "1. - item" instead of "1. item")
+    fixed = fixed.replace(/(\d{1,2})\.\s+-\s+/g, '$1. ');
 
     // ═══ Inline ## headings ═══
     fixed = fixed.replace(/([^\n])\s*(##\s)/g, '$1\n\n$2');
