@@ -231,16 +231,18 @@ class RerankService:
             logger.warning("Rerank: all documents had empty content, returning original order")
             return documents
 
-        # Call Jina API - get scores for all docs, but cap to avoid rate limits
-        # Jina has 100K tokens/min limit; with 1500 char/doc, ~20 docs = ~30K tokens
-        max_docs_for_jina = min(len(doc_texts), 20)
+        # v12.55: Use config.top_n from settings (rerankTopN) for Jina API
+        # This tells Jina to only return top N results, reducing response size
+        # Previously ignored: all docs were scored regardless of rerankTopN setting
+        max_docs_for_jina = min(len(doc_texts), 15)
+        jina_top_n = min(config.top_n or 10, max_docs_for_jina)
         try:
             reranked = await self._call_jina_api(
                 query=query,
                 documents=doc_texts[:max_docs_for_jina],
                 model=config.model,
                 api_key=config.api_key,
-                top_n=max_docs_for_jina  # Score all sent docs
+                top_n=jina_top_n  # Only return top N from Jina
             )
 
             elapsed = (datetime.now() - start_time).total_seconds() * 1000
