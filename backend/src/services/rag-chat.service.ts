@@ -5138,8 +5138,11 @@ Yani beyanname ile ödeme arasında **2 günlük** bir fark vardır.`;
         }
       }
 
+      // v12.53.1: Extract section headers from system prompt for dynamic header fixing
+      const promptSectionHeaders = (systemPrompt.match(/\*\*\d+\.\s+[^*]+:\*\*/g) || []) as string[];
+
       // FIX: Ensure proper markdown formatting and remove hallucinated citations
-      finalResponse = this.fixMarkdownAndCitations(finalResponse, limitedSources);
+      finalResponse = this.fixMarkdownAndCitations(finalResponse, limitedSources, promptSectionHeaders);
 
       // 🔧 v12 FIX: Auto-add citations to date claims before sanitizer removes them
       // This fixes the issue where model writes dates but forgets citations
@@ -5163,7 +5166,7 @@ Yani beyanname ile ödeme arasında **2 günlük** bir fark vardır.`;
       }
 
       // v4.2: Re-apply markdown fixes AFTER sanitizer (sanitizer may affect formatting)
-      finalResponse = this.fixMarkdownAndCitations(finalResponse, limitedSources);
+      finalResponse = this.fixMarkdownAndCitations(finalResponse, limitedSources, promptSectionHeaders);
 
       // 🔍 DEBUG v12: Log response AFTER sanitizer
       const has24After = /24|yirmidört/i.test(finalResponse);
@@ -5765,7 +5768,7 @@ Yani beyanname ile ödeme arasında **2 günlük** bir fark vardır.`;
    * @param sources - Source objects with metadata
    * @returns Fixed response text
    */
-  private fixMarkdownAndCitations(response: string, sources: any[]): string {
+  private fixMarkdownAndCitations(response: string, sources: any[], sectionHeaders?: string[]): string {
     let fixed = response;
 
     // ═══ Remove unwanted LLM wrapper headers (universal) ═══
@@ -5816,6 +5819,35 @@ Yani beyanname ile ödeme arasında **2 günlük** bir fark vardır.`;
       for (let i = maxCitations + 1; i <= 20; i++) {
         const pattern = new RegExp(`\\[${i}\\]`, 'g');
         fixed = fixed.replace(pattern, '');
+      }
+    }
+
+    // ═══ Schema-driven section header fix (dynamic, not hardcoded) ═══
+    // If section headers were extracted from system prompt, ensure they're bold in response
+    if (sectionHeaders && sectionHeaders.length > 0) {
+      for (const header of sectionHeaders) {
+        // Extract the section number and title from "**N. Title:**"
+        const headerMatch = header.match(/\*\*(\d+)\.\s+(.+?):\*\*/);
+        if (!headerMatch) continue;
+        const [, num, title] = headerMatch;
+        // Escape regex special chars in title
+        const escapedTitle = title.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        // Fix non-bold version: "N. Title:" → "**N. Title:**"
+        const nonBoldPattern = new RegExp(
+          `(?:^|\\n)\\s*${num}\\.\\s+${escapedTitle}[^:\\n]*:(?!\\*\\*)`,
+          'gm'
+        );
+        fixed = fixed.replace(nonBoldPattern, (match) => {
+          if (match.includes('**')) return match; // already bold
+          const leadingWhitespace = match.match(/^(\s*)/)?.[1] || '';
+          return `${leadingWhitespace}\n\n**${num}. ${title}:**`;
+        });
+        // Fix citation leak in header: "N. [X] Title:" → "**N. Title:**"
+        const citationLeakPattern = new RegExp(
+          `(?:^|\\n)\\s*${num}\\.\\s+\\[\\d+\\]\\s*${escapedTitle}[^:\\n]*:`,
+          'gm'
+        );
+        fixed = fixed.replace(citationLeakPattern, `\n\n**${num}. ${title}:**`);
       }
     }
 
