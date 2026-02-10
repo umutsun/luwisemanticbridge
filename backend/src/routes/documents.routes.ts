@@ -708,13 +708,14 @@ router.get('/stats', authenticateToken, async (req: AuthenticatedRequest, res: R
     const docStats = await lsembPool.query(`
       SELECT
         COUNT(*)::int as total,
-        COUNT(CASE WHEN processing_status = 'pending' THEN 1 END)::int as pending,
+        COUNT(CASE WHEN processing_status = 'pending' OR processing_status IS NULL THEN 1 END)::int as pending,
         COUNT(CASE WHEN processing_status = 'embedded'
                    OR EXISTS (SELECT 1 FROM document_embeddings de WHERE de.document_id = documents.id)
               THEN 1 END)::int as embedded,
         COUNT(CASE WHEN processing_status = 'failed' THEN 1 END)::int as failed,
-        COUNT(CASE WHEN processing_status IN ('completed', 'analyzed', 'embedded')
-                   OR content IS NOT NULL AND LENGTH(content) > 50
+        COUNT(CASE WHEN (processing_status IN ('completed', 'analyzed')
+                   OR (content IS NOT NULL AND LENGTH(content) > 50))
+                   AND NOT EXISTS (SELECT 1 FROM document_embeddings de WHERE de.document_id = documents.id)
               THEN 1 END)::int as ocr_processed,
         COUNT(CASE WHEN processing_status = 'analyzing' THEN 1 END)::int as ocr_pending,
         COUNT(CASE WHEN DATE(created_at) = CURRENT_DATE THEN 1 END)::int as uploaded_today,

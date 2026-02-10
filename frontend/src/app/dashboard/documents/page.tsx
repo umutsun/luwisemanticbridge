@@ -2645,10 +2645,10 @@ export default function DocumentManagerPage() {
     let matchesType = true;
     switch (filterType) {
       case 'analyzed':
-        // Analyzed = completed OR embedded (documents with extracted content)
-        matchesType = doc.processing_status === 'completed' ||
-                      doc.processing_status === 'embedded' ||
-                      doc.processing_status === 'analyzed';
+        // Analyzed = content extracted but NOT yet embedded
+        matchesType = (doc.processing_status === 'completed' ||
+                      doc.processing_status === 'analyzed') &&
+                      !doc.hasEmbeddings;
         break;
       case 'processing':
         // Processing = analyzing status
@@ -4186,14 +4186,16 @@ export default function DocumentManagerPage() {
                                   // For CSV files, use transform_status; for others, use processing_status
                                   const isCSV = (doc.type || doc.file_type || '').toLowerCase() === 'csv' || doc.title?.toLowerCase().endsWith('.csv');
                                   const statusValue = isCSV ? doc.transform_status : doc.processing_status;
-                                  const isEmbedded = doc.metadata?.embeddings;
-                                  const isOCRProcessed = doc.metadata?.ocr_processed;
+                                  const docHasEmbeddings = doc.hasEmbeddings || doc.metadata?.embeddings > 0;
 
                                   let status = '';
                                   let colorClass = '';
 
-                                  // Map status values to display
-                                  if (statusValue) {
+                                  // Priority: if document has embeddings, always show as "Gömülü"
+                                  if (!isCSV && docHasEmbeddings) {
+                                    status = t('documents.status.embedded');
+                                    colorClass = 'bg-violet-50 dark:bg-violet-950/30 border-violet-200 dark:border-violet-800 text-violet-700 dark:text-violet-400';
+                                  } else if (statusValue) {
                                     switch (statusValue) {
                                       case 'pending':
                                       case 'waiting':
@@ -4211,13 +4213,11 @@ export default function DocumentManagerPage() {
                                         break;
                                       case 'embedded':
                                         status = t('documents.status.embedded');
-                                        // Purple/violet for embedded - distinct from transformed
                                         colorClass = 'bg-violet-50 dark:bg-violet-950/30 border-violet-200 dark:border-violet-800 text-violet-700 dark:text-violet-400';
                                         break;
                                       case 'completed':
                                       case 'transformed':
                                         status = isCSV ? t('documents.status.transformed') : t('documents.status.analyzed');
-                                        // Emerald/green for transformed - indicates data in DB
                                         colorClass = 'bg-emerald-50 dark:bg-emerald-950/30 border-emerald-200 dark:border-emerald-800 text-emerald-700 dark:text-emerald-400';
                                         break;
                                       case 'failed':
@@ -4225,22 +4225,12 @@ export default function DocumentManagerPage() {
                                         colorClass = 'bg-red-50 dark:bg-red-950/30 border-red-200 dark:border-red-800 text-red-700 dark:text-red-400';
                                         break;
                                       default:
-                                        // Fallback for unknown status
                                         status = statusValue;
                                         colorClass = 'bg-gray-50 dark:bg-gray-950/30 border-gray-200 dark:border-gray-800 text-gray-600 dark:text-gray-400';
                                     }
                                   } else {
-                                    // Fallback to old logic if status is not available
-                                    if (isEmbedded) {
-                                      status = t('documents.status.embedded');
-                                      colorClass = 'bg-violet-50 dark:bg-violet-950/30 border-violet-200 dark:border-violet-800 text-violet-700 dark:text-violet-400';
-                                    } else if (isOCRProcessed) {
-                                      status = t('documents.status.ocrDone');
-                                      colorClass = 'bg-blue-50 dark:bg-blue-950/30 border-blue-200 dark:border-blue-800 text-blue-700 dark:text-blue-400';
-                                    } else {
-                                      status = t('documents.status.raw');
-                                      colorClass = 'bg-gray-50 dark:bg-gray-950/30 border-gray-200 dark:border-gray-800 text-gray-600 dark:text-gray-400';
-                                    }
+                                    status = t('documents.status.raw');
+                                    colorClass = 'bg-gray-50 dark:bg-gray-950/30 border-gray-200 dark:border-gray-800 text-gray-600 dark:text-gray-400';
                                   }
 
                                   return (

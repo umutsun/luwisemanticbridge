@@ -33,7 +33,8 @@ import {
   Wrench,
   AlertTriangle,
   Copy,
-  Ghost
+  Ghost,
+  Scissors
 } from 'lucide-react';
 import { ProgressCircle } from '@/components/ui/progress-circle';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -119,6 +120,58 @@ export default function MigrationToolsPage() {
   const [fixResult, setFixResult] = useState<FixResult | null>(null);
   const [selectedHealthTable, setSelectedHealthTable] = useState<string>('all');
   const [dryRun, setDryRun] = useState(true);
+
+  // Document Optimization State
+  const [docOptStatus, setDocOptStatus] = useState<{
+    is_running: boolean;
+    is_paused: boolean;
+    current_job: string | null;
+    phase: string;
+    progress: number;
+    total: number;
+    processed: number;
+    chunk_fixes: number;
+    meta_fixes: number;
+    llm_fixes: number;
+    errors: number;
+    elapsed_seconds: number;
+    message: string;
+    samples: Array<{
+      id: number;
+      document_id: number;
+      before: string;
+      after: string;
+      fix_types: string[];
+      meta_changes: string[];
+      changed: boolean;
+    }>;
+    analysis: {
+      total_records: number;
+      affected_records: number;
+      clean_records: number;
+      issues: {
+        spaced_letters: number;
+        word_breaks: number;
+        concatenated: number;
+        html: number;
+        metadata: number;
+      };
+      samples: any[];
+    } | null;
+  } | null>(null);
+  const [docOptPolling, setDocOptPolling] = useState(false);
+
+  // Law Chunking State
+  const [chunkingLoading, setChunkingLoading] = useState(false);
+  const [chunkingStatus, setChunkingStatus] = useState<{
+    running: boolean;
+    progress: number;
+    total: number;
+    processed: number;
+    chunks_created: number;
+    last_law?: string;
+    errors: string[];
+  } | null>(null);
   
   // Source selection
   const [sourceType, setSourceType] = useState<'database' | 'file' | 'url'>('database');
@@ -306,6 +359,78 @@ export default function MigrationToolsPage() {
     }
   };
 
+  // ==================== LAW CHUNKING FUNCTIONS ====================
+
+  const startLawChunking = async (dryRun: boolean = false) => {
+    setChunkingLoading(true);
+    setMessage(null);
+    try {
+      const response = await fetch(`${API_URL}/api/v2/source/chunk-laws`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          sourceTable: 'vergilex_mevzuat_kanunlar',
+          dryRun: dryRun,
+          limit: null
+        })
+      });
+
+      if (!response.ok) throw new Error('Chunking başlatılamadı');
+
+      const data = await response.json();
+      if (data.success) {
+        setMessage({ type: 'success', text: dryRun ? 'Simülasyon başlatıldı...' : 'Kanun chunking başlatıldı...' });
+        // Start polling for status
+        pollChunkingStatus();
+      } else {
+        throw new Error(data.error || 'Chunking başarısız');
+      }
+    } catch (error: any) {
+      setMessage({ type: 'error', text: error.message || 'Chunking başlatılamadı' });
+      setChunkingLoading(false);
+    }
+  };
+
+  const pollChunkingStatus = async () => {
+    const poll = async () => {
+      try {
+        const response = await fetch(`${API_URL}/api/v2/source/chunk-laws/status`);
+        if (response.ok) {
+          const data = await response.json();
+          setChunkingStatus(data);
+
+          if (data.running) {
+            setTimeout(poll, 2000);
+          } else {
+            setChunkingLoading(false);
+            if (data.chunks_created > 0) {
+              setMessage({ type: 'success', text: `Chunking tamamlandı! ${data.chunks_created} madde oluşturuldu.` });
+            }
+          }
+        }
+      } catch (error) {
+        console.error('Polling error:', error);
+        setChunkingLoading(false);
+      }
+    };
+    poll();
+  };
+
+  const stopChunking = async () => {
+    try {
+      const response = await fetch(`${API_URL}/api/v2/source/chunk-laws/status`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'stop' })
+      });
+      if (response.ok) {
+        setMessage({ type: 'info', text: 'Chunking durduruluyor...' });
+      }
+    } catch (error) {
+      console.error('Stop error:', error);
+    }
+  };
+
   // ==================== DATA HEALTH FUNCTIONS ====================
 
   const loadHealthReport = async () => {
@@ -458,6 +583,81 @@ export default function MigrationToolsPage() {
   useEffect(() => {
     if (activeTab === 'health' && !healthReport) {
       loadHealthReport();
+    }
+  }, [activeTab]);
+
+  // Document Optimization functions
+  const docOptFetchStatus = async () => {
+    try {
+      const res = await fetch(`${API_URL}/api/doc-optimization/status`);
+      if (res.ok) {
+        const data = await res.json();
+        setDocOptStatus(data);
+        return data;
+      }
+    } catch (e) {
+      // Service might not be running
+    }
+    return null;
+  };
+
+  const docOptStartAnalyze = async () => {
+    try {
+      const res = await fetch(`${API_URL}/api/doc-optimization/analyze/start`, { method: 'POST' });
+      if (res.ok) {
+        setDocOptPolling(true);
+        setMessage({ type: 'info', text: 'Doküman analizi başlatıldı...' });
+      } else {
+        const data = await res.json();
+        setMessage({ type: 'error', text: data.detail || 'Analiz başlatılamadı' });
+      }
+    } catch (e: any) {
+      setMessage({ type: 'error', text: `Bağlantı hatası: ${e.message}` });
+    }
+  };
+
+  const docOptStartOptimize = async (useLlm: boolean = false) => {
+    try {
+      const res = await fetch(`${API_URL}/api/doc-optimization/optimize/start`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ use_llm: useLlm, batch_size: 100 })
+      });
+      if (res.ok) {
+        setDocOptPolling(true);
+        setMessage({ type: 'info', text: `OCR düzeltme başlatıldı${useLlm ? ' (LLM destekli)' : ''}...` });
+      } else {
+        const data = await res.json();
+        setMessage({ type: 'error', text: data.detail || 'Optimizasyon başlatılamadı' });
+      }
+    } catch (e: any) {
+      setMessage({ type: 'error', text: `Bağlantı hatası: ${e.message}` });
+    }
+  };
+
+  const docOptControl = async (action: 'pause' | 'resume' | 'stop') => {
+    try {
+      await fetch(`${API_URL}/api/doc-optimization/${action}`, { method: 'POST' });
+      if (action === 'stop') setDocOptPolling(false);
+    } catch (e) {}
+  };
+
+  // Poll document optimization status
+  useEffect(() => {
+    if (!docOptPolling) return;
+    const interval = setInterval(async () => {
+      const status = await docOptFetchStatus();
+      if (status && !status.is_running && status.phase !== 'idle') {
+        setDocOptPolling(false);
+      }
+    }, 2000);
+    return () => clearInterval(interval);
+  }, [docOptPolling]);
+
+  // Load status when switching to doc-opt tab
+  useEffect(() => {
+    if (activeTab === 'doc-optimization') {
+      docOptFetchStatus();
     }
   }, [activeTab]);
 
@@ -622,7 +822,7 @@ export default function MigrationToolsPage() {
       )}
 
       <Tabs value={activeTab} onValueChange={setActiveTab}>
-        <TabsList className="grid w-full grid-cols-5">
+        <TabsList className="grid w-full grid-cols-6">
           <TabsTrigger value="database">
             <Database className="h-4 w-4 mr-2" />
             Veritabanı
@@ -642,6 +842,10 @@ export default function MigrationToolsPage() {
           <TabsTrigger value="health">
             <HeartPulse className="h-4 w-4 mr-2" />
             Veri Sağlığı
+          </TabsTrigger>
+          <TabsTrigger value="doc-optimization">
+            <Scissors className="h-4 w-4 mr-2" />
+            OCR Düzeltme
           </TabsTrigger>
         </TabsList>
 
@@ -1029,6 +1233,91 @@ export default function MigrationToolsPage() {
             </CardContent>
           </Card>
 
+          {/* Law Chunking Card */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Scissors className="h-5 w-5" />
+                Kanun Madde Chunking
+              </CardTitle>
+              <CardDescription>
+                Kanun metinlerini maddelere ayırarak semantic search kalitesini artırın
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <Alert>
+                <AlertCircle className="h-4 w-4" />
+                <AlertDescription>
+                  Kanun metinleri "Madde 1", "Madde 2", vb. şeklinde bölünerek her madde ayrı bir kayıt olarak embed edilir.
+                  Bu sayede "VUK 114" gibi sorgulamalar daha doğru sonuç verir.
+                </AlertDescription>
+              </Alert>
+
+              {/* Chunking Progress */}
+              {chunkingStatus?.running && (
+                <div className="p-4 bg-blue-50 rounded-lg border border-blue-200">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-sm font-medium">İşleniyor...</span>
+                    <span className="text-sm text-muted-foreground">
+                      %{chunkingStatus.progress.toFixed(1)}
+                    </span>
+                  </div>
+                  <Progress value={chunkingStatus.progress} className="mb-2" />
+                  <div className="grid grid-cols-3 gap-4 text-xs text-muted-foreground">
+                    <div>İşlenen: {chunkingStatus.processed}/{chunkingStatus.total}</div>
+                    <div>Oluşturulan: {chunkingStatus.chunks_created}</div>
+                    <div className="truncate">Son: {chunkingStatus.last_law}</div>
+                  </div>
+                </div>
+              )}
+
+              {/* Chunking Result */}
+              {chunkingStatus && !chunkingStatus.running && chunkingStatus.chunks_created > 0 && (
+                <Alert className="border-green-200 bg-green-50">
+                  <CheckCircle className="h-4 w-4 text-green-600" />
+                  <AlertDescription className="text-green-800">
+                    Chunking tamamlandı! {chunkingStatus.chunks_created} madde oluşturuldu.
+                  </AlertDescription>
+                </Alert>
+              )}
+
+              <div className="flex gap-2">
+                <Button
+                  onClick={() => startLawChunking(false)}
+                  disabled={chunkingLoading}
+                  className="flex-1"
+                >
+                  {chunkingLoading ? (
+                    <>
+                      <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                      Chunking Devam Ediyor...
+                    </>
+                  ) : (
+                    <>
+                      <Scissors className="h-4 w-4 mr-2" />
+                      Kanunları Maddelere Böl
+                    </>
+                  )}
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={() => startLawChunking(true)}
+                  disabled={chunkingLoading}
+                >
+                  Simülasyon
+                </Button>
+                {chunkingStatus?.running && (
+                  <Button
+                    variant="destructive"
+                    onClick={stopChunking}
+                  >
+                    Durdur
+                  </Button>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+
           {/* Token Stats */}
           {stats?.tokenUsage && (
             <Card>
@@ -1346,6 +1635,170 @@ export default function MigrationToolsPage() {
                       </div>
                     )}
                   </div>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* Document Optimization Tab */}
+        <TabsContent value="doc-optimization" className="space-y-4">
+          <Card>
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle className="flex items-center gap-2">
+                    <Scissors className="h-5 w-5" />
+                    Doküman OCR Düzeltme
+                  </CardTitle>
+                  <CardDescription>
+                    document_embeddings tablosundaki OCR sorunlarını analiz et ve düzelt
+                  </CardDescription>
+                </div>
+                {!docOptStatus?.is_running && (
+                  <div className="flex gap-2">
+                    <Button onClick={docOptStartAnalyze} variant="outline" size="sm">
+                      <Activity className="h-4 w-4 mr-1" />
+                      Analiz Et
+                    </Button>
+                    <Button onClick={() => docOptStartOptimize(false)} size="sm">
+                      <Wrench className="h-4 w-4 mr-1" />
+                      Düzelt (Regex)
+                    </Button>
+                    <Button onClick={() => docOptStartOptimize(true)} size="sm" variant="secondary">
+                      <Brain className="h-4 w-4 mr-1" />
+                      Düzelt (LLM)
+                    </Button>
+                  </div>
+                )}
+              </div>
+            </CardHeader>
+            <CardContent>
+              {/* Running: ProgressCircle + stats */}
+              {docOptStatus?.is_running && (
+                <div className="flex items-center gap-6">
+                  <div className="flex flex-col items-center">
+                    <ProgressCircle
+                      progress={docOptStatus.progress || 0}
+                      showPulse={!docOptStatus.is_paused}
+                      size={120}
+                    />
+                    <p className="text-xs text-muted-foreground mt-2">
+                      {docOptStatus.processed.toLocaleString()} / {docOptStatus.total.toLocaleString()}
+                    </p>
+                  </div>
+                  <div className="flex-1 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm font-medium">{docOptStatus.message}</span>
+                      <div className="flex gap-2">
+                        {docOptStatus.is_paused ? (
+                          <Button size="sm" variant="outline" onClick={() => docOptControl('resume')}>Devam Et</Button>
+                        ) : (
+                          <Button size="sm" variant="outline" onClick={() => docOptControl('pause')}>Duraklat</Button>
+                        )}
+                        <Button size="sm" variant="destructive" onClick={() => docOptControl('stop')}>Durdur</Button>
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-4 gap-3 text-xs text-center">
+                      <div className="p-2 bg-green-50 rounded">
+                        <p className="text-green-600">Chunk Fix</p>
+                        <p className="font-bold text-green-700">{docOptStatus.chunk_fixes.toLocaleString()}</p>
+                      </div>
+                      <div className="p-2 bg-purple-50 rounded">
+                        <p className="text-purple-600">Meta Fix</p>
+                        <p className="font-bold text-purple-700">{docOptStatus.meta_fixes.toLocaleString()}</p>
+                      </div>
+                      <div className="p-2 bg-orange-50 rounded">
+                        <p className="text-orange-600">LLM Fix</p>
+                        <p className="font-bold text-orange-700">{docOptStatus.llm_fixes.toLocaleString()}</p>
+                      </div>
+                      <div className="p-2 bg-gray-50 rounded">
+                        <p className="text-muted-foreground">Süre</p>
+                        <p className="font-bold">{Math.round(docOptStatus.elapsed_seconds)}s</p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Completed / Error alerts */}
+              {docOptStatus?.phase === 'completed' && !docOptStatus.is_running && (
+                <Alert className="mb-4">
+                  <CheckCircle className="h-4 w-4 text-green-600" />
+                  <AlertDescription>{docOptStatus.message}</AlertDescription>
+                </Alert>
+              )}
+              {docOptStatus?.phase === 'error' && !docOptStatus.is_running && (
+                <Alert className="mb-4" variant="destructive">
+                  <XCircle className="h-4 w-4" />
+                  <AlertDescription>{docOptStatus.message}</AlertDescription>
+                </Alert>
+              )}
+
+              {/* Analysis Results: ProgressCircle (clean %) + compact stats */}
+              {docOptStatus?.analysis && !docOptStatus.is_running && (
+                <div className="flex items-center gap-6">
+                  <div className="relative">
+                    <ProgressCircle
+                      progress={docOptStatus.analysis.total_records > 0
+                        ? Math.round((docOptStatus.analysis.clean_records / docOptStatus.analysis.total_records) * 100)
+                        : 0}
+                      size={100}
+                      showPulse={docOptStatus.analysis.affected_records > 0}
+                    />
+                  </div>
+                  <div className="flex-1 space-y-3">
+                    <div className="grid grid-cols-3 gap-3 text-center">
+                      <div className="p-2 bg-gray-50 rounded-lg">
+                        <p className="text-xs text-muted-foreground">Toplam</p>
+                        <p className="text-lg font-bold">{docOptStatus.analysis.total_records.toLocaleString()}</p>
+                      </div>
+                      <div className="p-2 bg-red-50 rounded-lg">
+                        <p className="text-xs text-red-600">Sorunlu</p>
+                        <p className="text-lg font-bold text-red-700">{docOptStatus.analysis.affected_records.toLocaleString()}</p>
+                      </div>
+                      <div className="p-2 bg-green-50 rounded-lg">
+                        <p className="text-xs text-green-600">Temiz</p>
+                        <p className="text-lg font-bold text-green-700">{docOptStatus.analysis.clean_records.toLocaleString()}</p>
+                      </div>
+                    </div>
+                    <div className="flex flex-wrap gap-2 text-xs">
+                      {docOptStatus.analysis.issues.spaced_letters > 0 && (
+                        <Badge variant="outline">Boşluklu Harf: {docOptStatus.analysis.issues.spaced_letters}</Badge>
+                      )}
+                      {docOptStatus.analysis.issues.word_breaks > 0 && (
+                        <Badge variant="outline">Kelime Kırılma: {docOptStatus.analysis.issues.word_breaks}</Badge>
+                      )}
+                      {docOptStatus.analysis.issues.concatenated > 0 && (
+                        <Badge variant="outline">Birleşik Metin: {docOptStatus.analysis.issues.concatenated}</Badge>
+                      )}
+                      {docOptStatus.analysis.issues.html > 0 && (
+                        <Badge variant="outline">HTML: {docOptStatus.analysis.issues.html}</Badge>
+                      )}
+                      {docOptStatus.analysis.issues.metadata > 0 && (
+                        <Badge variant="outline">Metadata: {docOptStatus.analysis.issues.metadata}</Badge>
+                      )}
+                    </div>
+                    {/* Compact samples */}
+                    {docOptStatus.analysis.samples.filter(s => s.changed).length > 0 && (
+                      <div className="max-h-[200px] overflow-y-auto space-y-1">
+                        {docOptStatus.analysis.samples.filter(s => s.changed).slice(0, 3).map((sample) => (
+                          <div key={sample.id} className="p-2 bg-gray-50 rounded text-xs">
+                            <p className="text-red-600 line-through truncate">{sample.before}</p>
+                            <p className="text-green-700 truncate">{sample.after}</p>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* Empty state */}
+              {!docOptStatus?.is_running && !docOptStatus?.analysis && docOptStatus?.phase !== 'completed' && docOptStatus?.phase !== 'error' && (
+                <div className="text-center py-6 text-muted-foreground">
+                  <Scissors className="h-10 w-10 mx-auto mb-2 opacity-20" />
+                  <p className="text-sm">OCR sorunlarını tespit etmek için &quot;Analiz Et&quot; butonuna tıklayın.</p>
                 </div>
               )}
             </CardContent>

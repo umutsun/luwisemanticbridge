@@ -105,6 +105,7 @@ import databaseSettingsRoutes from "./routes/database-settings.routes";
 import patternsRoutes from "./routes/api/v2/patterns.routes";
 import devopsRoutes from "./routes/devops.routes";
 import dataHealthRoutes from "./routes/data-health.routes";
+import docOptimizationRoutes from "./routes/doc-optimization.routes";
 import websocketLogStreamRoutes from "./api/websocket-log-stream.router";
 import { initPDFProgressWS } from './services/pdf/pdf-progress-ws.service';
 import importJobService from './services/import-job.service';
@@ -587,6 +588,7 @@ app.use("/api/whisper", whisperRoutes);
 app.use(ttsRoutes);  // TTS routes at /api/v2/tts/*
 app.use("/api/v2/notifications", notificationsRoutes);  // Real-time notifications
 app.use("/api/data-health", dataHealthRoutes);  // Data health check (Python proxy)
+app.use("/api/doc-optimization", docOptimizationRoutes);  // Document embeddings OCR optimization (Python proxy)
 
 // GraphQL server
 try {
@@ -1569,6 +1571,8 @@ export {
   app,
   httpServer,
   lsembPool as pgPool,
+  io,
+  redis,
   chatWss,
   chatConnections,
 };
