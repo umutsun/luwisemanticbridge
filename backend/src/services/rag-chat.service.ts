@@ -3293,14 +3293,20 @@ Lütfen "beyanname" veya "ödeme" yazarak belirtin.`;
         const strictModeLevel = settingsMap.get('ragSettings.strictModeLevel') || 'medium'; // Default to medium for better recall
         console.log(`✅ STRICT MODE ACTIVE - Level: ${strictModeLevel.toUpperCase()}`);
 
-        // v12.53.1: Detect system prompts that define their own numbered-section format
-        // Skip article format when system prompt already specifies a structured output format
-        const isV4SystemPrompt = /\*\*[1-5]\.\s+[^*]+:\*\*/m.test(systemPrompt);
+        // v12.53.5: Detect system prompts that define their own format structure
+        // Matches: numbered sections (**1. Header:**), ÖRNEK/EXAMPLE sections, FORMAT KURALLARI, etc.
+        const isV4SystemPrompt = (
+          /\*\*[1-5]\.\s+[^*]+:\*\*/m.test(systemPrompt) ||
+          /ÖRNEK YANIT|ÖRNEK:|EXAMPLE RESPONSE|EXAMPLE:/i.test(systemPrompt) ||
+          /YANIT FORMATI|FORMAT KURALLARI|RESPONSE FORMAT/i.test(systemPrompt) ||
+          /\*\*Mevzuat Analizi/i.test(systemPrompt) ||
+          /\*\*Yasal Dayanaklar/i.test(systemPrompt)
+        );
         const useArticleFormat = !isV4SystemPrompt &&
                                  routingSchema.routes.FOUND.format.articleSections &&
                                  routingSchema.routes.FOUND.format.articleSections.length > 0;
         if (isV4SystemPrompt) {
-          console.log('🛡️ [v4.2] V4 system prompt detected - skipping article format (conflicting citation rules)');
+          console.log('🛡️ [v12.53.5] System prompt defines own format - skipping article format');
         }
 
         // Get article length from settings (user-configurable)
@@ -3308,16 +3314,29 @@ Lütfen "beyanname" veya "ödeme" yazarak belirtin.`;
         const articleLength = parseInt(settingsMap.get('ragSettings.summaryMaxLength') || '4000');
 
         // v12.53.5: Format instructions come from system prompt + settings, not hardcoded
-        // Minimal fallback only provides source citation rules (language-agnostic)
-        const sourceInstructionFallback = `Sources are numbered [1], [2], etc. Use ONLY source content. Cite with [1], [2]. Follow system prompt format.`;
+        // When system prompt defines format: minimal instruction + grounding rules from schema
+        // When no custom format: use buildArticleFormatPrompt (schema-driven)
+        const foundFormat = routingSchema.routes.FOUND.format;
+        const groundingRulesFromSchema = foundFormat.groundingRules || {};
+        const groundingText = responseLanguage === 'en'
+          ? (groundingRulesFromSchema.en || '')
+          : (groundingRulesFromSchema.tr || '');
+
+        const sourceInstructionWithGrounding = [
+          `Sources are numbered [1], [2], etc. above.`,
+          `Synthesize ALL sources comprehensively. Reference each claim with [1], [2], [3].`,
+          `Follow your system prompt format structure.`,
+          `Target ~${articleLength} characters.`,
+          groundingText ? `\nGROUNDING RULES:\n${groundingText}` : ''
+        ].filter(Boolean).join('\n');
 
         const defaultMediumPromptTr = useArticleFormat
           ? this.buildArticleFormatPrompt(routingSchema, 'tr', articleLength)
-          : sourceInstructionFallback;
+          : sourceInstructionWithGrounding;
 
         const defaultMediumPromptEn = useArticleFormat
           ? this.buildArticleFormatPrompt(routingSchema, 'en', articleLength)
-          : sourceInstructionFallback;
+          : sourceInstructionWithGrounding;
 
         if (useArticleFormat) {
           console.log(`📋 ARTICLE FORMAT: Using ${routingSchema.routes.FOUND.format.articleSections?.length || 0}-section mini-makale format`);
@@ -4261,7 +4280,7 @@ Yani beyanname ile ödeme arasında **2 günlük** bir fark vardır.`;
 
         // v12.53.5: Detect if system prompt defines its own format (few-shot example, format template, etc.)
         // If so, skip enforceResponseFormat entirely - the prompt controls the output format
-        const promptDefinesFormat = /ÖRNEK YANIT|YANIT FORMATI|EXAMPLE RESPONSE|RESPONSE FORMAT/i.test(systemPrompt);
+        const promptDefinesFormat = /ÖRNEK YANIT|ÖRNEK:|YANIT FORMATI|FORMAT KURALLARI|EXAMPLE RESPONSE|EXAMPLE:|RESPONSE FORMAT/i.test(systemPrompt);
         // Also detect structured numbered-section format in LLM output
         const isV4Format = /\*\*[1-5]\.\s+[^*]+:\*\*/m.test(response.content);
 
@@ -5752,7 +5771,7 @@ Yani beyanname ile ödeme arasında **2 günlük** bir fark vardır.`;
     }
 
     if (sections.length >= 3) {
-      return `📋 YANIT YAPISI: ${sections.join(' → ')}\nHer bölüm bold başlıklı, her iddia kaynak numaralı [1], [2]. Paragraflar kısa (3-4 cümle).\n\n`;
+      return `FORMAT REMINDER: ${sections.join(' > ')}\nBold headers, citations [1],[2] after claims, short paragraphs.\n\n`;
     }
 
     // Fallback: check for bold-header patterns like "**1. Section:**" in system prompt
@@ -5763,7 +5782,23 @@ Yani beyanname ile ödeme arasında **2 günlük** bir fark vardır.`;
     }
 
     if (boldSections.length >= 3) {
-      return `📋 YANIT YAPISI: ${boldSections.join(' → ')}\nHer bölüm bold başlıklı, her iddia kaynak numaralı [1], [2]. Paragraflar kısa (3-4 cümle).\n\n`;
+      return `FORMAT REMINDER: ${boldSections.join(' > ')}\nBold headers, citations [1],[2] after claims, short paragraphs.\n\n`;
+    }
+
+    // Fallback 2: Extract standalone bold headers like **Mevzuat Analizi ve Detaylar:** from example
+    const standaloneBoldPattern = /\*\*([A-ZÇĞİÖŞÜ][^*:]{3,50}):\*\*/g;
+    const standaloneSections: string[] = [];
+    while ((match = standaloneBoldPattern.exec(systemPrompt)) !== null) {
+      const title = match[1].trim();
+      // Skip example content (sentences that happen to be bold)
+      if (title.length > 50 || /\[|\]/g.test(title)) continue;
+      if (!standaloneSections.includes(`**${title}:**`)) {
+        standaloneSections.push(`**${title}:**`);
+      }
+    }
+
+    if (standaloneSections.length >= 2) {
+      return `FORMAT REMINDER: Use bold headers: ${standaloneSections.join(', ')}\nCitations [1],[2] after claims, short paragraphs.\n\n`;
     }
 
     return '';
