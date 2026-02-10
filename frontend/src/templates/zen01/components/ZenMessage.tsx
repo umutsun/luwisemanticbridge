@@ -65,9 +65,9 @@ function highlightKeywordsInText(text: string, keywords: string[]): React.ReactN
   const sortedKeywords = [...keywords].sort((a, b) => b.length - a.length);
 
   // Create regex pattern with word boundaries to avoid splitting words
-  // Use (?<![a-zA-ZğüşıöçĞÜŞİÖÇ]) and (?![a-zA-ZğüşıöçĞÜŞİÖÇ]) for Turkish word boundaries
-  const turkishWordBoundary = '(?<![a-zA-ZğüşıöçĞÜŞİÖÇ0-9])';
-  const turkishWordBoundaryEnd = '(?![a-zA-ZğüşıöçĞÜŞİÖÇ0-9])';
+  // Use Unicode-aware word boundaries that work with any Latin-based language
+  const turkishWordBoundary = '(?<![a-zA-Z\\u00C0-\\u024F0-9])';
+  const turkishWordBoundaryEnd = '(?![a-zA-Z\\u00C0-\\u024F0-9])';
 
   const pattern = new RegExp(
     `(${sortedKeywords.map(k =>
@@ -108,12 +108,7 @@ function highlightKeywordsInText(text: string, keywords: string[]): React.ReactN
  */
 /**
  * Clean citation/source title from database formatting issues
- * Fixes: "T.C.D A N I Ş T A Y" -> "T.C. DANIŞTAY"
- * Fixes: "DAİREEsas No:" -> "DAİRE Esas No:"
- * Fixes: "2018/280Karar No:" -> "2018/280 Karar No:"
- * Fixes: "GelirMüdürlüğüILGİ" -> "Gelir Müdürlüğü İLGİ"
- * Fixes: ".......... gün ve ................" -> "" (removes placeholder dots)
- * Fixes: "15-4-2021 00:00:00" -> "15-4-2021" (removes time)
+ * v12.53: Uses Unicode ranges instead of hardcoded Turkish characters
  */
 function cleanCitationTitle(title: string): string {
   if (!title) return '';
@@ -124,26 +119,20 @@ function cleanCitationTitle(title: string): string {
     .replace(/\s+\d{2}:\d{2}:\d{2}\s/g, ' ')
     // Remove long sequences of dots/periods (likely placeholder text)
     .replace(/\.{4,}/g, '')
-    // Remove common placeholder patterns
-    .replace(/\s+gün\s+ve\s+$/i, '')
-    // Fix spaced letters like "D A N I Ş T A Y" -> "DANIŞTAY"
-    .replace(/([A-ZÇĞİÖŞÜ])\s+(?=[A-ZÇĞİÖŞÜ]\s*[A-ZÇĞİÖŞÜ])/g, '$1')
-    // Fix missing space after lowercase letter followed by uppercase
-    .replace(/([a-zçğıöşü])([A-ZÇĞİÖŞÜ]{2,})/g, '$1 $2')
-    // Fix camelCase merged words: "HukukDairesi" -> "Hukuk Dairesi"
-    .replace(/([a-zçğıöşü])([A-ZÇĞİÖŞÜ][a-zçğıöşü])/g, '$1 $2')
-    // Fix "T.C.D" -> "T.C. D"
-    .replace(/T\.C\.D/g, 'T.C. D')
-    .replace(/T\.C\.Y/g, 'T.C. Y')
-    // Fix merged words: "DAİREEsas" -> "DAİRE Esas"
-    .replace(/DAİRE([A-Z])/g, 'DAİRE $1')
-    .replace(/DAIRE([A-Z])/g, 'DAİRE $1')
-    // Fix "Esas No:2018" -> "Esas No: 2018"
+    // Fix spaced uppercase letters: "D A N I Ş T A Y" -> "DANIŞTAY"
+    .replace(/([A-Z\u00C0-\u024F])\s+(?=[A-Z\u00C0-\u024F]\s*[A-Z\u00C0-\u024F])/g, '$1')
+    // Fix missing space: lowercase followed by 2+ uppercase
+    .replace(/([a-z\u00E0-\u024F])([A-Z\u00C0-\u024F]{2,})/g, '$1 $2')
+    // Fix camelCase merged words
+    .replace(/([a-z\u00E0-\u024F])([A-Z\u00C0-\u024F][a-z\u00E0-\u024F])/g, '$1 $2')
+    // Fix abbreviations: "T.C.D" -> "T.C. D"
+    .replace(/(\.[A-Z])\.([A-Z])/g, '$1. $2')
+    // Fix "No:2018" -> "No: 2018"
     .replace(/No:(\d)/g, 'No: $1')
-    // Fix "2018/280Karar" -> "2018/280 Karar"
-    .replace(/(\d{4}\/\d+)([A-ZÇĞİÖŞÜ])/g, '$1 $2')
+    // Fix "2018/280Word" -> "2018/280 Word"
+    .replace(/(\d{4}\/\d+)([A-Z\u00C0-\u024F])/g, '$1 $2')
     // Fix number-word joins
-    .replace(/(\d+)([A-ZÇĞİÖŞÜ]{2,})/g, '$1 $2')
+    .replace(/(\d+)([A-Z\u00C0-\u024F]{2,})/g, '$1 $2')
     // Clean multiple spaces
     .replace(/\s{2,}/g, ' ')
     .trim();
@@ -152,19 +141,13 @@ function cleanCitationTitle(title: string): string {
 function cleanLLMResponse(content: string): string {
   if (!content) return '';
 
+  // v12.53: Minimal language-agnostic cleanup only
+  // Language-specific formatting (CEVAP, section headers, etc.) handled by backend fixMarkdownAndCitations()
   return content
-    // Remove unwanted **CEVAP** / **ANSWER** headers (v4.4)
-    .replace(/^\s*\*\*CEVAP\*\*\s*\n*/gi, '')
-    .replace(/^\s*\*\*ANSWER\*\*\s*\n*/gi, '')
-    // Remove legacy plain-text section labels ONLY (not bold markdown headers)
-    // These are from old prompt versions that used UPPERCASE: labels without markdown
-    .replace(/^KONU:\s*\n?/gim, '')
-    .replace(/^ANAHTAR_TERIMLER:\s*\n?[^\n]*\n?/gim, '')
-    .replace(/^DEGERLENDIRME:\s*\n?/gim, '')
-    // Remove Dipnotlar sections (LLM sometimes generates these unbidden)
-    .replace(/##\s*Dipnotlar[\s\S]*$/gi, '')
-    .replace(/\*\*Dipnotlar:?\*\*[\s\S]*$/gi, '')
-    // Remove standalone [1] [2] reference lists at the end (bibliography-style)
+    // Remove footnote/bibliography sections (common LLM pattern in any language)
+    .replace(/##\s*(?:Dipnotlar|Footnotes|References)[\s\S]*$/gi, '')
+    .replace(/\*\*(?:Dipnotlar|Footnotes|References):?\*\*[\s\S]*$/gi, '')
+    // Remove standalone bibliography-style reference lists at end: [1] Title\n[2] Title...
     .replace(/\n\s*\[\d+\]\s+[^\n]+(?:\n\s*\[\d+\]\s+[^\n]+)*\s*$/gi, '')
     // Clean up multiple newlines
     .replace(/\n{3,}/g, '\n\n')
@@ -173,40 +156,17 @@ function cleanLLMResponse(content: string): string {
 
 /**
  * Preprocess markdown content to ensure proper paragraph breaks
- * LLM often outputs **Header:** or **Header** inline instead of on new lines
- * Also converts single newlines between sentences into proper paragraph breaks
+ * v12.53: Language-agnostic only - Turkish-specific formatting handled by backend
  */
 function preprocessMarkdown(content: string): string {
   let result = content;
 
-  // ═══ STEP 0: Fix split bold section headers (v4.4) ═══
-  // LLM writes: "**3. Mevzuat Analizi ve ****Tanım ve Kapsam:**" (split bold)
-  // Fix to: "**3. Mevzuat Analizi ve Detaylar:**\n\n**Tanım ve Kapsam:**"
-  result = result.replace(
-    /\*\*(\d)\.\s+(Konu Başlığı|Özet Yanıt|Mevzuat Analizi|Yasal Dayanaklar|Kritik Notlar)[^*]*\*\*\s*\*\*([^*]+:\*\*)/g,
-    '**$1. $2 ve Detaylar:**\n\n**$3'
-  );
-
-  // ═══ STEP 1: Fix v4 numbered section headers ═══
-  // Fix broken bold headers: "**2.\nÖzet Yanıt:**" → "**2. Özet Yanıt:**"
+  // ═══ STEP 1: Fix broken bold headers (language-agnostic) ═══
+  // "**2.\nHeader:**" → "**2. Header:**"
   result = result.replace(/\*\*(\d)\.\s*\n\s*/g, '**$1. ');
 
   // Ensure bold numbered section headers get their own line
-  result = result.replace(/([^\n])\s*(\*\*[1-5]\.\s+[^*]+:\*\*)/g, '$1\n\n$2');
-
-  // Fix non-bold numbered section headers ANYWHERE in text
-  // LLM writes: "...text [1]. 3. Mevzuat Analizi ve Detaylar:" inline without bold
-  const sectionKeywords = ['Konu Başlığı', 'Özet Yanıt', 'Mevzuat Analizi', 'Yasal Dayanaklar', 'Kritik Notlar'];
-  const sectionPattern = new RegExp(
-    `([.!?\\]]\\s*)(${['1','2','3','4','5'].join('|')})\\.\\s+(${sectionKeywords.join('|')})[^:]*:`,
-    'g'
-  );
-  result = result.replace(sectionPattern, (_match, before, num, keyword) => {
-    return `${before.trim()}\n\n**${num}. ${keyword}:**`;
-  });
-  // Also at line start
-  result = result.replace(/^(\d)\.\s+(Konu Başlığı|Özet Yanıt|Mevzuat Analizi|Yasal Dayanaklar|Kritik Notlar)[^:\n]*:/gm,
-    '**$1. $2:**');
+  result = result.replace(/([^\n])\s*(\*\*[1-9]\.\s+[^*]+:\*\*)/g, '$1\n\n$2');
 
   // ═══ STEP 2: Fix inline bold sub-headers ═══
   result = result.replace(/([^\n])(\s)(\*\*[^*]{2,50}:\*\*)/g, '$1\n\n$3');
@@ -215,7 +175,6 @@ function preprocessMarkdown(content: string): string {
   result = result.replace(/(\d{1,2})\.\s+-\s+/g, '$1. ');
 
   // ═══ STEP 3: Fix inline numbered lists ═══
-  // "...şunlardır: 1. Xxx 2. Yyy 3. Zzz" → each on its own line
   const inlineListPattern = /(?:[.!?:;]\s*)\d{1,2}\.\s+\S[\s\S]*?(?:\s)\d{1,2}\.\s+\S[\s\S]*?(?:\s)\d{1,2}\.\s+\S/;
   if (inlineListPattern.test(result)) {
     result = result.replace(/([.!?:;,])\s+(\d{1,2})\.\s+/g, (match, punct, num) => {
@@ -227,11 +186,9 @@ function preprocessMarkdown(content: string): string {
     });
   }
 
-  // ═══ STEP 4: Fix single newlines between paragraphs ═══
-  // "...sentence [1].\nNext sentence..." → double newline
+  // ═══ STEP 4: Fix single newlines between paragraphs (language-agnostic) ═══
   result = result
-    .replace(/([.!?])(\s*(?:\[\d+\]|\[Kaynak\s*\d+\]|\[Source\s*\d+\])+)?\n(?!\n)([A-ZÇĞİÖŞÜ])/gi, '$1$2\n\n$3')
-    .replace(/([0-9%])(\s*(?:\[\d+\]|\[Kaynak\s*\d+\]|\[Source\s*\d+\])+)?\.\s*\n(?!\n)([A-ZÇĞİÖŞÜ])/gi, '$1$2.\n\n$3');
+    .replace(/([.!?])(\s*\[\d+\])?\n(?!\n)([A-Z\u00C0-\u024F])/g, '$1$2\n\n$3');
 
   // ═══ STEP 5: Handle warning emoji and dividers ═══
   result = result.replace(/([^\n])(⚠️)/g, '$1\n\n$2');
@@ -244,8 +201,8 @@ function preprocessMarkdown(content: string): string {
 
   if (!hasBoldHeaders && sentenceCount >= 4 && paragraphCount < 2) {
     let sentenceCounter = 0;
-    result = result.replace(/([.!?])(\s*(?:\[\d+\]|\[Kaynak\s*\d+\]|\[Source\s*\d+\])*)(\s+)([A-ZÇĞİÖŞÜ])/g,
-      (match, punct, citations, _space, nextChar) => {
+    result = result.replace(/([.!?])(\s*\[\d+\]*)(\s+)([A-Z\u00C0-\u024F])/g,
+      (_match, punct, citations, _space, nextChar) => {
         sentenceCounter++;
         if (sentenceCounter % 3 === 0) {
           return `${punct}${citations || ''}\n\n${nextChar}`;

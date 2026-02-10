@@ -1,11 +1,12 @@
 /**
  * Citation Reordering and Filtering Utilities
  *
- * Reorders citations based on usage frequency in LLM response
- * and removes unused citations to improve UX.
+ * Removes unused citations and re-numbers them sequentially.
+ * Preserves Python's rerank + priority-based source ordering.
  *
- * Problem: LLM may reference [6] most but sources are ordered by similarity score
- * Solution: Reorder so most-referenced citation becomes [1]
+ * v12.53: Changed from usage-frequency sorting to priority-preserving.
+ * Python's final_score already includes rerank + source_priority + table_weight,
+ * so re-sorting by LLM usage count was counterproductive (LLM naturally cites [1] most).
  */
 
 export interface CitationSource {
@@ -116,24 +117,27 @@ export function reorderCitations(
     }
   }
 
-  // Sort by usage frequency if requested (highest first)
-  // v12.49: Multi-signal sort: citation usage > rerank score > table priority > similarity
-  const hasCitedSources = processedSources.some(s => s.count > 0);
-  if (sortByUsage) {
+  // v12.53: Preserve Python's priority-based ordering (final_score = rerank + source_priority + table_weight)
+  // Don't re-sort by usage count - LLM naturally cites [1] most since it's first in context,
+  // which would always push the first source to top regardless of actual relevance.
+  // Instead, keep original order from Python's scoring pipeline.
+  // Only sort if sortByUsage is explicitly true AND there's no rerank data (legacy fallback).
+  const hasRerankData = processedSources.some(s => s.rerankScore > 0);
+  if (sortByUsage && !hasRerankData) {
+    // Legacy fallback: no rerank data, sort by usage as before
+    const hasCitedSources = processedSources.some(s => s.count > 0);
     processedSources.sort((a, b) => {
       if (hasCitedSources) {
-        // Primary: usage count (descending) - most cited first
         if (b.count !== a.count) return b.count - a.count;
       }
-      // Secondary: Jina rerank score (descending) - semantic relevance
-      if (b.rerankScore !== a.rerankScore) return b.rerankScore - a.rerankScore;
-      // Tertiary: table priority (descending) - Kanun > Tebliğ > Özelge etc.
       if (b.priority !== a.priority) return b.priority - a.priority;
-      // Quaternary: similarity score (descending)
       if (b.similarityScore !== a.similarityScore) return b.similarityScore - a.similarityScore;
-      // Final: original order (ascending) for equal scores
       return a.originalIndex - b.originalIndex;
     });
+  } else {
+    // v12.53: Rerank-aware mode - preserve Python's original ordering (by originalIndex)
+    // Sources already come sorted by final_score from Python pipeline
+    processedSources.sort((a, b) => a.originalIndex - b.originalIndex);
   }
 
   // Apply max limit if specified
