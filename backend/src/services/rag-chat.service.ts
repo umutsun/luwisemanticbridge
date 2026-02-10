@@ -4752,8 +4752,15 @@ Yani beyanname ile ödeme arasında **2 günlük** bir fark vardır.`;
         return diversified;
       };
 
-      // Apply diversification
-      rankedSources = diversifySources(rankedSources);
+      // Apply diversification - ONLY when no rerank data (legacy fallback)
+      // v12.53: When Python rerank is active, final_score already provides optimal ordering
+      // Diversification re-sorts by raw similarity tiers which breaks rerank order
+      const hasRerankScores = rankedSources.some(s => s.rerank_score > 0);
+      if (!hasRerankScores) {
+        rankedSources = diversifySources(rankedSources);
+      } else {
+        console.log(`🎨 [v12.53] DIVERSIFY_SKIP: Rerank active, preserving Python's priority ordering`);
+      }
 
       // ═══════════════════════════════════════════════════════════════
       // v12.25: MURAT HIERARCHY - Law Article to Top-1 for deadline queries
@@ -5768,8 +5775,20 @@ Yani beyanname ile ödeme arasında **2 günlük** bir fark vardır.`;
     // "**2.\nHeader:**" → "**2. Header:**"
     fixed = fixed.replace(/\*\*(\d)\.\s*\n\s*/g, '**$1. ');
 
+    // Fix citation in section header: "1. [1] Title:" → "**1. Title:**"
+    // LLM sometimes puts citation inside the section number
+    fixed = fixed.replace(/^(\d)\.\s*\[\d+\]\s*/gm, '**$1. ');
+
     // Ensure bold numbered section headers get their own line
     fixed = fixed.replace(/([^\n])\s*(\*\*[1-9]\.\s+[^*]+:\*\*)/g, '$1\n\n$2');
+
+    // v12.53: Fix non-bold numbered section headers inline (language-agnostic)
+    // LLM writes: "...text [2]. 3. Mevzuat Analizi ve Detaylar:" without bold
+    // Detect pattern: sentence-ending punctuation followed by "N. Word... :"
+    fixed = fixed.replace(
+      /([.!?\]])\s+([1-9])\.\s+([A-Z\u00C0-\u024F][^:]{5,60}:)/g,
+      '$1\n\n**$2. $3**'
+    );
 
     // Ensure bold sub-headers get their own line
     fixed = fixed.replace(/([^\n])(\s)(\*\*[^*]{2,50}:\*\*)/g, '$1\n\n$3');
@@ -9652,7 +9671,9 @@ DÜZELTILMIŞ METİN:`;
         const rawTitle = r.title?.replace(/ \(Part \d+\/\d+\)/g, '') || citation;
         const rawTitleStripped = this.stripHtml(rawTitle);
         const titleNeedsOCR = this.detectConcatenatedText(rawTitleStripped);
-        const cleanTitle = this.toSentenceCase(this.fixTurkishWordSpacing(rawTitleStripped));
+        // v12.53: Fix spaced-out uppercase letters in titles (OCR artifact: "D A N I Ş T A Y" → "DANIŞTAY")
+        const spacedLettersFix = rawTitleStripped.replace(/([A-Z\u00C0-\u024F])\s+(?=[A-Z\u00C0-\u024F]\s*[A-Z\u00C0-\u024F])/g, '$1');
+        const cleanTitle = this.toSentenceCase(this.fixTurkishWordSpacing(spacedLettersFix));
         // Clean raw metadata content (handles crawler records with listing_id/url format)
         // Prefer full_content for richer snippet extraction
         const rawExcerpt = r.full_content || r.excerpt || r.content || '';
