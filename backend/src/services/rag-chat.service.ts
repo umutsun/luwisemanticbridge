@@ -3278,7 +3278,9 @@ Lütfen "beyanname" veya "ödeme" yazarak belirtin.`;
         const fastModeInstruction = `\n\n${fastModeTemplate.replace(/{maxLength}/g, String(fastModeMaxLength))}`;
         console.log(`⚡ FAST MODE: Using maxLength=${fastModeMaxLength} characters`);
 
-        userPrompt = `${contextLabel}:\n${enhancedContext}${followUpInstruction}\n\n${questionLabel}: ${message}${fastModeInstruction}`;
+        // v12.56: Format reminder for fast mode
+        const fastFormatReminder = this.extractFormatReminder(systemPrompt);
+        userPrompt = `${contextLabel}:\n${enhancedContext}${followUpInstruction}\n\n${fastFormatReminder}${questionLabel}: ${message}${fastModeInstruction}`;
       } else if (strictRagMode) {
         // ========================================
         // STRICT RAG MODE - Source-faithful responses
@@ -3438,7 +3440,9 @@ Lütfen "beyanname" veya "ödeme" yazarak belirtin.`;
         // Build source reminder from template
         const sourceReminder = '\n\n' + contextTemplate.sourceReminder.replace('{sources}', sourceNumbers);
 
-        userPrompt = `${strictInstruction}${sourceReminder}\n\n--- ${contextLabel} ---\n${strictContext}\n--- KAYNAKLAR SONU ---\n\n${questionLabel}: ${message}`;
+        // v12.56: Format reminder for strict mode too
+        const strictFormatReminder = this.extractFormatReminder(systemPrompt);
+        userPrompt = `${strictInstruction}${sourceReminder}\n\n--- ${contextLabel} ---\n${strictContext}\n--- KAYNAKLAR SONU ---\n\n${strictFormatReminder}${questionLabel}: ${message}`;
         console.log('📋 STRICT RAG MODE: Using database-configured context format');
         console.log(`📝 PROMPT PREVIEW (first 300 chars): ${userPrompt.substring(0, 300).replace(/\n/g, '\\n')}`);
         } else {
@@ -3458,8 +3462,9 @@ Lütfen "beyanname" veya "ödeme" yazarak belirtin.`;
           // No hardcoded language-specific prompts. Settings override: ragSettings.citationInstructionTr/En
           const defaultSummaryFallback =
             `Sources are numbered [1], [2], etc. above.\n` +
-            `• Cite claims with [1], [2], [3] matching source numbers\n` +
-            `Follow your system prompt format. Synthesize all {sourceCount} sources. Target ~{maxLength} chars.`;
+            `• Cite claims with [1], [2], [3] at END of sentences\n` +
+            `• Follow the YANIT YAPISI format above — use bold section headers\n` +
+            `• Synthesize {sourceCount} sources. Target ~{maxLength} chars.`;
 
           const defaultSummaryEn = defaultSummaryFallback;
           const defaultSummaryTr = defaultSummaryFallback;
@@ -3479,7 +3484,14 @@ Lütfen "beyanname" veya "ödeme" yazarak belirtin.`;
             .replace(/{sourceCount}/g, String(initialDisplayCount))
             .replace(/{maxLength}/g, String(maxSummaryLength))}`;
 
-          userPrompt = `${contextLabel}:\n${enhancedContext}\n\n${questionLabel}: ${message}${summaryInstruction}`;
+          // v12.56: Inject format reminder extracted from system prompt
+          // Placed AFTER sources, BEFORE question — closest to where LLM generates
+          const formatReminder = this.extractFormatReminder(systemPrompt);
+          if (formatReminder) {
+            console.log(`📋 [v12.56] Format reminder injected (${formatReminder.length} chars)`);
+          }
+
+          userPrompt = `${contextLabel}:\n${enhancedContext}\n\n${formatReminder}${questionLabel}: ${message}${summaryInstruction}`;
         }
       console.log(` Best similarity score: ${(bestScore * 100).toFixed(1)}% (results sorted by relevance)`);
       console.log(`️ Sending temperature to LLM Manager: ${options.temperature} (type: ${typeof options.temperature})`);
@@ -5724,6 +5736,39 @@ Yani beyanname ile ödeme arasında **2 günlük** bir fark vardır.`;
    * @param sources - Source objects with metadata
    * @returns Fixed response text
    */
+  // v12.56: Extract format section structure from system prompt for user prompt reinforcement
+  // The LLM often "forgets" format rules when 5000+ chars of context sit between system prompt and question.
+  // This extracts a compact reminder (e.g., "**1. BAŞLIK:** → **2. ÖZET YANIT:** → ...")
+  // to inject AFTER sources and BEFORE the question in the user prompt.
+  private extractFormatReminder(systemPrompt: string): string {
+    if (!systemPrompt) return '';
+
+    // Extract numbered section labels from patterns like "1) BAŞLIK:", "2) ÖZET YANIT:", etc.
+    const sectionPattern = /(\d+)\)\s+([A-ZÇĞİÖŞÜa-zçğıöşü\s]+?):/g;
+    const sections: string[] = [];
+    let match;
+    while ((match = sectionPattern.exec(systemPrompt)) !== null) {
+      sections.push(`**${match[1]}. ${match[2].trim()}:**`);
+    }
+
+    if (sections.length >= 3) {
+      return `📋 YANIT YAPISI: ${sections.join(' → ')}\nHer bölüm bold başlıklı, her iddia kaynak numaralı [1], [2]. Paragraflar kısa (3-4 cümle).\n\n`;
+    }
+
+    // Fallback: check for bold-header patterns like "**1. Section:**" in system prompt
+    const boldPattern = /\*\*(\d+)\.\s+([^*:]+):\*\*/g;
+    const boldSections: string[] = [];
+    while ((match = boldPattern.exec(systemPrompt)) !== null) {
+      boldSections.push(`**${match[1]}. ${match[2].trim()}:**`);
+    }
+
+    if (boldSections.length >= 3) {
+      return `📋 YANIT YAPISI: ${boldSections.join(' → ')}\nHer bölüm bold başlıklı, her iddia kaynak numaralı [1], [2]. Paragraflar kısa (3-4 cümle).\n\n`;
+    }
+
+    return '';
+  }
+
   private fixMarkdownAndCitations(response: string, sources: any[], sectionHeaders?: string[]): string {
     let fixed = response;
 

@@ -973,6 +973,86 @@
   margin-bottom: 0.25rem;
 }
 
+/* Headings inside markdown content */
+.zen01-markdown h1 {
+  font-size: 1.125rem;
+  font-weight: 700;
+  color: #22d3ee;
+  margin-top: 1.5rem;
+  margin-bottom: 0.75rem;
+  padding-bottom: 0.25rem;
+  border-bottom: 1px solid rgba(34, 211, 238, 0.3);
+}
+
+.zen01-container.light .zen01-markdown h1 {
+  color: #0e7490;
+  border-bottom-color: rgba(14, 116, 144, 0.2);
+}
+
+.zen01-markdown h2 {
+  font-size: 1rem;
+  font-weight: 600;
+  color: #67e8f9;
+  margin-top: 1.25rem;
+  margin-bottom: 0.5rem;
+}
+
+.zen01-container.light .zen01-markdown h2 {
+  color: #0891b2;
+}
+
+.zen01-markdown h3 {
+  font-size: 0.9375rem;
+  font-weight: 600;
+  color: #67e8f9;
+  margin-top: 1rem;
+  margin-bottom: 0.375rem;
+}
+
+.zen01-container.light .zen01-markdown h3 {
+  color: #0891b2;
+}
+
+/* Blockquotes - legal citation style */
+.zen01-markdown blockquote {
+  border-left: 3px solid rgba(34, 211, 238, 0.5);
+  padding-left: 1rem;
+  margin: 1rem 0;
+  font-style: italic;
+  color: rgba(148, 163, 184, 0.9);
+}
+
+.zen01-container.light .zen01-markdown blockquote {
+  border-left-color: rgba(14, 116, 144, 0.3);
+  color: rgba(71, 85, 105, 0.9);
+}
+
+/* Horizontal dividers */
+.zen01-markdown hr {
+  border: none;
+  border-top: 1px solid rgba(34, 211, 238, 0.2);
+  margin: 1.5rem 0;
+}
+
+.zen01-container.light .zen01-markdown hr {
+  border-top-color: rgba(14, 116, 144, 0.15);
+}
+
+/* Warning/critical notes styling */
+.zen01-markdown p:has(> strong:first-child) {
+  margin-top: 1.75rem !important;
+}
+
+/* List item text colors for both modes */
+.zen01-container.light .zen01-markdown ul,
+.zen01-container.light .zen01-markdown ol {
+  color: #334155;
+}
+
+.zen01-container.light .zen01-markdown li {
+  color: #334155;
+}
+
 /* Override prose defaults that may conflict - FORCE with !important */
 .zen01-markdown.prose p {
   margin-top: 1.5rem !important;
@@ -986,6 +1066,15 @@
 
 .zen01-container.light .zen01-markdown.prose strong {
   color: #0891b2;
+}
+
+/* Light mode paragraph text readability */
+.zen01-container.light .zen01-markdown p {
+  color: #334155;
+}
+
+.zen01-container.light .zen01-markdown.prose p {
+  color: #334155;
 }
 
 /* ============================================
