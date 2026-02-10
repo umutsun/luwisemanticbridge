@@ -429,11 +429,7 @@ export class SemanticSearchService {
         return;
       }
 
-      const result = await this.pool.query(
-        `SELECT key, value FROM settings WHERE key IN (
-          $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27
-        )`,
-        [
+      const settingsKeys = [
           'ragSettings.similarityThreshold',
           'similarity_threshold',
           'ragSettings.maxResults',
@@ -451,16 +447,18 @@ export class SemanticSearchService {
           'ragSettings.documentsPriority',
           'ragSettings.chatPriority',
           'ragSettings.webPriority',
-          // 🔧 NEW: Source hierarchy and ranking weights
           'ragSettings.sourceTypeHierarchy',
           'ragSettings.semanticWeight',
           'ragSettings.hierarchyWeight',
           'ragSettings.usePythonSemanticSearch',
           'ragSettings.pythonSemanticSearchFallback',
-          // Excerpt length settings
           'ragSettings.maxExcerptLength',
           'ragSettings.excerptMaxLength'
-        ]
+      ];
+      const placeholders = settingsKeys.map((_, i) => `$${i + 1}`).join(', ');
+      const result = await this.pool.query(
+        `SELECT key, value FROM settings WHERE key IN (${placeholders})`,
+        settingsKeys
       );
 
       result.rows.forEach(row => {

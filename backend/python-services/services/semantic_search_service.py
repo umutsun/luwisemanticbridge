@@ -365,13 +365,15 @@ class SemanticSearchService:
             )
 
     async def _get_openai_client(self, api_key: Optional[str] = None):
-        """Get or create OpenAI client"""
+        """Get or create OpenAI client (reuses connection pool)"""
         key = api_key or os.getenv("OPENAI_API_KEY")
         if not key:
             raise ValueError("OPENAI_API_KEY not configured")
 
-        if self.openai_client is None or api_key:
+        # Only recreate client if key changed or client doesn't exist
+        if self.openai_client is None or (api_key and api_key != getattr(self, '_openai_api_key', None)):
             self.openai_client = openai.AsyncOpenAI(api_key=key)
+            self._openai_api_key = key
         return self.openai_client
 
     async def _get_gemini_embedding(self, text: str, api_key: str, model: str = GEMINI_EMBEDDING_MODEL) -> List[float]:
