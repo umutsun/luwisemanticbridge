@@ -3292,9 +3292,16 @@ Lütfen "beyanname" veya "ödeme" yazarak belirtin.`;
         console.log(`✅ STRICT MODE ACTIVE - Level: ${strictModeLevel.toUpperCase()}`);
 
         // 📋 Use article format from routing schema (akademik makale format)
-        // Article length comes from user settings (ragSettings.summaryMaxLength)
-        const useArticleFormat = routingSchema.routes.FOUND.format.articleSections &&
+        // v4.2: Skip article format when v4 system prompt is active - it has its own format
+        // and article format's groundingRules conflict with v4 citation requirements
+        const isV4SystemPrompt = systemPrompt.includes('**1. Konu Başlığı:**') ||
+                                  systemPrompt.includes('YANITINI AŞAĞIDAKİ FORMATTA VER');
+        const useArticleFormat = !isV4SystemPrompt &&
+                                 routingSchema.routes.FOUND.format.articleSections &&
                                  routingSchema.routes.FOUND.format.articleSections.length > 0;
+        if (isV4SystemPrompt) {
+          console.log('🛡️ [v4.2] V4 system prompt detected - skipping article format (conflicting citation rules)');
+        }
 
         // Get article length from settings (user-configurable)
         // Increased default from 2000 to 4000 for Wikipedia-style long articles
@@ -3305,6 +3312,17 @@ Lütfen "beyanname" veya "ödeme" yazarak belirtin.`;
         // v12.45: Added rule 5 for mandatory primary source citation
         const defaultMediumPromptTr = useArticleFormat
           ? this.buildArticleFormatPrompt(routingSchema, 'tr', articleLength)
+          : isV4SystemPrompt
+          ? `Aşağıda numaralanmış kaynaklar var. Her kaynağın numarası [1], [2] şeklindedir.
+
+KAYNAK KULLANIM KURALLARI:
+1. SADECE kaynaklardaki bilgiyi kullan
+2. Her iddiayı ilgili kaynak numarasıyla destekle: [1], [2], [3]
+3. Kaynaksız sayısal bilgi (oran, süre, tutar) verme
+4. ⭐ işaretli kaynaklar BİRİNCİL KAYNAKTIR - varsa MUTLAKA [X] ile atıf yap
+5. Kaynaklarda yoksa "Bu konuda yeterli kaynak bulunamadı" de
+
+System prompt'taki format yapısına uy.`
           : `Aşağıda numaralanmış kaynaklar var.
 
 CEVAPLAMA KURALLARI:
