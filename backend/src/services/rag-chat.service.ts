@@ -4312,24 +4312,24 @@ Yani beyanname ile ödeme arasında **2 günlük** bir fark vardır.`;
         // Any response with **N. SomeHeader:** pattern means the system prompt defined the format
         const isV4Format = /\*\*[1-5]\.\s+[^*]+:\*\*/m.test(response.content);
 
-        // Use 'legacy' format for deadline queries or v4-formatted responses to preserve structure
-        const formatType = (hasArticleSections && !isDeadlineQuery && !isV4Format) ? 'article' : 'legacy';
-
-        if (isDeadlineQuery) {
-          console.log(`🛡️ [v12.10] DEADLINE_FORMAT_SKIP: Using legacy format for deadline query (preserves content)`);
-        }
         if (isV4Format) {
-          console.log(`🛡️ [v4.2] V4_FORMAT_DETECTED: Skipping article format enforcement (v4 prompt has its own structure)`);
+          // v12.53.2: Skip enforceResponseFormat entirely for v4-formatted responses
+          // The system prompt defines the structure - post-processing should NOT restructure
+          console.log(`[v12.53.2] V4_FORMAT_DETECTED: Skipping enforceResponseFormat entirely (prompt defines structure)`);
+          // Only strip ALINTI/QUOTE sections (UI shows citations separately)
+          response.content = response.content.replace(/\*\*ALINTI\*\*[\s\S]*?(?=\*\*[A-Z\u00C7\u011E\u0130\u00D6\u015E\u00DC]|\n\n\n|$)/gi, '').trim();
+          response.content = response.content.replace(/\*\*QUOTE\*\*[\s\S]*?(?=\*\*[A-Z]|\n\n\n|$)/gi, '').trim();
+        } else if (isDeadlineQuery) {
+          console.log(`[v12.10] DEADLINE_FORMAT_SKIP: Using legacy format for deadline query (preserves content)`);
+          response.content = this.enforceResponseFormat(
+            response.content, searchResults, responseLanguage, message, 'legacy', routingSchema
+          );
+        } else {
+          const formatType = (hasArticleSections) ? 'article' : 'legacy';
+          response.content = this.enforceResponseFormat(
+            response.content, searchResults, responseLanguage, message, formatType, routingSchema
+          );
         }
-
-        response.content = this.enforceResponseFormat(
-          response.content,
-          searchResults,
-          responseLanguage,
-          message,  // Original user query for verdict detection
-          formatType,
-          routingSchema  // Schema for backendLabel lookup (settings-driven)
-        );
       }
 
       // 5. Save messages to database with error handling
@@ -4429,13 +4429,21 @@ Yani beyanname ile ödeme arasında **2 günlük** bir fark vardır.`;
           const isDeadlineQueryFast = this.detectDeadlineIntent(message) !== null;
           const hasArticleSectionsFast = routingSchema.routes.FOUND.format.articleSections &&
                                          routingSchema.routes.FOUND.format.articleSections.length > 0;
-          const formatType = (hasArticleSectionsFast && !isDeadlineQueryFast) ? 'article' : 'legacy';
+          const isV4FormatFast = /\*\*[1-5]\.\s+[^*]+:\*\*/m.test(response.content);
 
-          if (isDeadlineQueryFast) {
-            console.log(`🛡️ [v12.10] DEADLINE_FORMAT_SKIP (fast): Using legacy format for deadline query`);
+          if (isV4FormatFast) {
+            // v12.53.2: Skip enforceResponseFormat entirely for v4-formatted responses
+            console.log(`[v12.53.2] V4_FORMAT_DETECTED (fast): Skipping enforceResponseFormat`);
+            fastModeResponse = response.content
+              .replace(/\*\*ALINTI\*\*[\s\S]*?(?=\*\*[A-Z\u00C7\u011E\u0130\u00D6\u015E\u00DC]|\n\n\n|$)/gi, '')
+              .replace(/\*\*QUOTE\*\*[\s\S]*?(?=\*\*[A-Z]|\n\n\n|$)/gi, '').trim();
+          } else if (isDeadlineQueryFast) {
+            console.log(`[v12.10] DEADLINE_FORMAT_SKIP (fast): Using legacy format for deadline query`);
+            fastModeResponse = this.enforceResponseFormat(response.content, searchResults, responseLanguage, message, 'legacy', routingSchema);
+          } else {
+            const formatType = (hasArticleSectionsFast) ? 'article' : 'legacy';
+            fastModeResponse = this.enforceResponseFormat(response.content, searchResults, responseLanguage, message, formatType, routingSchema);
           }
-
-          fastModeResponse = this.enforceResponseFormat(response.content, searchResults, responseLanguage, message, formatType, routingSchema);
         }
 
         // 📊 DEBUG INFO for fast mode
