@@ -3478,11 +3478,28 @@ FORMAT:
         } else {
           // Normal mode with natural language summary instructions - loaded from settings
           // Supports {sourceCount} and {maxLength} placeholders for dynamic values
+
+          // v12.52: Check if system prompt already has citation instructions
+          // If so, don't contradict them - defer to system prompt format
+          const systemPromptHasCitations = systemPrompt &&
+            (/\[\d+\]/.test(systemPrompt) || /kaynak numarası/i.test(systemPrompt) || /\[Kaynak/i.test(systemPrompt));
+
+          if (systemPromptHasCitations) {
+            console.log(`📝 [v12.52] System prompt has citation rules - normal mode will defer to system prompt format`);
+          }
+
+          const citationRuleEn = systemPromptHasCitations
+            ? `• Reference claims with citation markers [1], [2], [3] matching the source numbers above`
+            : `• DO NOT use citation markers like [1], [2], [3] - write as a cohesive narrative`;
+          const citationRuleTr = systemPromptHasCitations
+            ? `• İddiaları yukarıdaki kaynak numaralarına uygun şekilde [1], [2], [3] ile referansla`
+            : `• [1], [2], [3] gibi kaynak işaretleri KULLANMA - tutarlı bir anlatım olarak yaz`;
+
           const defaultSummaryEn =
             `RESPONSE INSTRUCTIONS:\n` +
             `• Start your response with a SHORT introductory sentence that acknowledges the user's question (e.g., "According to the relevant law...", "Based on tax regulations...", "Under the applicable legislation...")\n` +
             `• Write a DETAILED natural language summary that synthesizes ALL {sourceCount} sources provided above\n` +
-            `• DO NOT use citation markers like [1], [2], [3] - write as a cohesive narrative\n` +
+            `${citationRuleEn}\n` +
             `• Aim for approximately {maxLength} characters (write LONGER if needed for completeness)\n` +
             `• MUST include:\n` +
             `  - Specific NUMBERS (rates, periods, amounts, dates)\n` +
@@ -3498,7 +3515,7 @@ FORMAT:
             `YANIT TALİMATLARI:\n` +
             `• Yanıta kullanıcının sorusunu anladığını gösteren KISA bir giriş cümlesiyle başla (örn: "İlgili kanun gereği...", "Bu konuda mevzuata göre...", "Vergi mevzuatı çerçevesinde...")\n` +
             `• Yukarıda verilen TÜM {sourceCount} kaynağı sentezleyen DETAYLI bir doğal dil özeti yaz\n` +
-            `• [1], [2], [3] gibi kaynak işaretleri KULLANMA - tutarlı bir anlatım olarak yaz\n` +
+            `${citationRuleTr}\n` +
             `• Yaklaşık {maxLength} karakter hedefle (bütünlük için gerekirse DAHA UZUN yaz)\n` +
             `• MUTLAKA şunları içer:\n` +
             `  - Spesifik SAYILAR (oranlar, süreler, tutarlar, tarihler)\n` +
