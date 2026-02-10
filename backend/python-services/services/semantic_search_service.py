@@ -3994,9 +3994,10 @@ class SemanticSearchService:
                             # Domain-specific additive boosts (already in percentage)
                             rate_boost = r.get('rate_article_boost', 0)
                             direct_boost = r.get('direct_answer_boost', 0)
+                            law_affinity = r.get('law_affinity_boost', 0)
 
-                            # Combined score: rerank * priority * weight + domain boosts
-                            combined_score = priority_weighted_rerank + rate_boost + direct_boost
+                            # Combined score: rerank * priority * weight + domain boosts + law affinity
+                            combined_score = priority_weighted_rerank + rate_boost + direct_boost + law_affinity
                             r['final_score'] = round(combined_score, 2)
                             r['rerank_base'] = round(rerank_score, 2)
                             r['rerank_priority_weighted'] = round(priority_weighted_rerank, 2)
