@@ -119,8 +119,9 @@ function cleanCitationTitle(title: string): string {
     .replace(/\s+\d{2}:\d{2}:\d{2}\s/g, ' ')
     // Remove long sequences of dots/periods (likely placeholder text)
     .replace(/\.{4,}/g, '')
-    // Fix spaced uppercase letters: "D A N I Ş T A Y" -> "DANIŞTAY"
-    .replace(/([A-Z\u00C0-\u024F])\s+(?=[A-Z\u00C0-\u024F]\s*[A-Z\u00C0-\u024F])/g, '$1')
+    // Fix single-letter OCR spacing: "D A N I Ş T A Y" -> "DANIŞTAY" (3+ consecutive single letters)
+    .replace(/\b([A-Z\u00C0-\u024F]) ([A-Z\u00C0-\u024F]) ([A-Z\u00C0-\u024F](?:\s[A-Z\u00C0-\u024F])*)\b/g,
+      (m) => m.replace(/ /g, ''))
     // Fix missing space: lowercase followed by 2+ uppercase
     .replace(/([a-z\u00E0-\u024F])([A-Z\u00C0-\u024F]{2,})/g, '$1 $2')
     // Fix camelCase merged words

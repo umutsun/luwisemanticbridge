@@ -5786,19 +5786,33 @@ Yani beyanname ile ödeme arasında **2 günlük** bir fark vardır.`;
     // "**2.\nHeader:**" → "**2. Header:**"
     fixed = fixed.replace(/\*\*(\d)\.\s*\n\s*/g, '**$1. ');
 
-    // Fix citation in section header: "1. [1] Title:" → "**1. Title:**"
+    // Fix citation in section header: "1. [1] Konu Başlığı:" → "**1. Konu Başlığı:**"
     // LLM sometimes puts citation inside the section number
-    fixed = fixed.replace(/^(\d)\.\s*\[\d+\]\s*/gm, '**$1. ');
+    // Note: the schema-driven header fix below will handle closing ** if sectionHeaders available
+    fixed = fixed.replace(/^(\d)\.\s*\[\d+\]\s*([^:\n]+:)/gm, '**$1. $2**');
 
     // Ensure bold numbered section headers get their own line
     fixed = fixed.replace(/([^\n])\s*(\*\*[1-9]\.\s+[^*]+:\*\*)/g, '$1\n\n$2');
 
-    // v12.53: Fix non-bold numbered section headers inline (language-agnostic)
-    // LLM writes: "...text [2]. 3. Mevzuat Analizi ve Detaylar:" without bold
-    // Detect pattern: sentence-ending punctuation followed by "N. Word... :"
+    // v12.53.3: Fix non-bold numbered section headers (language-agnostic)
+    // Matches both inline ("...text [2]. 3. Title:") and line-start ("4. Title:")
+    // Uses a two-pass approach:
+    // Pass 1: Inline headers after sentence-ending punctuation
     fixed = fixed.replace(
-      /([.!?\]])\s+([1-9])\.\s+([A-Z\u00C0-\u024F][^:]{5,60}:)/g,
-      '$1\n\n**$2. $3**'
+      /([.!?\]])\s+([1-9])\.\s+([A-Z\u00C0-\u024F][^:\n]{3,80}:)/g,
+      (match, prefix, num, rest) => {
+        if (match.includes('**')) return match; // already bold
+        return `${prefix}\n\n**${num}. ${rest}**`;
+      }
+    );
+    // Pass 2: Line/paragraph-start non-bold headers (e.g., "4. Yasal Dayanaklar:")
+    fixed = fixed.replace(
+      /(?:^|\n\n)([1-9])\.\s+([A-Z\u00C0-\u024F][^:\n]{3,80}:)/gm,
+      (match, num, rest) => {
+        if (match.includes('**')) return match; // already bold
+        const prefix = match.startsWith('\n') ? '\n\n' : '';
+        return `${prefix}**${num}. ${rest}**`;
+      }
     );
 
     // Ensure bold sub-headers get their own line
@@ -9711,8 +9725,12 @@ DÜZELTILMIŞ METİN:`;
         const rawTitle = r.title?.replace(/ \(Part \d+\/\d+\)/g, '') || citation;
         const rawTitleStripped = this.stripHtml(rawTitle);
         const titleNeedsOCR = this.detectConcatenatedText(rawTitleStripped);
-        // v12.53: Fix spaced-out uppercase letters in titles (OCR artifact: "D A N I Ş T A Y" → "DANIŞTAY")
-        const spacedLettersFix = rawTitleStripped.replace(/([A-Z\u00C0-\u024F])\s+(?=[A-Z\u00C0-\u024F]\s*[A-Z\u00C0-\u024F])/g, '$1');
+        // v12.53.3: Minimal OCR fix - only fix single-letter spacing ("D A N I Ş T A Y" → "DANIŞTAY")
+        // Word-break artifacts ("DANIŞ TAY") should be fixed at data level, not here
+        const spacedLettersFix = rawTitleStripped.replace(
+          /\b([A-Z\u00C0-\u024F]) ([A-Z\u00C0-\u024F]) ([A-Z\u00C0-\u024F](?:\s[A-Z\u00C0-\u024F])*)\b/g,
+          (m) => m.replace(/ /g, '')
+        );
         const cleanTitle = this.toSentenceCase(this.fixTurkishWordSpacing(spacedLettersFix));
         // Clean raw metadata content (handles crawler records with listing_id/url format)
         // Prefer full_content for richer snippet extraction

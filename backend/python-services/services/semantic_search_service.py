@@ -589,13 +589,17 @@ class SemanticSearchService:
 
             settings_dict = {row['key']: row['value'] for row in rows}
 
-            # Parse source table weights JSON
-            source_table_weights = {}
-            weights_str = settings_dict.get('search.sourceTableWeights', '{}')
-            try:
-                source_table_weights = json.loads(weights_str) if weights_str else {}
-            except (json.JSONDecodeError, TypeError):
-                source_table_weights = {}
+            # Build source_table_weights from sourceTypeHierarchy (single source of truth)
+            # This bridges the UI-configured hierarchy weights into the Python scoring pipeline
+            source_table_weights = self._build_table_weights_from_hierarchy(settings_dict)
+
+            # Fallback: if hierarchy didn't produce weights, use legacy search.sourceTableWeights
+            if not source_table_weights:
+                weights_str = settings_dict.get('search.sourceTableWeights', '{}')
+                try:
+                    source_table_weights = json.loads(weights_str) if weights_str else {}
+                except (json.JSONDecodeError, TypeError):
+                    source_table_weights = {}
 
             # Parse settings
             settings = RAGSettings(
@@ -2587,6 +2591,114 @@ class SemanticSearchService:
         except Exception as e:
             logger.error(f"Error injecting rate article: {e}")
             return False
+
+    # Source table → hierarchy type mapping (mirrors Node.js normalizeSourceType)
+    # This maps actual database table names to sourceTypeHierarchy keys
+    SOURCE_TABLE_TO_HIERARCHY_TYPE = {
+        # Kanun/Mevzuat (highest priority)
+        'vergilex_mevzuat_kanunlar': 'kanun',
+        'vergilex_mevzuat_kanunlar_chunks': 'kanun',
+        'mevzuat_kanunlar': 'kanun',
+        'kanun': 'kanun',
+        'kanunlar': 'kanun',
+        # Tebliğ/Yönetmelik
+        'teblig': 'teblig',
+        'tebligler': 'teblig',
+        'yonetmelik': 'teblig',
+        # Sirküler
+        'sirkuler': 'sirkuler',
+        'vergilex_gib_sirkuler': 'sirkuler',
+        'gib_sirkuler': 'sirkuler',
+        # Yargı Kararları
+        'yargi': 'yargi',
+        'yargi_kararlari': 'yargi',
+        # Özelge
+        'ozelge': 'ozelge',
+        'ozelgeler': 'ozelge',
+        # Danıştay
+        'danistay': 'danistay',
+        'danistaykararlari': 'danistay',
+        # Makale
+        'makale': 'makale',
+        'makaleler': 'makale',
+        'makale_arsiv_2021': 'makale',
+        'makale_arsiv_2022': 'makale',
+        'makale_arsiv_2023': 'makale',
+        'makale_arsiv_2024': 'makale',
+        'makale_arsiv_2025': 'makale',
+        'maliansiklopedi': 'makale',
+        # HUK DKK
+        'hukdkk': 'huk_dkk',
+        'huk_dkk': 'huk_dkk',
+        # Soru-Cevap
+        'sorucevap': 'sorucevap',
+        'soru_cevap': 'sorucevap',
+        # Doküman
+        'document': 'dokuman',
+        'documents': 'dokuman',
+        'unified': 'dokuman',
+        'document_embeddings': 'dokuman',
+    }
+
+    def _build_table_weights_from_hierarchy(self, settings_dict: Dict[str, str]) -> Dict[str, float]:
+        """
+        Build source_table_weights from sourceTypeHierarchy settings.
+
+        Reads ragSettings.sourceTypeHierarchy.*.weight from DB and maps them
+        to actual source table names using SOURCE_TABLE_TO_HIERARCHY_TYPE.
+
+        Weight normalization: hierarchy weight (0-100) → table_weight multiplier
+        - kanun (100) → 2.0 (highest boost)
+        - danistay (70) → 1.4
+        - makale (50) → 1.0 (baseline)
+        - dokuman (20) → 0.4
+
+        Formula: table_weight = hierarchy_weight / 50.0
+        (50 = baseline, so makale=50 gets 1.0x multiplier)
+        """
+        # Collect hierarchy weights from individual settings keys
+        hierarchy_weights = {}
+        for key, value in settings_dict.items():
+            # Match pattern: ragSettings.sourceTypeHierarchy.{type}.weight
+            if key.startswith('ragSettings.sourceTypeHierarchy.') and key.endswith('.weight'):
+                parts = key.split('.')
+                if len(parts) == 4:
+                    hierarchy_type = parts[2]  # e.g., 'kanun', 'danistay'
+                    try:
+                        hierarchy_weights[hierarchy_type] = float(value)
+                    except (ValueError, TypeError):
+                        pass
+
+        if not hierarchy_weights:
+            # Try parsing the JSON blob (ragSettings.sourceTypeHierarchy)
+            hierarchy_json = settings_dict.get('ragSettings.sourceTypeHierarchy', '')
+            if hierarchy_json:
+                try:
+                    hierarchy = json.loads(hierarchy_json)
+                    for htype, hconfig in hierarchy.items():
+                        if isinstance(hconfig, dict) and 'weight' in hconfig:
+                            hierarchy_weights[htype] = float(hconfig['weight'])
+                except (json.JSONDecodeError, TypeError, ValueError):
+                    pass
+
+        if not hierarchy_weights:
+            return {}
+
+        # Build table weights: map each source_table to its hierarchy weight
+        table_weights = {}
+        for table_name, hierarchy_type in self.SOURCE_TABLE_TO_HIERARCHY_TYPE.items():
+            if hierarchy_type in hierarchy_weights:
+                # Normalize: weight/50 so that baseline (makale=50) gets 1.0x
+                raw_weight = hierarchy_weights[hierarchy_type]
+                table_weights[table_name] = round(raw_weight / 50.0, 2)
+
+        if table_weights:
+            # Log the bridge results for debugging
+            sample = {k: v for k, v in sorted(table_weights.items(), key=lambda x: -x[1])[:5]}
+            logger.info(f"[SettingsBridge] Built table_weights from sourceTypeHierarchy: "
+                       f"{len(table_weights)} tables, top: {sample}")
+
+        return table_weights
 
     def _get_source_priority(self, source_table: str, settings: RAGSettings) -> float:
         """Get priority multiplier for source table"""
