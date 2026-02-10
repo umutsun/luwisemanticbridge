@@ -1656,7 +1656,6 @@ class SemanticSearchService:
         """
         source_table = (result.get("source_table") or "").lower()
         title = (result.get("title") or "").upper()
-        content_preview = ((result.get("content") or "") + " " + (result.get("full_content") or ""))[:800].upper()
 
         # Only apply affinity to kanun/mevzuat chunks - these are law texts
         # Don't penalize özelge, makale, sirküler, sorucevap - they can reference any law
@@ -1665,40 +1664,35 @@ class SemanticSearchService:
         if not is_law_chunk:
             return 0.0, {"law_affinity": "not_applicable", "reason": "non-law source"}
 
-        # Get all variations for the detected law code
-        target_variations = self.LAW_CODES.get(detected_law_code, [detected_law_code])
-        target_names_upper = [v.upper() for v in target_variations]
-
-        # Check if this chunk belongs to the target law
-        belongs_to_target = any(name in title for name in target_names_upper)
-        if not belongs_to_target:
-            # Also check content for law name
-            belongs_to_target = any(name in content_preview for name in target_names_upper)
-
-        if belongs_to_target:
-            # Boost: this is from the correct law
-            return 0.15, {"law_affinity": "match", "law_code": detected_law_code}
-
-        # Check if it belongs to a DIFFERENT law (not just unrelated content)
-        belongs_to_other = False
-        other_law = None
-        for code, variations in self.LAW_CODES.items():
-            if code == detected_law_code:
-                continue
-            for v in variations:
-                if v.upper() in title:
-                    belongs_to_other = True
-                    other_law = code
-                    break
-            if belongs_to_other:
+        # Detect which law this chunk belongs to using LAW_NAME_TO_CODE (title only)
+        # This is more reliable than checking content, which can cross-reference other laws
+        chunk_law_code = None
+        for law_name, code in self.LAW_NAME_TO_CODE.items():
+            if law_name in title:
+                chunk_law_code = code
                 break
 
-        if belongs_to_other:
-            # Penalize: this is from a different law
-            return -0.25, {"law_affinity": "wrong_law", "law_code": detected_law_code, "actual_law": other_law}
+        # Also check abbreviations in title (e.g., "GVK", "KVK")
+        if not chunk_law_code:
+            for code, variations in self.LAW_CODES.items():
+                for v in variations:
+                    # Only match short abbreviations (2-5 chars) in title to avoid false positives
+                    if len(v) <= 5 and v.upper() in title:
+                        chunk_law_code = code
+                        break
+                if chunk_law_code:
+                    break
 
-        # Neutral: can't determine law from title
-        return 0.0, {"law_affinity": "unknown", "law_code": detected_law_code}
+        if not chunk_law_code:
+            # Can't determine law from title
+            return 0.0, {"law_affinity": "unknown", "law_code": detected_law_code}
+
+        if chunk_law_code == detected_law_code:
+            # Boost: this chunk is from the target law
+            return 0.15, {"law_affinity": "match", "law_code": detected_law_code, "chunk_law": chunk_law_code}
+        else:
+            # Penalize: this chunk is from a different law
+            return -0.25, {"law_affinity": "wrong_law", "law_code": detected_law_code, "chunk_law": chunk_law_code}
 
     # === DIRECT ANSWER DETECTION (v12.47) ===
     # Patterns for "what is the rate/amount?" type questions
