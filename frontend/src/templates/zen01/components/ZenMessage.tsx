@@ -253,15 +253,39 @@ function preprocessMarkdown(content: string): string {
   result = result.replace(/\s+\d{1,2}\.\s*(?=\n|$)/g, '');
 
   // FIX INLINE NUMBERED LISTS: "...text 1. item text 2. item" → proper markdown list
-  // Find "N. text" patterns inline and add line breaks BEFORE the number
-  // Only match when followed by actual text (3+ chars) to avoid orphaning "N." alone
-  result = result.replace(/ (\d{1,2})\.\s+(?=[A-ZÇĞİÖŞÜa-zçğıöşü]{3,})/g, (match, num) => {
-    const numInt = parseInt(num, 10);
-    if (numInt >= 1 && numInt <= 30) {
-      return `\n\n${num}. `;
-    }
-    return match;
-  });
+  // Detect sequences like "şunlardır: 1. Xxx 2. Yyy 3. Zzz" or "1. Xxx. 2. Yyy. 3. Zzz."
+  // First check if there's a sequence of 3+ inline numbers (strong signal of a list)
+  const inlineListPattern = /(?:[.!?:;]\s*)(\d{1,2})\.\s+\S[\s\S]*?(?:\s)(\d{1,2})\.\s+\S[\s\S]*?(?:\s)(\d{1,2})\.\s+\S/;
+  const hasInlineList = inlineListPattern.test(result);
+
+  if (hasInlineList) {
+    // Strong inline list detected - break ALL numbered items onto new lines
+    // Match: sentence-ending punctuation or colon/space + number + period + text
+    result = result.replace(/([.!?:;,])\s+(\d{1,2})\.\s+/g, (match, punct, num) => {
+      const numInt = parseInt(num, 10);
+      if (numInt >= 1 && numInt <= 30) {
+        return `${punct}\n\n${num}. `;
+      }
+      return match;
+    });
+    // Also catch mid-sentence numbered items (space before number, not after colon)
+    result = result.replace(/ (\d{1,2})\.\s+(?=[A-ZÇĞİÖŞÜa-zçğıöşü]{3,})/g, (match, num) => {
+      const numInt = parseInt(num, 10);
+      if (numInt >= 1 && numInt <= 30) {
+        return `\n\n${num}. `;
+      }
+      return match;
+    });
+  } else {
+    // Weaker signal - only break when clearly inline (original logic)
+    result = result.replace(/ (\d{1,2})\.\s+(?=[A-ZÇĞİÖŞÜa-zçğıöşü]{3,})/g, (match, num) => {
+      const numInt = parseInt(num, 10);
+      if (numInt >= 1 && numInt <= 30) {
+        return `\n\n${num}. `;
+      }
+      return match;
+    });
+  }
 
   // CRITICAL FIX: Convert single newlines between sentences to paragraph breaks
   // Pattern: sentence ending (. ! ?) + optional citation [1][2] + single newline + capital letter
