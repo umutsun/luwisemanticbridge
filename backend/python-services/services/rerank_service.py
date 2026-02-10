@@ -216,9 +216,10 @@ class RerankService:
             if not text.strip() or len(text.strip()) < 10:
                 empty_count += 1
                 continue
-            # Truncate long documents (Jina has 1024 token limit per doc)
-            if len(text) > 4000:
-                text = text[:4000]
+            # Truncate long documents to stay within Jina token limits
+            # ~100K tokens/min limit, with 15-25 docs: max ~1500 chars each
+            if len(text) > 1500:
+                text = text[:1500]
             doc_texts.append(text)
             valid_indices.append(i)
 
@@ -230,21 +231,26 @@ class RerankService:
             logger.warning("Rerank: all documents had empty content, returning original order")
             return documents
 
-        # Call Jina API - send ALL documents to get scores for everything
+        # Call Jina API - get scores for all docs, but cap to avoid rate limits
+        # Jina has 100K tokens/min limit; with 1500 char/doc, ~20 docs = ~30K tokens
+        max_docs_for_jina = min(len(doc_texts), 20)
         try:
             reranked = await self._call_jina_api(
                 query=query,
-                documents=doc_texts,
+                documents=doc_texts[:max_docs_for_jina],
                 model=config.model,
                 api_key=config.api_key,
-                top_n=len(doc_texts)  # Get scores for ALL docs, not just top_n
+                top_n=max_docs_for_jina  # Score all sent docs
             )
 
             elapsed = (datetime.now() - start_time).total_seconds() * 1000
-            logger.info(f"Jina rerank completed: {len(reranked)} results in {elapsed:.1f}ms (sent {len(doc_texts)}/{len(documents)} docs)")
+            logger.info(f"Jina rerank completed: {len(reranked)} results in {elapsed:.1f}ms (sent {max_docs_for_jina}/{len(documents)} docs)")
+
+            # valid_indices for Jina are only the first max_docs_for_jina entries
+            jina_valid_indices = valid_indices[:max_docs_for_jina]
 
             # Build result list with rerank scores
-            # Map Jina indices back to original document indices via valid_indices
+            # Map Jina indices back to original document indices via jina_valid_indices
             result_docs = []
             for item in reranked:
                 jina_idx = item['index']
@@ -255,18 +261,19 @@ class RerankService:
                     continue
 
                 # Map back to original document index
-                original_idx = valid_indices[jina_idx]
+                if jina_idx >= len(jina_valid_indices):
+                    continue
+                original_idx = jina_valid_indices[jina_idx]
                 doc = documents[original_idx].copy()
                 doc['rerank_score'] = score
                 doc['_original_index'] = original_idx
                 result_docs.append(doc)
 
-            # Add skipped (empty content) documents with fallback score
-            # Instead of 0.0, use their pre-rerank similarity score normalized to 0-1 range
+            # Add documents not sent to Jina with fallback score
             reranked_original_indices = set()
             for item in reranked:
-                if item['index'] < len(valid_indices):
-                    reranked_original_indices.add(valid_indices[item['index']])
+                if item['index'] < len(jina_valid_indices):
+                    reranked_original_indices.add(jina_valid_indices[item['index']])
 
             for i, doc in enumerate(documents):
                 if i not in reranked_original_indices:
