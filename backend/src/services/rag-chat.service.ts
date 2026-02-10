@@ -4446,6 +4446,13 @@ Yani beyanname ile ödeme arasında **2 günlük** bir fark vardır.`;
           }
         }
 
+        // v12.53.4: Apply fixMarkdownAndCitations in fast mode too
+        // (was missing - caused inline section headers and citation-at-start issues)
+        if (responseType === 'FOUND') {
+          const fastSectionHeaders = (systemPrompt.match(/\*\*\d+\.\s+[^*]+:\*\*/g) || []) as string[];
+          fastModeResponse = this.fixMarkdownAndCitations(fastModeResponse, fastModeSources, fastSectionHeaders);
+        }
+
         // 📊 DEBUG INFO for fast mode
         const fastModeDebugInfo = {
           responseType,
@@ -5834,6 +5841,18 @@ Yani beyanname ile ödeme arasında **2 günlük** bir fark vardır.`;
       }
       return match;
     });
+
+    // ═══ Move citations from sentence start to sentence end ═══
+    // LLM sometimes writes "[1] Sentence text." instead of "Sentence text [1]."
+    // Match: start-of-line or after period/newline, then [N] at beginning of a sentence
+    fixed = fixed.replace(
+      /(?:^|\n)(\s*)\[(\d+)\]\s+([A-Z\u00C0-\u024F][^.!?\n]{10,}?)([.!?])\s*/gm,
+      (match, indent, cite, sentence, punct) => {
+        // Don't move if sentence already has a citation at the end
+        if (/\[\d+\]\s*$/.test(sentence)) return match;
+        return `\n${indent}${sentence} [${cite}]${punct} `;
+      }
+    );
 
     // ═══ Remove hallucinated citations ═══
     const maxCitations = sources.length;

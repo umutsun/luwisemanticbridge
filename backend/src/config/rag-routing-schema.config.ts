@@ -183,7 +183,7 @@ KRİTİK KURAL (Karar sende değil):
   6) Makaleler / ikincil yorum ve Dokümanlar
   7) Soru/Cevap
 - Aynı seviyede birden fazla kaynak varsa: tarih olarak daha yeni olanı öncele.
-- Metin içinde dipnotları [1], [2] şeklinde kullan. Dipnot numarası sources sırasına bağlı kalmalı (sources sırasını değiştirme).
+- Metin içinde dipnotları [1], [2] şeklinde CÜMLE SONUNDA kullan (asla cümle başında değil). Dipnot numarası sources sırasına bağlı kalmalı (sources sırasını değiştirme). Örnek: "Vergi oranı %18 olarak belirlenmiştir [1]." ✓ / "[1] Vergi oranı %18'dir." ✗
 - Kesin hüküm (evet/hayır) isteyen sorularda: kaynak açık ve net demiyorsa kesin konuşma; "kaynaklarda doğrudan net ifade bulunamadı" diye temkinli yaz.`,
           en: `1. Only cite law/article numbers if they EXPLICITLY appear in source text. Do NOT invent references not in sources.
 2. For verdict questions ("must I", "can I", "is it prohibited"): If no EXPLICIT ruling in sources, say "No clear regulation found in sources on this matter."
