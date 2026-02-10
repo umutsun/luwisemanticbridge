@@ -175,6 +175,29 @@ class SemanticSearchService:
         self._law_code_config_time: Optional[float] = None
         self._law_code_config_ttl = 60  # 60 seconds
 
+    async def warmup(self):
+        """Pre-warm caches and connections to reduce first-query latency"""
+        try:
+            # 1. Load and cache embedding config + settings in parallel
+            config, settings = await asyncio.gather(
+                self._get_embedding_config(),
+                self.get_rag_settings()
+            )
+            # 2. Pre-create OpenAI client (establishes httpx connection pool)
+            if config.provider == 'openai' and config.api_key:
+                self.openai_client = openai.AsyncOpenAI(api_key=config.api_key)
+                self._openai_api_key = config.api_key
+            # 3. Cache actual source tables from DB
+            from services.database import get_db
+            pool = await get_db()
+            table_rows = await pool.fetch(
+                "SELECT DISTINCT source_table FROM unified_embeddings WHERE source_table IS NOT NULL"
+            )
+            self._actual_source_tables = {row['source_table'] for row in table_rows}
+            logger.info(f"Warmup: {config.provider}/{config.model}, {len(self._actual_source_tables)} tables, settings cached")
+        except Exception as e:
+            logger.warning(f"Warmup partial failure: {e}")
+
     async def get_law_code_config(self) -> LawCodeConfig:
         """
         Load law code configuration from database (schema's llm_config.lawCodeConfig).
@@ -889,8 +912,8 @@ class SemanticSearchService:
                         ORDER BY embedding <=> $1::vector
                         LIMIT $2
                     """
-                    # Fetch more results to ensure good coverage across sources
-                    unified_limit = max(50, limit * 2)
+                    # v12.55: Reduced from 50 to 30 — backfill covers missing high-priority tables
+                    unified_limit = max(30, limit * 2)
                     rows = await pool.fetch(unified_query, embedding_str, unified_limit)
                     for row in rows:
                         source_id = row.get('source_id')
@@ -964,9 +987,8 @@ class SemanticSearchService:
                         ORDER BY embedding <=> $1::vector
                         LIMIT $2
                     """
-                    # Fetch more document embeddings to ensure good coverage
-                    # Minimum 15 results to capture relevant documents even with low limit
-                    doc_limit = max(15, limit)
+                    # v12.55: Reduced from 15 to 8 — unified_embeddings is primary source
+                    doc_limit = max(8, limit // 2)
                     rows = await pool.fetch(doc_query, embedding_str, doc_limit)
                     for row in rows:
                         row_dict = dict(row)
@@ -3617,12 +3639,12 @@ class SemanticSearchService:
         timings = {}
         use_keyword_fallback = False
 
-        # Load settings
-        settings = await self.get_rag_settings()
+        # v12.55: Parallel load settings + penalty config (saves ~30-50ms)
+        settings, penalty_config = await asyncio.gather(
+            self.get_rag_settings(),
+            self._load_penalty_config()
+        )
         limit = limit or settings.max_results
-
-        # Load penalty configuration (from DB or defaults)
-        penalty_config = await self._load_penalty_config()
 
         # === ARTICLE ANCHORING: Detect if query asks about specific law article ===
         article_query = self._detect_article_query(query)
@@ -4114,9 +4136,15 @@ class SemanticSearchService:
                     rerank_start = datetime.now()
                     rerank_service = get_rerank_service()
 
+                    # v12.55: Limit rerank candidates to top 15 for speed
+                    # Jina rerank time scales linearly with document count
+                    # 20 docs ≈ 400ms, 15 docs ≈ 300ms
+                    rerank_limit = min(len(scored_results), 15)
+                    rerank_candidates = scored_results[:rerank_limit]
+
                     # Prepare documents for reranking (use full_content for better accuracy)
                     rerank_docs = []
-                    for r in scored_results:
+                    for r in rerank_candidates:
                         doc = r.copy()
                         # Use full_content if available, otherwise content
                         doc['content'] = r.get('full_content') or r.get('content', '')

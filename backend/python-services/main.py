@@ -73,6 +73,14 @@ async def lifespan(app: FastAPI):
         # Auto-recovery: Check for crashed batch jobs and resume them
         await check_and_recover_crashed_jobs()
 
+        # v12.55: Pre-warm semantic search service (OpenAI client + settings cache)
+        try:
+            from services.semantic_search_service import semantic_search_service
+            await semantic_search_service.warmup()
+            logger.info("✅ Semantic search service warmed up")
+        except Exception as warmup_err:
+            logger.warning(f"⚠️ Semantic search warmup skipped: {warmup_err}")
+
     except Exception as e:
         logger.error(f"❌ Failed to initialize services: {e}")
         raise
