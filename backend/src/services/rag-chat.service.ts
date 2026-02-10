@@ -5793,9 +5793,16 @@ Yani beyanname ile ödeme arasında **2 günlük** bir fark vardır.`;
     // "**2.\nHeader:**" → "**2. Header:**"
     fixed = fixed.replace(/\*\*(\d)\.\s*\n\s*/g, '**$1. ');
 
-    // Fix citation in section header: "1. [1] Konu Başlığı:" → "**1. Konu Başlığı:**"
+    // Fix split bold headers: "**3. Title Part1 ve **\n**Part2:**" → "**3. Title Part1 ve Part2:**"
+    // LLM sometimes wraps long titles causing bold to split across lines
+    // Only merge if first part does NOT end with colon (incomplete title)
+    fixed = fixed.replace(/\*\*(\d+\.\s+[^*:]+?)\s*\*\*\s*\n\s*\*\*([^*]+?:\*\*)/g, '**$1 $2');
+
+    // Fix citation inside bold header: "**1. [1] Konu Başlığı:**" → "**1. Konu Başlığı:**"
+    fixed = fixed.replace(/\*\*(\d)\.\s*\[\d+\]\s*([^*:\n]+:)\*\*/gm, '**$1. $2**');
+
+    // Fix citation in non-bold section header: "1. [1] Konu Başlığı:" → "**1. Konu Başlığı:**"
     // LLM sometimes puts citation inside the section number
-    // Note: the schema-driven header fix below will handle closing ** if sectionHeaders available
     fixed = fixed.replace(/^(\d)\.\s*\[\d+\]\s*([^:\n]+:)/gm, '**$1. $2**');
 
     // Ensure bold numbered section headers get their own line
