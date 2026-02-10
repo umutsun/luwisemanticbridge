@@ -99,8 +99,8 @@ export const DEFAULT_RAG_ROUTING_SCHEMA: RAGRoutingSchema = {
             titleEn: 'Assessment',
             required: true,
             systemGenerated: false,  // LLM yazar
-            description: 'Kompozisyon yapısında yaz: 1) Giriş paragrafı - soruya doğrudan cevap ver ve konuyu çerçevele [1]. 2) Açıklama paragrafları - kapsam, koşullar, istisnalar, her paragraf YENİ bilgi eklemeli. 3) Pratik bilgi - uygulama detayları, süreler, usul (varsa). SADECE sources\'tan hareketle yaz. Her önemli bilgiden sonra dipnot ekle [1], [2]. Sayısal sorularda (oran, süre, tutar) ilk cümlede rakamı ver. Aynı bilgiyi tekrarlama, soyut yerine somut yaz. VERDICT SORULARINDA: Kaynaklarda AÇIK hüküm yoksa "Kaynaklarda bu konuda açık bir düzenleme bulunamamıştır" yaz.',
-            descriptionEn: 'Write in composition structure: 1) Opening paragraph - answer directly and frame the topic [1]. 2) Explanation paragraphs - scope, conditions, exceptions, each paragraph adds NEW info. 3) Practical info - deadlines, procedures (if available). Write based ONLY on sources. Add footnotes [1], [2]. For numerical questions, state the number in first sentence. No repetition, prefer concrete over abstract. VERDICT QUESTIONS: If no explicit ruling in sources, write "No clear regulation found in sources on this matter."'
+            description: 'System prompt\'taki YANIT FORMATI\'nı takip et. Kaynaklara dayanarak bold başlıklı, paragraf ayrımlı yapılandırılmış yanıt üret. Her önemli bilgiden sonra dipnot [1], [2] ekle. Sayısal sorularda ilk cümlede rakamı ver. Aynı bilgiyi tekrarlama, soyut yerine somut yaz. VERDICT SORULARINDA: Kaynaklarda AÇIK hüküm yoksa "Kaynaklarda bu konuda açık bir düzenleme bulunamamıştır" yaz.',
+            descriptionEn: 'Follow the RESPONSE FORMAT defined in the system prompt. Generate structured responses with bold headers and proper paragraph separation based on sources. Add footnotes [1], [2] after key claims. For numerical questions, state the number in first sentence. No repetition, prefer concrete over abstract. VERDICT QUESTIONS: If no explicit ruling in sources, write "No clear regulation found in sources on this matter."'
           }
         ],
 
@@ -265,8 +265,8 @@ Otherwise use: "may be interpreted as", "suggests", "indicates", "could be consi
 
         // Answer style instruction - configurable per schema
         // Override to change how the LLM opens its response
-        answerInstruction: 'Yanıta kullanıcının sorusunu anladığını gösteren KISA bir giriş cümlesiyle başla (örn: "GVK\'nın 94. maddesi uyarınca...", "İlgili mevzuata göre...", "Bu konuda vergi kanunu gereği...").\nSoruya İLK PARAGRAFTA doğrudan cevap ver (oran, süre, tutar, evet/hayır), ardından [1], [2], [3] atıflarıyla detaylandır.\nListe sorulan sorularda (hangi belgeler, hangi şartlar, neler gerekli) tüm maddeleri sırala, eksik bırakma.',
-        answerInstructionEn: 'Start the response with a SHORT introductory sentence that acknowledges the user\'s question (e.g., "According to Article 94 of the Income Tax Law...", "Under the relevant legislation...").\nAnswer the user\'s question directly in the FIRST PARAGRAPH (number, rate, date, duration, or yes/no), then elaborate with citations [1], [2], [3].\nFor list questions (which documents, which conditions, what is required) enumerate ALL items comprehensively, do not omit.',
+        answerInstruction: 'System prompt\'taki format yapısını takip et. Bold başlıklar (**başlık:**) ve paragraf ayrımları kullan.\nSoruya İLK bölümde doğrudan cevap ver (oran, süre, tutar, evet/hayır), ardından [1], [2], [3] atıflarıyla detaylandır.\nListe sorulan sorularda (hangi belgeler, hangi şartlar, neler gerekli) tüm maddeleri sırala, eksik bırakma.\nAlt başlıkları **bold** yap, paragraflar arası boş satır bırak.',
+        answerInstructionEn: 'Follow the format structure defined in the system prompt. Use bold headers (**header:**) and proper paragraph separation.\nAnswer the user\'s question directly in the FIRST section (number, rate, date, duration, or yes/no), then elaborate with citations [1], [2], [3].\nFor list questions (which documents, which conditions, what is required) enumerate ALL items comprehensively, do not omit.\nMake sub-headers **bold**, leave blank lines between paragraphs.',
 
         template: '' // Article format uses articleSections
       }

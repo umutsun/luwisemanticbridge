@@ -3305,49 +3305,17 @@ Lütfen "beyanname" veya "ödeme" yazarak belirtin.`;
         // Increased default from 2000 to 4000 for Wikipedia-style long articles
         const articleLength = parseInt(settingsMap.get('ragSettings.summaryMaxLength') || '4000');
 
-        // Default medium-mode prompts (better recall, still requires citation)
-        // If article format is enabled, use schema-driven academic article format
-        // v12.45: Added rule 5 for mandatory primary source citation
+        // v12.53.5: Format instructions come from system prompt + settings, not hardcoded
+        // Minimal fallback only provides source citation rules (language-agnostic)
+        const sourceInstructionFallback = `Sources are numbered [1], [2], etc. Use ONLY source content. Cite with [1], [2]. Follow system prompt format.`;
+
         const defaultMediumPromptTr = useArticleFormat
           ? this.buildArticleFormatPrompt(routingSchema, 'tr', articleLength)
-          : isV4SystemPrompt
-          ? `Aşağıda numaralanmış kaynaklar var. Her kaynağın numarası [1], [2] şeklindedir.
-
-KAYNAK KULLANIM KURALLARI:
-1. SADECE kaynaklardaki bilgiyi kullan
-2. Her iddiayı ilgili kaynak numarasıyla destekle: [1], [2], [3]
-3. Kaynaksız sayısal bilgi (oran, süre, tutar) verme
-4. ⭐ işaretli kaynaklar BİRİNCİL KAYNAKTIR - varsa MUTLAKA [X] ile atıf yap
-5. Kaynaklarda yoksa "Bu konuda yeterli kaynak bulunamadı" de
-
-System prompt'taki format yapısına uy.`
-          : `Aşağıda numaralanmış kaynaklar var.
-
-CEVAPLAMA KURALLARI:
-1. SADECE kaynaklardaki bilgiyi kullan
-2. Her iddiayı [Kaynak X] ile referansla
-3. Kaynak metninden doğrudan alıntı yap
-4. Kaynaklarda yoksa "Bu konuda kaynaklarda bilgi bulunamadı" de
-5. ⭐ işaretli kaynaklar (kanun, mevzuat) BİRİNCİL KAYNAKTIR - varsa MUTLAKA bunlara atıf yap
-
-FORMAT:
-**CEVAP**
-[Cevabın] [Kaynak X]`;
+          : sourceInstructionFallback;
 
         const defaultMediumPromptEn = useArticleFormat
           ? this.buildArticleFormatPrompt(routingSchema, 'en', articleLength)
-          : `Sources are numbered below.
-
-ANSWERING RULES:
-1. Use ONLY information from sources
-2. Reference every claim with [Source X]
-3. Quote directly from source text
-4. If not in sources, say "No information found on this topic in the sources"
-5. Sources marked with ⭐ (laws, legislation) are PRIMARY SOURCES - you MUST cite them if available
-
-FORMAT:
-**ANSWER**
-[Your answer] [Source X]`;
+          : sourceInstructionFallback;
 
         if (useArticleFormat) {
           console.log(`📋 ARTICLE FORMAT: Using ${routingSchema.routes.FOUND.format.articleSections?.length || 0}-section mini-makale format`);
@@ -3486,44 +3454,15 @@ FORMAT:
             console.log(`📝 [v12.52] System prompt has citation rules - normal mode will defer to system prompt format`);
           }
 
-          const citationRuleEn = systemPromptHasCitations
-            ? `• Reference claims with citation markers [1], [2], [3] matching the source numbers above`
-            : `• DO NOT use citation markers like [1], [2], [3] - write as a cohesive narrative`;
-          const citationRuleTr = systemPromptHasCitations
-            ? `• İddiaları yukarıdaki kaynak numaralarına uygun şekilde [1], [2], [3] ile referansla`
-            : `• [1], [2], [3] gibi kaynak işaretleri KULLANMA - tutarlı bir anlatım olarak yaz`;
+          // v12.53.5: Minimal fallback - all format instructions come from system prompt + settings
+          // No hardcoded language-specific prompts. Settings override: ragSettings.citationInstructionTr/En
+          const defaultSummaryFallback =
+            `Sources are numbered [1], [2], etc. above.\n` +
+            `• Cite claims with [1], [2], [3] matching source numbers\n` +
+            `Follow your system prompt format. Synthesize all {sourceCount} sources. Target ~{maxLength} chars.`;
 
-          const defaultSummaryEn =
-            `RESPONSE INSTRUCTIONS:\n` +
-            `• Start your response with a SHORT introductory sentence that acknowledges the user's question (e.g., "According to the relevant law...", "Based on tax regulations...", "Under the applicable legislation...")\n` +
-            `• Write a DETAILED natural language summary that synthesizes ALL {sourceCount} sources provided above\n` +
-            `${citationRuleEn}\n` +
-            `• Aim for approximately {maxLength} characters (write LONGER if needed for completeness)\n` +
-            `• MUST include:\n` +
-            `  - Specific NUMBERS (rates, periods, amounts, dates)\n` +
-            `  - CONDITIONS and REQUIREMENTS (when what applies)\n` +
-            `  - EXCEPTIONS and EXEMPTIONS (if any)\n` +
-            `  - RELEVANT LEGISLATION (law/article/regulation numbers)\n` +
-            `• DO NOT skip information from sources - TRANSFER it fully\n` +
-            `• Provide CONCRETE and SPECIFIC information like a tax expert\n` +
-            `• NEVER add section headings or labels like "SUMMARY:" or "CONCLUSION:"\n` +
-            `Provide a flowing, informative overview that addresses the question comprehensively.`;
-
-          const defaultSummaryTr =
-            `YANIT TALİMATLARI:\n` +
-            `• Yanıta kullanıcının sorusunu anladığını gösteren KISA bir giriş cümlesiyle başla (örn: "İlgili kanun gereği...", "Bu konuda mevzuata göre...", "Vergi mevzuatı çerçevesinde...")\n` +
-            `• Yukarıda verilen TÜM {sourceCount} kaynağı sentezleyen DETAYLI bir doğal dil özeti yaz\n` +
-            `${citationRuleTr}\n` +
-            `• Yaklaşık {maxLength} karakter hedefle (bütünlük için gerekirse DAHA UZUN yaz)\n` +
-            `• MUTLAKA şunları içer:\n` +
-            `  - Spesifik SAYILAR (oranlar, süreler, tutarlar, tarihler)\n` +
-            `  - ŞARTLAR ve KOŞULLAR (hangi durumda ne geçerli)\n` +
-            `  - İSTİSNALAR ve MUAFIYETLER (varsa)\n` +
-            `  - İLGİLİ MEVZUAT (kanun/madde/tebliğ numaraları)\n` +
-            `• Kaynaklardaki BİLGİYİ ATLA DEĞİL, AKTAR - kısa kesme\n` +
-            `• Bir vergi uzmanı gibi SOMUT ve SPESİFİK bilgi ver\n` +
-            `• ASLA "ÖZET:" veya "SONUÇ:" gibi bölüm başlıkları ekleme\n` +
-            `Soruyu kapsamlı bir şekilde ele alan akıcı, bilgilendirici bir genel bakış sun.`;
+          const defaultSummaryEn = defaultSummaryFallback;
+          const defaultSummaryTr = defaultSummaryFallback;
 
           // Get max summary length from settings (used in citation excerpt generation)
           // 📝 NOTE: Increased default from 800 to 1500 for more detailed responses
