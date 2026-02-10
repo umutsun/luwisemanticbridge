@@ -7804,10 +7804,14 @@ Please verify the article number or check official sources.`;
     // ═══════════════════════════════════════════════════════════════
     let result = processedSentences.join(' ');
 
-    // Clean up artifacts
+    // Clean up artifacts from sentence removal
     result = result.replace(/\s{2,}/g, ' ');           // Double spaces
     result = result.replace(/\s+([,;.])/g, '$1');      // Space before punctuation
-    result = result.replace(/([,;])\s*([,;.])/g, '$1'); // Double punctuation
+    // Remove orphaned commas/semicolons: ", ," or ", , ," patterns (from removed sentence fragments)
+    result = result.replace(/(?:,\s*){2,}/g, ', ');    // Multiple commas → single comma
+    result = result.replace(/([,;])\s*([,;.])/g, '$1'); // Adjacent punctuation
+    result = result.replace(/,\s*\./g, '.');           // Comma before period
+    result = result.replace(/^\s*,\s*/gm, '');         // Leading comma on line
     result = result.replace(/\n{3,}/g, '\n\n');        // Multiple newlines
     result = result.replace(/\[\d+\]\s*\[\d+\]/g, (m) => m.split('][').join('], [')); // Fix citation clusters
 
