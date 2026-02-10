@@ -66,6 +66,10 @@ export interface SemanticSearchResult {
   source_priority: number;
   final_score: number;
   rerank_score?: number;  // Jina reranker score (0-1) when reranking is enabled
+  rerank_base?: number;   // Raw Jina score * 100 (percentage)
+  rerank_priority_weighted?: number;  // rerank_base * source_priority * table_weight
+  table_weight?: number;  // Table weight from settings (0-1)
+  pre_rerank_score?: number;  // Pre-rerank final_score (for debugging)
   metadata?: Record<string, any>;
 }
 

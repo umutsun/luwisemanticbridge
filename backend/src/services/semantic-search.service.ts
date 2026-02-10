@@ -1189,9 +1189,12 @@ export class SemanticSearchService {
                 matchedPattern = articleBoostResult.matchedPattern;
               }
 
-              // Combined score: (semantic * 0.70 + hierarchy * 0.30 + keyword * 0.10) * articleBoost
-              const baseScore = pureSimilarity * this.semanticWeight + hierarchyScore * this.hierarchyWeight + keywordBoost * 0.1;
-              const combinedScore = Math.min(baseScore * articleBoostMultiplier * 100, 100);
+              // v12.52: Preserve Python's final_score (includes rerank + priority + weight + boosts)
+              // Only apply Node.js article boost on top when article query detected
+              const pythonFinalScore = r.final_score || 0; // Already 0-100 from Python
+              const boostedScore = articleBoostMultiplier > 1.0
+                ? Math.min(pythonFinalScore * articleBoostMultiplier, 150)
+                : pythonFinalScore;
 
               return {
                 id: r.id,
@@ -1199,14 +1202,21 @@ export class SemanticSearchService {
                 excerpt: r.content,
                 full_content: r.full_content,
                 source_table: r.source_table,
+                source_type: r.source_type,
                 source_id: r.source_id,
                 similarity_score: r.similarity_score,
-                final_score: combinedScore, // Use combined score with hierarchy + article boost
+                final_score: boostedScore, // v12.52: Preserve Python's rerank-based score
                 keyword_boost: r.keyword_boost,
                 metadata: r.metadata,
                 hierarchyScore: hierarchyScore,
                 pureSimilarity: pureSimilarity,
-                // 🔧 NEW: Article match info
+                // Rerank fields from Python (pass through)
+                rerank_score: r.rerank_score,
+                rerank_base: r.rerank_base,
+                rerank_priority_weighted: r.rerank_priority_weighted,
+                source_priority: r.source_priority,
+                table_weight: r.table_weight,
+                // Article match info
                 articleMatched: articleMatched,
                 articleMatchedPattern: matchedPattern,
                 articleBoost: articleBoostMultiplier

@@ -2714,37 +2714,11 @@ ${questionLabel}: ${message}`;
         }
       }
 
+      // v12.52: Sort by final_score (includes rerank + priority + weight from Python)
       searchResults = allResults.sort((a, b) => {
-        const scoreA = a.score || (a.similarity_score * 100) || 0;
-        const scoreB = b.score || (b.similarity_score * 100) || 0;
-
-        // Primary sort: by score (descending)
-        const scoreDiff = scoreB - scoreA;
-
-        // If scores are within 5% tolerance and source type priority is enabled,
-        // use source type as secondary sort
-        if (sourceTypePriorityEnabled && Math.abs(scoreDiff) < 5) {
-          const typeA = (a.source_type || a.metadata?.source_type || '').toLowerCase();
-          const typeB = (b.source_type || b.metadata?.source_type || '').toLowerCase();
-
-          // Get priority index (lower = higher priority, -1 means not in list = lowest priority)
-          const getPriority = (type: string): number => {
-            for (let i = 0; i < sourceTypePriority.length; i++) {
-              if (type.includes(sourceTypePriority[i])) return i;
-            }
-            return sourceTypePriority.length; // Lowest priority if not found
-          };
-
-          const priorityA = getPriority(typeA);
-          const priorityB = getPriority(typeB);
-
-          // If priorities differ, sort by priority
-          if (priorityA !== priorityB) {
-            return priorityA - priorityB;
-          }
-        }
-
-        return scoreDiff;
+        const scoreA = a.final_score || a.score || (a.similarity_score * 100) || 0;
+        const scoreB = b.final_score || b.score || (b.similarity_score * 100) || 0;
+        return scoreB - scoreA;
       });
 
       initialDisplayCount = Math.min(minResults, searchResults.length);
@@ -2814,29 +2788,17 @@ ${questionLabel}: ${message}`;
         return weight;
       };
 
-      // Sort: high-priority first, then by original similarity
-      const presortedResults = [...searchResults].sort((a, b) => {
-        const weightA = getHierarchyWeight(a);
-        const weightB = getHierarchyWeight(b);
-        // High priority (>= 80) comes first
-        const isHighA = weightA >= 80 ? 1 : 0;
-        const isHighB = weightB >= 80 ? 1 : 0;
-        if (isHighB !== isHighA) return isHighB - isHighA; // High priority first
-        // Within same priority tier, keep original order (by similarity)
-        return searchResults.indexOf(a) - searchResults.indexOf(b);
-      });
-
-      // Log if reordering happened
-      const firstHighPriorityInOriginal = searchResults.findIndex(r => getHierarchyWeight(r) >= 80);
-      if (firstHighPriorityInOriginal > 0) {
-        const sourceTable = searchResults[firstHighPriorityInOriginal]?.source_table || 'unknown';
-        console.log(`🎯 [v12.46] Pre-sorted: High-priority source moved from [${firstHighPriorityInOriginal + 1}] to [1]: ${sourceTable}`);
+      // v12.52: Respect Python's rerank + priority ordering
+      // Python already applies source_priority and table_weight in scoring
+      // Only intervene if a high-priority source would be cut off by initialDisplayCount
+      const firstHighIdx = searchResults.findIndex(r => getHierarchyWeight(r) >= 80);
+      if (firstHighIdx >= initialDisplayCount && firstHighIdx < searchResults.length) {
+        // High-priority source exists but outside context window - swap it in
+        const highPriorityResult = searchResults[firstHighIdx];
+        searchResults.splice(firstHighIdx, 1);
+        searchResults.splice(initialDisplayCount - 1, 0, highPriorityResult);
+        console.log(`🎯 [v12.52] Promoted law source from [${firstHighIdx + 1}] to [${initialDisplayCount}]: ${highPriorityResult.source_table}`);
       }
-
-      // 🎯 v12.46: Replace searchResults with presorted version
-      // This ensures high-priority sources are included in context AND tracked correctly
-      // in later processing (formattedSources, citationRemap, etc.)
-      searchResults = presortedResults;
 
       let contextParts: string[] = [];
       let currentContextLength = 0;
@@ -2844,7 +2806,7 @@ ${questionLabel}: ${message}`;
 
       for (let idx = 0; idx < Math.min(initialDisplayCount, searchResults.length); idx++) {
         const r = searchResults[idx];
-        const score = Math.round(r.score || (r.similarity_score * 100) || 0);
+        const score = Math.round(r.final_score || r.score || (r.similarity_score * 100) || 0);
         const title = r.title || `Kaynak ${idx + 1}`;
         // Get content - prefer full_content (untrimmed), fall back to excerpt/content
         // Clean raw metadata content (handles crawler records with listing_id/url format)
@@ -4735,8 +4697,9 @@ Yani beyanname ile ödeme arasında **2 günlük** bir fark vardır.`;
         // Get similarity score (normalized 0-1)
         const similarityScore = source.score || source.similarity_score || 0;
 
-        // Combined score: hierarchy weight (70%) + similarity score (30%)
-        const combinedScore = (hierarchyWeight / 100) * 0.7 + similarityScore * 0.3;
+        // v12.52: Use Python's final_score (includes rerank + priority + weight)
+        const pythonFinalScore = source.final_score || 0;
+        const combinedScore = pythonFinalScore > 1 ? pythonFinalScore / 100 : pythonFinalScore;
 
         return {
           ...source,
@@ -4744,11 +4707,11 @@ Yani beyanname ile ödeme arasında **2 günlük** bir fark vardır.`;
           _similarityScore: similarityScore,
           _combinedScore: combinedScore,
           _originalIndex: originalIndex + 1,  // 1-indexed (matches LLM citation [1], [2], etc.)
-          table_weight: hierarchyWeight / 100  // v12.45: Normalized 0-1 for citation-utils
+          table_weight: source.table_weight || hierarchyWeight / 100  // v12.52: Prefer Python's table_weight
         };
       });
 
-      // Step 2: Sort by combined score (hierarchy + similarity)
+      // Step 2: Sort by combined score (v12.52: based on Python's rerank + priority scores)
       let sortedSources = sourcesWithScores.sort((a, b) => b._combinedScore - a._combinedScore);
 
       // ═══════════════════════════════════════════════════════════════
@@ -10574,6 +10537,7 @@ DÜZELTILMIŞ METİN:`;
           question: generatedQuestion,
           category: prep.category,
           sourceTable: r.source_table || 'documents',
+          source_table: r.source_table || 'documents',
           citation: prep.citation,
           score: prep.score,
           relevance: prep.score,
@@ -10589,7 +10553,15 @@ DÜZELTILMIŞ METİN:`;
           hasContent: !!(r.content || r.excerpt),
           contentLength: (r.content || r.excerpt || '').length,
           // Add flag indicating if LLM enrichment was applied
-          enriched: enableLLMGeneration && !!batchLLMResults[i]
+          enriched: enableLLMGeneration && !!batchLLMResults[i],
+          // v12.52: Pass through rerank + priority fields for citation ordering
+          final_score: r.final_score || 0,
+          similarity_score: r.similarity_score || 0,
+          rerank_score: r.rerank_score,
+          rerank_base: r.rerank_base,
+          rerank_priority_weighted: r.rerank_priority_weighted,
+          source_priority: r.source_priority,
+          table_weight: r.table_weight
         });
       }
     }
