@@ -851,17 +851,28 @@ class SemanticSearchService:
                 try:
                     logger.info(f"[VectorSearch] Querying unified_embeddings (database_priority={settings.database_priority})")
 
-                    # 🔧 SOURCE DIVERSITY: Get priority sources from settings (weight >= 1.0)
-                    # This ensures high-priority sources like kanun always get representation
+                    # 🔧 v12.54: SOURCE DIVERSITY - query only tables that exist in DB
+                    # Filter priority sources against actual DB tables to avoid wasted queries
                     priority_sources = []
                     if settings.source_table_weights:
+                        # Get actual tables from DB (cached for performance)
+                        if not hasattr(self, '_actual_source_tables') or not self._actual_source_tables:
+                            try:
+                                table_rows = await pool.fetch(
+                                    "SELECT DISTINCT source_table FROM unified_embeddings WHERE source_table IS NOT NULL"
+                                )
+                                self._actual_source_tables = {row['source_table'] for row in table_rows}
+                                logger.info(f"[VectorSearch] Cached {len(self._actual_source_tables)} actual source tables")
+                            except Exception:
+                                self._actual_source_tables = set()
+
                         priority_sources = [
                             table for table, weight in settings.source_table_weights.items()
-                            if weight >= 1.0
+                            if weight >= 1.0 and table in self._actual_source_tables
                         ]
-                        logger.info(f"[VectorSearch] Priority sources from settings: {priority_sources}")
+                        logger.info(f"[VectorSearch] Priority sources (filtered): {priority_sources}")
 
-                    # First, query priority sources to ensure they're represented
+                    # Query priority sources to ensure they're represented
                     for priority_source in priority_sources:
                         priority_query = """
                             SELECT
@@ -872,14 +883,13 @@ class SemanticSearchService:
                             WHERE embedding IS NOT NULL
                             AND source_table = $2
                             ORDER BY embedding <=> $1::vector
-                            LIMIT 5
+                            LIMIT 3
                         """
                         try:
                             priority_rows = await pool.fetch(priority_query, embedding_str, priority_source)
                             for row in priority_rows:
                                 source_id = row.get('source_id')
                                 if float(row['similarity_score']) >= similarity_threshold and row['id'] not in seen_ids:
-                                    # Skip if we already have a result from the same source_id (higher similarity)
                                     if source_id and source_id in seen_source_ids:
                                         continue
                                     all_results.append(dict(row))
@@ -1023,9 +1033,10 @@ class SemanticSearchService:
                 source_table = result.get('source_table', '')
                 # Use _get_table_weight which handles csv_ prefix mismatch
                 source_weight = self._get_table_weight(source_table, settings) if settings.source_table_weights else 1.0
-                # Hierarchy bonus: (weight - 1.0) * 0.10 on 0-1 scale
-                # kanun tw=2.0 → +0.10, sirkuler tw=1.8 → +0.08, makale tw=1.0 → 0, sorucevap tw=0.6 → -0.04
-                weight_bonus = (source_weight - 1.0) * 0.10
+                # v12.55: Hierarchy bonus on 0-1 scale (pre-rerank ordering)
+                # kanun tw=2.0 → +0.15, sirkuler tw=1.8 → +0.12, makale tw=1.0 → 0
+                # Stronger bonus ensures high-authority sources reach reranker
+                weight_bonus = (source_weight - 1.0) * 0.15
                 return sim + weight_bonus
 
             all_results.sort(key=get_weighted_score, reverse=True)
@@ -4114,14 +4125,16 @@ class SemanticSearchService:
                             tbl_weight = r.get('table_weight', 1.0)
                             priority_weighted_rerank = rerank_score * src_priority * tbl_weight
 
-                            # v12.54: Additive hierarchy bonus based on table_weight
-                            # tw=2.0 (kanun, weight=100) → +15 points
-                            # tw=1.8 (sirkuler, weight=90) → +12 points
-                            # tw=1.4 (danistay, weight=70) → +6 points
-                            # tw=1.0 (makale, weight=50) → 0 points (baseline)
-                            # tw=0.6 (sorucevap, weight=30) → -6 points
-                            # Formula: (tbl_weight - 1.0) * 15 → centered at baseline 1.0
-                            hierarchy_bonus = (tbl_weight - 1.0) * 15.0
+                            # v12.55: Strong hierarchy bonus to enforce source authority ordering
+                            # Customer requirement: kanun > sirkuler > danistay > ozelge > makale
+                            # tw=2.0 (kanun, weight=100) → +35 points
+                            # tw=1.8 (sirkuler, weight=90) → +28 points
+                            # tw=1.4 (danistay, weight=70) → +14 points
+                            # tw=1.5 (ozelge, weight=75)  → +17.5 points
+                            # tw=1.0 (makale, weight=50)  → 0 points (baseline)
+                            # tw=0.6 (sorucevap, weight=30) → -14 points
+                            # At equal rerank: kanun(119) >> ozelge(80) >> makale(63)
+                            hierarchy_bonus = (tbl_weight - 1.0) * 35.0
 
                             # Domain-specific additive boosts (already in percentage)
                             rate_boost = r.get('rate_article_boost', 0)
