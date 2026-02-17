@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { useTranslation } from "react-i18next";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -385,6 +385,8 @@ export default function DashboardPage() {
   // Relationship graph data
   const [relationshipStats, setRelationshipStats] = useState<any>(null);
   const [graphData, setGraphData] = useState<any>(null);
+  const graphContainerRef = useRef<HTMLDivElement>(null);
+  const [graphWidth, setGraphWidth] = useState(0);
 
   // SSE connection status
   const [sseConnected, setSseConnected] = useState(false);
@@ -673,6 +675,19 @@ export default function DashboardPage() {
     setTimeout(fetchRelationshipData, 3000);
     return () => { isMounted = false; };
   }, []);
+
+  // Measure graph container width
+  useEffect(() => {
+    const el = graphContainerRef.current;
+    if (!el) return;
+    const observer = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        setGraphWidth(Math.floor(entry.contentRect.width));
+      }
+    });
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [relationshipStats]);
 
   // Fetch chat statistics - delayed to avoid concurrent request overload
   useEffect(() => {
@@ -1859,8 +1874,8 @@ export default function DashboardPage() {
                 </div>
 
                 {/* Force-Directed Graph */}
-                <div className="lg:col-span-2 rounded-xl border border-gray-200/60 dark:border-[#1e3a5f]/50 overflow-hidden bg-gradient-to-br from-slate-50/50 to-gray-50/50 dark:from-[#0a1628]/60 dark:to-[#0d1f3c]/60" style={{ height: 320 }}>
-                  {graphData && graphData.edges && graphData.edges.length > 0 ? (
+                <div ref={graphContainerRef} className="lg:col-span-2 rounded-xl border border-gray-200/60 dark:border-[#1e3a5f]/50 overflow-hidden bg-gradient-to-br from-slate-50/50 to-gray-50/50 dark:from-[#0a1628]/60 dark:to-[#0d1f3c]/60" style={{ height: 320 }}>
+                  {graphData && graphData.edges && graphData.edges.length > 0 && graphWidth > 0 ? (
                     <ForceGraph2D
                       graphData={{
                         nodes: graphData.nodes
@@ -1868,6 +1883,7 @@ export default function DashboardPage() {
                           .map((n: any) => ({ id: n.id, label: n.label, val: Math.max(n.entity_count || 1, 3) })),
                         links: graphData.edges.map((e: any) => ({ source: e.source, target: e.target, value: e.count, type: e.type })),
                       }}
+                      width={graphWidth}
                       height={320}
                       nodeLabel={(node: any) => `${node.label}\n${node.val} entities`}
                       nodeRelSize={4}
