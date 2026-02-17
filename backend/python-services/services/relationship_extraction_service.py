@@ -818,10 +818,19 @@ class RelationshipExtractionService:
             ORDER BY cr.confidence DESC
         """, chunk_id)
 
+        def _parse_row(r):
+            d = dict(r)
+            if isinstance(d.get("metadata"), str):
+                try:
+                    d["metadata"] = json.loads(d["metadata"])
+                except (json.JSONDecodeError, TypeError):
+                    d["metadata"] = {}
+            return d
+
         return {
             "chunk_id": chunk_id,
-            "outgoing": [dict(r) for r in outgoing],
-            "incoming": [dict(r) for r in incoming],
+            "outgoing": [_parse_row(r) for r in outgoing],
+            "incoming": [_parse_row(r) for r in incoming],
             "total": len(outgoing) + len(incoming),
         }
 
