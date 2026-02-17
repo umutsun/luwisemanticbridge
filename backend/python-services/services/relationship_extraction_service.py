@@ -623,6 +623,8 @@ class RelationshipExtractionService:
 
             rows = await pool.fetch(query, *params)
 
+            job_status = 'running'
+
             for i in range(0, len(rows), batch_size):
                 batch = rows[i:i + batch_size]
 
@@ -636,7 +638,13 @@ class RelationshipExtractionService:
 
                 for row in batch:
                     try:
-                        metadata = json.loads(row['metadata']) if row['metadata'] else {}
+                        raw_meta = row['metadata']
+                        if isinstance(raw_meta, dict):
+                            metadata = raw_meta
+                        elif isinstance(raw_meta, str):
+                            metadata = json.loads(raw_meta)
+                        else:
+                            metadata = {}
                         result = await self.extract_from_chunk(
                             chunk_id=row['id'],
                             content=row['content'],
