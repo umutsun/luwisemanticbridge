@@ -665,7 +665,7 @@ class SemanticSearchService:
             self._settings_cache = settings
             self._settings_cache_time = current_time
 
-            logger.info(f"RAG settings loaded: threshold={settings.similarity_threshold}, max={settings.max_results}, weights={len(source_table_weights)} tables")
+            logger.info(f"RAG settings loaded: threshold={settings.similarity_threshold}, max={settings.max_results}, weights={len(source_table_weights)} tables, bm25={settings.enable_bm25_search} (w={settings.bm25_weight}), rerank={settings.rerank_enabled}")
             return settings
 
         except Exception as e:
@@ -3963,16 +3963,41 @@ class SemanticSearchService:
                 }
 
         try:
-            # Generate query embedding
+            # v12.56: PARALLEL embedding + BM25
+            # BM25 doesn't need embeddings, so run them concurrently for ~2-4s savings
             embed_start = datetime.now()
-            try:
-                query_embedding = await self.generate_embedding(query)
-                timings["embedding_ms"] = (datetime.now() - embed_start).total_seconds() * 1000
-            except Exception as embed_error:
-                logger.warning(f"Embedding failed, using keyword fallback: {embed_error}")
-                use_keyword_fallback = True
-                timings["embedding_ms"] = 0
-                timings["embedding_error"] = str(embed_error)
+
+            if settings.enable_bm25_search and not use_keyword_fallback:
+                # Run embedding generation and BM25 search in parallel
+                bm25_limit = int(limit * settings.bm25_limit_multiplier)
+                embed_task = asyncio.create_task(self.generate_embedding(query))
+                bm25_task = asyncio.create_task(self.bm25_search(query, limit=bm25_limit, settings=settings))
+
+                try:
+                    query_embedding, bm25_results = await asyncio.gather(embed_task, bm25_task)
+                    timings["embedding_ms"] = (datetime.now() - embed_start).total_seconds() * 1000
+                except Exception as embed_error:
+                    # If embedding fails, still try to get BM25 results
+                    logger.warning(f"Embedding failed during parallel exec, using keyword fallback: {embed_error}")
+                    use_keyword_fallback = True
+                    timings["embedding_ms"] = 0
+                    timings["embedding_error"] = str(embed_error)
+                    bm25_results = []
+                    try:
+                        bm25_results = await bm25_task
+                    except Exception:
+                        pass
+            else:
+                # Sequential: embedding only (BM25 disabled or keyword fallback)
+                bm25_results = []
+                try:
+                    query_embedding = await self.generate_embedding(query)
+                    timings["embedding_ms"] = (datetime.now() - embed_start).total_seconds() * 1000
+                except Exception as embed_error:
+                    logger.warning(f"Embedding failed, using keyword fallback: {embed_error}")
+                    use_keyword_fallback = True
+                    timings["embedding_ms"] = 0
+                    timings["embedding_error"] = str(embed_error)
 
             # Vector search or keyword fallback
             search_start = datetime.now()
@@ -3991,23 +4016,16 @@ class SemanticSearchService:
                 )
                 timings["vector_search_ms"] = (datetime.now() - search_start).total_seconds() * 1000
 
-                # BM25 HYBRID SEARCH: Full-text search on unified_embeddings via tsvector
-                if settings.enable_bm25_search:
-                    bm25_start = datetime.now()
-                    bm25_limit = int(limit * settings.bm25_limit_multiplier)
-                    bm25_results = await self.bm25_search(query, limit=bm25_limit, settings=settings)
-                    timings["bm25_search_ms"] = (datetime.now() - bm25_start).total_seconds() * 1000
-
-                    if bm25_results:
-                        # RRF fusion: merge vector + BM25 results
-                        raw_results = self.rrf_fusion(
-                            raw_results,
-                            bm25_results,
-                            vector_weight=1.0 - settings.bm25_weight,
-                            bm25_weight=settings.bm25_weight
-                        )
-                        timings["bm25_results"] = len(bm25_results)
-                        timings["rrf_merged"] = len(raw_results)
+                # BM25 RRF fusion (results already fetched in parallel above)
+                if settings.enable_bm25_search and bm25_results:
+                    raw_results = self.rrf_fusion(
+                        raw_results,
+                        bm25_results,
+                        vector_weight=1.0 - settings.bm25_weight,
+                        bm25_weight=settings.bm25_weight
+                    )
+                    timings["bm25_results"] = len(bm25_results)
+                    timings["rrf_merged"] = len(raw_results)
 
                 # KEYWORD AUGMENT: Additional keyword matches from document_embeddings
                 # This ensures exact keyword matches are included even if vector similarity is low

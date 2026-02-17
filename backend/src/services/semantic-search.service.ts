@@ -161,15 +161,16 @@ export class SemanticSearchService {
         console.warn('   Run: backend/scripts/QUICK-FIX.sql to create index');
       } else {
         const index = result.rows[0];
-        const indexType = index.indexname.includes('hnsw') ? 'HNSW'
-          : index.indexname.includes('diskann') ? 'DiskANN'
-          : index.indexname.includes('ivfflat') ? 'IVFFlat'
-          : 'Unknown';
+        const nameAndDef = (index.indexname + ' ' + (index.indexdef || '')).toLowerCase();
+        const indexType = nameAndDef.includes('hnsw') ? 'HNSW'
+          : nameAndDef.includes('diskann') ? 'DiskANN'
+            : nameAndDef.includes('ivfflat') ? 'IVFFlat'
+              : 'Unknown';
 
         const performance = indexType === 'HNSW' ? '10-50x faster'
           : indexType === 'DiskANN' ? '50-100x faster'
-          : indexType === 'IVFFlat' ? '5-10x faster'
-          : 'Unknown';
+            : indexType === 'IVFFlat' ? '5-10x faster'
+              : 'Unknown';
 
         console.log(` [SemanticSearch] Vector index active: ${indexType} (${performance})`);
         console.log(`   Index: ${index.indexname}, Size: ${index.index_size}`);
@@ -430,30 +431,30 @@ export class SemanticSearchService {
       }
 
       const settingsKeys = [
-          'ragSettings.similarityThreshold',
-          'similarity_threshold',
-          'ragSettings.maxResults',
-          'ragSettings.minResults',
-          'ragSettings.enableHybridSearch',
-          'ragSettings.enableKeywordBoost',
-          'similarityThreshold',
-          'maxResults',
-          'minResults',
-          'parallel_llm_count',
-          'parallel_llm_batch_size',
-          'ragSettings.enableUnifiedEmbeddings',
-          'ragSettings.unifiedEmbeddingsPriority',
-          'ragSettings.databasePriority',
-          'ragSettings.documentsPriority',
-          'ragSettings.chatPriority',
-          'ragSettings.webPriority',
-          'ragSettings.sourceTypeHierarchy',
-          'ragSettings.semanticWeight',
-          'ragSettings.hierarchyWeight',
-          'ragSettings.usePythonSemanticSearch',
-          'ragSettings.pythonSemanticSearchFallback',
-          'ragSettings.maxExcerptLength',
-          'ragSettings.excerptMaxLength'
+        'ragSettings.similarityThreshold',
+        'similarity_threshold',
+        'ragSettings.maxResults',
+        'ragSettings.minResults',
+        'ragSettings.enableHybridSearch',
+        'ragSettings.enableKeywordBoost',
+        'similarityThreshold',
+        'maxResults',
+        'minResults',
+        'parallel_llm_count',
+        'parallel_llm_batch_size',
+        'ragSettings.enableUnifiedEmbeddings',
+        'ragSettings.unifiedEmbeddingsPriority',
+        'ragSettings.databasePriority',
+        'ragSettings.documentsPriority',
+        'ragSettings.chatPriority',
+        'ragSettings.webPriority',
+        'ragSettings.sourceTypeHierarchy',
+        'ragSettings.semanticWeight',
+        'ragSettings.hierarchyWeight',
+        'ragSettings.usePythonSemanticSearch',
+        'ragSettings.pythonSemanticSearchFallback',
+        'ragSettings.maxExcerptLength',
+        'ragSettings.excerptMaxLength'
       ];
       const placeholders = settingsKeys.map((_, i) => `$${i + 1}`).join(', ');
       const result = await this.pool.query(
@@ -702,11 +703,11 @@ export class SemanticSearchService {
       // Determine provider and model from settings
       // Check all possible key formats: camelCase, dot notation, underscore
       let providerFromSettings = settings.embeddingProvider || settings.embeddingprovider ||
-                                  settings.llmSettingsembeddingProvider ||
-                                  settings.embedding_provider || settings.embeddingsprovider || 'google';
+        settings.llmSettingsembeddingProvider ||
+        settings.embedding_provider || settings.embeddingsprovider || 'google';
       let modelFromSettings = settings.embeddingModel || settings.embeddingmodel ||
-                              settings.llmSettingsembeddingModel ||
-                              settings.embedding_model || settings.embeddingsmodel || 'text-embedding-004';
+        settings.llmSettingsembeddingModel ||
+        settings.embedding_model || settings.embeddingsmodel || 'text-embedding-004';
 
       // Normalize provider name
       let provider = this.normalizeProvider(providerFromSettings);
@@ -837,7 +838,7 @@ export class SemanticSearchService {
     console.log(`[SemanticSearch] Cleaned ${keysToDelete.length} old embedding cache entries`);
   }
 
-  
+
   private generateMockEmbedding(text: string): number[] {
     const embedding = new Array(768).fill(0);
     const hash = this.simpleHash(text);
@@ -1807,38 +1808,38 @@ export class SemanticSearchService {
       .replace(/_embeddings$/, '')  // Remove _embeddings suffix
       .trim();
 
-    // Map source_table names to hierarchy keys (Türkçe key'ler - veri Türkçe olduğu için)
+    // Map source_table names to hierarchy keys (Turkish keys - since data is in Turkish)
     const mappings: Record<string, string> = {
-      // Kanun kaynakları - en yüksek öncelik (100)
+      // Law sources - highest priority (100)
       'vergilex_mevzuat_kanunlar': 'kanun',
-      'vergilex_mevzuat_kanunlar_chunks': 'kanun',  // Madde bazlı chunk'lanmış kanunlar
+      'vergilex_mevzuat_kanunlar_chunks': 'kanun',  // Article-based chunked laws
       'mevzuat_kanunlar': 'kanun',
       'kanun': 'kanun',
       'kanunlar': 'kanun',
 
-      // Tebliğ/Yönetmelik kaynakları (95)
+      // Communiqué/Regulation sources (95)
       'teblig': 'teblig',
       'tebligler': 'teblig',
       'yonetmelik': 'teblig',
 
-      // Sirküler kaynakları (90)
+      // Circular sources (90)
       'sirkuler': 'sirkuler',
       'vergilex_gib_sirkuler': 'sirkuler',
       'gib_sirkuler': 'sirkuler',
 
-      // Yargı Kararları - genel (80)
+      // Judicial Decisions - general (80)
       'yargi': 'yargi',
       'yargi_kararlari': 'yargi',
 
-      // Özelge kaynakları (75)
+      // Private Ruling sources (75)
       'ozelge': 'ozelge',
       'ozelgeler': 'ozelge',
 
-      // Danıştay Kararları - spesifik (70)
+      // Council of State Decisions - specific (70)
       'danistay': 'danistay',
       'danistaykararlari': 'danistay',
 
-      // Makale kaynakları (50)
+      // Article sources (50)
       'makale': 'makale',
       'makaleler': 'makale',
       'makale_arsiv_2021': 'makale',
@@ -1852,11 +1853,11 @@ export class SemanticSearchService {
       'hukdkk': 'huk_dkk',
       'huk_dkk': 'huk_dkk',
 
-      // Soru-Cevap kaynakları (30)
+      // Q&A sources (30)
       'sorucevap': 'sorucevap',
       'soru_cevap': 'sorucevap',
 
-      // Doküman kaynakları (20)
+      // Document sources (20)
       'document': 'dokuman',
       'documents': 'dokuman',
       'unified': 'dokuman',
