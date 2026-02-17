@@ -81,6 +81,10 @@ class RAGSettings:
     source_table_weights: Dict[str, float] = None  # Individual table weights
     max_excerpt_length: int = 1500  # Maximum excerpt length for citations
     excerpt_max_length: int = 1500  # Alias for compatibility
+    # BM25 hybrid search settings
+    enable_bm25_search: bool = True  # ON by default, graceful fallback if column missing
+    bm25_weight: float = 0.3  # 0.0-1.0, RRF weight for BM25 vs vector (0.3 = 30% BM25)
+    bm25_limit_multiplier: float = 2.0  # Fetch limit*multiplier from BM25
     # Reranking settings
     rerank_enabled: bool = False  # Enable Jina reranking
     rerank_provider: str = "jina"  # jina, cohere, voyage
@@ -645,6 +649,10 @@ class SemanticSearchService:
                 source_table_weights=source_table_weights,
                 max_excerpt_length=int(settings_dict.get('ragSettings.maxExcerptLength', 1500)),
                 excerpt_max_length=int(settings_dict.get('ragSettings.excerptMaxLength', 1500)),
+                # BM25 hybrid search settings
+                enable_bm25_search=settings_dict.get('ragSettings.enableBM25Search', 'true').lower() == 'true',
+                bm25_weight=float(settings_dict.get('ragSettings.bm25Weight', '0.3')),
+                bm25_limit_multiplier=float(settings_dict.get('ragSettings.bm25LimitMultiplier', '2.0')),
                 # Reranking settings
                 rerank_enabled=settings_dict.get('ragSettings.rerankEnabled', 'false').lower() == 'true',
                 rerank_provider=settings_dict.get('ragSettings.rerankProvider', 'jina'),
@@ -1383,6 +1391,158 @@ class SemanticSearchService:
         except Exception as e:
             logger.error(f"Keyword augment error: {e}")
             return []
+
+    # ─────────────────────────────────────────────────────────────────
+    # BM25 Full-Text Search (PostgreSQL tsvector)
+    # ─────────────────────────────────────────────────────────────────
+
+    _bm25_available: Optional[bool] = None  # Cache column existence check
+
+    async def bm25_search(
+        self,
+        query: str,
+        limit: int = 20,
+        settings: Optional['RAGSettings'] = None
+    ) -> List[Dict[str, Any]]:
+        """
+        BM25-style full-text search using PostgreSQL tsvector + ts_rank_cd.
+        Uses Turkish text search config for proper stemming.
+        Graceful fallback: returns empty list if search_vector column doesn't exist.
+        """
+        try:
+            pool = await get_db()
+
+            # Check if search_vector column exists (cached after first check)
+            if SemanticSearchService._bm25_available is None:
+                try:
+                    exists = await pool.fetchval("""
+                        SELECT COUNT(*) FROM information_schema.columns
+                        WHERE table_name = 'unified_embeddings'
+                          AND column_name = 'search_vector'
+                    """)
+                    SemanticSearchService._bm25_available = exists > 0
+                    if not SemanticSearchService._bm25_available:
+                        logger.warning("[BM25] search_vector column not found - run migration 20260218_bm25_search_vector.sql")
+                        return []
+                    logger.info("[BM25] search_vector column detected - BM25 search enabled")
+                except Exception:
+                    SemanticSearchService._bm25_available = False
+                    return []
+
+            if not SemanticSearchService._bm25_available:
+                return []
+
+            max_excerpt = settings.max_excerpt_length if settings else 1500
+
+            # Use plainto_tsquery for robust query parsing (handles any input)
+            rows = await pool.fetch("""
+                SELECT id, LEFT(content, $3) as content, source_table, source_type,
+                       source_id, metadata,
+                       ts_rank_cd(search_vector, plainto_tsquery('turkish', $1), 32) as bm25_score
+                FROM unified_embeddings
+                WHERE search_vector @@ plainto_tsquery('turkish', $1)
+                ORDER BY bm25_score DESC
+                LIMIT $2
+            """, query, limit, max_excerpt)
+
+            results = []
+            for row in rows:
+                metadata = {}
+                if row['metadata']:
+                    try:
+                        metadata = json.loads(row['metadata']) if isinstance(row['metadata'], str) else dict(row['metadata'])
+                    except (json.JSONDecodeError, TypeError):
+                        metadata = {}
+
+                results.append({
+                    "id": str(row['id']),
+                    "content": row['content'],
+                    "title": metadata.get('title', row['content'][:100] if row['content'] else ''),
+                    "source_table": row['source_table'],
+                    "source_type": row['source_type'],
+                    "source_id": str(row['source_id']) if row['source_id'] else None,
+                    "similarity_score": float(row['bm25_score']),
+                    "metadata": metadata,
+                    "search_source": "bm25"
+                })
+
+            logger.info(f"[BM25] {len(results)} results for '{query[:40]}...' (top score: {results[0]['similarity_score']:.4f})" if results else f"[BM25] 0 results for '{query[:40]}...'")
+            return results
+
+        except Exception as e:
+            logger.error(f"[BM25] Search error: {e}")
+            return []
+
+    def rrf_fusion(
+        self,
+        vector_results: List[Dict[str, Any]],
+        bm25_results: List[Dict[str, Any]],
+        k: int = 60,
+        vector_weight: float = 0.7,
+        bm25_weight: float = 0.3
+    ) -> List[Dict[str, Any]]:
+        """
+        Reciprocal Rank Fusion: merge vector and BM25 results.
+        RRF score = vector_weight * 1/(k + rank_v) + bm25_weight * 1/(k + rank_b)
+        Documents in both lists get naturally boosted.
+        """
+        # Build rank maps (1-indexed)
+        vector_ranks = {}
+        for rank, r in enumerate(vector_results, 1):
+            vector_ranks[str(r['id'])] = rank
+
+        bm25_ranks = {}
+        for rank, r in enumerate(bm25_results, 1):
+            bm25_ranks[str(r['id'])] = rank
+
+        # Collect all unique documents
+        all_docs = {}
+        for r in vector_results:
+            all_docs[str(r['id'])] = r
+        for r in bm25_results:
+            rid = str(r['id'])
+            if rid not in all_docs:
+                all_docs[rid] = r
+
+        # Calculate RRF scores
+        rrf_scores = []
+        max_rank = max(len(vector_results), len(bm25_results)) + 1
+
+        for doc_id, doc in all_docs.items():
+            v_rank = vector_ranks.get(doc_id, max_rank)
+            b_rank = bm25_ranks.get(doc_id, max_rank)
+
+            rrf_score = (
+                vector_weight * (1.0 / (k + v_rank)) +
+                bm25_weight * (1.0 / (k + b_rank))
+            )
+
+            # Preserve original similarity_score from vector search for downstream scoring
+            # If doc only from BM25, use a moderate similarity score
+            if doc_id in vector_ranks:
+                sim_score = doc.get('similarity_score', 0.5)
+            else:
+                # BM25-only result: assign a base similarity score
+                sim_score = max(0.3, min(0.8, doc.get('similarity_score', 0.5)))
+
+            doc_copy = dict(doc)
+            doc_copy['similarity_score'] = sim_score
+            doc_copy['rrf_score'] = rrf_score
+            doc_copy['in_vector'] = doc_id in vector_ranks
+            doc_copy['in_bm25'] = doc_id in bm25_ranks
+
+            rrf_scores.append(doc_copy)
+
+        # Sort by RRF score descending
+        rrf_scores.sort(key=lambda x: x['rrf_score'], reverse=True)
+
+        logger.info(
+            f"[RRF] Fusion: {len(vector_results)} vector + {len(bm25_results)} BM25 "
+            f"→ {len(rrf_scores)} merged "
+            f"(both: {sum(1 for r in rrf_scores if r.get('in_vector') and r.get('in_bm25'))})"
+        )
+
+        return rrf_scores
 
     def _calculate_keyword_boost(
         self,
@@ -3831,7 +3991,25 @@ class SemanticSearchService:
                 )
                 timings["vector_search_ms"] = (datetime.now() - search_start).total_seconds() * 1000
 
-                # HYBRID SEARCH: Augment vector results with keyword matches
+                # BM25 HYBRID SEARCH: Full-text search on unified_embeddings via tsvector
+                if settings.enable_bm25_search:
+                    bm25_start = datetime.now()
+                    bm25_limit = int(limit * settings.bm25_limit_multiplier)
+                    bm25_results = await self.bm25_search(query, limit=bm25_limit, settings=settings)
+                    timings["bm25_search_ms"] = (datetime.now() - bm25_start).total_seconds() * 1000
+
+                    if bm25_results:
+                        # RRF fusion: merge vector + BM25 results
+                        raw_results = self.rrf_fusion(
+                            raw_results,
+                            bm25_results,
+                            vector_weight=1.0 - settings.bm25_weight,
+                            bm25_weight=settings.bm25_weight
+                        )
+                        timings["bm25_results"] = len(bm25_results)
+                        timings["rrf_merged"] = len(raw_results)
+
+                # KEYWORD AUGMENT: Additional keyword matches from document_embeddings
                 # This ensures exact keyword matches are included even if vector similarity is low
                 if settings.enable_hybrid_search:
                     augment_start = datetime.now()

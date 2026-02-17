@@ -2581,6 +2581,8 @@ function RAGSettings() {
     chunkSize: 1000,                // 1000 chars per chunk
     enableHybridSearch: true,       // Combine semantic + keyword search
     enableKeywordBoost: true,       // Boost keyword matches
+    enableBM25Search: true,         // BM25 full-text search (tsvector)
+    bm25Weight: 0.3,                // 30% BM25 / 70% vector (RRF weight)
     enableUnifiedEmbeddings: true,  // Include database content
     enableMessageEmbeddings: false, // Don't include chat history
     enableDocumentEmbeddings: false,// Don't include uploaded docs
@@ -3029,6 +3031,44 @@ function RAGSettings() {
                     onCheckedChange={(checked) => updateRAGSetting('enableKeywordBoost', checked)}
                   />
                 </div>
+
+                {/* BM25 Full-Text Search */}
+                <div className="flex items-center justify-between py-2">
+                  <div className="flex-1">
+                    <Label>BM25 Full-Text Search</Label>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      PostgreSQL tsvector ile Türkçe tam metin araması. Kesin kelime eşleşmeleri için vektör aramayı tamamlar.
+                    </p>
+                  </div>
+                  <Switch
+                    checked={tempRAGConfig?.ragSettings?.enableBM25Search ?? ragConfig?.ragSettings?.enableBM25Search ?? true}
+                    onCheckedChange={(checked) => updateRAGSetting('enableBM25Search', checked)}
+                  />
+                </div>
+
+                {/* BM25 Weight Slider */}
+                {(tempRAGConfig?.ragSettings?.enableBM25Search ?? ragConfig?.ragSettings?.enableBM25Search ?? true) && (
+                  <div className="space-y-2 pl-4 border-l-2 border-indigo-200 dark:border-indigo-800">
+                    <div className="flex items-center justify-between">
+                      <Label className="text-sm">BM25 Ağırlığı (RRF)</Label>
+                      <span className="text-sm font-mono text-muted-foreground">
+                        {((tempRAGConfig?.ragSettings?.bm25Weight ?? ragConfig?.ragSettings?.bm25Weight ?? 0.3) * 100).toFixed(0)}% BM25 / {((1 - (tempRAGConfig?.ragSettings?.bm25Weight ?? ragConfig?.ragSettings?.bm25Weight ?? 0.3)) * 100).toFixed(0)}% Vektör
+                      </span>
+                    </div>
+                    <input
+                      type="range"
+                      min="0"
+                      max="100"
+                      step="5"
+                      value={(tempRAGConfig?.ragSettings?.bm25Weight ?? ragConfig?.ragSettings?.bm25Weight ?? 0.3) * 100}
+                      onChange={(e) => updateRAGSetting('bm25Weight', parseInt(e.target.value) / 100)}
+                      className="w-full h-2 bg-gray-200 dark:bg-gray-700 rounded-lg appearance-none cursor-pointer accent-indigo-500"
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      Düşük = semantik ağırlıklı, Yüksek = anahtar kelime ağırlıklı
+                    </p>
+                  </div>
+                )}
 
                 {/* Source Question Generation Toggle */}
                 <div className="flex items-center justify-between">
