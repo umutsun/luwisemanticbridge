@@ -748,12 +748,26 @@ class RelationshipExtractionService:
     # Reference Resolution
     # ─────────────────────────────────────────────────────────────────
 
+    async def _load_law_code_mapping(self) -> Dict[str, str]:
+        """Load law code abbreviation → law number mapping from settings."""
+        pool = await get_db()
+        raw = await pool.fetchval(
+            "SELECT value FROM settings WHERE key = 'relationships.lawCodeMapping'"
+        )
+        if raw:
+            try:
+                return json.loads(raw) if isinstance(raw, str) else raw
+            except (json.JSONDecodeError, TypeError):
+                pass
+        return {}
+
     async def resolve_references(self, dry_run: bool = False) -> Dict[str, Any]:
         """
         Resolve unresolved references by matching target_law_code + target_article_number
-        to unified_embeddings metadata.
+        to unified_embeddings metadata. Uses law code → law number mapping from settings.
         """
         pool = await get_db()
+        law_map = await self._load_law_code_mapping()
 
         # Count unresolved
         total_unresolved = await pool.fetchval("""
@@ -761,45 +775,49 @@ class RelationshipExtractionService:
             WHERE target_chunk_id IS NULL AND target_law_code IS NOT NULL
         """)
 
-        if dry_run:
-            # Find how many could be resolved
-            resolvable = await pool.fetchval("""
-                SELECT COUNT(*) FROM chunk_relationships cr
-                WHERE cr.target_chunk_id IS NULL
-                  AND cr.target_law_code IS NOT NULL
-                  AND EXISTS (
-                    SELECT 1 FROM unified_embeddings ue
-                    WHERE ue.metadata->>'law_code' = cr.target_law_code
-                      AND ue.metadata->>'article_number' = cr.target_article_number
-                  )
-            """)
-            return {
-                "total_unresolved": total_unresolved,
-                "resolved": 0,
-                "resolvable": resolvable,
-                "still_unresolved": total_unresolved,
-                "dry_run": True,
-            }
-
-        # Resolve
-        result = await pool.execute("""
-            UPDATE chunk_relationships cr
-            SET target_chunk_id = ue.id, updated_at = NOW()
-            FROM unified_embeddings ue
-            WHERE cr.target_chunk_id IS NULL
-              AND cr.target_law_code IS NOT NULL
-              AND ue.metadata->>'law_code' = cr.target_law_code
-              AND ue.metadata->>'article_number' = cr.target_article_number
+        # Get all unresolved references
+        unresolved = await pool.fetch("""
+            SELECT id, target_law_code, target_article_number
+            FROM chunk_relationships
+            WHERE target_chunk_id IS NULL AND target_law_code IS NOT NULL
         """)
 
-        resolved_count = int(result.split()[-1]) if result else 0
+        resolved_count = 0
+        for ref in unresolved:
+            law_code = ref['target_law_code']
+            article = ref['target_article_number']
+            if not article:
+                continue
+
+            # Convert abbreviation to law number via mapping
+            law_number = law_map.get(law_code, law_code)
+
+            # Try matching by law_number + article_number in metadata
+            target_id = await pool.fetchval("""
+                SELECT id FROM unified_embeddings
+                WHERE metadata->>'law_number' = $1
+                  AND metadata->>'article_number' = $2
+                LIMIT 1
+            """, law_number, article)
+
+            if target_id and not dry_run:
+                await pool.execute("""
+                    UPDATE chunk_relationships
+                    SET target_chunk_id = $1, updated_at = NOW()
+                    WHERE id = $2
+                """, target_id, ref['id'])
+                resolved_count += 1
+            elif target_id and dry_run:
+                resolved_count += 1
+
         still_unresolved = total_unresolved - resolved_count
 
         return {
             "total_unresolved": total_unresolved,
             "resolved": resolved_count,
+            "resolvable": resolved_count if dry_run else None,
             "still_unresolved": still_unresolved,
-            "dry_run": False,
+            "dry_run": dry_run,
         }
 
     # ─────────────────────────────────────────────────────────────────
