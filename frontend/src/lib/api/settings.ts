@@ -198,6 +198,7 @@ export const getDatabaseSettings = () => getSettingsCategory('database');
 export const getSecuritySettings = () => getSettingsCategory('security');
 export const getAppSettingsOnly = () => getSettingsCategory('app');
 export const getTranslationSettings = () => getSettingsCategory('translation');
+export const getRelationshipsSettings = () => getSettingsCategory('relationships');
 
 export async function getLLMProviders() {
   const response = await apiClient.get('/api/v2/settings/llm');

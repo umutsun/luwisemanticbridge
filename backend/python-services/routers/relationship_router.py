@@ -169,3 +169,18 @@ async def get_extraction_stats():
     except Exception as e:
         logger.error(f"[RelRouter] Get stats failed: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/graph-data")
+async def get_graph_data():
+    """
+    Get cross-table relationship data for dashboard visualization.
+    Returns nodes (source tables) and edges (relationship counts between tables).
+    """
+    try:
+        service = get_relationship_extraction_service()
+        result = await service.get_graph_data()
+        return result
+    except Exception as e:
+        logger.error(f"[RelRouter] Get graph data failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))

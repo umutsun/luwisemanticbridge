@@ -182,7 +182,10 @@ router.get('/', cacheMiddleware, async (req: Request, res: Response) => {
                WHERE key LIKE 'chatbot.%'`,
 
       redis: `SELECT key, value FROM settings
-              WHERE key LIKE 'redis.%'`
+              WHERE key LIKE 'redis.%'`,
+
+      relationships: `SELECT key, value FROM settings
+                     WHERE key LIKE 'relationships.%'`
     };
 
     const query = categoryQueries[category as string];
@@ -642,7 +645,7 @@ router.put('/:categoryName', async (req: Request, res: Response) => {
     const settings = req.body;
 
     // Validate category name
-    const validCategories = ['llm', 'embeddings', 'rag', 'database', 'security', 'app', 'scraper', 'translation', 'prompts', 'chatbot', 'redis', 'ocr', 'advanced', 'storage', 'crawler', 'smtp', 'integrations'];
+    const validCategories = ['llm', 'embeddings', 'rag', 'database', 'security', 'app', 'scraper', 'translation', 'prompts', 'chatbot', 'redis', 'ocr', 'advanced', 'storage', 'crawler', 'smtp', 'integrations', 'relationships'];
     if (!validCategories.includes(categoryName)) {
       return res.status(400).json({ error: `Invalid category: ${categoryName}` });
     }
@@ -730,7 +733,7 @@ router.put('/category/:categoryName', async (req: Request, res: Response) => {
     const settings = req.body;
 
     // Validate category name
-    const validCategories = ['llm', 'embeddings', 'rag', 'database', 'security', 'app', 'scraper', 'translation', 'ocr', 'advanced', 'storage', 'crawler', 'smtp', 'integrations'];
+    const validCategories = ['llm', 'embeddings', 'rag', 'database', 'security', 'app', 'scraper', 'translation', 'ocr', 'advanced', 'storage', 'crawler', 'smtp', 'integrations', 'relationships'];
     if (!validCategories.includes(categoryName)) {
       return res.status(400).json({ error: `Invalid category: ${categoryName}` });
     }

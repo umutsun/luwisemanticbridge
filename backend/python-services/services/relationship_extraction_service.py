@@ -1050,6 +1050,55 @@ class RelationshipExtractionService:
             "active_jobs": active_jobs,
         }
 
+    async def get_graph_data(self) -> Dict[str, Any]:
+        """Get cross-table relationship data for dashboard graph visualization."""
+        pool = await get_db()
+
+        # Nodes: source tables with chunk and entity counts
+        node_rows = await pool.fetch("""
+            SELECT ue.source_table,
+                   COUNT(DISTINCT ue.id) as chunk_count,
+                   COUNT(DISTINCT ce.id) as entity_count
+            FROM unified_embeddings ue
+            LEFT JOIN chunk_entities ce ON ce.chunk_id = ue.id
+            GROUP BY ue.source_table
+            ORDER BY chunk_count DESC
+        """)
+
+        nodes = [
+            {
+                "id": row['source_table'],
+                "label": row['source_table'].replace('csv_', '').replace('vergilex_', ''),
+                "chunk_count": row['chunk_count'],
+                "entity_count": row['entity_count'],
+            }
+            for row in node_rows
+        ]
+
+        # Edges: cross-table relationships (only resolved ones)
+        edge_rows = await pool.fetch("""
+            SELECT src.source_table as source, tgt.source_table as target,
+                   cr.relationship_type, COUNT(*) as count
+            FROM chunk_relationships cr
+            JOIN unified_embeddings src ON cr.source_chunk_id = src.id
+            JOIN unified_embeddings tgt ON cr.target_chunk_id = tgt.id
+            WHERE cr.target_chunk_id IS NOT NULL
+            GROUP BY src.source_table, tgt.source_table, cr.relationship_type
+            ORDER BY count DESC
+        """)
+
+        edges = [
+            {
+                "source": row['source'],
+                "target": row['target'],
+                "type": row['relationship_type'],
+                "count": row['count'],
+            }
+            for row in edge_rows
+        ]
+
+        return {"nodes": nodes, "edges": edges}
+
 
 # ═══════════════════════════════════════════════════════════════════════════
 # SINGLETON

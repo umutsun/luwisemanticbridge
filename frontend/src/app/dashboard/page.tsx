@@ -25,6 +25,12 @@ import { useAnimatedPercentage } from "@/hooks/use-animated-counter";
 import { useMetricsWebSocket } from "@/hooks/useMetricsWebSocket";
 import { CircularProgress } from "@/components/ui/circular-progress";
 import { isDebugMode } from "@/lib/debug";
+import dynamic from "next/dynamic";
+
+const ForceGraph2D = dynamic(() => import('react-force-graph-2d'), {
+  ssr: false,
+  loading: () => <div className="flex items-center justify-center h-[320px] text-sm text-slate-400">Loading graph...</div>
+});
 
 interface SystemStatus {
   database: {
@@ -376,6 +382,10 @@ export default function DashboardPage() {
     schedulerRunning: false
   });
 
+  // Relationship graph data
+  const [relationshipStats, setRelationshipStats] = useState<any>(null);
+  const [graphData, setGraphData] = useState<any>(null);
+
   // SSE connection status
   const [sseConnected, setSseConnected] = useState(false);
 
@@ -637,6 +647,31 @@ export default function DashboardPage() {
       isMounted = false;
       if (intervalId) clearInterval(intervalId);
     };
+  }, []);
+
+  // Fetch relationship graph data
+  useEffect(() => {
+    let isMounted = true;
+    const fetchRelationshipData = async () => {
+      try {
+        const [statsRes, graphRes] = await Promise.all([
+          fetchWithAuth(apiConfig.getApiUrl('/api/v2/relationships/stats')),
+          fetchWithAuth(apiConfig.getApiUrl('/api/v2/relationships/graph-data')),
+        ]);
+        if (statsRes.ok && isMounted) {
+          const data = await safeJsonParse(statsRes);
+          if (data) setRelationshipStats(data);
+        }
+        if (graphRes.ok && isMounted) {
+          const data = await safeJsonParse(graphRes);
+          if (data) setGraphData(data);
+        }
+      } catch (error) {
+        // Silently fail - graph is optional
+      }
+    };
+    setTimeout(fetchRelationshipData, 3000);
+    return () => { isMounted = false; };
   }, []);
 
   // Fetch chat statistics - delayed to avoid concurrent request overload
@@ -1758,6 +1793,123 @@ export default function DashboardPage() {
             </div>
           </CardContent>
         </Card>
+
+        {/* Semantic Graph - Knowledge Relationships */}
+        {relationshipStats && relationshipStats.total_relationships > 0 && (
+          <Card className="bg-white/80 dark:bg-[#0d1f3c]/60 backdrop-blur-sm border border-gray-200/60 dark:border-[#1e3a5f]/50 shadow-lg">
+            <CardHeader className="pb-4">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="h-8 w-1 bg-gradient-to-b from-indigo-500 to-violet-600 rounded-full" />
+                  <div>
+                    <h3 className="text-base font-semibold text-gray-900 dark:text-cyan-100">Semantic Graph</h3>
+                    <p className="text-xs text-gray-500 dark:text-slate-400">Cross-reference relationships between source tables</p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Badge variant="outline" className="text-xs bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border-indigo-500/30">
+                    {relationshipStats.total_relationships?.toLocaleString()} relationships
+                  </Badge>
+                  <Badge variant="outline" className="text-xs bg-violet-500/10 text-violet-600 dark:text-violet-400 border-violet-500/30">
+                    {relationshipStats.extraction_coverage_pct}% coverage
+                  </Badge>
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                {/* Quick Stats */}
+                <div className="space-y-3">
+                  <div className="p-4 bg-gradient-to-br from-indigo-50/80 to-violet-50/80 dark:from-indigo-950/30 dark:to-violet-950/30 border border-indigo-200/60 dark:border-indigo-800/50 rounded-xl">
+                    <div className="flex items-center gap-2 mb-1">
+                      <div className="h-2 w-2 rounded-full bg-indigo-500" />
+                      <span className="text-sm font-medium text-gray-700 dark:text-indigo-200">Entities</span>
+                    </div>
+                    <p className="text-2xl font-bold text-indigo-700 dark:text-indigo-300">
+                      <AnimatedNumber value={relationshipStats.total_entities || 0} />
+                    </p>
+                    <p className="text-xs text-gray-500 dark:text-slate-400 mt-1">
+                      {Object.entries(relationshipStats.entities_by_type || {}).slice(0, 3).map(([k, v]) => `${k}: ${v}`).join(', ')}
+                    </p>
+                  </div>
+                  <div className="p-4 bg-gradient-to-br from-violet-50/80 to-purple-50/80 dark:from-violet-950/30 dark:to-purple-950/30 border border-violet-200/60 dark:border-violet-800/50 rounded-xl">
+                    <div className="flex items-center gap-2 mb-1">
+                      <div className="h-2 w-2 rounded-full bg-violet-500" />
+                      <span className="text-sm font-medium text-gray-700 dark:text-violet-200">Relationships</span>
+                    </div>
+                    <p className="text-2xl font-bold text-violet-700 dark:text-violet-300">
+                      <AnimatedNumber value={relationshipStats.total_relationships || 0} />
+                    </p>
+                    <p className="text-xs text-gray-500 dark:text-slate-400 mt-1">
+                      {Object.entries(relationshipStats.relationships_by_type || {}).map(([k, v]) => `${k}: ${v}`).join(', ')}
+                    </p>
+                  </div>
+                  <div className="p-4 bg-gradient-to-br from-cyan-50/80 to-blue-50/80 dark:from-cyan-950/30 dark:to-blue-950/30 border border-cyan-200/60 dark:border-cyan-800/50 rounded-xl">
+                    <div className="flex items-center gap-2 mb-1">
+                      <div className="h-2 w-2 rounded-full bg-cyan-500" />
+                      <span className="text-sm font-medium text-gray-700 dark:text-cyan-200">Connected Chunks</span>
+                    </div>
+                    <p className="text-2xl font-bold text-cyan-700 dark:text-cyan-300">
+                      <AnimatedNumber value={relationshipStats.chunks_with_relationships || 0} />
+                    </p>
+                    <p className="text-xs text-gray-500 dark:text-slate-400 mt-1">
+                      of {relationshipStats.total_chunks?.toLocaleString()} total
+                    </p>
+                  </div>
+                </div>
+
+                {/* Force-Directed Graph */}
+                <div className="lg:col-span-2 rounded-xl border border-gray-200/60 dark:border-[#1e3a5f]/50 overflow-hidden bg-gradient-to-br from-slate-50/50 to-gray-50/50 dark:from-[#0a1628]/60 dark:to-[#0d1f3c]/60" style={{ height: 320 }}>
+                  {graphData && graphData.edges && graphData.edges.length > 0 ? (
+                    <ForceGraph2D
+                      graphData={{
+                        nodes: graphData.nodes
+                          .filter((n: any) => graphData.edges.some((e: any) => e.source === n.id || e.target === n.id))
+                          .map((n: any) => ({ id: n.id, label: n.label, val: Math.max(n.entity_count || 1, 3) })),
+                        links: graphData.edges.map((e: any) => ({ source: e.source, target: e.target, value: e.count, type: e.type })),
+                      }}
+                      height={320}
+                      nodeLabel={(node: any) => `${node.label}\n${node.val} entities`}
+                      nodeRelSize={4}
+                      linkColor={() => 'rgba(99, 102, 241, 0.35)'}
+                      linkWidth={(link: any) => Math.max(1, Math.log2((link as any).value || 1))}
+                      linkDirectionalArrowLength={4}
+                      linkDirectionalArrowRelPos={1}
+                      backgroundColor="transparent"
+                      nodeCanvasObject={(node: any, ctx: CanvasRenderingContext2D, globalScale: number) => {
+                        const label = node.label || node.id;
+                        const fontSize = Math.max(10 / globalScale, 3);
+                        const r = Math.sqrt(node.val || 3) * 2;
+                        // Node circle
+                        ctx.beginPath();
+                        ctx.arc(node.x, node.y, r, 0, 2 * Math.PI);
+                        ctx.fillStyle = '#6366f1';
+                        ctx.fill();
+                        ctx.strokeStyle = '#818cf8';
+                        ctx.lineWidth = 0.5;
+                        ctx.stroke();
+                        // Label
+                        ctx.font = `${fontSize}px Inter, sans-serif`;
+                        ctx.fillStyle = '#94a3b8';
+                        ctx.textAlign = 'center';
+                        ctx.textBaseline = 'top';
+                        ctx.fillText(label, node.x, node.y + r + 2);
+                      }}
+                      cooldownTicks={80}
+                      enableZoomInteraction={false}
+                      enablePanInteraction={false}
+                    />
+                  ) : (
+                    <div className="flex flex-col items-center justify-center h-full text-sm text-gray-500 dark:text-slate-400 gap-2">
+                      <p>No cross-table relationships yet</p>
+                      <p className="text-xs">Run extraction in Settings → Graph</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        )}
 
         {/* Performance & System Resources - 3 Column Grid */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">

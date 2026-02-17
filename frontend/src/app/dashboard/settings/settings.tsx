@@ -58,7 +58,8 @@ import {
   Download,
   Upload,
   Terminal,
-  Bug
+  Bug,
+  Network
 } from 'lucide-react';
 import {
   getSettingsCategory,
@@ -67,6 +68,7 @@ import {
   getDatabaseSettings,
   getTranslationSettings,
   getAppSettingsOnly,
+  getRelationshipsSettings,
   updateSettingsCategory
 } from '../../../lib/api/settings';
 import { API_CONFIG } from '../../../lib/config';
@@ -6081,6 +6083,260 @@ export default function OptimizedSettingsPage() {
     if (e.target) e.target.value = '';
   };
 
+  // ═══════════════════════════════════════════════════════════════════════
+  // RELATIONSHIPS SETTINGS TAB
+  // ═══════════════════════════════════════════════════════════════════════
+
+  function RelationshipsSettings() {
+    const [config, setConfig] = useState<any>({});
+    const [tempConfig, setTempConfig] = useState<any>({});
+    const [loading, setLoading] = useState(false);
+    const [saving, setSaving] = useState(false);
+    const [stats, setStats] = useState<any>(null);
+    const [resolveResult, setResolveResult] = useState<any>(null);
+    const [resolving, setResolving] = useState(false);
+
+    const DEFAULTS: Record<string, any> = {
+      extractionEnabled: false,
+      extractionModel: 'gpt-4o-mini',
+      batchSize: 50,
+      confidenceThreshold: 0.7,
+      graphRetrievalEnabled: false,
+      graphBoostScore: 0.08,
+      maxGraphHops: 1,
+      maxRelatedResults: 3,
+    };
+
+    useEffect(() => {
+      loadSettings();
+      loadStats();
+    }, []);
+
+    const loadSettings = async () => {
+      setLoading(true);
+      try {
+        const data = await getRelationshipsSettings();
+        const merged = { relationships: { ...DEFAULTS, ...data?.relationships } };
+        setConfig(merged);
+        setTempConfig(merged);
+      } catch (error) {
+        console.error('Failed to load relationships settings:', error);
+        setConfig({ relationships: { ...DEFAULTS } });
+        setTempConfig({ relationships: { ...DEFAULTS } });
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    const loadStats = async () => {
+      try {
+        const res = await fetch('/api/v2/relationships/stats');
+        if (res.ok) setStats(await res.json());
+      } catch (error) {
+        console.error('Failed to load relationship stats:', error);
+      }
+    };
+
+    const updateSetting = (key: string, value: any) => {
+      setTempConfig((prev: any) => ({
+        ...prev,
+        relationships: { ...prev.relationships, [key]: value }
+      }));
+    };
+
+    const saveAllSettings = async () => {
+      setSaving(true);
+      try {
+        await updateSettingsCategory('relationships', tempConfig);
+        setConfig(tempConfig);
+        window.dispatchEvent(new CustomEvent('settingsUpdated', { detail: { category: 'relationships', settings: tempConfig } }));
+        toast({ title: 'Saved', description: 'Relationship settings saved.' });
+      } catch (error: any) {
+        toast({ title: 'Error', description: error.message, variant: 'destructive' });
+      } finally {
+        setSaving(false);
+      }
+    };
+
+    const handleResolve = async (dryRun: boolean) => {
+      setResolving(true);
+      try {
+        const res = await fetch('/api/v2/relationships/resolve', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ dry_run: dryRun }),
+        });
+        const data = await res.json();
+        setResolveResult(data);
+        if (!dryRun) loadStats();
+        toast({
+          title: dryRun ? 'Dry Run' : 'Resolution Complete',
+          description: `Resolved: ${data.resolved}, Unresolved: ${data.still_unresolved}`,
+        });
+      } catch (error: any) {
+        toast({ title: 'Error', description: error.message, variant: 'destructive' });
+      } finally {
+        setResolving(false);
+      }
+    };
+
+    if (loading) return <div className="flex justify-center py-12"><Spinner /></div>;
+
+    const rs = tempConfig?.relationships || DEFAULTS;
+
+    return (
+      <div className="space-y-6">
+        <div className="grid grid-cols-2 gap-6">
+          {/* Left: Extraction Configuration */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Network className="w-5 h-5" />
+                Extraction Configuration
+              </CardTitle>
+              <CardDescription>LLM-based entity and relationship extraction from chunks</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-5">
+              <div className="flex items-center justify-between py-2">
+                <div className="flex-1">
+                  <Label>Extraction Enabled</Label>
+                  <p className="text-xs text-muted-foreground mt-1">Enable automatic extraction for new embeddings</p>
+                </div>
+                <Switch checked={rs.extractionEnabled === true || rs.extractionEnabled === 'true'} onCheckedChange={(v) => updateSetting('extractionEnabled', v)} />
+              </div>
+
+              <div className="space-y-2">
+                <Label>Extraction Model</Label>
+                <Select value={rs.extractionModel || 'gpt-4o-mini'} onValueChange={(v) => updateSetting('extractionModel', v)}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="gpt-4o-mini">gpt-4o-mini (fast, cost-effective)</SelectItem>
+                    <SelectItem value="gpt-4o">gpt-4o (higher quality)</SelectItem>
+                    <SelectItem value="gpt-4-turbo">gpt-4-turbo</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-2">
+                <Label>Batch Size: {rs.batchSize || 50}</Label>
+                <p className="text-xs text-muted-foreground">Chunks per batch extraction job (10-200)</p>
+                <Slider value={[Number(rs.batchSize) || 50]} min={10} max={200} step={10} onValueChange={([v]) => updateSetting('batchSize', v)} />
+              </div>
+
+              <div className="space-y-2">
+                <Label>Confidence Threshold: {Number(rs.confidenceThreshold || 0.7).toFixed(2)}</Label>
+                <p className="text-xs text-muted-foreground">Minimum confidence to store a relationship</p>
+                <Slider value={[Number(rs.confidenceThreshold) || 0.7]} min={0.1} max={1.0} step={0.05} onValueChange={([v]) => updateSetting('confidenceThreshold', v)} />
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Right: Graph Retrieval + Stats */}
+          <div className="space-y-6">
+            <Card>
+              <CardHeader>
+                <CardTitle>Graph-Enhanced Retrieval</CardTitle>
+                <CardDescription>Boost RAG results using cross-reference relationships</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-5">
+                <div className="flex items-center justify-between py-2">
+                  <div className="flex-1">
+                    <Label>Enable Graph Retrieval</Label>
+                    <p className="text-xs text-muted-foreground mt-1">Add related chunks from graph to RAG results</p>
+                  </div>
+                  <Switch checked={rs.graphRetrievalEnabled === true || rs.graphRetrievalEnabled === 'true'} onCheckedChange={(v) => updateSetting('graphRetrievalEnabled', v)} />
+                </div>
+
+                <div className="space-y-2">
+                  <Label>Boost Score: {Number(rs.graphBoostScore || 0.08).toFixed(2)}</Label>
+                  <p className="text-xs text-muted-foreground">Score boost for graph-related results (0.00-0.20)</p>
+                  <Slider value={[Number(rs.graphBoostScore) || 0.08]} min={0} max={0.20} step={0.01} onValueChange={([v]) => updateSetting('graphBoostScore', v)} />
+                </div>
+
+                <div className="space-y-2">
+                  <Label>Max Graph Hops</Label>
+                  <Select value={String(rs.maxGraphHops || 1)} onValueChange={(v) => updateSetting('maxGraphHops', parseInt(v))}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="1">1 hop (direct references)</SelectItem>
+                      <SelectItem value="2">2 hops (indirect references)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-2">
+                  <Label>Max Related Results: {rs.maxRelatedResults || 3}</Label>
+                  <Slider value={[Number(rs.maxRelatedResults) || 3]} min={1} max={10} step={1} onValueChange={([v]) => updateSetting('maxRelatedResults', v)} />
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Stats & Actions */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center justify-between">
+                  <span>Statistics & Actions</span>
+                  <Button variant="ghost" size="sm" onClick={loadStats}><RefreshCw className="w-4 h-4" /></Button>
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {stats ? (
+                  <div className="grid grid-cols-2 gap-3 text-sm">
+                    <div className="p-3 rounded-lg bg-muted/50">
+                      <span className="text-muted-foreground text-xs block">Total Entities</span>
+                      <span className="font-semibold text-lg">{stats.total_entities?.toLocaleString() || 0}</span>
+                    </div>
+                    <div className="p-3 rounded-lg bg-muted/50">
+                      <span className="text-muted-foreground text-xs block">Relationships</span>
+                      <span className="font-semibold text-lg">{stats.total_relationships?.toLocaleString() || 0}</span>
+                    </div>
+                    <div className="p-3 rounded-lg bg-muted/50">
+                      <span className="text-muted-foreground text-xs block">Coverage</span>
+                      <span className="font-semibold text-lg">{stats.extraction_coverage_pct || 0}%</span>
+                    </div>
+                    <div className="p-3 rounded-lg bg-muted/50">
+                      <span className="text-muted-foreground text-xs block">Unresolved</span>
+                      <span className="font-semibold text-lg">{stats.unresolved_references?.toLocaleString() || 0}</span>
+                    </div>
+                  </div>
+                ) : (
+                  <p className="text-sm text-muted-foreground">Loading stats...</p>
+                )}
+
+                <div className="flex gap-2 pt-2">
+                  <Button variant="outline" size="sm" onClick={() => handleResolve(true)} disabled={resolving}>
+                    {resolving && <RefreshCw className="w-3 h-3 mr-1 animate-spin" />}
+                    Dry Run
+                  </Button>
+                  <Button size="sm" onClick={() => handleResolve(false)} disabled={resolving}>
+                    {resolving && <RefreshCw className="w-3 h-3 mr-1 animate-spin" />}
+                    Run Resolution
+                  </Button>
+                </div>
+
+                {resolveResult && (
+                  <Alert>
+                    <AlertDescription>
+                      Resolved: {resolveResult.resolved} | Still unresolved: {resolveResult.still_unresolved}
+                      {resolveResult.dry_run && ' (dry run)'}
+                    </AlertDescription>
+                  </Alert>
+                )}
+              </CardContent>
+            </Card>
+          </div>
+        </div>
+
+        {/* Save Button */}
+        <div className="flex justify-end">
+          <Button onClick={saveAllSettings} disabled={saving}>
+            {saving ? <><RefreshCw className="w-4 h-4 mr-2 animate-spin" /> Saving...</> : <><Save className="w-4 h-4 mr-2" /> Save Settings</>}
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="w-full max-w-[90%] mx-auto p-6">
       <div className="mb-6 flex items-start justify-between">
@@ -6112,7 +6368,7 @@ export default function OptimizedSettingsPage() {
       />
 
       <Tabs value={activeTab} onValueChange={handleTabChange} className="space-y-6">
-        <TabsList className="grid w-full grid-cols-8 h-14">
+        <TabsList className="grid w-full grid-cols-9 h-14">
           <TabsTrigger value="app" className="h-12 px-4">
             <span className="text-sm">App</span>
           </TabsTrigger>
@@ -6133,6 +6389,9 @@ export default function OptimizedSettingsPage() {
           </TabsTrigger>
           <TabsTrigger value="scheduler" className="h-12 px-4">
             <span className="text-sm">Scheduler</span>
+          </TabsTrigger>
+          <TabsTrigger value="relationships" className="h-12 px-4">
+            <span className="text-sm">Graph</span>
           </TabsTrigger>
           <TabsTrigger value="advanced" className="h-12 px-4">
             <span className="text-sm">Advanced</span>
@@ -6165,6 +6424,10 @@ export default function OptimizedSettingsPage() {
 
         <TabsContent value="scheduler">
           <SchedulerSection />
+        </TabsContent>
+
+        <TabsContent value="relationships">
+          <RelationshipsSettings />
         </TabsContent>
 
         <TabsContent value="advanced">
