@@ -54,6 +54,39 @@ class EmbeddingWorker:
         }
         self._redis: Optional[redis.Redis] = None
         self._heartbeat_task: Optional[asyncio.Task] = None
+        self._rel_extraction_enabled: bool = False  # v12.54: set via check_rel_extraction_setting()
+        self._rel_extraction_checked: bool = False
+
+    async def _check_rel_extraction_setting(self):
+        """v12.54: Check if relationship extraction is enabled (one-time check per job)."""
+        if self._rel_extraction_checked:
+            return
+        try:
+            pool = await get_db()
+            row = await pool.fetchrow(
+                "SELECT value FROM settings WHERE key = 'relationships.extractionEnabled'"
+            )
+            self._rel_extraction_enabled = row and row['value'].lower() == 'true'
+            self._rel_extraction_checked = True
+            if self._rel_extraction_enabled:
+                logger.info("🕸️ Relationship extraction enabled for new embeddings")
+        except Exception:
+            self._rel_extraction_enabled = False
+            self._rel_extraction_checked = True
+
+    async def _extract_chunk_relationships(self, chunk_id: int, content: str, source_table: str):
+        """v12.54: Fire-and-forget relationship extraction for a new embedding."""
+        try:
+            from services.relationship_extraction_service import get_relationship_extraction_service
+            service = get_relationship_extraction_service()
+            await service.extract_from_chunk(
+                chunk_id=chunk_id,
+                content=content,
+                source_table=source_table,
+                source_type="csv",
+            )
+        except Exception as e:
+            logger.debug(f"[RelExtract] Post-embedding extraction failed for chunk {chunk_id}: {e}")
 
     def _get_redis(self) -> redis.Redis:
         """Get Redis connection (lazy initialization)"""
@@ -244,6 +277,8 @@ class EmbeddingWorker:
         """Process CSV table in batches"""
 
         try:
+            # v12.54: Check if relationship extraction is enabled (once per job)
+            await self._check_rel_extraction_setting()
             pool = await get_db()
 
             # Get total count
@@ -352,6 +387,21 @@ class EmbeddingWorker:
                         tokens_used = EXCLUDED.tokens_used,
                         updated_at = NOW()
                 """, table_name, int(source_id), text[:10000], embedding_vector, EMBEDDING_MODEL, text_tokens)
+
+                # v12.54: Fire-and-forget relationship extraction for new embeddings
+                if self._rel_extraction_enabled:
+                    try:
+                        # Get the chunk ID from unified_embeddings
+                        chunk_row = await pool.fetchrow(
+                            "SELECT id FROM unified_embeddings WHERE source_table = $1 AND source_id = $2",
+                            table_name, int(source_id)
+                        )
+                        if chunk_row:
+                            asyncio.create_task(
+                                self._extract_chunk_relationships(chunk_row['id'], text[:10000], table_name)
+                            )
+                    except Exception as rel_err:
+                        pass  # Non-critical: don't block embedding pipeline
 
         except openai.RateLimitError:
             logger.warning("Rate limited, waiting 60 seconds...")

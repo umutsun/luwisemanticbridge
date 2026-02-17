@@ -1749,6 +1749,106 @@ class SemanticSearchService:
             # Penalize: this chunk is from a different law
             return -0.25, {"law_affinity": "wrong_law", "law_code": detected_law_code, "chunk_law": chunk_law_code}
 
+    # === GRAPH-ENHANCED RETRIEVAL HELPERS (v12.54) ===
+
+    async def _load_graph_settings(self) -> Dict[str, Any]:
+        """Load graph retrieval settings from DB."""
+        try:
+            pool = await get_db()
+            rows = await pool.fetch(
+                "SELECT key, value FROM settings WHERE category = 'relationships'"
+            )
+            settings = {}
+            for row in rows:
+                key = row['key'].replace('relationships.', '')
+                settings[key] = row['value']
+
+            return {
+                "enabled": settings.get("graphRetrievalEnabled", "false").lower() == "true",
+                "boost_score": float(settings.get("graphBoostScore", "0.04")),
+                "max_hops": int(settings.get("maxGraphHops", "1")),
+                "max_related": int(settings.get("maxRelatedResults", "3")),
+            }
+        except Exception as e:
+            logger.warning(f"[Graph] Settings load failed: {e}")
+            return {"enabled": False}
+
+    async def _inject_graph_related_chunks(
+        self,
+        scored_results: List[Dict],
+        graph_data: Dict[int, List[Dict]],
+        max_inject: int = 3,
+    ) -> List[Dict]:
+        """
+        Inject related chunks from graph that weren't found by vector search.
+        These are appended after the scored results with _graph_injected=True flag.
+        """
+        existing_ids = {r['id'] for r in scored_results}
+        target_ids_to_inject = set()
+
+        # Collect unique target chunk IDs not already in results
+        for chunk_id, relations in graph_data.items():
+            if chunk_id not in existing_ids:
+                continue  # Only inject for chunks that ARE in results
+            for rel in relations:
+                tid = rel['target_chunk_id']
+                if tid and tid not in existing_ids and tid not in target_ids_to_inject:
+                    target_ids_to_inject.add(tid)
+
+        if not target_ids_to_inject:
+            return scored_results
+
+        # Limit injection count
+        inject_ids = list(target_ids_to_inject)[:max_inject]
+
+        try:
+            pool = await get_db()
+            rows = await pool.fetch("""
+                SELECT id, content, source_table, source_type, source_id, metadata
+                FROM unified_embeddings
+                WHERE id = ANY($1::int[])
+            """, inject_ids)
+
+            injected_count = 0
+            for row in rows:
+                formatted = self._format_content(dict(row))
+                scored_results.append({
+                    "id": row['id'],
+                    "content": formatted["excerpt"][:500] if formatted["excerpt"] else "",
+                    "full_content": row['content'],
+                    "title": formatted["title"],
+                    "excerpt": formatted["excerpt"],
+                    "source_table": row['source_table'],
+                    "source_type": self._get_source_display_name(row['source_table']),
+                    "source_id": row['source_id'],
+                    "similarity_score": 0,
+                    "keyword_boost": 0,
+                    "metadata_boost": 0,
+                    "article_boost": 0,
+                    "direct_answer_boost": 0,
+                    "rate_article_boost": 0,
+                    "law_affinity_boost": 0,
+                    "graph_boost": 0,
+                    "source_priority": 0,
+                    "table_weight": 0,
+                    "final_score": 0,  # Graph-injected results don't compete in ranking
+                    "metadata": json.loads(row['metadata']) if row['metadata'] else {},
+                    "search_source": "graph",
+                    "is_law_text": False,
+                    "article_match_type": "graph_related",
+                    "_graph_injected": True,
+                    "_debug": {"graph_injection": True},
+                })
+                injected_count += 1
+
+            if injected_count > 0:
+                logger.info(f"🕸️ Graph injection: {injected_count} related chunks added from graph traversal")
+
+        except Exception as e:
+            logger.warning(f"[Graph] Chunk injection failed: {e}")
+
+        return scored_results
+
     # === DIRECT ANSWER DETECTION (v12.47) ===
     # Patterns for "what is the rate/amount?" type questions
     RATE_QUESTION_PATTERNS = [
@@ -3775,11 +3875,37 @@ class SemanticSearchService:
                     if rate_injected:
                         logger.info(f"📊 Injected rate article: {rate_question_law_code} Madde {rate_article_config.article_number}")
 
+            # === GRAPH-ENHANCED RETRIEVAL: Pre-load relationships for scoring boost ===
+            graph_enabled = False
+            graph_data = {}
+            graph_boost_base = 0.04
+            max_related_inject = 3
+            try:
+                graph_settings = await self._load_graph_settings()
+                graph_enabled = graph_settings.get("enabled", False)
+                if graph_enabled:
+                    graph_boost_base = float(graph_settings.get("boost_score", 0.04))
+                    max_related_inject = int(graph_settings.get("max_related", 3))
+                    graph_load_start = datetime.now()
+                    chunk_ids = [r['id'] for r in raw_results if r.get('id')]
+                    if chunk_ids:
+                        from services.relationship_extraction_service import get_relationship_extraction_service
+                        rel_service = get_relationship_extraction_service()
+                        graph_data = await rel_service.load_graph_for_chunks(chunk_ids)
+                    timings["graph_load_ms"] = (datetime.now() - graph_load_start).total_seconds() * 1000
+                    if graph_data:
+                        logger.info(f"🕸️ Graph data loaded: {len(graph_data)} chunks have relationships")
+            except Exception as e:
+                logger.warning(f"[Graph] Failed to load graph data (non-critical): {e}")
+                graph_enabled = False
+
             # Apply hybrid scoring with table weights and retrieval-level penalties
             score_start = datetime.now()
             scored_results = []
             penalty_stats = {"temporal_count": 0, "toc_count": 0}
             scored_source_ids = set()  # Dedup by source_id in scoring phase
+            # Pre-compute top result IDs for graph mutual reference detection
+            top_result_ids = {r['id'] for r in raw_results[:20]} if graph_enabled else set()
 
             for result in raw_results:
                 # Dedup: skip if same source_id already scored (keep highest similarity first)
@@ -3932,9 +4058,26 @@ class SemanticSearchService:
                     elif law_affinity_boost < 0:
                         penalty_stats["law_affinity_wrong_count"] += 1
 
-                # Calculate final score (includes keyword boost, penalties, metadata boost, article boost, direct answer boost, rate article boost, AND law affinity)
+                # === GRAPH BOOST: Boost chunks that have mutual references with other top results ===
+                graph_boost = 0.0
+                graph_details = {"graph_enhanced": False, "mutual_refs": 0}
+                if graph_enabled and result["id"] in graph_data:
+                    relations = graph_data[result["id"]]
+                    mutual_refs = [r for r in relations if r['target_chunk_id'] in top_result_ids]
+                    if mutual_refs:
+                        graph_boost = min(len(mutual_refs) * graph_boost_base, 0.12)
+                        graph_details = {
+                            "graph_enhanced": True,
+                            "mutual_refs": len(mutual_refs),
+                            "relation_types": list(set(r['relationship_type'] for r in mutual_refs)),
+                        }
+                        if "graph_boost_count" not in penalty_stats:
+                            penalty_stats["graph_boost_count"] = 0
+                        penalty_stats["graph_boost_count"] += 1
+
+                # Calculate final score (includes keyword boost, penalties, metadata boost, article boost, direct answer boost, rate article boost, law affinity, AND graph boost)
                 # Penalty is negative, other boosts can be positive or negative
-                final_score = max(0, weighted_similarity + keyword_boost + retrieval_penalty + metadata_boost + article_boost + direct_answer_boost + rate_article_boost + law_affinity_boost)
+                final_score = max(0, weighted_similarity + keyword_boost + retrieval_penalty + metadata_boost + article_boost + direct_answer_boost + rate_article_boost + law_affinity_boost + graph_boost)
 
                 scored_results.append({
                     "id": result["id"],
@@ -3952,6 +4095,7 @@ class SemanticSearchService:
                     "direct_answer_boost": round(direct_answer_boost * 100, 2),  # v12.47
                     "rate_article_boost": round(rate_article_boost * 100, 2),  # v12.48
                     "law_affinity_boost": round(law_affinity_boost * 100, 2),  # v12.53
+                    "graph_boost": round(graph_boost * 100, 2),  # v12.54 graph-enhanced
                     "source_priority": round(source_priority, 2),
                     "table_weight": round(table_weight, 2),
                     "final_score": round(final_score * 100, 2),
@@ -3960,6 +4104,7 @@ class SemanticSearchService:
                     # Article anchoring info for LLM context
                     "is_law_text": article_details.get("is_law_text", False),
                     "article_match_type": article_details.get("article_anchoring", "not_applicable"),
+                    "_graph_injected": False,  # v12.54: marks graph-injected results
                     "_debug": {
                         "pure_similarity": round(similarity * 100, 2),
                         "weighted_similarity": round(weighted_similarity * 100, 2),
@@ -3970,6 +4115,8 @@ class SemanticSearchService:
                         "article_boost": round(article_boost * 100, 2),
                         "direct_answer_boost": round(direct_answer_boost * 100, 2),  # v12.47
                         "direct_answer_details": direct_answer_details,  # v12.47
+                        "graph_boost": round(graph_boost * 100, 2),  # v12.54
+                        "graph_details": graph_details,  # v12.54
                         "article_anchoring": article_details,
                         "metadata_quality": metadata_details,
                         "retrieval_penalty": round(retrieval_penalty * 100, 2),
@@ -4015,8 +4162,23 @@ class SemanticSearchService:
                 if match_count > 0 or wrong_count > 0:
                     logger.info(f"📋 Law affinity ({detected_law_code}): {match_count} boosted, {wrong_count} penalized")
 
+            # Log graph boost statistics (v12.54)
+            if graph_enabled and penalty_stats.get("graph_boost_count", 0) > 0:
+                logger.info(f"🕸️ Graph boost: {penalty_stats['graph_boost_count']} results boosted via mutual references")
+
             # Sort by final score and limit
             scored_results.sort(key=lambda x: x["final_score"], reverse=True)
+
+            # === GRAPH INJECTION: Add related chunks from graph that weren't found by vector search ===
+            if graph_enabled and graph_data and max_related_inject > 0:
+                try:
+                    graph_inject_start = datetime.now()
+                    scored_results = await self._inject_graph_related_chunks(
+                        scored_results, graph_data, max_inject=max_related_inject
+                    )
+                    timings["graph_inject_ms"] = (datetime.now() - graph_inject_start).total_seconds() * 1000
+                except Exception as e:
+                    logger.warning(f"[Graph] Injection failed (non-critical): {e}")
 
             # Log top 5 results for debugging rate questions
             if is_rate_question and scored_results:

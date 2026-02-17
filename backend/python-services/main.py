@@ -43,7 +43,7 @@ logger.add(
 )
 
 # Import routers
-from routers import crawl_router, pgai_router, health_router, whisper_router, import_router, worker_router, pdf_router, csv_transform_router, embedding_router, document_analyzer_router, semantic_search_router, devops_router, semantic_analyzer_router, pdf_vision_router, rag_pipeline_router
+from routers import crawl_router, pgai_router, health_router, whisper_router, import_router, worker_router, pdf_router, csv_transform_router, embedding_router, document_analyzer_router, semantic_search_router, devops_router, semantic_analyzer_router, pdf_vision_router, rag_pipeline_router, relationship_router
 from routers.scheduler_router import router as scheduler_router
 from routers.data_health_router import router as data_health_router
 from routers.document_optimization_router import router as doc_optimization_router
@@ -265,6 +265,12 @@ app.include_router(
     prefix="/api/python/doc-optimization",
     tags=["doc-optimization"]
     # Document optimization: OCR artifact cleanup in document_embeddings
+)
+app.include_router(
+    relationship_router,
+    prefix="/api/python/relationships",
+    tags=["relationships"]
+    # Chunk relationship extraction: entities, cross-references, graph traversal
 )
 
 # Global exception handler
