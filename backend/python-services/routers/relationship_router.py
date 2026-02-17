@@ -27,7 +27,7 @@ router = APIRouter()
 # EXTRACTION ENDPOINTS
 # ═══════════════════════════════════════════════════════════════════════════
 
-@router.post("/extract", response_model=ExtractionResult)
+@router.post("/extract")
 async def extract_from_chunk(request: ExtractRequest):
     """
     Extract entities and relationships from a single chunk.

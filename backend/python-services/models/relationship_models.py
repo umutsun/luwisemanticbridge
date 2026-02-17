@@ -45,11 +45,13 @@ class ExtractionStatus(str, Enum):
 
 class EntityResult(BaseModel):
     """Single extracted entity"""
-    entity_type: EntityType
+    entity_type: EntityType = Field(alias="type")
     value: str = Field(..., description="Raw entity value from text")
     normalized: Optional[str] = Field(None, description="Normalized value (e.g., '%18' -> '0.18')")
     position_start: Optional[int] = Field(None, description="Character offset start in content")
     position_end: Optional[int] = Field(None, description="Character offset end in content")
+
+    model_config = {"populate_by_name": True}
 
 
 class EntityDB(BaseModel):
@@ -73,9 +75,11 @@ class ReferenceResult(BaseModel):
     """Single extracted cross-reference"""
     target_law: Optional[str] = Field(None, description="Target law code: VUK, GVK, etc.")
     target_article: Optional[str] = Field(None, description="Target article number: 114, 40, 29/A")
-    relationship_type: RelationshipType = Field(default=RelationshipType.REFERENCES)
+    relationship_type: RelationshipType = Field(default=RelationshipType.REFERENCES, alias="type")
     context: Optional[str] = Field(None, description="Surrounding text where reference was found")
     confidence: float = Field(default=0.8, ge=0.0, le=1.0)
+
+    model_config = {"populate_by_name": True}
 
 
 class RelationshipDB(BaseModel):
