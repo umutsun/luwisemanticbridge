@@ -462,4 +462,51 @@ router.post('/tables/:tableName/insert', async (req: Request, res: Response) => 
   }
 });
 
+/**
+ * POST /chunk-laws
+ * Chunk law documents into individual articles (Madde)
+ * Proxies to Python service
+ */
+router.post('/chunk-laws', async (req: Request, res: Response) => {
+  try {
+    const { sourceTable = 'vergilex_mevzuat_kanunlar', dryRun = false, limit } = req.body;
+
+    const pythonUrl = process.env.PYTHON_SERVICE_URL || 'http://localhost:8003';
+
+    const response = await fetch(`${pythonUrl}/api/python/embedding/chunk-laws`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ source_table: sourceTable, dry_run: dryRun, limit })
+    });
+
+    const data = await response.json();
+    res.status(response.status).json(data);
+  } catch (error: any) {
+    console.error('Failed to chunk laws:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message || 'Failed to chunk laws'
+    });
+  }
+});
+
+/**
+ * GET /chunk-laws/status
+ * Get chunking job status
+ */
+router.get('/chunk-laws/status', async (req: Request, res: Response) => {
+  try {
+    const pythonUrl = process.env.PYTHON_SERVICE_URL || 'http://localhost:8003';
+
+    const response = await fetch(`${pythonUrl}/api/python/embedding/chunk-laws/status`);
+    const data = await response.json();
+    res.status(response.status).json(data);
+  } catch (error: any) {
+    res.status(500).json({
+      success: false,
+      error: error.message || 'Failed to get status'
+    });
+  }
+});
+
 export default router;

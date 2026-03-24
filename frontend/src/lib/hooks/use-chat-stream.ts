@@ -162,6 +162,7 @@ export function useChatStream() {
           sources: pdfData.sources,
           relatedTopics: pdfData.relatedTopics,
           pdfAttachment: pdfData.pdfAttachment,
+          articleQuery: pdfData.articleQuery, // Article anchoring metadata
           isLoading: false,
           isStreaming: false,
           status: 'complete',
@@ -228,6 +229,7 @@ export function useChatStream() {
                   content: wsData.response,
                   sources: wsData.sources,
                   relatedTopics: wsData.relatedTopics,
+                  articleQuery: wsData.articleQuery, // Article anchoring metadata
                   isLoading: false,
                   isStreaming: false,
                 });
@@ -265,6 +267,7 @@ export function useChatStream() {
         updateMessage(assistantMessageId, {
           content: fallbackData.message.content,
           sources: fallbackData.sources,
+          articleQuery: fallbackData.articleQuery, // Article anchoring metadata
           isLoading: false,
           isStreaming: false,
         });

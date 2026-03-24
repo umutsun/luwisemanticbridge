@@ -5,7 +5,7 @@ import { useConfig } from '@/contexts/ConfigContext';
 import { useEffect } from 'react';
 
 export function useLanguage() {
-  const { i18n } = useTranslation('translations');
+  const { i18n } = useTranslation();
   const { config, updateConfig } = useConfig();
 
   // Dil değiştirme fonksiyonu
@@ -39,6 +39,11 @@ export function useLanguage() {
       // Local storage'a kaydet
       if (typeof window !== 'undefined') {
         localStorage.setItem('selectedLanguage', language);
+
+        // Force reload to ensure all components re-render
+        setTimeout(() => {
+          window.location.reload();
+        }, 100);
       }
     } catch (error) {
       console.error('Failed to change language:', error);
@@ -76,7 +81,8 @@ export function useLanguage() {
       { code: 'ru', name: 'Русский', flag: '🇷🇺' },
       { code: 'ar', name: 'العربية', flag: '🇸🇦' },
       { code: 'ja', name: '日本語', flag: '🇯🇵' },
-      { code: 'ko', name: '한국어', flag: '🇰🇷' }
+      { code: 'ko', name: '한국어', flag: '🇰🇷' },
+      { code: 'km', name: 'ខ្មែរ', flag: '🇰🇭' }
     ]
   };
 }

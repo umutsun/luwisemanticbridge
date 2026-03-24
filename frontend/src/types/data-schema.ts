@@ -42,6 +42,23 @@ export interface LawCodeConfig {
   lawNameToCode?: Record<string, string>;
   /** Patterns for matching law codes in malformed text */
   lawCodePatterns?: Array<{ pattern: string; code: string }>;
+  /** v12.48: Rate article configuration for tax rate questions */
+  rateArticles?: Record<string, RateArticleConfig>;
+}
+
+/**
+ * v12.48: Rate Article Configuration
+ * Defines which article contains rate/percentage information for a given law
+ */
+export interface RateArticleConfig {
+  /** Article number that defines the rate (e.g., "32" for KVK) */
+  articleNumber: string;
+  /** Keywords that indicate a rate question (e.g., ["oran", "yüzde", "%"]) */
+  keywords: string[];
+  /** Boost score to add when rate question detected (0.0-0.5, default 0.2) */
+  boostScore?: number;
+  /** Additional article numbers for rate-related content */
+  relatedArticles?: string[];
 }
 
 /**

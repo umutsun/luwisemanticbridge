@@ -14,7 +14,19 @@
     "logs:frontend": "pm2 logs lsemb-frontend --lines 50",
     "logs:python": "pm2 logs lsemb-python --lines 50",
     "status": "pm2 status",
-    "monit": "pm2 monit"
+    "monit": "pm2 monit",
+    "i18n:consolidate": "node scripts/consolidate_locales.js",
+    "i18n:validate": "node scripts/validate_translations.js",
+    "i18n:validate:strict": "node scripts/validate_translations.js --strict",
+    "i18n:translate": "node scripts/auto_translate.js --all",
+    "i18n:translate:tr": "node scripts/auto_translate.js tr",
+    "i18n:report": "node scripts/auto_translate.js --report",
+    "i18n:missing": "node scripts/find_missing_keys.js",
+    "i18n:missing:detailed": "node scripts/find_missing_keys.js --detailed",
+    "i18n:missing:fix": "node scripts/find_missing_keys.js --fix",
+    "i18n:clean": "node scripts/clean_auto_tags.js --all",
+    "i18n:clean:report": "node scripts/clean_auto_tags.js --report",
+    "i18n:check": "npm run i18n:consolidate && npm run i18n:validate && npm run i18n:report"
   },
   "dependencies": {
     "@types/dompurify": "^3.0.5",

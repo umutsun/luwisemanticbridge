@@ -1,0 +1,90 @@
+upstream frontend {
+    server 127.0.0.1:3002;
+}
+
+upstream backend {
+    server 127.0.0.1:8083;
+}
+
+# HTTP redirect
+server {
+    listen 80;
+    server_name lsemb.luwi.dev;
+    return 301 https://$server_name$request_uri;
+}
+
+# HTTPS lsemb.luwi.dev
+server {
+    listen 443 ssl http2;
+    server_name lsemb.luwi.dev;
+
+    ssl_certificate /etc/letsencrypt/live/lsemb.luwi.dev/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/lsemb.luwi.dev/privkey.pem;
+    ssl_protocols TLSv1.2 TLSv1.3;
+    ssl_ciphers HIGH:!aNULL:!MD5;
+    ssl_prefer_server_ciphers on;
+
+    client_max_body_size 100M;
+
+    # API routes - proxy to backend
+    location /api/ {
+        proxy_pass http://backend;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto https;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection 'upgrade';
+    }
+
+    # Specific location for Next.js static assets
+    location /_next/ {
+        proxy_pass http://frontend;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto https;
+    }
+
+    # All other routes - proxy to frontend
+    location / {
+        proxy_pass http://frontend;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto https;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection 'upgrade';
+
+        # Handle websockets
+        proxy_read_timeout 86400;
+    }
+}
+
+# luwi.dev (separate domain)
+server {
+    listen 80;
+    server_name luwi.dev www.luwi.dev;
+    return 301 https://$server_name$request_uri;
+}
+
+server {
+    listen 443 ssl http2;
+    server_name luwi.dev www.luwi.dev;
+
+    ssl_certificate /etc/letsencrypt/live/luwi.dev/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/luwi.dev/privkey.pem;
+    ssl_protocols TLSv1.2 TLSv1.3;
+
+    location / {
+        proxy_pass http://127.0.0.1:3000;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto https;
+    }
+}

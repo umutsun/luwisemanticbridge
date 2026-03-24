@@ -216,3 +216,243 @@ async def get_progress() -> Dict[str, Any]:
     except Exception as e:
         logger.error(f"Failed to get progress: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+# ============== LAW CHUNKING ENDPOINTS ==============
+
+class ChunkLawsRequest(BaseModel):
+    """Request model for law chunking"""
+    source_table: str = Field("vergilex_mevzuat_kanunlar", description="Source table with law documents")
+    dry_run: bool = Field(False, description="If true, don't actually insert chunks")
+    limit: Optional[int] = Field(None, description="Limit number of laws to process")
+
+
+# Global chunking status
+_chunking_status = {
+    "running": False,
+    "progress": 0,
+    "total": 0,
+    "processed": 0,
+    "chunks_created": 0,
+    "errors": [],
+    "last_law": None
+}
+
+
+@router.post("/chunk-laws")
+async def chunk_laws(request: ChunkLawsRequest, background_tasks: BackgroundTasks) -> Dict[str, Any]:
+    """
+    Chunk law documents into individual articles (Madde).
+    Each law is split into its constituent articles for better semantic search.
+    """
+    global _chunking_status
+
+    if _chunking_status["running"]:
+        return {
+            "success": False,
+            "error": "Chunking already in progress",
+            "status": _chunking_status
+        }
+
+    # Start chunking in background
+    background_tasks.add_task(
+        run_law_chunking,
+        request.source_table,
+        request.dry_run,
+        request.limit
+    )
+
+    _chunking_status = {
+        "running": True,
+        "progress": 0,
+        "total": 0,
+        "processed": 0,
+        "chunks_created": 0,
+        "errors": [],
+        "last_law": None
+    }
+
+    return {
+        "success": True,
+        "message": "Law chunking started in background",
+        "dry_run": request.dry_run,
+        "source_table": request.source_table
+    }
+
+
+@router.get("/chunk-laws/status")
+async def get_chunk_laws_status() -> Dict[str, Any]:
+    """Get the current status of law chunking"""
+    return {
+        "success": True,
+        **_chunking_status
+    }
+
+
+@router.post("/chunk-laws/stop")
+async def stop_chunk_laws() -> Dict[str, Any]:
+    """Stop the running law chunking process"""
+    global _chunking_status
+    _chunking_status["running"] = False
+    return {
+        "success": True,
+        "message": "Chunking stop requested"
+    }
+
+
+async def run_law_chunking(source_table: str, dry_run: bool, limit: Optional[int]):
+    """Background task to run law chunking"""
+    global _chunking_status
+    import asyncpg
+    import re
+    import hashlib
+    import os
+    from datetime import datetime
+
+    DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://postgres:Luwi2025SecurePGx7749@localhost:5432/vergilex_lsemb")
+
+    try:
+        conn = await asyncpg.connect(DATABASE_URL)
+
+        # Get law documents
+        query = f"""
+            SELECT id, source_name, content, metadata
+            FROM unified_embeddings
+            WHERE source_table = $1 AND source_type = 'law'
+            ORDER BY id
+        """
+        if limit:
+            query += f" LIMIT {limit}"
+
+        laws = await conn.fetch(query, source_table)
+        _chunking_status["total"] = len(laws)
+
+        logger.info(f"Starting law chunking: {len(laws)} documents from {source_table}")
+
+        for i, law in enumerate(laws):
+            if not _chunking_status["running"]:
+                logger.info("Chunking stopped by user")
+                break
+
+            law_id = law["id"]
+            law_name = law["source_name"] or "Unknown Law"
+            content = law["content"] or ""
+            metadata = law["metadata"] or {}
+
+            _chunking_status["last_law"] = law_name[:50]
+            _chunking_status["processed"] = i + 1
+            _chunking_status["progress"] = round((i + 1) / len(laws) * 100, 1)
+
+            # Check if already chunked
+            existing = await conn.fetchval(
+                "SELECT COUNT(*) FROM unified_embeddings WHERE source_table = $1 AND metadata->>'original_id' = $2",
+                f"{source_table}_chunks",
+                str(law_id)
+            )
+
+            if existing > 0:
+                logger.debug(f"Law {law_id} already chunked ({existing} articles)")
+                continue
+
+            # Parse articles from content
+            articles = parse_law_articles(content, law_name, metadata)
+
+            if not articles:
+                logger.warning(f"No articles found in law: {law_name[:50]}")
+                continue
+
+            # Insert article chunks
+            if not dry_run:
+                for article in articles:
+                    content_hash = hashlib.md5(article["content"].encode()).hexdigest()[:12]
+
+                    await conn.execute("""
+                        INSERT INTO unified_embeddings
+                        (source_table, source_type, source_id, source_name, content, metadata, content_hash, created_at)
+                        VALUES ($1, $2, $3, $4, $5, $6, $7, NOW())
+                        ON CONFLICT (source_table, source_type, source_name, source_id) DO NOTHING
+                    """,
+                        f"{source_table}_chunks",
+                        "kanun",
+                        article["id"],
+                        article["source_name"],
+                        article["content"],
+                        article["metadata"],
+                        content_hash
+                    )
+                    _chunking_status["chunks_created"] += 1
+            else:
+                _chunking_status["chunks_created"] += len(articles)
+
+            logger.info(f"[{i+1}/{len(laws)}] {law_name[:40]}: {len(articles)} articles")
+
+        await conn.close()
+        _chunking_status["running"] = False
+        logger.info(f"Law chunking completed: {_chunking_status['chunks_created']} chunks created")
+
+    except Exception as e:
+        logger.error(f"Law chunking failed: {e}")
+        _chunking_status["errors"].append(str(e))
+        _chunking_status["running"] = False
+
+
+def parse_law_articles(content: str, law_name: str, metadata: dict) -> List[Dict]:
+    """Parse law content into individual articles"""
+    import re
+    import json
+
+    articles = []
+
+    # Pattern to match article headers: "Madde 1", "Madde 114", "MADDE 1" etc.
+    # Also handles "Madde 1 –", "Madde 1-" variants
+    article_pattern = re.compile(
+        r'(?:^|\n)\s*((?:Madde|MADDE|madde)\s+(\d+(?:\s*/\s*[A-Za-z])?)\s*[-–]?\s*)',
+        re.MULTILINE | re.IGNORECASE
+    )
+
+    matches = list(article_pattern.finditer(content))
+
+    if not matches:
+        return articles
+
+    law_number = metadata.get("law_number") if isinstance(metadata, dict) else None
+
+    for i, match in enumerate(matches):
+        article_num = match.group(2).strip()
+        start_pos = match.start()
+
+        # End position is start of next article or end of content
+        if i + 1 < len(matches):
+            end_pos = matches[i + 1].start()
+        else:
+            end_pos = len(content)
+
+        article_content = content[start_pos:end_pos].strip()
+
+        # Skip if too short
+        if len(article_content) < 50:
+            continue
+
+        # Truncate if too long (for embedding)
+        if len(article_content) > 8000:
+            article_content = article_content[:8000] + "..."
+
+        # Create article record
+        article_metadata = {
+            "law_name": law_name,
+            "law_number": law_number,
+            "article_number": article_num,
+            "article_title": None,
+            "chunk_type": "article",
+            "original_id": metadata.get("original_id") if isinstance(metadata, dict) else None,
+            "chunked_at": datetime.now().isoformat() if 'datetime' in dir() else None
+        }
+
+        articles.append({
+            "id": len(articles) + 1,
+            "source_name": f"{law_name} - Madde {article_num}",
+            "content": f"{law_name}\n\nMadde {article_num}\n\n{article_content}",
+            "metadata": json.dumps(article_metadata)
+        })
+
+    return articles

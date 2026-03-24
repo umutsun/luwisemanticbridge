@@ -12,6 +12,7 @@
 import debug from '@/lib/debug';
 
 import React, { useState, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import {
   Dialog,
   DialogContent,
@@ -83,9 +84,9 @@ const isPDFDocument = (doc: { type?: string; file_type?: string; title?: string 
   const fileType = doc.file_type?.toLowerCase() || '';
   const title = doc.title?.toLowerCase() || '';
   return type === 'pdf' ||
-         type === 'application/pdf' ||
-         fileType === 'application/pdf' ||
-         title.endsWith('.pdf');
+    type === 'application/pdf' ||
+    fileType === 'application/pdf' ||
+    title.endsWith('.pdf');
 };
 
 interface DocumentPreviewModalProps {
@@ -106,6 +107,7 @@ export default function DocumentPreviewModal({
   onClose,
   document,
 }: DocumentPreviewModalProps) {
+  const { t } = useTranslation();
   const { toast } = useToast();
   const { config } = useConfig();
 
@@ -164,10 +166,10 @@ export default function DocumentPreviewModal({
   const [selectedTemplate, setSelectedTemplate] = useState<string>('general');
   const [customKeywords, setCustomKeywords] = useState<string>('');
   const [templateDetecting, setTemplateDetecting] = useState(false);
-  const [detectedTemplate, setDetectedTemplate] = useState<{id: string; confidence: number; reason: string} | null>(null);
+  const [detectedTemplate, setDetectedTemplate] = useState<{ id: string; confidence: number; reason: string } | null>(null);
 
   // Active LLM state
-  const [activeLLM, setActiveLLM] = useState<{provider: string; model: string} | null>(null);
+  const [activeLLM, setActiveLLM] = useState<{ provider: string; model: string } | null>(null);
 
   // Custom field extraction state for Transform tab
   const [useCustomSchema, setUseCustomSchema] = useState(false);
@@ -1043,11 +1045,11 @@ export default function DocumentPreviewModal({
 
       // Decode HTML entities
       str = str.replace(/&nbsp;/g, ' ')
-               .replace(/&amp;/g, '&')
-               .replace(/&lt;/g, '<')
-               .replace(/&gt;/g, '>')
-               .replace(/&quot;/g, '"')
-               .replace(/&#39;/g, "'");
+        .replace(/&amp;/g, '&')
+        .replace(/&lt;/g, '<')
+        .replace(/&gt;/g, '>')
+        .replace(/&quot;/g, '"')
+        .replace(/&#39;/g, "'");
 
       return str.length > maxLength ? str.substring(0, maxLength) + '...' : str;
     };
@@ -1331,7 +1333,7 @@ export default function DocumentPreviewModal({
 
     setPdfProcessing(true);
     setPdfProgress(10);
-    setPdfStatus('OCR yapılıyor (Tesseract)...');
+    setPdfStatus(t('ocr.status.processing'));
 
     try {
       // Try batch-ocr first (background job)
@@ -1349,12 +1351,12 @@ export default function DocumentPreviewModal({
         await pollJobProgress(ocrData.jobId, 10, 100);
 
         setPdfProgress(100);
-        setPdfStatus('OCR Tamamlandı!');
+        setPdfStatus(t('ocr.status.completed'));
       } else {
         // Fallback: Use sync text extraction endpoint
         debug.log('[OCR] Batch OCR failed, using fallback text extraction');
         setPdfProgress(30);
-        setPdfStatus('Text çıkarılıyor...');
+        setPdfStatus(t('ocr.status.extracting'));
 
         const extractResponse = await fetch(`/api/v2/pdf/extract-text`, {
           method: 'POST',
@@ -1366,9 +1368,9 @@ export default function DocumentPreviewModal({
           const extractData = await extractResponse.json();
           await pollJobProgress(extractData.jobId, 30, 100);
           setPdfProgress(100);
-          setPdfStatus('Text çıkarma tamamlandı!');
+          setPdfStatus(t('ocr.status.extracted'));
         } else {
-          throw new Error('OCR ve text extraction başarısız');
+          throw new Error(t('ocr.status.failed'));
         }
       }
 
@@ -1401,15 +1403,15 @@ export default function DocumentPreviewModal({
       }
 
       toast({
-        title: "Başarılı",
-        description: "OCR işlemi tamamlandı",
+        title: t('ocr.success'),
+        description: t('ocr.process_completed'),
       });
     } catch (error: any) {
       console.error('OCR error:', error);
-      setPdfStatus('OCR başarısız');
+      setPdfStatus(t('ocr.process_failed'));
       toast({
-        title: "Hata",
-        description: error.message || 'OCR işlemi başarısız',
+        title: t('ocr.error'),
+        description: error.message || t('ocr.process_failed'),
         variant: "destructive"
       });
     } finally {
@@ -2581,8 +2583,8 @@ ${selectedArray.map(f => `  ${f.replace(/\./g, '_')} = EXCLUDED.${f.replace(/\./
                   <p className="text-sm font-medium text-foreground">{pdfStatus}</p>
                   <p className="text-[10px] font-mono text-muted-foreground">
                     {pdfStatus.toLowerCase().includes('ocr') ? 'OCR' :
-                     pdfStatus.toLowerCase().includes('analyz') ? 'Metadata Extraction' :
-                     'Processing'}
+                      pdfStatus.toLowerCase().includes('analyz') ? 'Metadata Extraction' :
+                        'Processing'}
                   </p>
                 </div>
               </div>
@@ -2697,7 +2699,7 @@ ${selectedArray.map(f => `  ${f.replace(/\./g, '_')} = EXCLUDED.${f.replace(/\./
                 </div>
 
                 {/* Field Mapping - Right Side - Two Column Layout */}
-<div className="w-[480px] flex-shrink-0 flex flex-col border-l pl-4 overflow-hidden">
+                <div className="w-[480px] flex-shrink-0 flex flex-col border-l pl-4 overflow-hidden">
                   <div className="flex items-center justify-between mb-3 flex-shrink-0">
                     <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
                       Field Mapping ({pdfSelectedFields.size})
@@ -2858,9 +2860,9 @@ ${selectedArray.map(f => `  ${f.replace(/\./g, '_')} = EXCLUDED.${f.replace(/\./
                                   />
                                   <span className="text-[10px] text-muted-foreground">
                                     {typeof previewValue === 'number' ? 'NUMBER' :
-                                     typeof previewValue === 'boolean' ? 'BOOLEAN' :
-                                     Array.isArray(previewValue) ? 'ARRAY' :
-                                     typeof previewValue === 'object' ? 'JSON' : 'TEXT'}
+                                      typeof previewValue === 'boolean' ? 'BOOLEAN' :
+                                        Array.isArray(previewValue) ? 'ARRAY' :
+                                          typeof previewValue === 'object' ? 'JSON' : 'TEXT'}
                                   </span>
                                 </div>
                               </div>
@@ -2993,326 +2995,326 @@ ${selectedArray.map(f => `  ${f.replace(/\./g, '_')} = EXCLUDED.${f.replace(/\./
 
   return (
     <React.Fragment>
-    <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-5xl max-h-fit p-0 gap-0 overflow-hidden flex flex-col">
-        {/* Modal Header - Glassmorphic */}
-        <div className="flex-shrink-0 bg-background/95 backdrop-blur-xl border-b border-border/50 px-6 py-4">
-          <div className="flex items-center justify-between gap-2.5">
-            <div className="flex items-center gap-2.5">
-              <DialogTitle className="text-base font-bold">{document.title}</DialogTitle>
-              <Badge variant="secondary" className="text-[10px] font-semibold px-2 py-0.5">
-                {document.type.toUpperCase()}
-              </Badge>
-              <span className="text-[10px] text-muted-foreground font-medium">
-                {formatFileSize(document.size)}
-              </span>
-              {/* Template Info Badge */}
-              {document?.metadata?.lastAnalysis?.template && (
-                <Badge variant="outline" className="text-[10px] font-medium px-2 py-0.5 bg-amber-50 dark:bg-amber-950 border-amber-200 dark:border-amber-800">
-                  Template: {document.metadata.lastAnalysis.template}
+      <Dialog open={isOpen} onOpenChange={onClose}>
+        <DialogContent className="max-w-5xl max-h-fit p-0 gap-0 overflow-hidden flex flex-col">
+          {/* Modal Header - Glassmorphic */}
+          <div className="flex-shrink-0 bg-background/95 backdrop-blur-xl border-b border-border/50 px-6 py-4">
+            <div className="flex items-center justify-between gap-2.5">
+              <div className="flex items-center gap-2.5">
+                <DialogTitle className="text-base font-bold">{document.title}</DialogTitle>
+                <Badge variant="secondary" className="text-[10px] font-semibold px-2 py-0.5">
+                  {document.type.toUpperCase()}
                 </Badge>
-              )}
-              {/* LLM Info - Next to File Size (same size) */}
-              {isPDF && activeLLM && (
-                <Badge variant="outline" className="text-[10px] font-medium px-2 py-0.5 bg-blue-50 dark:bg-blue-950 border-blue-200 dark:border-blue-800">
-                  {activeLLM.provider === 'gemini' ? 'Gemini' : activeLLM.provider === 'deepseek' ? 'DeepSeek' : activeLLM.provider === 'claude' ? 'Claude' : activeLLM.provider}
-                </Badge>
-              )}
+                <span className="text-[10px] text-muted-foreground font-medium">
+                  {formatFileSize(document.size)}
+                </span>
+                {/* Template Info Badge */}
+                {document?.metadata?.lastAnalysis?.template && (
+                  <Badge variant="outline" className="text-[10px] font-medium px-2 py-0.5 bg-amber-50 dark:bg-amber-950 border-amber-200 dark:border-amber-800">
+                    Template: {document.metadata.lastAnalysis.template}
+                  </Badge>
+                )}
+                {/* LLM Info - Next to File Size (same size) */}
+                {isPDF && activeLLM && (
+                  <Badge variant="outline" className="text-[10px] font-medium px-2 py-0.5 bg-blue-50 dark:bg-blue-950 border-blue-200 dark:border-blue-800">
+                    {activeLLM.provider === 'gemini' ? 'Gemini' : activeLLM.provider === 'deepseek' ? 'DeepSeek' : activeLLM.provider === 'claude' ? 'Claude' : activeLLM.provider}
+                  </Badge>
+                )}
+              </div>
             </div>
+            <DialogDescription className="sr-only">
+              Preview of {document.title}
+            </DialogDescription>
           </div>
-          <DialogDescription className="sr-only">
-            Preview of {document.title}
-          </DialogDescription>
-        </div>
 
-        {/* Modal Content - Scrollable */}
-        <div className="overflow-hidden px-6 py-4">
-          {/* CSV: Tabbed View */}
-          {isCSV && (
-            <div className="relative">
-              {/* Loading Overlay */}
-              {csvLoading && (
-                <div className="absolute inset-0 z-50 bg-background/80 backdrop-blur-sm flex items-center justify-center rounded-lg">
-                  <div className="text-center">
-                    <Loader2 className="w-8 h-8 animate-spin mx-auto mb-3 text-primary" />
-                    <p className="text-sm font-medium text-foreground">Parsing CSV...</p>
-                    <p className="text-xs text-muted-foreground mt-1">This may take a moment for large files</p>
+          {/* Modal Content - Scrollable */}
+          <div className="overflow-hidden px-6 py-4">
+            {/* CSV: Tabbed View */}
+            {isCSV && (
+              <div className="relative">
+                {/* Loading Overlay */}
+                {csvLoading && (
+                  <div className="absolute inset-0 z-50 bg-background/80 backdrop-blur-sm flex items-center justify-center rounded-lg">
+                    <div className="text-center">
+                      <Loader2 className="w-8 h-8 animate-spin mx-auto mb-3 text-primary" />
+                      <p className="text-sm font-medium text-foreground">Parsing CSV...</p>
+                      <p className="text-xs text-muted-foreground mt-1">This may take a moment for large files</p>
+                    </div>
                   </div>
+                )}
+
+                <Tabs defaultValue="table" className="w-full">
+                  <TabsList className="grid w-full grid-cols-2 mb-3">
+                    <TabsTrigger value="table" disabled={csvLoading}>
+                      Preview
+                    </TabsTrigger>
+                    <TabsTrigger value="graphql" disabled={csvLoading}>
+                      Transform
+                    </TabsTrigger>
+                  </TabsList>
+
+                  <TabsContent value="table" className="mt-0">
+                    <div className="h-[450px]">
+                      {renderCSVTable()}
+                    </div>
+                  </TabsContent>
+
+                  <TabsContent value="graphql" className="mt-0">
+                    <div className="h-[450px]">
+                      {renderGraphQLTransform()}
+                    </div>
+                  </TabsContent>
+                </Tabs>
+              </div>
+            )}
+
+            {/* JSON: Tree View */}
+            {isJSON && (
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                    <Code className="w-4 h-4" />
+                    <span>JSON Tree View (First 10 Records)</span>
+                  </div>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => handleCopy(document.content)}
+                  >
+                    <Copy className="w-3 h-3 mr-2" />
+                    Copy Raw
+                  </Button>
                 </div>
-              )}
+                {renderJSONTree()}
+              </div>
+            )}
 
-              <Tabs defaultValue="table" className="w-full">
-                <TabsList className="grid w-full grid-cols-2 mb-3">
-                  <TabsTrigger value="table" disabled={csvLoading}>
-                    Preview
-                  </TabsTrigger>
-                  <TabsTrigger value="graphql" disabled={csvLoading}>
-                    Transform
-                  </TabsTrigger>
-                </TabsList>
-
-                <TabsContent value="table" className="mt-0">
-                  <div className="h-[450px]">
-                    {renderCSVTable()}
-                  </div>
-                </TabsContent>
-
-                <TabsContent value="graphql" className="mt-0">
-                  <div className="h-[450px]">
-                    {renderGraphQLTransform()}
-                  </div>
-                </TabsContent>
-              </Tabs>
-            </div>
-          )}
-
-          {/* JSON: Tree View */}
-          {isJSON && (
-            <div className="space-y-4">
-              <div className="flex items-center justify-between">
+            {/* Text/MD/DOC: Raw Text */}
+            {isText && (
+              <div className="space-y-4">
                 <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                  <Code className="w-4 h-4" />
-                  <span>JSON Tree View (First 10 Records)</span>
+                  <FileText className="w-4 h-4" />
+                  <span>Text Preview</span>
                 </div>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => handleCopy(document.content)}
-                >
-                  <Copy className="w-3 h-3 mr-2" />
-                  Copy Raw
-                </Button>
+                {renderTextView()}
               </div>
-              {renderJSONTree()}
-            </div>
-          )}
+            )}
 
-          {/* Text/MD/DOC: Raw Text */}
-          {isText && (
-            <div className="space-y-4">
-              <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                <FileText className="w-4 h-4" />
-                <span>Text Preview</span>
+            {/* PDF: Tabs (Preview, Metadata, Transform) */}
+            {isPDF && renderPDFTabs()}
+
+            {/* Default: Raw Content */}
+            {!isCSV && !isJSON && !isText && !isPDF && (
+              <div className="space-y-4">
+                <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <FileText className="w-4 h-4" />
+                  <span>Preview</span>
+                </div>
+                {renderTextView()}
               </div>
-              {renderTextView()}
-            </div>
-          )}
+            )}
+          </div>
 
-          {/* PDF: Tabs (Preview, Metadata, Transform) */}
-          {isPDF && renderPDFTabs()}
-
-          {/* Default: Raw Content */}
-          {!isCSV && !isJSON && !isText && !isPDF && (
-            <div className="space-y-4">
-              <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                <FileText className="w-4 h-4" />
-                <span>Preview</span>
-              </div>
-              {renderTextView()}
-            </div>
-          )}
-        </div>
-
-        {/* Modal Footer - Fixed */}
-        <div className="flex-shrink-0 bg-background/95 backdrop-blur-xl border-t border-border/50 px-6 py-2.5">
-          <div className="flex items-center justify-between">
-            {/* Left side: Compact single-line info */}
-            <div className="flex items-center gap-2 text-xs text-muted-foreground">
-              {isCSV && parsedData && csvHeaders && (
-                <div className="flex items-center gap-2">
-                  {/* Show preview count / total count */}
-                  <span>
-                    <span className="font-semibold text-foreground">{Math.min(csvVisibleRows, parsedData.length)}</span>
-                    {' / '}
-                    <span className="font-semibold text-foreground">{totalRowCount > 0 ? totalRowCount.toLocaleString() : parsedData.length}</span>
-                    {' rows'}
-                    {totalRowCount > parsedData.length && (
-                      <span className="text-muted-foreground ml-1">(total)</span>
-                    )}
-                  </span>
-                  <span className="text-muted-foreground/40">•</span>
-                  <span className="flex items-center gap-1.5">
-                    <span className="font-semibold text-foreground">{csvHeaders?.length || 0}</span> columns
-                    {!isEditingHeaders ? (
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => {
-                          setIsEditingHeaders(true);
-                          setEditableHeaders([...csvHeaders]);
-                        }}
-                        className="h-5 w-5 p-0 hover:bg-muted/50"
-                        title="Edit column headers"
-                      >
-                        <Edit3 className="h-3 w-3 text-muted-foreground" />
-                      </Button>
-                    ) : (
-                      <div className="flex items-center gap-1">
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={saveEditedHeaders}
-                          className="h-5 w-5 p-0 hover:bg-green-100 dark:hover:bg-green-900/20"
-                          title="Save headers"
-                        >
-                          <Check className="h-3.5 w-3.5 text-green-600 dark:text-green-400" />
-                        </Button>
+          {/* Modal Footer - Fixed */}
+          <div className="flex-shrink-0 bg-background/95 backdrop-blur-xl border-t border-border/50 px-6 py-2.5">
+            <div className="flex items-center justify-between">
+              {/* Left side: Compact single-line info */}
+              <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                {isCSV && parsedData && csvHeaders && (
+                  <div className="flex items-center gap-2">
+                    {/* Show preview count / total count */}
+                    <span>
+                      <span className="font-semibold text-foreground">{Math.min(csvVisibleRows, parsedData.length)}</span>
+                      {' / '}
+                      <span className="font-semibold text-foreground">{totalRowCount > 0 ? totalRowCount.toLocaleString() : parsedData.length}</span>
+                      {' rows'}
+                      {totalRowCount > parsedData.length && (
+                        <span className="text-muted-foreground ml-1">(total)</span>
+                      )}
+                    </span>
+                    <span className="text-muted-foreground/40">•</span>
+                    <span className="flex items-center gap-1.5">
+                      <span className="font-semibold text-foreground">{csvHeaders?.length || 0}</span> columns
+                      {!isEditingHeaders ? (
                         <Button
                           variant="ghost"
                           size="sm"
                           onClick={() => {
-                            setIsEditingHeaders(false);
+                            setIsEditingHeaders(true);
                             setEditableHeaders([...csvHeaders]);
                           }}
-                          className="h-5 w-5 p-0 hover:bg-red-100 dark:hover:bg-red-900/20"
-                          title="Cancel editing"
+                          className="h-5 w-5 p-0 hover:bg-muted/50"
+                          title="Edit column headers"
                         >
-                          <X className="h-3.5 w-3.5 text-red-600 dark:text-red-400" />
+                          <Edit3 className="h-3 w-3 text-muted-foreground" />
                         </Button>
-                      </div>
-                    )}
-                  </span>
-                  {config?.database?.name && (
-                    <>
-                      <span className="text-muted-foreground/40">•</span>
-                      <span className="font-mono font-semibold text-foreground">{config.database.name}</span>
-                    </>
-                  )}
-                </div>
-              )}
-              {isPDF && pdfMetadata && (
-                <>
-                  <div className="flex items-center gap-1.5">
-                    <FileText className="w-3 h-3" />
-                    <span><span className="font-bold text-foreground">{pdfSelectedFields.size}</span> / <span className="font-bold text-foreground">{Object.keys(pdfMetadata).length}</span> fields selected</span>
-                  </div>
-                  {config?.database?.name && (
-                    <>
-                      <div className="w-px h-3 bg-border" />
-                      <div className="flex items-center gap-1.5">
-                        <Database className="w-3 h-3" />
-                        <span className="font-mono font-semibold text-foreground">{config.database.name}</span>
-                      </div>
-                    </>
-                  )}
-                </>
-              )}
-              {!isCSV && !isPDF && (
-                <div className="flex items-center gap-1.5">
-                  <Database className="w-3 h-3" />
-                  <span>Document ID: <span className="font-mono font-semibold text-foreground">{document.id}</span></span>
-                </div>
-              )}
-            </div>
-
-            {/* Right side: Action buttons based on tab */}
-            <div className="flex items-center gap-1.5">
-              {/* CSV: Transform button removed - use tab navigation instead */}
-
-              {/* CSV: Load More button (only when not editing) */}
-              {isCSV && !isEditingHeaders && parsedData && csvVisibleRows < parsedData.length && (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setCsvVisibleRows(prev => prev + CSV_ROWS_PER_PAGE)}
-                  className="h-7 px-3 gap-2 text-xs"
-                >
-                  <span>Load More</span>
-                  <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
-                    +{Math.min(CSV_ROWS_PER_PAGE, (parsedData?.length || 0) - csvVisibleRows)}
-                  </Badge>
-                </Button>
-              )}
-
-              {/* Preview Tab: Template Dropdown + Custom Keywords + Analyze button */}
-              {isPDF && pdfActiveTab === 'preview' && pdfExtractedText && (
-                <>
-                  <Select
-                    value={selectedTemplate}
-                    onValueChange={setSelectedTemplate}
-                  >
-                    <SelectTrigger className="h-7 w-40 text-[11px]">
-                      <SelectValue placeholder="Select Template..." />
-                    </SelectTrigger>
-                    <SelectContent className="z-[10000]" position="popper" sideOffset={4}>
-                      {analysisTemplates.length > 0 ? (
-                        analysisTemplates.map((template) => (
-                          <SelectItem key={template.id} value={template.id} className="text-xs">
-                            {template.name}
-                          </SelectItem>
-                        ))
                       ) : (
-                        <SelectItem value="general" className="text-xs">General Document</SelectItem>
+                        <div className="flex items-center gap-1">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={saveEditedHeaders}
+                            className="h-5 w-5 p-0 hover:bg-green-100 dark:hover:bg-green-900/20"
+                            title="Save headers"
+                          >
+                            <Check className="h-3.5 w-3.5 text-green-600 dark:text-green-400" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => {
+                              setIsEditingHeaders(false);
+                              setEditableHeaders([...csvHeaders]);
+                            }}
+                            className="h-5 w-5 p-0 hover:bg-red-100 dark:hover:bg-red-900/20"
+                            title="Cancel editing"
+                          >
+                            <X className="h-3.5 w-3.5 text-red-600 dark:text-red-400" />
+                          </Button>
+                        </div>
                       )}
-                    </SelectContent>
-                  </Select>
-                  {/* Template Detection Indicator */}
-                  {templateDetecting ? (
-                    <Badge variant="outline" className="h-8 text-xs px-2 bg-blue-50 dark:bg-blue-950 border-blue-200 dark:border-blue-800">
-                      <Loader2 className="w-3 h-3 mr-1 animate-spin" />
-                      Detecting...
+                    </span>
+                    {config?.database?.name && (
+                      <>
+                        <span className="text-muted-foreground/40">•</span>
+                        <span className="font-mono font-semibold text-foreground">{config.database.name}</span>
+                      </>
+                    )}
+                  </div>
+                )}
+                {isPDF && pdfMetadata && (
+                  <>
+                    <div className="flex items-center gap-1.5">
+                      <FileText className="w-3 h-3" />
+                      <span><span className="font-bold text-foreground">{pdfSelectedFields.size}</span> / <span className="font-bold text-foreground">{Object.keys(pdfMetadata).length}</span> fields selected</span>
+                    </div>
+                    {config?.database?.name && (
+                      <>
+                        <div className="w-px h-3 bg-border" />
+                        <div className="flex items-center gap-1.5">
+                          <Database className="w-3 h-3" />
+                          <span className="font-mono font-semibold text-foreground">{config.database.name}</span>
+                        </div>
+                      </>
+                    )}
+                  </>
+                )}
+                {!isCSV && !isPDF && (
+                  <div className="flex items-center gap-1.5">
+                    <Database className="w-3 h-3" />
+                    <span>Document ID: <span className="font-mono font-semibold text-foreground">{document.id}</span></span>
+                  </div>
+                )}
+              </div>
+
+              {/* Right side: Action buttons based on tab */}
+              <div className="flex items-center gap-1.5">
+                {/* CSV: Transform button removed - use tab navigation instead */}
+
+                {/* CSV: Load More button (only when not editing) */}
+                {isCSV && !isEditingHeaders && parsedData && csvVisibleRows < parsedData.length && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setCsvVisibleRows(prev => prev + CSV_ROWS_PER_PAGE)}
+                    className="h-7 px-3 gap-2 text-xs"
+                  >
+                    <span>Load More</span>
+                    <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
+                      +{Math.min(CSV_ROWS_PER_PAGE, (parsedData?.length || 0) - csvVisibleRows)}
                     </Badge>
-                  ) : detectedTemplate && (
-                    <Badge variant="outline" className="h-8 text-xs px-2 bg-green-50 dark:bg-green-950 border-green-200 dark:border-green-800 text-green-700 dark:text-green-300">
-                      <Sparkles className="w-3 h-3 mr-1" />
-                      Auto: {detectedTemplate.confidence}%
-                    </Badge>
-                  )}
+                  </Button>
+                )}
+
+                {/* Preview Tab: Template Dropdown + Custom Keywords + Analyze button */}
+                {isPDF && pdfActiveTab === 'preview' && pdfExtractedText && (
+                  <>
+                    <Select
+                      value={selectedTemplate}
+                      onValueChange={setSelectedTemplate}
+                    >
+                      <SelectTrigger className="h-7 w-40 text-[11px]">
+                        <SelectValue placeholder="Select Template..." />
+                      </SelectTrigger>
+                      <SelectContent className="z-[10000]" position="popper" sideOffset={4}>
+                        {analysisTemplates.length > 0 ? (
+                          analysisTemplates.map((template) => (
+                            <SelectItem key={template.id} value={template.id} className="text-xs">
+                              {template.name}
+                            </SelectItem>
+                          ))
+                        ) : (
+                          <SelectItem value="general" className="text-xs">General Document</SelectItem>
+                        )}
+                      </SelectContent>
+                    </Select>
+                    {/* Template Detection Indicator */}
+                    {templateDetecting ? (
+                      <Badge variant="outline" className="h-8 text-xs px-2 bg-blue-50 dark:bg-blue-950 border-blue-200 dark:border-blue-800">
+                        <Loader2 className="w-3 h-3 mr-1 animate-spin" />
+                        Detecting...
+                      </Badge>
+                    ) : detectedTemplate && (
+                      <Badge variant="outline" className="h-8 text-xs px-2 bg-green-50 dark:bg-green-950 border-green-200 dark:border-green-800 text-green-700 dark:text-green-300">
+                        <Sparkles className="w-3 h-3 mr-1" />
+                        Auto: {detectedTemplate.confidence}%
+                      </Badge>
+                    )}
+                    <Button
+                      variant="default"
+                      size="sm"
+                      onClick={handleAnalyzeMetadata}
+                      className="h-8 px-3"
+                    >
+                      {pdfMetadata ? 'Re-Analyze' : 'Analyze'}
+                    </Button>
+                  </>
+                )}
+
+                {/* Map Fields Tab: Continue to Create Table button */}
+                {isPDF && pdfActiveTab === 'map' && pdfMetadata && (
                   <Button
                     variant="default"
                     size="sm"
-                    onClick={handleAnalyzeMetadata}
+                    onClick={handleContinueToTransform}
+                    disabled={pdfSelectedFields.size === 0}
                     className="h-8 px-3"
                   >
-                    {pdfMetadata ? 'Re-Analyze' : 'Analyze'}
+                    Continue to Create Table
                   </Button>
-                </>
-              )}
+                )}
 
-              {/* Map Fields Tab: Continue to Create Table button */}
-              {isPDF && pdfActiveTab === 'map' && pdfMetadata && (
-                <Button
-                  variant="default"
-                  size="sm"
-                  onClick={handleContinueToTransform}
-                  disabled={pdfSelectedFields.size === 0}
-                  className="h-8 px-3"
-                >
-                  Continue to Create Table
-                </Button>
-              )}
-
-              {/* Create Table Tab: Transform button */}
-              {isPDF && pdfActiveTab === 'transform' && pdfMetadata && pdfSelectedFields.size > 0 && (
-                <Button
-                  variant="default"
-                  size="sm"
-                  onClick={handlePDFTransform}
-                  disabled={
-                    pdfProcessing ||
-                    pdfSelectedFields.size === 0 ||
-                    !pdfTableName
-                  }
-                  className="h-8 px-3"
-                >
-                  {pdfProcessing ? (
-                    <>
-                      <Loader2 className="w-3 h-3 mr-1 animate-spin" />
-                      Creating...
-                    </>
-                  ) : (
-                    <>
-                      <Database className="w-3 h-3 mr-1" />
-                      Create Table & Insert Data
-                    </>
-                  )}
-                </Button>
-              )}
+                {/* Create Table Tab: Transform button */}
+                {isPDF && pdfActiveTab === 'transform' && pdfMetadata && pdfSelectedFields.size > 0 && (
+                  <Button
+                    variant="default"
+                    size="sm"
+                    onClick={handlePDFTransform}
+                    disabled={
+                      pdfProcessing ||
+                      pdfSelectedFields.size === 0 ||
+                      !pdfTableName
+                    }
+                    className="h-8 px-3"
+                  >
+                    {pdfProcessing ? (
+                      <>
+                        <Loader2 className="w-3 h-3 mr-1 animate-spin" />
+                        Creating...
+                      </>
+                    ) : (
+                      <>
+                        <Database className="w-3 h-3 mr-1" />
+                        Create Table & Insert Data
+                      </>
+                    )}
+                  </Button>
+                )}
+              </div>
             </div>
           </div>
-        </div>
-      </DialogContent>
-    </Dialog>
+        </DialogContent>
+      </Dialog>
     </React.Fragment>
   );
 }

@@ -1,115 +1,115 @@
 /**
  * Data Schema Types
  *
- * Kullanıcının veri yapısını tanımlaması ve LLM'in doğru yorumlaması için
- * gerekli tip tanımlamaları.
+ * Type definitions required for the user to define data structure
+ * and for the LLM to interpret it correctly.
  *
- * Akış: Analyze → Embed → Search → Citation → Question
+ * Flow: Analyze → Embed → Search → Citation → Question
  */
 
-// Alan tipleri
+// Field types
 export type FieldType =
-  | 'string'      // Genel metin
-  | 'number'      // Sayısal değer
-  | 'date'        // Tarih (format ile birlikte)
-  | 'currency'    // Para birimi
-  | 'percentage'  // Yüzde değeri
-  | 'reference'   // Referans (kanun no, madde no vs.)
-  | 'category'    // Kategori/sınıflandırma
-  | 'entity'      // Named entity (kişi, kurum vs.)
-  | 'boolean';    // Evet/Hayır
+  | 'string'      // General text
+  | 'number'      // Numeric value
+  | 'date'        // Date (with format)
+  | 'currency'    // Currency
+  | 'percentage'  // Percentage value
+  | 'reference'   // Reference (law no, article no etc.)
+  | 'category'    // Category/classification
+  | 'entity'      // Named entity (person, institution etc.)
+  | 'boolean';    // Yes/No
 
-// Tek bir alan tanımı
+// Single field definition
 export interface SchemaField {
   key: string;              // Unique identifier (snake_case)
-  label: string;            // Görüntüleme adı (Türkçe)
-  type: FieldType;          // Alan tipi
-  format?: string;          // Tarih formatı vs. (DD.MM.YYYY)
-  required?: boolean;       // Zorunlu mu?
-  extractionHint?: string;  // LLM'e çıkarım ipucu
-  displayOrder?: number;    // Gösterim sırası
-  showInCitation?: boolean; // Citation'da gösterilsin mi?
-  showInTags?: boolean;     // Tag olarak gösterilsin mi?
+  label: string;            // Display name (Turkish)
+  type: FieldType;          // Field type
+  format?: string;          // Date format etc. (DD.MM.YYYY)
+  required?: boolean;       // Is required?
+  extractionHint?: string;  // Extraction hint for LLM
+  displayOrder?: number;    // Display order
+  showInCitation?: boolean; // Show in Citation?
+  showInTags?: boolean;     // Show as Tag?
 }
 
-// Template değişken tipi
+// Template variable type
 export interface TemplateVariable {
-  key: string;              // {{key}} olarak kullanılır
-  description: string;      // Açıklama
-  example?: string;         // Örnek değer
+  key: string;              // Used as {{key}}
+  description: string;      // Description
+  example?: string;         // Example value
 }
 
-// Ana Data Schema yapısı
+// Main Data Schema structure
 export interface DataSchema {
   id: string;               // Unique ID (UUID)
-  name: string;             // Schema adı (vergi_mevzuati)
-  displayName: string;      // Görüntüleme adı (Vergi Mevzuatı)
-  description: string;      // Detaylı açıklama
+  name: string;             // Schema name (vergi_mevzuati)
+  displayName: string;      // Display name (Vergi Mevzuatı)
+  description: string;      // Detailed description
 
-  // Alan tanımları
+  // Field definitions
   fields: SchemaField[];
 
-  // Template tanımları
+  // Template definitions
   templates: {
-    // Belge analiz prompt'u - {{content}} değişkeni otomatik eklenir
+    // Document analysis prompt - {{content}} variable is automatically added
     analyze: string;
 
-    // Citation gösterim formatı
-    // Örnek: "{{source_table}} - {{kanun_no}} Md.{{madde_no}}"
+    // Citation display format
+    // Example: "{{source_table}} - {{kanun_no}} Md.{{madde_no}}"
     citation: string;
 
-    // Excerpt gösterim formatı (opsiyonel)
-    // Örnek: "{{excerpt | truncate:200}}"
+    // Excerpt display format (optional)
+    // Example: "{{excerpt | truncate:200}}"
     excerpt?: string;
 
-    // Takip sorusu kalıpları
-    // Örnek: ["{{madde_no}}. maddenin istisnaları nelerdir?"]
+    // Follow-up question patterns
+    // Example: ["What are the exceptions of article {{madde_no}}?"]
     questions: string[];
 
-    // Statik örnek sorular (placeholder içermez)
-    // Örnek: ["Vergi iadesi nasıl alınır?"]
+    // Static example questions (no placeholders)
+    // Example: ["How to get tax refund?"]
     example_questions?: string[];
   };
 
-  // LLM'e veri hakkında kılavuz
-  // Bu metin system prompt'a eklenir
+  // Guide for LLM about the data
+  // This text is added to the system prompt
   llmGuide: string;
 
   // LLM Configuration for all processes
   llmConfig?: LLMConfig;
 
-  // Source table mapping (hangi tablolara uygulanır)
+  // Source table mapping (which tables it applies to)
   sourceTables?: string[];
 
-  // Transform Prompts (Document analizi ve veri çıkarımı)
+  // Transform Prompts (Document analysis and data extraction)
   transformPrompts?: TransformPrompt[];
 
-  // Question Generation Patterns (Dinamik soru üretimi)
+  // Question Generation Patterns (Dynamic question generation)
   questionPatterns?: QuestionPattern[];
 
-  // Citation Patterns (Kaynak gösterme formatları)
+  // Citation Patterns (citation display formats)
   citationPatterns?: CitationPattern[];
 
   // Metadata
   isActive: boolean;
-  isDefault?: boolean;      // Varsayılan schema mı?
+  isDefault?: boolean;      // Is default schema?
   createdAt: Date;
   updatedAt: Date;
 }
 
-// Settings'te saklanacak konfigürasyon
+// Configuration to be stored in Settings
 export interface DataSchemaConfig {
-  activeSchemaId?: string;  // Aktif schema ID
-  schemas: DataSchema[];    // Tüm schema'lar
+  activeSchemaId?: string;  // Active schema ID
+  schemas: DataSchema[];    // All schemas
   globalSettings: {
-    enableAutoDetect: boolean;    // Otomatik schema tespiti
-    fallbackSchemaId?: string;    // Tespit edilemezse kullanılacak
-    maxFieldsInCitation: number;  // Citation'da max alan sayısı
-    maxQuestionsToGenerate: number; // Max takip sorusu sayısı
+    enableAutoDetect: boolean;    // Auto schema detection
+    fallbackSchemaId?: string;    // Used if not detected
+    maxFieldsInCitation: number;  // Max fields in citation
+    maxQuestionsToGenerate: number; // Max follow-up questions count
   };
 }
 
-// API Response tipleri
+// API Response types
 export interface DataSchemaListResponse {
   schemas: DataSchema[];
   activeSchemaId?: string;
@@ -119,7 +119,7 @@ export interface DataSchemaResponse {
   schema: DataSchema;
 }
 
-// Template işleme için helper tipler
+// Helper types for template processing
 export interface TemplateContext {
   [key: string]: string | number | boolean | undefined;
 }
@@ -135,45 +135,45 @@ export interface ProcessedCitation {
 
 export interface ProcessedQuestion {
   text: string;
-  basedOn: string[];  // Hangi alanlara dayalı
+  basedOn: string[];  // Based on which fields
 }
 
-// Question Generation Pattern (Dinamik soru üretimi için)
+// Question Generation Pattern (For dynamic question generation)
 export interface QuestionPattern {
   id: string;                       // Unique ID
-  name: string;                     // Pattern adı (Saglik, Emlak, Vergi)
-  priority: number;                 // Yüksek priority = önce kontrol edilir
-  keywords: string[];               // İçerikte aranacak keywords
-  titleKeywords?: string[];         // Title'da aranacak keywords (opsiyonel)
-  defaultQuestion: string;          // Varsayılan soru template'i (kullanılacak: {topic})
-  combinations: Array<{             // Keyword kombinasyonları için özel sorular
-    when: string;                   // İkinci keyword (basvuru, sure, ozellik vb.)
-    question: string;               // Bu durumda sorulacak soru
+  name: string;                     // Pattern name (Health, RealEstate, Tax)
+  priority: number;                 // High priority = checked first
+  keywords: string[];               // Keywords to search in content
+  titleKeywords?: string[];         // Keywords to search in title (optional)
+  defaultQuestion: string;          // Default question template (used: {topic})
+  combinations: Array<{             // Special questions for keyword combinations
+    when: string;                   // Second keyword
+    question: string;               // Question to ask in this case
   }>;
 }
 
-// Citation Pattern (Citation formatı için)
+// Citation Pattern (For citation format)
 export interface CitationPattern {
   id: string;
   name: string;
   format: string;                   // Citation format template
-  fields: string[];                 // Kullanılan field key'leri
-  example?: string;                 // Örnek citation
+  fields: string[];                 // Used field keys
+  example?: string;                 // Example citation
 }
 
-// Transform Prompt (Document analizi ve veri çıkarımı için)
+// Transform Prompt (For document analysis and data extraction)
 export interface TransformPrompt {
   id: string;                       // Unique ID
-  name: string;                     // Prompt adı (Invoice, Legal, Research vb.)
-  description?: string;             // Açıklama
+  name: string;                     // Prompt name (Invoice, Legal, Research etc.)
+  description?: string;             // Description
   systemPrompt: string;             // LLM system prompt (transformation instructions)
-  targetFields: string[];           // Çıkarılacak field'lar
-  examples?: Array<{                // Örnek input/output
+  targetFields: string[];           // Fields to extract
+  examples?: Array<{                // Example input/output
     input: string;
     output: any;
   }>;
   temperature?: number;             // LLM temperature (default: 0.1)
-  priority?: number;                // Uygulama önceliği
+  priority?: number;                // Application priority
 }
 
 // ============================================

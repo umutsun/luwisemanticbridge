@@ -227,7 +227,7 @@ class QueryAnalyzer:
                 logger.info(f"[QueryAnalyzer] Domain: {domain} (matched: {', '.join(matched)})")
                 break
 
-        # 2. Article detection
+        # 2. Article detection - try abbreviated first, then full law names
         match = self.ARTICLE_PATTERN.search(ctx.query)
         if match:
             ctx.article_query = {
@@ -236,6 +236,23 @@ class QueryAnalyzer:
                 "matched_text": match.group(0),
             }
             logger.info(f"[QueryAnalyzer] Article: {ctx.article_query['law_code']} m.{ctx.article_query['article_number']}")
+        else:
+            # v12.52: Try full law name patterns (T05 fix)
+            full_match = self.FULL_LAW_ARTICLE_PATTERN.search(ctx.query)
+            if full_match:
+                law_name = full_match.group(1).lower()
+                law_code = self.FULL_LAW_NAMES.get(law_name, "UNKNOWN")
+                article_num = full_match.group(2) or full_match.group(3)
+                if article_num:
+                    ctx.article_query = {
+                        "law_code": law_code,
+                        "article_number": int(article_num),
+                        "matched_text": full_match.group(0),
+                    }
+                    # Also set domain if not already detected
+                    if not ctx.query_domain:
+                        ctx.query_domain = law_code
+                    logger.info(f"[QueryAnalyzer] Article (full name): {law_code} m.{article_num}")
 
         # 3. Rate question detection
         for pattern in self.RATE_PATTERNS:
@@ -323,6 +340,9 @@ class SourceRanker:
     # Tier thresholds for diversification
     TIER_THRESHOLDS = [0.40, 0.25, 0.15]  # High, Medium, Lower
 
+    # v12.52: Max results per source table (T36 fix)
+    MAX_PER_TABLE = 5
+
     async def execute(self, ctx: PipelineContext) -> PipelineContext:
         start = time.time()
         sources = ctx.filtered_results if ctx.filtered_results else ctx.raw_results
@@ -332,6 +352,20 @@ class SourceRanker:
             ctx.timings["ranking_ms"] = (time.time() - start) * 1000
             return ctx
 
+        # v12.52: Deduplicate by source_id (fixes duplicate source_id issue)
+        seen_ids = set()
+        deduped = []
+        for s in sources:
+            sid = s.get("source_id") or s.get("id")
+            if sid and sid in seen_ids:
+                continue
+            if sid:
+                seen_ids.add(sid)
+            deduped.append(s)
+        if len(deduped) < len(sources):
+            logger.info(f"[SourceRanker] Deduped: {len(sources)} -> {len(deduped)} (removed {len(sources) - len(deduped)} duplicates)")
+        sources = deduped
+
         # Load settings
         threshold = float(ctx.settings.get("similarityThreshold", 0.10))
         max_sources = int(ctx.settings.get("maxSourcesToShow", 15))
@@ -340,9 +374,19 @@ class SourceRanker:
         # 1. Calculate combined score
         for source in sources:
             similarity = source.get("similarity_score", 0) / 100  # Normalize to 0-1
+
+            # v12.52: Zero-score fallback - if rerank gave 0 but similarity exists, use similarity
+            rerank_score = source.get("rerank_score", None)
+            if rerank_score is not None and rerank_score == 0 and similarity > 0:
+                # Use original semantic similarity as fallback
+                source["_zero_score_fallback"] = True
+
             hierarchy_weight = self._get_hierarchy_weight(source)
 
-            combined = (hierarchy_weight / 100 * 0.7) + (similarity * 0.3)
+            # v12.52: Boost sources whose table matches query keywords (T24 fix)
+            table_match_boost = self._get_table_query_boost(source, ctx)
+
+            combined = (hierarchy_weight / 100 * 0.7) + (similarity * 0.3) + table_match_boost
             source["_combined_score"] = combined
             source["_hierarchy_weight"] = hierarchy_weight
             source["_similarity_normalized"] = similarity
@@ -365,14 +409,23 @@ class SourceRanker:
         if len(ranked) > 5:
             ranked = self._diversify(ranked, max_sources)
 
+        # v12.52: 5. Table diversity enforcement (T36 fix)
+        ranked = self._enforce_table_diversity(ranked, sources, max_sources)
+
         # Track best score for evidence gate
         if ranked:
             ctx.best_score = max(s["_similarity_normalized"] for s in ranked)
             ctx.quality_chunks = len([s for s in ranked if s["_similarity_normalized"] >= 0.15])
 
         ctx.ranked_results = ranked
-        logger.info(f"[SourceRanker] {len(sources)} -> {len(ranked)} sources "
-                     f"(threshold={threshold}, best={ctx.best_score:.3f})")
+
+        # Log table distribution
+        table_dist = {}
+        for s in ranked:
+            t = s.get("source_table", "unknown")
+            table_dist[t] = table_dist.get(t, 0) + 1
+        logger.info(f"[SourceRanker] {len(deduped)} -> {len(ranked)} sources "
+                     f"(threshold={threshold}, best={ctx.best_score:.3f}, tables={table_dist})")
 
         ctx.timings["ranking_ms"] = (time.time() - start) * 1000
         return ctx
@@ -386,6 +439,80 @@ class SourceRanker:
             if keyword in combined:
                 return weight
         return 30  # Default
+
+    def _get_table_query_boost(self, source: Dict, ctx: PipelineContext) -> float:
+        """v12.52: Boost sources whose table name matches query keywords (T24 fix)."""
+        query_lower = ctx.query.lower()
+        source_table = (source.get("source_table", "") or "").lower()
+
+        # Direct table name match in query (e.g., "özelge" in query, "csv_ozelge" in table)
+        TABLE_KEYWORDS = {
+            "ozelge": ["özelge", "ozelge"],
+            "danistay": ["danıştay", "danistay", "mahkeme", "karar"],
+            "makale": ["makale", "yayın", "dergi"],
+            "sorucevap": ["soru", "cevap", "soru-cevap"],
+            "hukdkk": ["düzenleyici", "kurul", "dkk"],
+        }
+
+        for table_key, keywords in TABLE_KEYWORDS.items():
+            if table_key in source_table:
+                for kw in keywords:
+                    if kw in query_lower:
+                        return 0.15  # Significant boost
+        return 0.0
+
+    def _enforce_table_diversity(self, ranked: List[Dict], all_sources: List[Dict], max_total: int) -> List[Dict]:
+        """v12.52: Ensure no single source table dominates results (T36 fix)."""
+        if len(ranked) <= 3:
+            return ranked
+
+        table_counts = {}
+        for s in ranked:
+            t = s.get("source_table", "unknown")
+            table_counts[t] = table_counts.get(t, 0) + 1
+
+        # Check if any table has more than MAX_PER_TABLE results
+        dominant_table = None
+        for t, count in table_counts.items():
+            if count > self.MAX_PER_TABLE:
+                dominant_table = t
+                break
+
+        if not dominant_table:
+            return ranked
+
+        # Keep top MAX_PER_TABLE from dominant table, replace rest with other-table sources
+        kept = []
+        removed = []
+        dominant_count = 0
+        for s in ranked:
+            if s.get("source_table", "unknown") == dominant_table:
+                dominant_count += 1
+                if dominant_count <= self.MAX_PER_TABLE:
+                    kept.append(s)
+                else:
+                    removed.append(s)
+            else:
+                kept.append(s)
+
+        # Fill with next-best sources from other tables
+        ranked_ids = {id(s) for s in kept}
+        for s in all_sources:
+            if len(kept) >= max_total:
+                break
+            if id(s) not in ranked_ids and s.get("source_table", "unknown") != dominant_table:
+                # Check minimum quality
+                sim = s.get("similarity_score", 0) / 100
+                if sim >= 0.05:  # Very low bar for diversity fill
+                    kept.append(s)
+                    ranked_ids.add(id(s))
+
+        if removed:
+            logger.info(f"[SourceRanker] Table diversity: capped {dominant_table} from "
+                         f"{table_counts[dominant_table]} to {self.MAX_PER_TABLE}, "
+                         f"replaced {len(removed)} with other-table sources")
+
+        return kept
 
     def _diversify(self, sources: List[Dict], max_total: int) -> List[Dict]:
         tiers = [[] for _ in range(4)]

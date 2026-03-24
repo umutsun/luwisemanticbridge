@@ -344,12 +344,18 @@ class CSVTransformService:
                 f"({rows_processed / elapsed:.0f} rows/sec)"
             )
 
+            # Auto-chunk law documents if table contains law-related data
+            auto_chunked = False
+            if any(keyword in table_name.lower() for keyword in ['kanun', 'mevzuat', 'law']):
+                auto_chunked = await self._trigger_auto_chunk(table_name, database_url)
+
             return {
                 "status": "completed",
                 "rows_inserted": rows_processed,
                 "total_rows": total_rows,
                 "elapsed_seconds": elapsed,
-                "rows_per_second": rows_processed / elapsed if elapsed > 0 else 0
+                "rows_per_second": rows_processed / elapsed if elapsed > 0 else 0,
+                "auto_chunked": auto_chunked
             }
 
         except Exception as e:
@@ -616,6 +622,83 @@ class CSVTransformService:
             return True
 
         return False
+
+    async def _trigger_auto_chunk(self, table_name: str, database_url: str) -> bool:
+        """
+        Trigger automatic law chunking for law tables.
+        Checks active schema's chunkConfig for autoChunkOnTransform flag.
+        """
+        try:
+            async with await psycopg.AsyncConnection.connect(database_url) as conn:
+                async with conn.cursor() as cur:
+                    # Get active schema's chunk config
+                    # First get active schema ID from user settings
+                    await cur.execute("""
+                        SELECT s.llm_config
+                        FROM data_schemas s
+                        JOIN user_schema_settings uss ON s.id = uss.active_schema_id
+                        WHERE s.is_active = true
+                        LIMIT 1
+                    """)
+                    result = await cur.fetchone()
+
+                    chunk_config = None
+                    if result and result[0]:
+                        llm_config = result[0] if isinstance(result[0], dict) else json.loads(result[0]) if result[0] else {}
+                        chunk_config = llm_config.get('chunkConfig', {})
+
+                    # If no schema config, check global settings as fallback
+                    if not chunk_config:
+                        await cur.execute("""
+                            SELECT value FROM settings
+                            WHERE key = 'rag' OR key = 'ragSettings'
+                            LIMIT 1
+                        """)
+                        result = await cur.fetchone()
+                        if result:
+                            rag_settings = result[0] if isinstance(result[0], dict) else json.loads(result[0]) if result[0] else {}
+                            if 'ragSettings' in rag_settings:
+                                rag_settings = rag_settings['ragSettings']
+                            # Legacy: check autoChunkLaws in RAG settings
+                            if rag_settings.get('autoChunkLaws', False):
+                                chunk_config = {'enabled': True, 'autoChunkOnTransform': True, 'sourceTables': []}
+
+                    if not chunk_config:
+                        logger.info("No chunk config found, skipping auto-chunk")
+                        return False
+
+                    # Check if chunking is enabled and autoChunkOnTransform is true
+                    if not chunk_config.get('enabled', False):
+                        logger.info(f"Chunking disabled in schema config, skipping for {table_name}")
+                        return False
+
+                    if not chunk_config.get('autoChunkOnTransform', False):
+                        logger.info(f"Auto-chunk on transform disabled, skipping for {table_name}")
+                        return False
+
+                    # Check if this table is in sourceTables list
+                    source_tables = chunk_config.get('sourceTables', [])
+                    if source_tables and table_name not in source_tables:
+                        # Check if table name contains any of the source table patterns
+                        table_lower = table_name.lower()
+                        if not any(st.lower() in table_lower or table_lower in st.lower() for st in source_tables):
+                            logger.info(f"Table {table_name} not in sourceTables list, skipping")
+                            return False
+
+            # Import and call chunking function
+            from routers.embedding_router import run_law_chunking
+
+            logger.info(f"Auto-chunking triggered for table: {table_name}")
+
+            # Run chunking in background (non-blocking)
+            import asyncio
+            asyncio.create_task(run_law_chunking(table_name, dry_run=False, limit=None))
+
+            return True
+
+        except Exception as e:
+            logger.error(f"Auto-chunk trigger failed: {e}")
+            return False
 
 
 # Singleton instance

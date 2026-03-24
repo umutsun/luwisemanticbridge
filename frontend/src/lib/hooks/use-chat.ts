@@ -67,6 +67,7 @@ export function useChat() {
       updateMessage(assistantMessageId, {
         content: data.message.content,
         sources: data.sources,
+        articleQuery: data.articleQuery, // Article anchoring metadata
         isLoading: false,
       });
     } catch (error) {

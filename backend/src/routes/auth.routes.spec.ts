@@ -1,43 +1,39 @@
 import request from 'supertest';
 import express from 'express';
-import authRouter from './auth.routes'; // Test edilecek router
-import { Pool } from 'pg';
-import bcrypt from 'bcryptjs';
-import jwt from 'jsonwebtoken';
+import authRouter from './auth.routes';
+import { AuthService } from '../services/auth.service';
 
-// Bağımlılıkları mock'lama
-jest.mock('pg', () => {
-  const mPool = {
-    query: jest.fn(),
-    connect: jest.fn(),
-    release: jest.fn(),
-  };
-  return { Pool: jest.fn(() => mPool) };
-});
+// Mock AuthService
+jest.mock('../services/auth.service');
 
-jest.mock('bcryptjs');
-jest.mock('jsonwebtoken');
+// Mock rate limiting middleware
+jest.mock('../middleware/rate-limit.middleware', () => ({
+  createAuthRateLimit: {
+    middleware: (req: any, res: any, next: any) => next()
+  },
+  createUploadRateLimit: {
+    middleware: (req: any, res: any, next: any) => next()
+  }
+}));
 
-// Mock Redis for rate limiting
-jest.mock('ioredis', () => {
-  return jest.fn().mockImplementation(() => ({
-    get: jest.fn().mockResolvedValue(null),
-    set: jest.fn().mockResolvedValue('OK'),
-    setex: jest.fn().mockResolvedValue('OK'),
-  }));
-});
+// Mock auth middleware
+jest.mock('../middleware/auth.middleware', () => ({
+  authenticateToken: (req: any, res: any, next: any) => {
+    req.user = { userId: 1, email: 'test@example.com', role: 'user' };
+    next();
+  }
+}));
 
 const app = express();
 app.use(express.json());
 app.use('/api/auth', authRouter);
 
 describe('Auth Routes', () => {
-  let pool: jest.Mocked<Pool>;
+  let authService: jest.Mocked<AuthService>;
 
   beforeEach(() => {
-    // Her test öncesi mock'ları temizle
     jest.clearAllMocks();
-    pool = new (Pool as any)();
+    authService = new AuthService() as jest.Mocked<AuthService>;
   });
 
   describe('POST /api/auth/register', () => {
@@ -191,9 +187,9 @@ describe('Auth Routes', () => {
       // Hangi secret'in kullanıldığını kontrol etmiyoruz, sadece doğru payload'ı döndürüyoruz.
       // Gerçek uygulamada, jwt.verify'nin doğru secret ile çağrıldığını test etmek daha iyi olabilir.
       (jwt.verify as jest.Mock).mockReturnValue(decodedToken);
-      
+
       (pool.query as jest.Mock).mockResolvedValueOnce({ rows: [{ id: 1 }] }); // Session found
-      
+
       (jwt.sign as jest.Mock).mockImplementation((payload, secret, options) => {
         if (options && options.expiresIn === '1h') return 'newaccesstoken';
         return 'newrefreshtoken';
@@ -210,7 +206,7 @@ describe('Auth Routes', () => {
 
     it('should return 401 for invalid refresh token', async () => {
       (jwt.verify as jest.Mock).mockImplementation(() => { throw new Error('Invalid'); });
-      
+
       const res = await request(app)
         .post('/api/auth/refresh')
         .send({ refreshToken: 'invalidtoken' });

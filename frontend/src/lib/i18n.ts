@@ -15,6 +15,7 @@ import ruTranslations from '../../public/locales/ru/translation.json';
 import arTranslations from '../../public/locales/ar/translation.json';
 import jaTranslations from '../../public/locales/ja/translation.json';
 import koTranslations from '../../public/locales/ko/translation.json';
+import kmTranslations from '../../public/locales/km/translation.json';
 
 i18n
   .use(LanguageDetector)
@@ -57,6 +58,9 @@ i18n
       },
       ko: {
         translation: koTranslations
+      },
+      km: {
+        translation: kmTranslations
       }
     },
     fallbackLng: 'en',
@@ -76,7 +80,12 @@ i18n
     },
 
     react: {
-      useSuspense: true,
+      useSuspense: false,
+      bindI18n: 'languageChanged loaded',
+      bindI18nStore: 'added removed',
+      transEmptyNodeValue: '',
+      transSupportBasicHtmlNodes: true,
+      transKeepBasicHtmlNodesFor: ['br', 'strong', 'i', 'p']
     }
   });
 
