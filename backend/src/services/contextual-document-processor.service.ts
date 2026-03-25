@@ -5,6 +5,8 @@ import mammoth from 'mammoth';
 import { Readable } from 'stream';
 import OpenAI from 'openai';
 import pool from '../config/database';
+import claudeService from './claude.service';
+import { SettingsService } from './settings.service';
 
 interface ProcessedDocument {
   title: string;
@@ -249,9 +251,24 @@ export class ContextualDocumentProcessorService {
           metadata.content_type = 'plain_text';
       }
 
+      // Get chunking strategy from settings
+      const settingsService = SettingsService.getInstance();
+      const ragSettings = await settingsService.getSetting('rag');
+      let chunkingStrategy = 'semantic';
+      if (ragSettings) {
+        try {
+          const parsed = typeof ragSettings === 'string' ? JSON.parse(ragSettings) : ragSettings;
+          chunkingStrategy = parsed['ragSettings.chunkingStrategy'] || 'semantic';
+        } catch (e) {
+          console.warn('Failed to parse RAG settings for chunking strategy:', e);
+        }
+      }
+
+      console.log(`[Processor] Using chunking strategy: ${chunkingStrategy}`);
+
       // Create contextual content map for better embeddings
       const contextualContent = await this.createContextualContent(content, documentType, metadata);
-      const chunks = this.createIntelligentChunks(contextualContent, documentType);
+      const chunks = await this.createIntelligentChunks(contextualContent, documentType, chunkingStrategy);
 
       return {
         title: originalName,
@@ -613,18 +630,184 @@ export class ContextualDocumentProcessorService {
     }
   }
 
-  private createIntelligentChunks(text: string, documentType: string): string[] {
-    switch (documentType) {
-      case 'tabular':
-        return this.createTabularChunks(text);
-      case 'structured':
-        return this.createStructuredChunks(text);
-      case 'text':
-        return this.createTextChunks(text);
+  private async createIntelligentChunks(text: string, documentType: string, strategy: string = 'semantic'): Promise<string[]> {
+    console.log(`[Chunking] Strategy: ${strategy}, DocumentType: ${documentType}, TextLength: ${text.length}`);
+
+    // If semantic-haiku is selected, use Claude-3-Haiku to find boundaries
+    if (strategy === 'semantic-haiku' && claudeService.isAvailable()) {
+      console.log(`[Chunking] Performing Semantic Segmentation with Claude-3-Haiku...`);
+      return await claudeService.segmentText(text);
+    }
+
+    // Strategy-based routing
+    switch (strategy) {
+      case 'sentence':
+        console.log(`[Chunking] Using sentence-based chunking (1000 char / 200 overlap)`);
+        return this.chunkBySentence(text, 1000, 200);
+      case 'paragraph':
+        console.log(`[Chunking] Using paragraph-based chunking (1500 char / 300 overlap)`);
+        return this.chunkByParagraph(text, 1500, 300);
+      case 'semantic':
+        console.log(`[Chunking] Using semantic sections chunking (1200 char / 200 overlap)`);
+        return this.chunkBySemantic(text, 1200, 200);
+      case 'fixed':
+        console.log(`[Chunking] Using fixed-size chunking (1000 char / 100 overlap)`);
+        return this.chunkByFixedSize(text, 1000, 100);
+      case 'recursive':
       default:
-        return this.createTextChunks(text);
+        // Fallback to document-type-aware chunking (original behavior)
+        switch (documentType) {
+          case 'tabular':
+            return this.createTabularChunks(text);
+          case 'structured':
+            return this.createStructuredChunks(text);
+          case 'text':
+            return this.createTextChunks(text);
+          default:
+            return this.createTextChunks(text);
+        }
     }
   }
+
+  /**
+   * Sentence-based chunking: splits at sentence boundaries (.!?)
+   * Preserves sentence structure and uses smart overlap
+   */
+  private chunkBySentence(text: string, maxSize: number = 1000, overlap: number = 200): string[] {
+    const chunks: string[] = [];
+    const sentences = text.match(/[^.!?]+[.!?]+/g) || text.split(/\n+/).filter(s => s.trim().length > 0);
+
+    if (sentences.length === 0) return [text];
+
+    let currentChunk = '';
+
+    for (const sentence of sentences) {
+      if ((currentChunk + sentence).length > maxSize) {
+        if (currentChunk.trim().length > 0) {
+          chunks.push(currentChunk.trim());
+          // Smart overlap: keep the last part of previous chunk
+          const overlapText = currentChunk.slice(-overlap);
+          const sentenceBreak = overlapText.search(/[.!?]\s/);
+          currentChunk = sentenceBreak > 0 ? overlapText.slice(sentenceBreak + 2) + sentence : sentence;
+        } else {
+          // Single sentence exceeds max, force split
+          const splitChunks = this.forceSplitLongText(sentence);
+          chunks.push(...splitChunks.slice(0, -1));
+          currentChunk = splitChunks[splitChunks.length - 1] || '';
+        }
+      } else {
+        currentChunk += (currentChunk ? ' ' : '') + sentence;
+      }
+    }
+
+    if (currentChunk.trim().length > 0) {
+      chunks.push(currentChunk.trim());
+    }
+
+    return chunks.filter(c => c.length > 10);
+  }
+
+  /**
+   * Paragraph-based chunking: splits at paragraph boundaries (double newlines)
+   * Better for preserving contextual coherence in long documents
+   */
+  private chunkByParagraph(text: string, maxSize: number = 1500, overlap: number = 300): string[] {
+    const chunks: string[] = [];
+    const paragraphs = text.split(/\n\s*\n/).filter(p => p.trim().length > 0);
+
+    if (paragraphs.length === 0) return [text];
+    if (paragraphs.length === 1 && paragraphs[0].length > maxSize) {
+      return this.forceSplitLongText(paragraphs[0]);
+    }
+
+    let currentChunk = '';
+
+    for (const paragraph of paragraphs) {
+      if ((currentChunk + '\n\n' + paragraph).length > maxSize) {
+        if (currentChunk.trim().length > 0) {
+          chunks.push(currentChunk.trim());
+          // Overlap: keep tail of previous chunk
+          const overlapText = currentChunk.slice(-overlap);
+          currentChunk = overlapText + '\n\n' + paragraph;
+        } else {
+          if (paragraph.length > maxSize) {
+            const splitChunks = this.forceSplitLongText(paragraph);
+            chunks.push(...splitChunks.slice(0, -1));
+            currentChunk = splitChunks[splitChunks.length - 1] || '';
+          } else {
+            chunks.push(paragraph.trim());
+            currentChunk = '';
+          }
+        }
+      } else {
+        currentChunk = currentChunk ? currentChunk + '\n\n' + paragraph : paragraph;
+      }
+    }
+
+    if (currentChunk.trim().length > 0) {
+      if (currentChunk.length > maxSize) {
+        chunks.push(...this.forceSplitLongText(currentChunk));
+      } else {
+        chunks.push(currentChunk.trim());
+      }
+    }
+
+    return chunks.filter(c => c.length > 10);
+  }
+
+  /**
+   * Semantic section chunking: splits at heading/section boundaries
+   * Best for structured documents with clear section headers
+   */
+  private chunkBySemantic(text: string, maxSize: number = 1200, overlap: number = 200): string[] {
+    const chunks: string[] = [];
+    // Split by headings (markdown #, underlines ===, ---)
+    const sections = text.split(/\n(?=#{1,6}\s|={3,}|-{3,})/);
+    const cleanSections = sections.map(s => s.trim()).filter(s => s.length > 0);
+
+    if (cleanSections.length <= 1) {
+      // No headings found, fall back to paragraph chunking
+      return this.chunkByParagraph(text, maxSize, overlap);
+    }
+
+    for (const section of cleanSections) {
+      if (section.length > maxSize) {
+        // Section is too large, sub-chunk it
+        const subChunks = this.chunkByParagraph(section, maxSize, overlap);
+        chunks.push(...subChunks);
+      } else {
+        chunks.push(section);
+      }
+    }
+
+    return chunks.filter(c => c.length > 10);
+  }
+
+  /**
+   * Fixed-size chunking: splits at exact character boundaries
+   * Fastest approach, no structure preservation
+   */
+  private chunkByFixedSize(text: string, maxSize: number = 1000, overlap: number = 100): string[] {
+    const chunks: string[] = [];
+    let start = 0;
+
+    while (start < text.length) {
+      const end = Math.min(start + maxSize, text.length);
+      const chunk = text.slice(start, end);
+
+      if (chunk.trim().length > 0) {
+        chunks.push(chunk.trim());
+      }
+
+      start = end - overlap;
+      if (start < 0 || start >= text.length) break;
+      // Prevent infinite loop
+      if (end === text.length) break;
+    }
+
+    return chunks.filter(c => c.length > 10);
+  }
+
 
   private createTabularChunks(text: string): string[] {
     const chunks: string[] = [];

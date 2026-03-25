@@ -913,7 +913,8 @@ function LLMSettings() {
       deepseek: ['deepseek-chat', 'deepseek-coder'],
       huggingface: ['sentence-transformers/all-MiniLM-L6-v2', 'distilbert-base-uncased', 'bert-base-uncased'],
       openrouter: ['openai/gpt-4o', 'openai/gpt-4o-mini', 'openai/gpt-4-turbo', 'anthropic/claude-3.5-sonnet', 'meta-llama/llama-3.1-8b-instruct', 'google/gemini-pro-1.5'],
-      jina: ['jina-reranker-v2-base-multilingual']
+      jina: ['jina-reranker-v2-base-multilingual'],
+      xai: ['grok-beta', 'grok-2', 'grok-2-1212']
     };
 
     debug.log(`⚠️ [${provider}] No verified models, using defaults`);
@@ -927,7 +928,8 @@ function LLMSettings() {
       anthropic: 'claude-3-5-sonnet-20241022',
       deepseek: 'deepseek-chat',
       huggingface: 'sentence-transformers/all-MiniLM-L6-v2',
-      openrouter: 'openai/gpt-4o-mini'
+      openrouter: 'openai/gpt-4o-mini',
+      xai: 'grok-beta'
     };
     return defaults[provider] || 'gpt-4o-mini';
   };
@@ -949,15 +951,22 @@ function LLMSettings() {
       },
       google: {
         'gemini-2.0-flash': { input: 0.1, output: 0.4 },
+        'gemini-1.5-flash': { input: 0.1, output: 0.4 },
+        'gemini-1.5-pro': { input: 3.5, output: 10.5 },
         'gemini-1.5-flash-latest': { input: 0.075, output: 0.3 },
         'gemini-1.5-pro-latest': { input: 1.25, output: 5 },
+      },
+      xai: {
+        'grok-beta': { input: 5, output: 15 },
+        'grok-2': { input: 2, output: 10 },
+        'grok-2-1212': { input: 2, output: 10 },
       },
       deepseek: {
         'deepseek-chat': { input: 0.14, output: 0.28 },
         'deepseek-coder': { input: 0.14, output: 0.28 },
       }
     };
-    return pricing[provider]?.[modelName] || null;
+    return pricing[provider]?.[modelName] || pricing[provider]?.['default'] || null;
   };
 
   const getModelDetails = (provider: string, modelName: string) => {
@@ -1231,6 +1240,7 @@ function LLMSettings() {
                 openrouter: { key: tempConfig?.openrouter?.apiKey ?? llmConfig?.openrouter?.apiKey, name: 'OpenRouter', type: 'LLM + Embedding' },
                 deepl: { key: tempConfig?.deepl?.apiKey ?? translationConfig?.deepl?.apiKey, name: 'DeepL', type: 'Translation' },
                 jina: { key: tempConfig?.jina?.apiKey ?? llmConfig?.jina?.apiKey, name: 'Jina AI', type: 'Reranking' },
+                xai: { key: tempConfig?.xai?.apiKey ?? llmConfig?.xai?.apiKey, name: 'X.AI (Grok)', type: 'LLM + Vision' },
               }).map(([provider, data]) => {
                 const providerStatus = getProviderStatus(provider);
                 const isValidated = isProviderValidated(provider);
@@ -1920,8 +1930,8 @@ function LLMSettings() {
                         // Auto-save when provider changes - save to ragSettings for backend compatibility
                         try {
                           await updateSettingsCategory('rag', {
-                            rerankEnabled: value !== 'none',
-                            rerankProvider: value === 'none' ? 'jina' : value
+                            'ragSettings.rerankEnabled': value !== 'none',
+                            'ragSettings.rerankProvider': value === 'none' ? 'jina' : value
                           });
                           toast({
                             title: "Başarılı",
@@ -1959,6 +1969,157 @@ function LLMSettings() {
                       </SelectContent>
                     </Select>
                   </div>
+                </div>
+
+                {/* Chunking Strategy Selection */}
+                <div>
+                  <Label className="flex items-center gap-2">
+                    Chunking Strategy
+                    <Badge variant="outline" className="text-[10px] px-1.5 py-0 font-normal">
+                      Semantic Embedding
+                    </Badge>
+                  </Label>
+                  <p className="text-xs text-muted-foreground mt-1 mb-2">
+                    Dokümanların vektör embedding için nasıl parçalanacağını belirler
+                  </p>
+                  <div className="mt-2">
+                    <Select
+                      value={tempConfig?.chunkingStrategy || 'semantic'}
+                      onValueChange={async (value) => {
+                        const updatedConfig = {
+                          ...tempConfig,
+                          chunkingStrategy: value
+                        };
+                        updateTempConfig('chunkingStrategy', value);
+                        setTempConfig(updatedConfig);
+                        // Auto-save to ragSettings
+                        try {
+                          await updateSettingsCategory('rag', {
+                            'ragSettings.chunkingStrategy': value,
+                            // Preserve existing RAG settings if possible with proper prefix
+                            'ragSettings.rerankEnabled': tempConfig?.rerankProvider !== 'none',
+                            'ragSettings.rerankProvider': tempConfig?.rerankProvider === 'none' ? 'jina' : tempConfig?.rerankProvider
+                          });
+                          toast({
+                            title: "Başarılı",
+                            description: "Chunking stratejisi güncellendi",
+                          });
+                        } catch (error) {
+                          toast({
+                            title: "Hata",
+                            description: "Strateji güncellenemedi",
+                            variant: "destructive",
+                          });
+                        }
+                      }}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Strateji seçin" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="recursive">
+                          <div className="flex flex-col">
+                            <div className="flex items-center gap-2">
+                              <span className="font-medium">Recursive Character</span>
+                              <span className="text-[10px] bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300 px-1.5 py-0.5 rounded">Standart</span>
+                            </div>
+                            <span className="text-xs text-gray-500">Çok seviyeli ayırıcılarla akıllı bölme • 1000 char / 200 overlap</span>
+                          </div>
+                        </SelectItem>
+                        <SelectItem value="sentence">
+                          <div className="flex flex-col">
+                            <div className="flex items-center gap-2">
+                              <span className="font-medium">Sentence-Based</span>
+                              <span className="text-[10px] bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300 px-1.5 py-0.5 rounded">Yapı Koruma</span>
+                            </div>
+                            <span className="text-xs text-gray-500">Cümle sınırlarını koruyarak böler • 1000 char / 200 overlap</span>
+                          </div>
+                        </SelectItem>
+                        <SelectItem value="paragraph">
+                          <div className="flex flex-col">
+                            <div className="flex items-center gap-2">
+                              <span className="font-medium">Paragraph-Based</span>
+                              <span className="text-[10px] bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300 px-1.5 py-0.5 rounded">Yapı Koruma</span>
+                            </div>
+                            <span className="text-xs text-gray-500">Paragraf sınırlarını koruyarak böler • 1500 char / 300 overlap</span>
+                          </div>
+                        </SelectItem>
+                        <SelectItem value="semantic">
+                          <div className="flex flex-col">
+                            <div className="flex items-center gap-2">
+                              <span className="font-medium">Semantic Sections</span>
+                              <span className="text-[10px] bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300 px-1.5 py-0.5 rounded">Semantik</span>
+                            </div>
+                            <span className="text-xs text-gray-500">Başlık/bölüm yapısına göre anlamlı parçalama • 1200 char / 200 overlap</span>
+                          </div>
+                        </SelectItem>
+                        <SelectItem value="fixed">
+                          <div className="flex flex-col">
+                            <div className="flex items-center gap-2">
+                              <span className="font-medium">Fixed Size</span>
+                              <span className="text-[10px] bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300 px-1.5 py-0.5 rounded">Basit</span>
+                            </div>
+                            <span className="text-xs text-gray-500">Sabit karakter uzunluğunda böler • 1000 char / 100 overlap</span>
+                          </div>
+                        </SelectItem>
+                        <SelectItem value="semantic-haiku" disabled={!isProviderValidated('anthropic')}>
+                          <div className="flex flex-col">
+                            <div className="flex items-center gap-2">
+                              <span className="font-medium">AI Semantic (Claude-3-Haiku)</span>
+                              <span className="text-[10px] bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300 px-1.5 py-0.5 rounded">AI-Powered</span>
+                            </div>
+                            {isProviderValidated('anthropic') ? (
+                              <span className="text-xs text-emerald-600">LLM ile anlamlı sınır tespiti • Yüksek doğruluk</span>
+                            ) : (
+                              <span className="text-xs text-red-500">Anthropic API key gerekli</span>
+                            )}
+                          </div>
+                        </SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  {/* Active Strategy Info Card */}
+                  {(() => {
+                    const strategyInfo: Record<string, { icon: string; desc: string; chunkSize: string; overlap: string; boundary: string; costLevel: string }> = {
+                      'recursive': { icon: '🔄', desc: 'Paragraf → Satır → Cümle → Kelime sırasıyla ayırır. En dengeli strateji.', chunkSize: '1000', overlap: '200', boundary: 'Akıllı (Smart)', costLevel: 'Ücretsiz' },
+                      'sentence': { icon: '📝', desc: 'Cümle sonlarını (.!?) algılayarak doğal dil yapısını korur.', chunkSize: '1000', overlap: '200', boundary: 'Cümle Sınırı', costLevel: 'Ücretsiz' },
+                      'paragraph': { icon: '📄', desc: 'Paragraf boşluklarından bölerek bağlam bütünlüğünü korur. Uzun dokümanlar için ideal.', chunkSize: '1500', overlap: '300', boundary: 'Paragraf Sınırı', costLevel: 'Ücretsiz' },
+                      'semantic': { icon: '🧠', desc: 'Başlık ve bölüm yapısını analiz ederek semantik birimlere ayırır.', chunkSize: '1200', overlap: '200', boundary: 'Başlık/Bölüm', costLevel: 'Ücretsiz' },
+                      'fixed': { icon: '📏', desc: 'Sabit karakter uzunluğunda böler. Hızlı ama bağlam kaybı olabilir.', chunkSize: '1000', overlap: '100', boundary: 'Yok', costLevel: 'Ücretsiz' },
+                      'semantic-haiku': { icon: '✨', desc: 'Claude-3-Haiku modeli ile anlam sınırlarını tespit eder. En yüksek doğruluk.', chunkSize: 'Dinamik', overlap: 'Dinamik', boundary: 'AI Tespiti', costLevel: 'API maliyet' }
+                    };
+                    const active = strategyInfo[tempConfig?.chunkingStrategy || 'semantic'];
+                    if (!active) return null;
+                    return (
+                      <div className="mt-3 p-3 rounded-lg bg-gradient-to-r from-slate-50 to-slate-100 dark:from-slate-900/50 dark:to-slate-800/50 border border-slate-200 dark:border-slate-700">
+                        <div className="flex items-start gap-2">
+                          <span className="text-lg">{active.icon}</span>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-xs text-muted-foreground">{active.desc}</p>
+                            <div className="flex flex-wrap gap-3 mt-2">
+                              <div className="flex items-center gap-1">
+                                <span className="text-[10px] text-muted-foreground">Chunk:</span>
+                                <span className="text-[10px] font-medium">{active.chunkSize} char</span>
+                              </div>
+                              <div className="flex items-center gap-1">
+                                <span className="text-[10px] text-muted-foreground">Overlap:</span>
+                                <span className="text-[10px] font-medium">{active.overlap} char</span>
+                              </div>
+                              <div className="flex items-center gap-1">
+                                <span className="text-[10px] text-muted-foreground">Sınır:</span>
+                                <span className="text-[10px] font-medium">{active.boundary}</span>
+                              </div>
+                              <div className="flex items-center gap-1">
+                                <span className="text-[10px] text-muted-foreground">Maliyet:</span>
+                                <span className={`text-[10px] font-medium ${active.costLevel === 'Ücretsiz' ? 'text-green-600' : 'text-amber-600'}`}>{active.costLevel}</span>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })()}
                 </div>
               </div>
 

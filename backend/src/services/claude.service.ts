@@ -134,9 +134,42 @@ ${context || 'Veritabanında bu konuyla ilgili spesifik bilgi bulunmuyor.'}`;
       return {
         content: textContent || 'Yanıt oluşturulamadı.'
       };
+  /**
+   * 🧠 NEW: Semantic Segmentation using Claude-3-Haiku
+   * Inserts markers at natural semantic boundaries for RAG chunking.
+   */
+  public async segmentText(text: string): Promise<string[]> {
+    if (!this.client) {
+      throw new Error('Claude API not initialized');
+    }
+
+    try {
+      const systemPrompt = `You are a document segmentation expert. 
+Your task is to insert "|||CHUNKSPLIT|||" markers into the provided text at natural semantic boundaries.
+- Boundaries usually occur between topics, sections, or distinct legal provisions.
+- DO NOT add, remove, or change any original text.
+- JUST insert the markers.
+- Aim for chunks between 800-1500 characters, but PRIORITIZE semantic meaning over exact length.
+- If a section is very long and has no clear boundary, insert a marker at a logical paragraph break.`;
+
+      const response = await this.client.messages.create({
+        model: 'claude-3-haiku-20240307', // Haiku is fast and cheap for this
+        max_tokens: 4096,
+        temperature: 0,
+        system: systemPrompt,
+        messages: [{ role: 'user', content: `Segment this text:\n\n${text}` }]
+      });
+
+      const segmentedText = response.content
+        .filter(block => block.type === 'text')
+        .map(block => (block as any).text)
+        .join('');
+
+      return segmentedText.split('|||CHUNKSPLIT|||').map(chunk => chunk.trim()).filter(chunk => chunk.length > 0);
     } catch (error: any) {
-      console.error('Claude API error:', error);
-      throw error;
+      console.error('Claude segmentation error:', error);
+      // Fallback: return as single chunk on error to prevent failure
+      return [text];
     }
   }
 }
