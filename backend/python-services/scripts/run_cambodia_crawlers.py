@@ -11,7 +11,9 @@ import time
 import sys
 
 # ASEANlex API base URL
-ASEANLEX_API = "https://aseanlex.luwi.dev/api/v2"
+# Use localhost:8087 for server-side calls, or the public URL for external calls
+import os
+ASEANLEX_API = os.environ.get("ASEANLEX_API", "http://localhost:8087/api/v2")
 
 # Cambodia crawlers configuration
 CAMBODIA_CRAWLERS = [
