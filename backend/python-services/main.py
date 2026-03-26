@@ -58,8 +58,10 @@ async def lifespan(app: FastAPI):
     from services.redis_client import init_redis
 
     try:
+        from services.neo4j_service import neo4j_service
         await init_db()
         await init_redis()
+        await neo4j_service.connect()
         logger.info("✅ All services initialized successfully")
 
         # Initialize and start scheduler
@@ -99,9 +101,11 @@ async def lifespan(app: FastAPI):
 
     from services.database import close_db
     from services.redis_client import close_redis
+    from services.neo4j_service import neo4j_service
 
     await close_db()
     await close_redis()
+    await neo4j_service.close()
     logger.info("👋 Shutdown complete")
 
 

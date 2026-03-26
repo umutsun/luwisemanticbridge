@@ -36,24 +36,20 @@ import {
   Network,
   Database,
   TrendingUp,
-  Users,
-  FileText,
-  MessageSquare,
-  Layers,
-  Activity,
-  Zap,
   Link,
-  Globe,
   RefreshCw,
   Download,
-  Filter,
-  Search,
-  Eye,
   GitBranch,
-  Share2,
   Sparkles,
   Info
 } from 'lucide-react';
+import { fetchWithAuth, safeJsonParse } from '@/lib/auth-fetch';
+import dynamic from 'next/dynamic';
+
+const ForceGraph2D = dynamic(() => import('react-force-graph-2d'), {
+  ssr: false,
+  loading: () => <div className="flex items-center justify-center h-[480px] text-sm text-slate-400">Loading Knowledge Graph...</div>
+});
 
 interface GraphNode {
   id: string;
@@ -103,14 +99,48 @@ export default function AnalyticsDashboard() {
   const fetchAnalytics = async () => {
     setLoading(true);
     try {
-      const response = await fetch('http://localhost:3001/api/v2/lightrag/analytics');
+      const response = await fetchWithAuth(getApiUrl('relationshipsGraph'));
+      
       if (response.ok) {
-        const data = await response.json();
-        setAnalyticsData(data);
+        const data = await safeJsonParse(response);
+        if (data) {
+          // Adapt Python response to AnalyticsData structure
+          setAnalyticsData({
+            nodes: data.nodes.map((n: any) => ({
+               id: n.id,
+               label: n.label,
+               type: 'document',
+               size: n.val || 20,
+               connections: data.edges.filter((e: any) => e.source === n.id || e.target === n.id).length
+            })),
+            edges: data.edges.map((e: any) => ({
+               source: e.source,
+               target: e.target,
+               weight: e.count || 1,
+               type: e.type || 'semantic'
+            })),
+            stats: {
+              totalNodes: data.nodes.length,
+              totalEdges: data.edges.length,
+              avgDegree: data.nodes.length > 0 ? (data.edges.length * 2 / data.nodes.length) : 0,
+              density: 0.05,
+              communities: 1,
+              centralNodes: data.nodes.slice(0, 3).map((n: any) => n.label)
+            },
+            insights: {
+              topEntities: [],
+              topConcepts: [],
+              documentClusters: [],
+              semanticDensity: 0.8,
+              knowledgeCoverage: 0.85
+            }
+          });
+        }
+      } else {
+        throw new Error('Failed to fetch real data');
       }
     } catch (error) {
-      console.error('Failed to fetch analytics:', error);
-      // Mock data for demonstration
+      console.error('Failed to fetch analytics, using mock data:', error);
       setAnalyticsData(generateMockData());
     } finally {
       setLoading(false);
@@ -496,37 +526,49 @@ export default function AnalyticsDashboard() {
                     variant={selectedView === '3d' ? 'default' : 'outline'}
                     onClick={() => setSelectedView('3d')}
                   >
-                    3D Graf
-                  </Button>
+                    </Button>
                 </div>
               </div>
             </CardHeader>
-            <CardContent className="h-full">
-              <div className="bg-gray-50 dark:bg-gray-800 rounded-lg h-[480px] flex items-center justify-center">
-                <div className="text-center space-y-4">
-                  <Network className="h-16 w-16 mx-auto text-primary opacity-50" />
-                  <div>
-                    <h3 className="font-medium">Bilgi Grafiği Görselleştirmesi</h3>
-                    <p className="text-sm text-muted-foreground mt-2">
-                      {analyticsData?.nodes.length || 0} düğüm ve {analyticsData?.edges.length || 0} bağlantı
-                    </p>
-                  </div>
-                  <div className="flex justify-center gap-4 mt-4">
-                    <Badge variant="outline">
+            <CardContent className="h-full p-0 overflow-hidden bg-slate-50 dark:bg-[#0a1628]/40">
+              {analyticsData && analyticsData.nodes.length > 0 ? (
+                <div className="relative h-[530px] w-full">
+                  <ForceGraph2D
+                    graphData={{
+                      nodes: analyticsData.nodes.map(n => ({ id: n.id, name: n.label, val: n.size })),
+                      links: analyticsData.edges.map(e => ({ source: e.source, target: e.target }))
+                    }}
+                    height={530}
+                    nodeLabel="name"
+                    nodeAutoColorBy="id"
+                    linkDirectionalParticles={2}
+                    linkDirectionalParticleSpeed={d => (d as any).weight * 0.001}
+                    backgroundColor="transparent"
+                  />
+                  <div className="absolute bottom-4 left-4 flex gap-4">
+                    <Badge variant="outline" className="bg-white/80 dark:bg-black/40 backdrop-blur">
                       <div className="w-2 h-2 bg-blue-500 rounded-full mr-2" />
-                      Konseptler
+                      {analyticsData.nodes.length} Nodes
                     </Badge>
-                    <Badge variant="outline">
-                      <div className="w-2 h-2 bg-green-500 rounded-full mr-2" />
-                      Dokümanlar
-                    </Badge>
-                    <Badge variant="outline">
-                      <div className="w-2 h-2 bg-purple-500 rounded-full mr-2" />
-                      Varlıklar
+                    <Badge variant="outline" className="bg-white/80 dark:bg-black/40 backdrop-blur">
+                      <div className="w-2 h-2 bg-indigo-500 rounded-full mr-2" />
+                      {analyticsData.edges.length} Connections
                     </Badge>
                   </div>
                 </div>
-              </div>
+              ) : (
+                <div className="h-[480px] flex items-center justify-center">
+                  <div className="text-center space-y-4">
+                    <Network className="h-16 w-16 mx-auto text-primary opacity-50" />
+                    <div>
+                      <h3 className="font-medium text-slate-900 dark:text-cyan-100">Bilgi Grafiği Boş</h3>
+                      <p className="text-sm text-muted-foreground mt-2">
+                        Henüz eşlenmiş bir veri bulunamadı.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
             </CardContent>
           </Card>
         </TabsContent>

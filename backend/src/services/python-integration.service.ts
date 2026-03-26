@@ -793,6 +793,34 @@ export class PythonIntegrationService {
       throw error;
     }
   }
+
+  // ============= Graph Cleanup Methods =============
+
+  /**
+   * Remove chunks from Neo4j that have been deleted from PostgreSQL.
+   *
+   * @param workspaceId - The workspace ID the chunks belong to
+   * @param chunkIds - List of chunk IDs to remove
+   */
+  public async cleanupNeo4jChunks(workspaceId: string, chunkIds: number[]): Promise<any> {
+    try {
+      if (!await this.isPythonServiceAvailable()) {
+        logger.warn('Python service not available for Neo4j cleanup, skipping');
+        return null;
+      }
+
+      const response = await this.axiosClient.post('/api/python/relationships/cleanup', {
+        workspace_id: workspaceId,
+        chunk_ids: chunkIds
+      });
+
+      return response.data;
+    } catch (error: any) {
+      logger.error('Neo4j cleanup error:', error.message);
+      // Don't throw, cleanup is best-effort
+      return null;
+    }
+  }
 }
 
 // Export singleton instance

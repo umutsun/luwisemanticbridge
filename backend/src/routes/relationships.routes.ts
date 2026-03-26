@@ -96,4 +96,20 @@ router.get('/extract-batch/status/:jobId', async (req: Request, res: Response) =
   }
 });
 
+/**
+ * POST /api/v2/relationships/sync-neo4j
+ * Manually trigger Neo4j synchronization
+ */
+router.post('/sync-neo4j', async (req: Request, res: Response) => {
+  try {
+    const response = await axios.post(`${PYTHON_SERVICE_URL}/api/python/relationships/sync-neo4j`, {}, {
+      timeout: 30000,
+    });
+    res.json(response.data);
+  } catch (error: any) {
+    logger.error('Relationships sync-neo4j error:', error.message);
+    res.status(500).json({ error: error.message || 'Python service unreachable' });
+  }
+});
+
 export default router;

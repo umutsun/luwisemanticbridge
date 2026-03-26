@@ -32,7 +32,7 @@ import useAuthStore from '@/stores/auth.store';
 import { useSocketIO } from '@/hooks/useSocketIO';
 import { AdminTodo, CreateTodoData, TodoStatus, TodoPriority } from '@/types/admin-todo';
 import { formatDistanceToNow } from 'date-fns';
-import { tr } from 'date-fns/locale';
+import { tr, enUS } from 'date-fns/locale';
 
 const priorityColors: Record<TodoPriority, string> = {
   low: 'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300',
@@ -41,27 +41,27 @@ const priorityColors: Record<TodoPriority, string> = {
   urgent: 'bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300'
 };
 
-const priorityLabels: Record<TodoPriority, string> = {
-  low: 'Düşük',
-  normal: 'Normal',
-  high: 'Yüksek',
-  urgent: 'Acil'
-};
-
 const statusIcons: Record<TodoStatus, React.ReactNode> = {
   pending: <Circle className="h-4 w-4 text-gray-400" />,
   in_progress: <Loader2 className="h-4 w-4 text-blue-500 animate-spin" />,
   completed: <CheckCircle className="h-4 w-4 text-green-500" />
 };
 
-const statusLabels: Record<TodoStatus, string> = {
-  pending: 'Bekliyor',
-  in_progress: 'Devam Ediyor',
-  completed: 'Tamamlandı'
-};
-
 export default function AdminTasksPage() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
+  
+  const priorityLabels: Record<TodoPriority, string> = {
+    low: t('adminTasks.priorityLevels.low'),
+    normal: t('adminTasks.priorityLevels.normal'),
+    high: t('adminTasks.priorityLevels.high'),
+    urgent: t('adminTasks.priorityLevels.urgent')
+  };
+
+  const statusLabels: Record<TodoStatus, string> = {
+    pending: t('adminTasks.pending'),
+    in_progress: t('adminTasks.inProgress'),
+    completed: t('adminTasks.completed')
+  };
   const { user } = useAuthStore();
   const {
     todos,
@@ -207,7 +207,10 @@ export default function AdminTasksPage() {
   // Format date
   const formatDate = (dateString: string) => {
     try {
-      return formatDistanceToNow(new Date(dateString), { addSuffix: true, locale: tr });
+      return formatDistanceToNow(new Date(dateString), { 
+        addSuffix: true, 
+        locale: i18n.language === 'tr' ? tr : enUS 
+      });
     } catch {
       return dateString;
     }
@@ -218,13 +221,13 @@ export default function AdminTasksPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-xl font-semibold">Admin Görevleri</h1>
+          <h1 className="text-xl font-semibold">{t('adminTasks.title')}</h1>
           <p className="text-muted-foreground text-sm">
-            Kim, ne yapıyor, nerede? Ekip koordinasyonu için görev takibi
+            {t('adminTasks.subtitle')}
             {isConnected && (
               <span className="ml-2 inline-flex items-center text-green-600">
                 <span className="h-2 w-2 bg-green-500 rounded-full mr-1 animate-pulse" />
-                Canlı
+                {t('adminTasks.live')}
               </span>
             )}
           </p>
@@ -232,50 +235,50 @@ export default function AdminTasksPage() {
         <div className="flex items-center gap-2">
           <Button variant="outline" size="sm" onClick={() => fetchTodos()}>
             <RefreshCw className="h-4 w-4 mr-2" />
-            Yenile
+            {t('adminTasks.refresh')}
           </Button>
           <Dialog open={showCreateDialog} onOpenChange={setShowCreateDialog}>
             <DialogTrigger asChild>
               <Button onClick={() => { resetForm(); setShowCreateDialog(true); }}>
                 <Plus className="h-4 w-4 mr-2" />
-                Yeni Görev
+                {t('adminTasks.newTask')}
               </Button>
             </DialogTrigger>
             <DialogContent>
               <DialogHeader>
-                <DialogTitle>Yeni Görev Oluştur</DialogTitle>
+                <DialogTitle>{t('adminTasks.createTask')}</DialogTitle>
                 <DialogDescription>
-                  Diğer adminlerle paylaşılacak yeni bir görev ekleyin
+                  {t('adminTasks.createTaskDesc')}
                 </DialogDescription>
               </DialogHeader>
               <div className="space-y-4 py-4">
                 <div className="space-y-2">
-                  <Label>Başlık *</Label>
+                  <Label>{t('adminTasks.taskTitle')}</Label>
                   <Input
-                    placeholder="Ne yapılacak?"
+                    placeholder={t('adminTasks.taskTitlePlaceholder')}
                     value={formData.title}
                     onChange={(e) => setFormData({ ...formData, title: e.target.value })}
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label>Açıklama</Label>
+                  <Label>{t('adminTasks.description')}</Label>
                   <Textarea
-                    placeholder="Detaylar..."
+                    placeholder={t('adminTasks.descriptionPlaceholder')}
                     value={formData.description}
                     onChange={(e) => setFormData({ ...formData, description: e.target.value })}
                   />
                 </div>
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
-                    <Label>Konum</Label>
+                    <Label>{t('adminTasks.location')}</Label>
                     <Input
-                      placeholder="Nerede?"
+                      placeholder={t('adminTasks.locationPlaceholder')}
                       value={formData.location}
                       onChange={(e) => setFormData({ ...formData, location: e.target.value })}
                     />
                   </div>
                   <div className="space-y-2">
-                    <Label>Öncelik</Label>
+                    <Label>{t('adminTasks.priority')}</Label>
                     <Select
                       value={formData.priority}
                       onValueChange={(value: TodoPriority) => setFormData({ ...formData, priority: value })}
@@ -284,17 +287,17 @@ export default function AdminTasksPage() {
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="low">Düşük</SelectItem>
-                        <SelectItem value="normal">Normal</SelectItem>
-                        <SelectItem value="high">Yüksek</SelectItem>
-                        <SelectItem value="urgent">Acil</SelectItem>
+                        <SelectItem value="low">{t('adminTasks.priorityLevels.low')}</SelectItem>
+                        <SelectItem value="normal">{t('adminTasks.priorityLevels.normal')}</SelectItem>
+                        <SelectItem value="high">{t('adminTasks.priorityLevels.high')}</SelectItem>
+                        <SelectItem value="urgent">{t('adminTasks.priorityLevels.urgent')}</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
                 </div>
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
-                    <Label>Link</Label>
+                    <Label>{t('adminTasks.link')}</Label>
                     <Input
                       placeholder="https://..."
                       value={formData.link}
@@ -302,7 +305,7 @@ export default function AdminTasksPage() {
                     />
                   </div>
                   <div className="space-y-2">
-                    <Label>Tarih</Label>
+                    <Label>{t('adminTasks.dueDate')}</Label>
                     <Input
                       type="date"
                       value={formData.dueDate}
@@ -312,8 +315,8 @@ export default function AdminTasksPage() {
                 </div>
               </div>
               <DialogFooter>
-                <Button variant="outline" onClick={() => setShowCreateDialog(false)}>İptal</Button>
-                <Button onClick={handleCreate} disabled={!formData.title.trim()}>Oluştur</Button>
+                <Button variant="outline" onClick={() => setShowCreateDialog(false)}>{t('adminTasks.cancel')}</Button>
+                <Button onClick={handleCreate} disabled={!formData.title.trim()}>{t('adminTasks.create')}</Button>
               </DialogFooter>
             </DialogContent>
           </Dialog>
@@ -323,31 +326,31 @@ export default function AdminTasksPage() {
       {/* Filters */}
       <div className="flex items-center gap-4">
         <div className="flex items-center gap-2">
-          <Label className="text-sm">Durum:</Label>
+          <Label className="text-sm">{t('adminTasks.status')}:</Label>
           <Select value={statusFilter} onValueChange={setStatusFilter}>
             <SelectTrigger className="w-[140px]">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">Tümü</SelectItem>
-              <SelectItem value="pending">Bekliyor</SelectItem>
-              <SelectItem value="in_progress">Devam Ediyor</SelectItem>
-              <SelectItem value="completed">Tamamlandı</SelectItem>
+              <SelectItem value="all">{t('adminTasks.all')}</SelectItem>
+              <SelectItem value="pending">{t('adminTasks.pending')}</SelectItem>
+              <SelectItem value="in_progress">{t('adminTasks.inProgress')}</SelectItem>
+              <SelectItem value="completed">{t('adminTasks.completed')}</SelectItem>
             </SelectContent>
           </Select>
         </div>
         <div className="flex items-center gap-2">
-          <Label className="text-sm">Öncelik:</Label>
+          <Label className="text-sm">{t('adminTasks.priority')}:</Label>
           <Select value={priorityFilter} onValueChange={setPriorityFilter}>
             <SelectTrigger className="w-[140px]">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">Tümü</SelectItem>
-              <SelectItem value="urgent">Acil</SelectItem>
-              <SelectItem value="high">Yüksek</SelectItem>
-              <SelectItem value="normal">Normal</SelectItem>
-              <SelectItem value="low">Düşük</SelectItem>
+              <SelectItem value="all">{t('adminTasks.all')}</SelectItem>
+              <SelectItem value="urgent">{t('adminTasks.priorityLevels.urgent')}</SelectItem>
+              <SelectItem value="high">{t('adminTasks.priorityLevels.high')}</SelectItem>
+              <SelectItem value="normal">{t('adminTasks.priorityLevels.normal')}</SelectItem>
+              <SelectItem value="low">{t('adminTasks.priorityLevels.low')}</SelectItem>
             </SelectContent>
           </Select>
         </div>
@@ -358,7 +361,7 @@ export default function AdminTasksPage() {
         <div className="flex items-center gap-2 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg text-red-700 dark:text-red-300">
           <AlertCircle className="h-4 w-4" />
           <span className="text-sm">{error}</span>
-          <Button variant="ghost" size="sm" onClick={clearError}>Kapat</Button>
+          <Button variant="ghost" size="sm" onClick={clearError}>{t('adminTasks.close')}</Button>
         </div>
       )}
 
@@ -372,8 +375,8 @@ export default function AdminTasksPage() {
           ) : todos.length === 0 ? (
             <div className="flex flex-col items-center justify-center p-8 text-muted-foreground">
               <CheckCircle className="h-12 w-12 mb-2" />
-              <p>Henüz görev yok</p>
-              <p className="text-sm">Yeni görev ekleyerek başlayın</p>
+              <p>{t('adminTasks.noTasks')}</p>
+              <p className="text-sm">{t('adminTasks.startByAdding')}</p>
             </div>
           ) : (
             <div className="divide-y">
@@ -432,7 +435,7 @@ export default function AdminTasksPage() {
                         {todo.dueDate && (
                           <span className="flex items-center gap-1">
                             <Calendar className="h-3 w-3" />
-                            {new Date(todo.dueDate).toLocaleDateString('tr-TR')}
+                            {new Date(todo.dueDate).toLocaleDateString(i18n.language === 'tr' ? 'tr-TR' : 'en-US')}
                           </span>
                         )}
 
@@ -444,7 +447,7 @@ export default function AdminTasksPage() {
                             className="flex items-center gap-1 text-blue-600 hover:underline"
                           >
                             <ExternalLink className="h-3 w-3" />
-                            Link
+                            {t('adminTasks.link')}
                           </a>
                         )}
 
@@ -456,7 +459,7 @@ export default function AdminTasksPage() {
                         {todo.completedByName && (
                           <span className="flex items-center gap-1 text-green-600">
                             <CheckCircle className="h-3 w-3" />
-                            {todo.completedByName} tamamladı
+                            {t('adminTasks.completedBy', { name: todo.completedByName })}
                           </span>
                         )}
                       </div>
@@ -473,8 +476,7 @@ export default function AdminTasksPage() {
                         <Edit className="h-4 w-4" />
                       </Button>
                       <ConfirmTooltip
-                        title="Görevi Sil"
-                        description="Bu görev kalıcı olarak silinecek."
+                        message={t('adminTasks.deleteConfirm')}
                         onConfirm={() => handleDelete(todo.id)}
                       >
                         <Button variant="ghost" size="icon" className="h-8 w-8 text-red-600 hover:text-red-700">
@@ -494,36 +496,36 @@ export default function AdminTasksPage() {
       <Dialog open={showEditDialog} onOpenChange={setShowEditDialog}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Görevi Düzenle</DialogTitle>
+            <DialogTitle>{t('adminTasks.editTask')}</DialogTitle>
           </DialogHeader>
           <div className="space-y-4 py-4">
             <div className="space-y-2">
-              <Label>Başlık *</Label>
+              <Label>{t('adminTasks.taskTitle')}</Label>
               <Input
-                placeholder="Ne yapılacak?"
+                placeholder={t('adminTasks.taskTitlePlaceholder')}
                 value={formData.title}
                 onChange={(e) => setFormData({ ...formData, title: e.target.value })}
               />
             </div>
             <div className="space-y-2">
-              <Label>Açıklama</Label>
+              <Label>{t('adminTasks.description')}</Label>
               <Textarea
-                placeholder="Detaylar..."
+                placeholder={t('adminTasks.descriptionPlaceholder')}
                 value={formData.description}
                 onChange={(e) => setFormData({ ...formData, description: e.target.value })}
               />
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label>Konum</Label>
+                <Label>{t('adminTasks.location')}</Label>
                 <Input
-                  placeholder="Nerede?"
+                  placeholder={t('adminTasks.locationPlaceholder')}
                   value={formData.location}
                   onChange={(e) => setFormData({ ...formData, location: e.target.value })}
                 />
               </div>
               <div className="space-y-2">
-                <Label>Öncelik</Label>
+                <Label>{t('adminTasks.priority')}</Label>
                 <Select
                   value={formData.priority}
                   onValueChange={(value: TodoPriority) => setFormData({ ...formData, priority: value })}
@@ -532,17 +534,17 @@ export default function AdminTasksPage() {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="low">Düşük</SelectItem>
-                    <SelectItem value="normal">Normal</SelectItem>
-                    <SelectItem value="high">Yüksek</SelectItem>
-                    <SelectItem value="urgent">Acil</SelectItem>
+                    <SelectItem value="low">{t('adminTasks.priorityLevels.low')}</SelectItem>
+                    <SelectItem value="normal">{t('adminTasks.priorityLevels.normal')}</SelectItem>
+                    <SelectItem value="high">{t('adminTasks.priorityLevels.high')}</SelectItem>
+                    <SelectItem value="urgent">{t('adminTasks.priorityLevels.urgent')}</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label>Link</Label>
+                <Label>{t('adminTasks.link')}</Label>
                 <Input
                   placeholder="https://..."
                   value={formData.link}
@@ -550,7 +552,7 @@ export default function AdminTasksPage() {
                 />
               </div>
               <div className="space-y-2">
-                <Label>Tarih</Label>
+                <Label>{t('adminTasks.dueDate')}</Label>
                 <Input
                   type="date"
                   value={formData.dueDate}
@@ -560,8 +562,8 @@ export default function AdminTasksPage() {
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setShowEditDialog(false)}>İptal</Button>
-            <Button onClick={handleUpdate} disabled={!formData.title.trim()}>Kaydet</Button>
+            <Button variant="outline" onClick={() => setShowEditDialog(false)}>{t('adminTasks.cancel')}</Button>
+            <Button onClick={handleUpdate} disabled={!formData.title.trim()}>{t('adminTasks.save')}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

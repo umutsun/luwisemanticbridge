@@ -17,6 +17,7 @@ crawl4ai==0.3.0
 psycopg[binary,pool]==3.1.13
 asyncpg==0.29.0
 pgvector==0.2.3
+neo4j==5.28.0
 
 # pgai - Automatic Embeddings (will be installed separately)
 # pgai==0.2.0
@@ -49,11 +50,11 @@ lxml==4.9.3
 PyPDF2==3.0.1
 
 # LLM Support
-openai==1.3.7
-anthropic==0.7.7
-google-generativeai==0.8.0
-langchain==0.0.345
-langchain-openai==0.0.5
+openai>=1.50.0
+anthropic>=0.35.0
+google-generativeai>=0.8.0
+langchain>=0.3.0
+langchain-openai>=0.2.0
 
 # Speech-to-Text - OpenAI Whisper (DISABLED: Heavy dependencies)
 # openai-whisper==20231117

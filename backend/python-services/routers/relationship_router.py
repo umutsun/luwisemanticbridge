@@ -18,6 +18,7 @@ from models.relationship_models import (
     ChunkRelationshipsResponse,
     RelatedChunksResponse,
     ExtractionStatsResponse,
+    CleanupRequest,
 )
 
 router = APIRouter()
@@ -171,6 +172,25 @@ async def get_extraction_stats():
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@router.post("/sync-neo4j")
+async def sync_to_neo4j():
+    """
+    Trigger a manual synchronization of PostgreSQL graph data to Neo4j.
+    Runs in the background (fire and forget for now, or use a task ID if complex).
+    """
+    try:
+        from scripts.sync_graph_to_neo4j import main as run_sync
+        import asyncio
+        
+        # Run sync in background to avoid timeout
+        asyncio.create_task(run_sync())
+        
+        return {"message": "Neo4j synchronization started in background"}
+    except Exception as e:
+        logger.error(f"[RelRouter] Neo4j sync trigger failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @router.get("/graph-data")
 async def get_graph_data():
     """
@@ -183,4 +203,21 @@ async def get_graph_data():
         return result
     except Exception as e:
         logger.error(f"[RelRouter] Get graph data failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/cleanup")
+async def cleanup_deleted_chunks(request: CleanupRequest):
+    """
+    Remove chunks from Neo4j that have been deleted from PostgreSQL.
+    """
+    try:
+        from services.neo4j_service import neo4j_service
+        await neo4j_service.cleanup_deleted_chunks(
+            workspace_id=request.workspace_id,
+            chunk_ids=request.chunk_ids,
+        )
+        return {"success": True, "message": f"Deleted {len(request.chunk_ids)} chunks from Neo4j"}
+    except Exception as e:
+        logger.error(f"[RelRouter] Cleanup failed: {e}")
         raise HTTPException(status_code=500, detail=str(e))

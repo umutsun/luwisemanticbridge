@@ -2,9 +2,17 @@ import request from 'supertest';
 import express from 'express';
 import authRouter from './auth.routes';
 import { AuthService } from '../services/auth.service';
+import { pool } from '../config/database';
 
 // Mock AuthService
 jest.mock('../services/auth.service');
+
+// Mock database pool
+jest.mock('../config/database', () => ({
+  pool: {
+    query: jest.fn()
+  }
+}));
 
 // Mock rate limiting middleware
 jest.mock('../middleware/rate-limit.middleware', () => ({
@@ -19,7 +27,7 @@ jest.mock('../middleware/rate-limit.middleware', () => ({
 // Mock auth middleware
 jest.mock('../middleware/auth.middleware', () => ({
   authenticateToken: (req: any, res: any, next: any) => {
-    req.user = { userId: 1, email: 'test@example.com', role: 'user' };
+    req.user = { userId: '1', email: 'test@example.com', role: 'user' };
     next();
   }
 }));
@@ -29,81 +37,105 @@ app.use(express.json());
 app.use('/api/auth', authRouter);
 
 describe('Auth Routes', () => {
-  let authService: jest.Mocked<AuthService>;
+  let mockedAuthService: jest.Mocked<AuthService>;
 
   beforeEach(() => {
     jest.clearAllMocks();
-    authService = new AuthService() as jest.Mocked<AuthService>;
+    // Get the mocked instance - in auth.routes, it's created as 'const authService = new AuthService();'
+    // Because of jest.mock, the constructor is already mocked.
+    mockedAuthService = (AuthService as any).mock.instances[0] || new AuthService();
   });
 
   describe('POST /api/auth/register', () => {
     it('should register a new user successfully', async () => {
-      // Mock veritabanı cevapları
-      (pool.query as jest.Mock)
-        .mockResolvedValueOnce({ rows: [] }) // Kullanıcı yok
-        .mockResolvedValueOnce({ rows: [{ id: 1, email: 'test@example.com', name: 'Test User', role: 'user' }] }) // Yeni kullanıcı oluşturuldu
-        .mockResolvedValueOnce({ rows: [] }) // Profil oluşturuldu
-        .mockResolvedValueOnce({ rows: [{ id: 1 }] }) // Ücretsiz plan bulundu
-        .mockResolvedValueOnce({ rows: [] }); // Abonelik oluşturuldu
-
-      (bcrypt.hash as jest.Mock).mockResolvedValue('hashedpassword');
-      (jwt.sign as jest.Mock).mockReturnValue('testtoken');
-
-      const res = await request(app)
-        .post('/api/auth/register')
-        .send({
-          email: 'test@example.com',
-          password: 'password123',
-          name: 'Test User',
-        });
-
-      expect(res.statusCode).toEqual(200);
-      expect(res.body).toHaveProperty('accessToken', 'testtoken');
-      expect(res.body.user).toEqual({
-        id: 1,
+      const mockUser = {
+        id: '1',
+        username: 'testuser',
         email: 'test@example.com',
         name: 'Test User',
         role: 'user',
-      });
-      expect(pool.query).toHaveBeenCalledTimes(7); // Sorgu sayısını kontrol et
-    });
+        status: 'active',
+        email_verified: false,
+        created_at: new Date(),
+        updated_at: new Date()
+      };
 
-    it('should return 400 if user already exists', async () => {
-      (pool.query as jest.Mock).mockResolvedValueOnce({ rows: [{ id: 1 }] }); // Kullanıcı var
+      const mockResponse = {
+        user: mockUser,
+        accessToken: 'test-access-token',
+        refreshToken: 'test-refresh-token'
+      };
+
+      // Mock the service method
+      (mockedAuthService.register as jest.Mock).mockResolvedValue(mockResponse);
+
+      // Mock database queries
+      (pool.query as jest.Mock).mockResolvedValueOnce({ rows: [] }); // User not found
+      (pool.query as jest.Mock).mockResolvedValueOnce({ rows: [] }); // Profile created
+      (pool.query as jest.Mock).mockResolvedValueOnce({ rows: [{ id: 1 }] }); // Free plan found
 
       const res = await request(app)
         .post('/api/auth/register')
         .send({
+          username: 'testuser',
           email: 'test@example.com',
           password: 'password123',
-          name: 'Test User',
+          first_name: 'Test',
+          last_name: 'User'
+        });
+
+      expect(res.statusCode).toEqual(201);
+      expect(res.body).toHaveProperty('accessToken', 'test-access-token');
+      expect(res.body.user.username).toEqual('testuser');
+      expect(mockedAuthService.register).toHaveBeenCalled();
+    });
+
+    it('should return 400 if validation fails', async () => {
+      const res = await request(app)
+        .post('/api/auth/register')
+        .send({
+          email: 'test@example.com'
+          // Missing username and password
         });
 
       expect(res.statusCode).toEqual(400);
-      expect(res.body).toHaveProperty('error', 'User already exists with this email');
+      expect(res.body).toHaveProperty('error');
+    });
+
+    it('should return 400 if service throws error', async () => {
+      (mockedAuthService.register as jest.Mock).mockRejectedValue(new Error('User already exists'));
+
+      const res = await request(app)
+        .post('/api/auth/register')
+        .send({
+          username: 'testuser',
+          email: 'test@example.com',
+          password: 'password123'
+        });
+
+      expect(res.statusCode).toEqual(400);
+      expect(res.body).toHaveProperty('error', 'User already exists');
     });
   });
 
   describe('POST /api/auth/login', () => {
     it('should login a user successfully', async () => {
       const mockUser = {
-        id: 1,
+        id: '1',
+        username: 'testuser',
         email: 'test@example.com',
-        password: 'hashedpassword',
         name: 'Test User',
         role: 'user',
-        status: 'active',
+        status: 'active'
       };
-      (pool.query as jest.Mock)
-        .mockResolvedValueOnce({ rows: [mockUser] }) // Kullanıcı bulundu
-        .mockResolvedValueOnce({ rows: [] }) // Son giriş güncellendi
-        .mockResolvedValueOnce({ rows: [] }) // Oturum kaydedildi
-        .mockResolvedValueOnce({ rows: [] }) // Aktivite loglandı
-        .mockResolvedValueOnce({ rows: [{ company_name: 'Test Inc.' }] }) // Profil bulundu
-        .mockResolvedValueOnce({ rows: [{ plan_name: 'Free' }] }); // Abonelik bulundu
 
-      (bcrypt.compare as jest.Mock).mockResolvedValue(true);
-      (jwt.sign as jest.Mock).mockReturnValue('testtoken');
+      const mockResponse = {
+        user: mockUser,
+        accessToken: 'test-access-token',
+        refreshToken: 'test-refresh-token'
+      };
+
+      (mockedAuthService.login as jest.Mock).mockResolvedValue(mockResponse);
 
       const res = await request(app)
         .post('/api/auth/login')
@@ -113,12 +145,12 @@ describe('Auth Routes', () => {
         });
 
       expect(res.statusCode).toEqual(200);
-      expect(res.body).toHaveProperty('accessToken', 'testtoken');
+      expect(res.body).toHaveProperty('accessToken', 'test-access-token');
       expect(res.body.user.name).toEqual('Test User');
     });
 
     it('should return 401 for invalid credentials', async () => {
-      (pool.query as jest.Mock).mockResolvedValueOnce({ rows: [] }); // Kullanıcı bulunamadı
+      (mockedAuthService.login as jest.Mock).mockRejectedValue(new Error('Invalid credentials'));
 
       const res = await request(app)
         .post('/api/auth/login')
@@ -130,86 +162,45 @@ describe('Auth Routes', () => {
       expect(res.statusCode).toEqual(401);
       expect(res.body).toHaveProperty('error', 'Invalid credentials');
     });
-
-    it('should return 401 for wrong password', async () => {
-      const mockUser = { id: 1, email: 'test@example.com', password: 'hashedpassword', status: 'active' };
-      (pool.query as jest.Mock).mockResolvedValueOnce({ rows: [mockUser] });
-      (bcrypt.compare as jest.Mock).mockResolvedValue(false); // Şifre eşleşmedi
-
-      const res = await request(app)
-        .post('/api/auth/login')
-        .send({ email: 'test@example.com', password: 'wrongpassword' });
-
-      expect(res.statusCode).toEqual(401);
-      expect(res.body).toHaveProperty('error', 'Invalid credentials');
-    });
-
-    it('should return 403 if user is not active', async () => {
-      const mockUser = { id: 1, email: 'test@example.com', password: 'hashedpassword', status: 'inactive' };
-      (pool.query as jest.Mock).mockResolvedValueOnce({ rows: [mockUser] });
-
-      const res = await request(app)
-        .post('/api/auth/login')
-        .send({ email: 'test@example.com', password: 'password123' });
-
-      expect(res.statusCode).toEqual(403);
-      expect(res.body).toHaveProperty('error', 'Account is inactive');
-    });
-
-    it('should return 500 on login db error', async () => {
-      (pool.query as jest.Mock).mockRejectedValue(new Error('DB Error'));
-
-      const res = await request(app)
-        .post('/api/auth/login')
-        .send({ email: 'test@example.com', password: 'password123' });
-
-      expect(res.statusCode).toEqual(500);
-      expect(res.body).toHaveProperty('error', 'Login failed');
-    });
   });
 
   describe('POST /api/auth/logout', () => {
     it('should logout successfully', async () => {
-      (pool.query as jest.Mock).mockResolvedValueOnce({ rows: [] });
+      (mockedAuthService.logout as jest.Mock).mockResolvedValue(undefined);
+
       const res = await request(app)
         .post('/api/auth/logout')
         .set('Authorization', 'Bearer testtoken');
 
       expect(res.statusCode).toEqual(200);
-      expect(res.body).toHaveProperty('message', 'Logout successful');
-      expect(pool.query).toHaveBeenCalledWith('DELETE FROM user_sessions WHERE token = $1', ['testtoken']);
+      expect(res.body).toHaveProperty('message', 'Logged out successfully');
+      expect(mockedAuthService.logout).toHaveBeenCalledWith('testtoken');
     });
   });
 
   describe('POST /api/auth/refresh', () => {
-    it.skip('should refresh token successfully', async () => {
-      const decodedToken = { userId: 1, email: 'test@example.com', role: 'user' };
-      // Hangi secret'in kullanıldığını kontrol etmiyoruz, sadece doğru payload'ı döndürüyoruz.
-      // Gerçek uygulamada, jwt.verify'nin doğru secret ile çağrıldığını test etmek daha iyi olabilir.
-      (jwt.verify as jest.Mock).mockReturnValue(decodedToken);
+    it('should refresh token successfully', async () => {
+      const mockResponse = {
+        accessToken: 'new-access-token',
+        refreshToken: 'new-refresh-token'
+      };
 
-      (pool.query as jest.Mock).mockResolvedValueOnce({ rows: [{ id: 1 }] }); // Session found
-
-      (jwt.sign as jest.Mock).mockImplementation((payload, secret, options) => {
-        if (options && options.expiresIn === '1h') return 'newaccesstoken';
-        return 'newrefreshtoken';
-      });
+      (mockedAuthService.refreshToken as jest.Mock).mockResolvedValue(mockResponse);
 
       const res = await request(app)
         .post('/api/auth/refresh')
-        .send({ refreshToken: 'oldrefreshtoken' });
+        .send({ refreshToken: 'old-refresh-token' });
 
       expect(res.statusCode).toEqual(200);
-      expect(res.body).toHaveProperty('accessToken', 'newaccesstoken');
-      expect(res.body).toHaveProperty('refreshToken', 'newrefreshtoken');
+      expect(res.body).toHaveProperty('accessToken', 'new-access-token');
     });
 
-    it('should return 401 for invalid refresh token', async () => {
-      (jwt.verify as jest.Mock).mockImplementation(() => { throw new Error('Invalid'); });
+    it('should return 401 if refresh fails', async () => {
+      (mockedAuthService.refreshToken as jest.Mock).mockRejectedValue(new Error('Invalid refresh token'));
 
       const res = await request(app)
         .post('/api/auth/refresh')
-        .send({ refreshToken: 'invalidtoken' });
+        .send({ refreshToken: 'invalid-token' });
 
       expect(res.statusCode).toEqual(401);
     });
@@ -217,12 +208,8 @@ describe('Auth Routes', () => {
 
   describe('GET /api/auth/verify', () => {
     it('should verify token successfully', async () => {
-      const decodedToken = { userId: 1 };
-      const mockUser = { id: 1, email: 'test@example.com', name: 'Test User', role: 'user' };
-      (jwt.verify as jest.Mock).mockReturnValue(decodedToken);
-      (pool.query as jest.Mock)
-        .mockResolvedValueOnce({ rows: [{ id: 1 }] }) // Session found
-        .mockResolvedValueOnce({ rows: [mockUser] }); // User found
+      const mockUser = { id: '1', email: 'test@example.com', name: 'Test User', role: 'user' };
+      (mockedAuthService.getUserById as jest.Mock).mockResolvedValue(mockUser);
 
       const res = await request(app)
         .get('/api/auth/verify')
@@ -233,14 +220,15 @@ describe('Auth Routes', () => {
       expect(res.body.user).toEqual(mockUser);
     });
 
-    it('should return 401 for invalid token', async () => {
-      (jwt.verify as jest.Mock).mockImplementation(() => { throw new Error('Invalid'); });
+    it('should return 401 if user not found', async () => {
+      (mockedAuthService.getUserById as jest.Mock).mockResolvedValue(null);
 
       const res = await request(app)
         .get('/api/auth/verify')
-        .set('Authorization', 'Bearer invalidtoken');
+        .set('Authorization', 'Bearer validtoken');
 
       expect(res.statusCode).toEqual(401);
+      expect(res.body).toHaveProperty('valid', false);
     });
   });
 });

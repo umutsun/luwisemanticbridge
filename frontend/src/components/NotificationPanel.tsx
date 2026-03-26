@@ -16,6 +16,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { useNotifications } from '@/hooks/useNotifications';
 import { cn } from '@/lib/utils';
+import { useTranslation } from 'react-i18next';
 
 export function NotificationPanel() {
   const {
@@ -27,6 +28,7 @@ export function NotificationPanel() {
     deleteNotification,
     clearAll
   } = useNotifications();
+  const { t } = useTranslation();
 
   const getIcon = (type: string) => {
     const cls = "h-4 w-4";
@@ -41,12 +43,12 @@ export function NotificationPanel() {
 
   const timeAgo = (ts: string) => {
     const diff = Date.now() - new Date(ts).getTime();
-    const m = Math.floor(diff / 60000);
-    if (m < 1) return 'şimdi';
-    if (m < 60) return `${m} dk`;
+    const m = Math.floor(diff / 1000 / 60);
+    if (m < 1) return t('notifications.now');
+    if (m < 60) return `${m} ${t('notifications.mins')}`;
     const h = Math.floor(m / 60);
-    if (h < 24) return `${h} sa`;
-    return `${Math.floor(h / 24)} gün`;
+    if (h < 24) return `${h} ${t('notifications.hours')}`;
+    return `${Math.floor(h / 24)} ${t('notifications.days')}`;
   };
 
   return (
@@ -68,7 +70,7 @@ export function NotificationPanel() {
       <DropdownMenuContent align="end" className="w-[340px]">
         {/* Header */}
         <div className="flex items-center justify-between px-3 py-2 border-b">
-          <span className="text-sm font-medium">Bildirimler</span>
+          <span className="text-sm font-medium">{t('notifications.title')}</span>
           <div className="flex items-center gap-1">
             {unreadCount > 0 && (
               <Button
@@ -78,7 +80,7 @@ export function NotificationPanel() {
                 className="h-6 px-2 text-xs"
               >
                 <CheckCheck className="h-3 w-3 mr-1" />
-                Oku
+                {t('notifications.read')}
               </Button>
             )}
             {notifications.length > 0 && (
@@ -89,7 +91,7 @@ export function NotificationPanel() {
                 className="h-6 px-2 text-xs text-muted-foreground hover:text-red-500"
               >
                 <Trash2 className="h-3 w-3 mr-1" />
-                Temizle
+                {t('notifications.clearAll')}
               </Button>
             )}
           </div>
@@ -100,7 +102,7 @@ export function NotificationPanel() {
           {notifications.length === 0 ? (
             <div className="py-8 text-center text-muted-foreground">
               <Bell className="h-8 w-8 mx-auto mb-2 opacity-20" />
-              <p className="text-sm">Bildirim yok</p>
+              <p className="text-sm">{t('notifications.noNotifications')}</p>
             </div>
           ) : (
             notifications.map((n) => (
@@ -149,7 +151,7 @@ export function NotificationPanel() {
             <DropdownMenuSeparator />
             <div className="px-3 py-2 text-xs text-yellow-600 dark:text-yellow-500 flex items-center gap-2">
               <span className="h-2 w-2 bg-yellow-500 rounded-full animate-pulse" />
-              Bağlantı kuruluyor...
+              {t('notifications.connecting')}
             </div>
           </>
         )}

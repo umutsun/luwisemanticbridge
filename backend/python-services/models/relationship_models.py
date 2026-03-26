@@ -239,3 +239,9 @@ class LLMExtractionResponse(BaseModel):
     """Expected JSON structure from LLM extraction call"""
     entities: List[EntityResult] = []
     references: List[ReferenceResult] = []
+
+
+class CleanupRequest(BaseModel):
+    """Request to remove chunks from Neo4j after deletion from PG"""
+    workspace_id: str
+    chunk_ids: List[int]

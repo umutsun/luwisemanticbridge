@@ -75,6 +75,11 @@ export const API_CONFIG = {
     // Chatbot settings
     chatbotSettings: '/api/v2/chatbot/settings',
 
+    // Relationships & Knowledge Graph
+    relationships: '/api/v2/relationships',
+    relationshipsStats: '/api/v2/relationships/stats',
+    relationshipsGraph: '/api/v2/relationships/graph-data',
+
     // GraphQL
     graphql: '/api/graphql'
   }

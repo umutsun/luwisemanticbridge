@@ -8,9 +8,9 @@ module.exports = {
       interpreter_args: '-r dotenv/config -r ts-node/register',
       env: {
         NODE_ENV: 'development',
-        PORT: 8080,
+        PORT: 8083,
         ENABLE_WEBSOCKET: 'true',
-        WEBSOCKET_PORT: '8080',
+        WEBSOCKET_PORT: '8083',
         WEBSOCKET_PATH: '/socket.io',
         dotenv_config_path: '../.env.lsemb'
       },
@@ -50,8 +50,8 @@ module.exports = {
       cwd: 'c:/xampp/htdocs/lsemb/backend/python-services',
       interpreter: 'C:/Users/umut.demirci/AppData/Local/Programs/Python/Python313/python.exe',
       env: {
-        PORT: 8002,
-        PYTHON_SERVICE_PORT: '8002',
+        PORT: 8004,
+        PYTHON_SERVICE_PORT: '8004',
         PYTHONUNBUFFERED: '1',
         PYTHON_ENV: 'production'
       },

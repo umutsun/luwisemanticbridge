@@ -15,6 +15,7 @@ import importJobService from '../services/import-job.service';
 import * as iconv from 'iconv-lite';
 import * as jschardet from 'jschardet';
 import * as ExcelJS from 'exceljs';
+import { pythonService } from '../services/python-integration.service';
 
 /**
  * Strip BOM (Byte Order Mark) from buffer
@@ -1840,8 +1841,16 @@ router.post('/bulk-delete', authenticateToken, async (req: AuthenticatedRequest,
 router.delete('/:id', authenticateToken, async (req: AuthenticatedRequest, res: Response) => {
   try {
     const { id } = req.params;
+    const workspaceId = req.user?.workspace_id || 'lsemb';
 
-    // Delete from database only (physical file remains on disk)
+    // 1. Get associated chunk IDs from document_embeddings before deletion for Neo4j cleanup
+    const chunkIdsResult = await lsembPool.query(
+      'SELECT id FROM document_embeddings WHERE document_id = $1',
+      [id]
+    );
+    const chunkIds = chunkIdsResult.rows.map(row => row.id);
+
+    // 2. Delete from database (document_embeddings and other dependent tables will be deleted via ON DELETE CASCADE)
     const result = await lsembPool.query(
       'DELETE FROM documents WHERE id = $1 RETURNING id, file_path',
       [id]
@@ -1851,11 +1860,19 @@ router.delete('/:id', authenticateToken, async (req: AuthenticatedRequest, res: 
       return res.status(404).json({ error: 'Document not found' });
     }
 
+    // 3. Trigger Neo4j garbage collection for the orphaned chunks via Python microservice (async, best-effort)
+    if (chunkIds.length > 0) {
+      pythonService.cleanupNeo4jChunks(workspaceId, chunkIds).catch(err => {
+        console.error('Failed to trigger Neo4j cleanup:', err);
+      });
+    }
+
     res.json({
       success: true,
-      message: 'Document deleted from database (physical file preserved)',
+      message: 'Document deleted from database (physical file preserved and Neo4j cleanup triggered)',
       deletedId: result.rows[0].id,
-      preservedFile: result.rows[0].file_path
+      preservedFile: result.rows[0].file_path,
+      chunksCleanedCount: chunkIds.length
     });
   } catch (error) {
     console.error('Error deleting document:', error);

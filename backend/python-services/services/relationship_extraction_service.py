@@ -22,6 +22,7 @@ from loguru import logger
 
 from services.database import get_db
 from services.redis_client import cache_get, cache_set, get_redis
+from services.neo4j_service import neo4j_service
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -262,6 +263,41 @@ class RelationshipExtractionService:
         # Store in DB
         entities_stored = await self._store_entities(chunk_id, entities)
         relationships_stored = await self._store_relationships(chunk_id, references)
+
+        # ─────────────────────────────────────────────────────────────
+        # NEO4J INTEGRATION: Push to Knowledge Graph (Isolated by workspace_id)
+        # ─────────────────────────────────────────────────────────────
+        try:
+            # 1. Ensure Chunk exists in Neo4j
+            await neo4j_service.upsert_chunk_node(workspace_id, chunk_id, content, metadata or {})
+            
+            # 2. Add Entities
+            for entity in entities:
+                await neo4j_service.add_entity(workspace_id, chunk_id, entity.get("type", "concept"), entity.get("value", ""))
+            
+            # 3. Add Relationships
+            for ref in references:
+                target_law = ref.get("target_law")
+                target_article = ref.get("target_article")
+                rel_type = ref.get("type", "references")
+                target_ref = f"{target_law} Madde {target_article}" if target_law and target_article else ref.get("context", "")[:100]
+                
+                # Try to resolve target_chunk_id (similar to PG storage)
+                target_chunk_id = None
+                if target_law and target_article:
+                    pool = await get_db()
+                    target_chunk_id = await pool.fetchval("""
+                        SELECT id FROM unified_embeddings 
+                        WHERE metadata->>'law_code' = $1 AND metadata->>'article_number' = $2 LIMIT 1
+                    """, target_law, str(target_article))
+                
+                await neo4j_service.add_relationship(
+                    workspace_id, chunk_id, target_chunk_id, rel_type, target_ref, target_law, str(target_article) if target_article else None
+                )
+                
+            logger.info(f"🕸️ Knowledge Graph: Pushed chunk {chunk_id} to Neo4j (Workspace: {workspace_id})")
+        except Exception as e:
+            logger.warning(f"🕸️ Knowledge Graph: Failed to push to Neo4j for chunk {chunk_id}: {e}")
 
         elapsed = (time.time() - start_time) * 1000
 
@@ -810,6 +846,10 @@ class RelationshipExtractionService:
             elif target_id and dry_run:
                 resolved_count += 1
 
+        if not dry_run and resolved_count > 0:
+            workspace_id = os.getenv("TENANT_ID", "default")
+            await neo4j_service.resolve_references(workspace_id)
+
         still_unresolved = total_unresolved - resolved_count
 
         return {
@@ -964,13 +1004,45 @@ class RelationshipExtractionService:
         """
         Bulk load relationships for multiple chunks in a single query.
         Used by semantic_search_service during scoring phase.
-        Returns {chunk_id: [relationships]}.
+        Prioritizes Neo4j if available, falls back to PostgreSQL.
         """
         if not chunk_ids:
             return {}
 
-        pool = await get_db()
+        # 1. Try Neo4j first
+        try:
+            settings = await self._get_settings()
+            graph_enabled = settings.get('neo4jEnabled', 'true').lower() == 'true'
+            
+            if graph_enabled and neo4j_service.driver:
+                workspace_id = os.getenv("TENANT_ID", "default")
+                cypher = """
+                MATCH (s:Chunk)-[r]->(t:Chunk)
+                WHERE s.id IN $chunk_ids AND s.workspace_id = $workspace_id AND t.workspace_id = $workspace_id
+                RETURN s.id as source_chunk_id, t.id as target_chunk_id, 
+                       type(r) as relationship_type, coalesce(r.confidence, 0.8) as confidence
+                ORDER BY confidence DESC
+                """
+                records = await neo4j_service.run_query(cypher, {"chunk_ids": chunk_ids, "workspace_id": workspace_id})
+                
+                if records:
+                    result: Dict[int, List[Dict]] = {}
+                    for row in records:
+                        src_id = row['source_chunk_id']
+                        if src_id not in result:
+                            result[src_id] = []
+                        result[src_id].append({
+                            "target_chunk_id": row['target_chunk_id'],
+                            "relationship_type": row['relationship_type'],
+                            "confidence": float(row['confidence']),
+                        })
+                    logger.debug(f"🕸️ Neo4j: Loaded graph data for {len(result)} chunks via Cypher")
+                    return result
+        except Exception as e:
+            logger.warning(f"🕸️ Neo4j: Graph load failed, falling back to PG: {e}")
 
+        # 2. Fallback to PostgreSQL
+        pool = await get_db()
         rows = await pool.fetch("""
             SELECT
                 cr.source_chunk_id,
@@ -1002,33 +1074,62 @@ class RelationshipExtractionService:
     # ─────────────────────────────────────────────────────────────────
 
     async def get_stats(self) -> Dict[str, Any]:
-        """Get overall extraction statistics."""
+        """Get overall extraction statistics. Including Neo4j if available."""
         pool = await get_db()
+        workspace_id = os.getenv("TENANT_ID", "default")
 
+        # 1. Get PG Stats
         total_chunks = await pool.fetchval("SELECT COUNT(*) FROM unified_embeddings")
-        chunks_with_rels = await pool.fetchval(
+        pg_chunks_with_rels = await pool.fetchval(
             "SELECT COUNT(DISTINCT source_chunk_id) FROM chunk_relationships"
         )
-        chunks_with_entities = await pool.fetchval(
-            "SELECT COUNT(DISTINCT chunk_id) FROM chunk_entities"
-        )
-        total_rels = await pool.fetchval("SELECT COUNT(*) FROM chunk_relationships")
-        total_entities = await pool.fetchval("SELECT COUNT(*) FROM chunk_entities")
+        pg_total_rels = await pool.fetchval("SELECT COUNT(*) FROM chunk_relationships")
+        pg_total_entities = await pool.fetchval("SELECT COUNT(*) FROM chunk_entities")
+        
+        # 2. Get Neo4j Stats if available
+        neo4j_rels = 0
+        neo4j_entities = 0
+        neo4j_active = False
+        
+        if neo4j_service.driver:
+            try:
+                # Count Relationships
+                rel_q = "MATCH (s:Chunk)-[r]->(t:Chunk) WHERE s.workspace_id = $wid RETURN count(r) as cnt"
+                rel_res = await neo4j_service.run_query(rel_q, {"wid": workspace_id})
+                if rel_res: neo4j_rels = rel_res[0]['cnt']
+                
+                # Count Entities (Reference nodes in our schema)
+                ent_q = "MATCH (n:Reference) WHERE n.workspace_id = $wid RETURN count(n) as cnt"
+                ent_res = await neo4j_service.run_query(ent_q, {"wid": workspace_id})
+                if ent_res: neo4j_entities = ent_res[0]['cnt']
+                
+                neo4j_active = True
+            except Exception as e:
+                logger.warning(f"Failed to fetch stats from Neo4j: {e}")
+
+        # Use the higher value or Neo4j value if active
+        total_rels = max(pg_total_rels, neo4j_rels)
+        total_entities = max(pg_total_entities, neo4j_entities)
+        chunks_with_rels = pg_chunks_with_rels # Neo4j doesn't easily store "chunks with rels" without complex query
+        
         unresolved = await pool.fetchval(
             "SELECT COUNT(*) FROM chunk_relationships WHERE target_chunk_id IS NULL AND target_law_code IS NOT NULL"
         )
 
-        # Relationships by type
+        # Extra data for visualization
         rel_rows = await pool.fetch(
             "SELECT relationship_type, COUNT(*) as cnt FROM chunk_relationships GROUP BY relationship_type"
         )
         rels_by_type = {r['relationship_type']: r['cnt'] for r in rel_rows}
 
-        # Entities by type
         ent_rows = await pool.fetch(
             "SELECT entity_type, COUNT(*) as cnt FROM chunk_entities GROUP BY entity_type"
         )
         ents_by_type = {r['entity_type']: r['cnt'] for r in ent_rows}
+
+        chunks_with_entities = await pool.fetchval(
+            "SELECT COUNT(DISTINCT chunk_id) FROM chunk_entities"
+        )
 
         # Active jobs
         active_jobs = await pool.fetchval(
@@ -1051,10 +1152,59 @@ class RelationshipExtractionService:
         }
 
     async def get_graph_data(self) -> Dict[str, Any]:
-        """Get cross-table relationship data for dashboard graph visualization."""
-        pool = await get_db()
+        """Get cross-table relationship data for dashboard graph visualization. Priority: Neo4j."""
+        workspace_id = os.getenv("TENANT_ID", "default")
+        
+        # ─────────────────────────────────────────────────────────────
+        # 1. Try Neo4j for high-fidelity Knowledge Graph
+        # ─────────────────────────────────────────────────────────────
+        if neo4j_service.driver:
+            try:
+                # Aggregate relationships between source_tables (or Law codes)
+                cypher = """
+                MATCH (s:Chunk)-[r]->(t:Chunk)
+                WHERE s.workspace_id = $workspace_id AND t.workspace_id = $workspace_id
+                RETURN s.law_code as source, t.law_code as target, 
+                       type(r) as type, count(*) as count
+                ORDER BY count DESC
+                """
+                records = await neo4j_service.run_query(cypher, {"workspace_id": workspace_id})
+                
+                if records:
+                    nodes_dict = {}
+                    edges = []
+                    
+                    for row in records:
+                        src = row['source'] or "General"
+                        tgt = row['target'] or "General"
+                        
+                        if src not in nodes_dict:
+                            nodes_dict[src] = {"id": src, "label": src, "val": 1}
+                        if tgt not in nodes_dict:
+                            nodes_dict[tgt] = {"id": tgt, "label": tgt, "val": 1}
+                            
+                        nodes_dict[src]["val"] += 1
+                        nodes_dict[tgt]["val"] += 1
+                        
+                        edges.append({
+                            "source": src,
+                            "target": tgt,
+                            "type": row['type'],
+                            "count": row['count']
+                        })
+                    
+                    return {
+                        "nodes": list(nodes_dict.values()), 
+                        "edges": edges,
+                        "engine": "neo4j"
+                    }
+            except Exception as e:
+                logger.warning(f"🕸️ Knowledge Graph: Failed to fetch dashboard graph from Neo4j: {e}")
 
-        # Nodes: source tables with chunk and entity counts
+        # ─────────────────────────────────────────────────────────────
+        # 2. Fallback to PostgreSQL (Simplified Stats)
+        # ─────────────────────────────────────────────────────────────
+        pool = await get_db()
         node_rows = await pool.fetch("""
             SELECT ue.source_table,
                    COUNT(DISTINCT ue.id) as chunk_count,
@@ -1069,13 +1219,13 @@ class RelationshipExtractionService:
             {
                 "id": row['source_table'],
                 "label": row['source_table'].replace('csv_', '').replace('vergilex_', ''),
+                "val": row['chunk_count'], 
                 "chunk_count": row['chunk_count'],
                 "entity_count": row['entity_count'],
             }
             for row in node_rows
         ]
 
-        # Edges: cross-table relationships (only resolved ones)
         edge_rows = await pool.fetch("""
             SELECT src.source_table as source, tgt.source_table as target,
                    cr.relationship_type, COUNT(*) as count
@@ -1097,7 +1247,332 @@ class RelationshipExtractionService:
             for row in edge_rows
         ]
 
-        return {"nodes": nodes, "edges": edges}
+        return {"nodes": nodes, "edges": edges, "engine": "postgresql"}
+
+    # ─────────────────────────────────────────────────────────────────
+    # Optimized Batch Processing
+    # ─────────────────────────────────────────────────────────────────
+
+    async def extract_batch_optimized(
+        self,
+        source_table: Optional[str] = None,
+        source_type: Optional[str] = None,
+        limit: int = 50,
+        offset: int = 0,
+        force_reprocess: bool = False
+    ) -> Dict[str, Any]:
+        """
+        Optimized batch extraction with parallel processing.
+        Returns immediate results (not background job).
+        
+        Args:
+            source_table: Source table to extract from
+            source_type: Source type to filter by
+            limit: Maximum number of chunks to process
+            offset: Offset for pagination
+            force_reprocess: Force reprocess even if already extracted
+        
+        Returns:
+            Dictionary with extraction results
+        """
+        start_time = time.time()
+        
+        # 1. Batch fetch
+        pool = await get_db()
+        query = """
+        SELECT id, content, metadata, source_table, source_type
+        FROM unified_embeddings
+        WHERE content IS NOT NULL AND content != ''
+        """
+        params = []
+        param_count = 0
+        
+        if source_table:
+            query += f" AND source_table = ${param_count + 1}"
+            params.append(source_table)
+            param_count += 1
+        
+        if source_type:
+            query += f" AND source_type = ${param_count + 1}"
+            params.append(source_type)
+            param_count += 1
+        
+        if not force_reprocess:
+            query += """
+            AND id NOT IN (SELECT DISTINCT chunk_id FROM chunk_entities)
+            """
+        
+        query += " ORDER BY id LIMIT $1 OFFSET $2"
+        params.extend([limit, offset])
+        
+        rows = await pool.fetch(query, *params)
+        
+        if not rows:
+            return {
+                "job_id": str(uuid.uuid4()),
+                "total": 0,
+                "success": 0,
+                "failed": 0,
+                "results": [],
+                "status": "completed",
+                "extraction_time_ms": 0
+            }
+        
+        # 2. Parallel extraction
+        tasks = [
+            self.extract_from_chunk(
+                chunk_id=row['id'],
+                content=row['content'],
+                metadata=json.loads(row['metadata']) if row['metadata'] else {},
+                source_table=row['source_table'],
+                source_type=row['source_type']
+            )
+            for row in rows
+        ]
+        
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+        
+        # 3. Process results
+        success_count = sum(1 for r in results if not isinstance(r, Exception))
+        failed_count = len(results) - success_count
+        total_time = (time.time() - start_time) * 1000
+        
+        # 4. Calculate statistics
+        avg_entities = sum(
+            r.get('entities_stored', 0)
+            for r in results
+            if not isinstance(r, Exception)
+        ) / success_count if success_count > 0 else 0
+        
+        avg_references = sum(
+            r.get('relationships_stored', 0)
+            for r in results
+            if not isinstance(r, Exception)
+        ) / success_count if success_count > 0 else 0
+        
+        avg_time = sum(
+            r.get('extraction_time_ms', 0)
+            for r in results
+            if not isinstance(r, Exception)
+        ) / success_count if success_count > 0 else 0
+        
+        return {
+            "job_id": str(uuid.uuid4()),
+            "total": len(rows),
+            "success": success_count,
+            "failed": failed_count,
+            "results": results,
+            "status": "completed",
+            "extraction_time_ms": round(total_time, 1),
+            "avg_entities_per_chunk": round(avg_entities, 1),
+            "avg_references_per_chunk": round(avg_references, 1),
+            "avg_extraction_time_ms": round(avg_time, 1)
+        }
+
+    # ─────────────────────────────────────────────────────────────────
+    # Dynamic Confidence Threshold
+    # ─────────────────────────────────────────────────────────────────
+
+    async def _get_dynamic_confidence_threshold(self, workspace_id: str) -> float:
+        """
+        Get dynamic confidence threshold based on workspace data quality.
+        
+        Args:
+            workspace_id: Workspace ID for filtering
+        
+        Returns:
+            Dynamic confidence threshold (0.5 - 0.95)
+        """
+        settings = await self._get_settings()
+        base_threshold = float(settings.get('confidenceThreshold', DEFAULT_CONFIDENCE_THRESHOLD))
+        
+        # Get workspace statistics
+        pool = await get_db()
+        stats = await pool.fetchrow("""
+            SELECT
+                COUNT(*) as total,
+                COUNT(CASE WHEN confidence >= $1 THEN 1 END) as high_conf
+            FROM chunk_relationships
+            WHERE workspace_id = $2
+        """, base_threshold, workspace_id)
+        
+        if stats and stats['total'] > 0:
+            confidence_rate = stats['high_conf'] / stats['total']
+            # Adjust threshold based on confidence rate
+            if confidence_rate > 0.8:
+                return min(base_threshold + 0.1, 0.95)
+            elif confidence_rate < 0.5:
+                return max(base_threshold - 0.1, 0.5)
+        
+        return base_threshold
+
+    # ─────────────────────────────────────────────────────────────────
+    # Entity Resolution with Caching
+    # ─────────────────────────────────────────────────────────────────
+
+    async def _resolve_entity_cached(
+        self,
+        law_code: str,
+        article_number: str,
+        workspace_id: str
+    ) -> Optional[int]:
+        """
+        Resolve entity to chunk ID with Redis caching.
+        
+        Args:
+            law_code: Law code (e.g., "VUK")
+            article_number: Article number (e.g., "114")
+            workspace_id: Workspace ID for filtering
+        
+        Returns:
+            Chunk ID if found, None otherwise
+        """
+        cache_key = f"entity:resolve:{workspace_id}:{law_code}:{article_number}"
+        cached = await cache_get(cache_key)
+        if cached:
+            return int(cached)
+        
+        pool = await get_db()
+        chunk_id = await pool.fetchval("""
+            SELECT id FROM unified_embeddings
+            WHERE metadata->>'law_code' = $1
+            AND metadata->>'article_number' = $2
+            LIMIT 1
+        """, law_code, str(article_number))
+        
+        if chunk_id:
+            await cache_set(cache_key, str(chunk_id), ttl=3600)
+        
+        return chunk_id
+
+    # ─────────────────────────────────────────────────────────────────
+    # Metrics Tracking
+    # ─────────────────────────────────────────────────────────────────
+
+    async def track_extraction_metrics(
+        self,
+        chunk_id: int,
+        entities_count: int,
+        references_count: int,
+        confidence_avg: float,
+        model_used: str,
+        fallback_used: bool
+    ) -> Dict[str, Any]:
+        """
+        Track extraction quality metrics.
+        
+        Args:
+            chunk_id: Chunk ID
+            entities_count: Number of entities extracted
+            references_count: Number of references extracted
+            confidence_avg: Average confidence score
+            model_used: Model used for extraction
+            fallback_used: Whether regex fallback was used
+        
+        Returns:
+            Metrics dictionary
+        """
+        metrics = {
+            "chunk_id": chunk_id,
+            "entities_count": entities_count,
+            "references_count": references_count,
+            "confidence_avg": confidence_avg,
+            "model_used": model_used,
+            "fallback_used": fallback_used,
+            "timestamp": datetime.utcnow().isoformat(),
+            "quality_score": self._calculate_quality_score(
+                entities_count, references_count, confidence_avg
+            )
+        }
+        
+        # Log to database
+        pool = await get_db()
+        try:
+            await pool.execute("""
+                INSERT INTO extraction_metrics (
+                    chunk_id, entities_count, references_count,
+                    confidence_avg, model_used, fallback_used, quality_score
+                ) VALUES ($1, $2, $3, $4, $5, $6, $7)
+            """, chunk_id, entities_count, references_count, confidence_avg, model_used, fallback_used, metrics['quality_score'])
+        except Exception as e:
+            logger.warning(f"[RelExtract] Failed to log metrics: {e}")
+        
+        # Alert if quality is low
+        if metrics['quality_score'] < 0.5:
+            logger.warning(f"Low quality extraction for chunk {chunk_id}: {metrics}")
+        
+        return metrics
+
+    def _calculate_quality_score(
+        self,
+        entities_count: int,
+        references_count: int,
+        confidence_avg: float
+    ) -> float:
+        """
+        Calculate extraction quality score.
+        
+        Args:
+            entities_count: Number of entities
+            references_count: Number of references
+            confidence_avg: Average confidence
+        
+        Returns:
+            Quality score (0.0 - 1.0)
+        """
+        entity_score = min(entities_count / 10.0, 0.3)
+        reference_score = min(references_count / 5.0, 0.4)
+        confidence_score = confidence_avg * 0.3
+        
+        return entity_score + reference_score + confidence_score
+
+    # ─────────────────────────────────────────────────────────────────
+    # Performance Measurement
+    # ─────────────────────────────────────────────────────────────────
+
+    async def measure_performance(
+        self,
+        operation: str,
+        chunk_id: int,
+        start_time: float
+    ) -> Dict[str, Any]:
+        """
+        Measure and log performance metrics.
+        
+        Args:
+            operation: Operation name
+            chunk_id: Chunk ID
+            start_time: Start time in seconds
+        
+        Returns:
+            Performance metrics dictionary
+        """
+        end_time = time.time()
+        duration_ms = (end_time - start_time) * 1000
+        
+        metrics = {
+            "operation": operation,
+            "chunk_id": chunk_id,
+            "duration_ms": duration_ms,
+            "timestamp": datetime.utcnow().isoformat()
+        }
+        
+        # Log to database
+        pool = await get_db()
+        try:
+            await pool.execute("""
+                INSERT INTO performance_metrics (
+                    operation, chunk_id, duration_ms, timestamp
+                ) VALUES ($1, $2, $3, $4)
+            """, operation, chunk_id, duration_ms, metrics['timestamp'])
+        except Exception as e:
+            logger.warning(f"[RelExtract] Failed to log performance: {e}")
+        
+        # Alert if performance is slow
+        if duration_ms > 5000:  # 5 seconds
+            logger.warning(f"Slow operation: {operation} for chunk {chunk_id} took {duration_ms}ms")
+        
+        return metrics
 
 
 # ═══════════════════════════════════════════════════════════════════════════

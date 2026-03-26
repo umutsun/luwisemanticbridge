@@ -4878,6 +4878,144 @@ class SemanticSearchService:
             logger.error(f"Stats error: {e}")
             return {"error": str(e)}
 
+    # ─────────────────────────────────────────────────────────────────
+    # Hybrid Search with Graph
+    # ─────────────────────────────────────────────────────────────────
+
+    async def hybrid_search_with_graph(
+        self,
+        query: str,
+        workspace_id: str,
+        max_results: int = 25,
+        graph_boost: float = 0.3,
+        max_hops: int = 2
+    ) -> List[SearchResult]:
+        """
+        Hybrid search with graph traversal.
+        Combines vector search, BM25 search, and graph traversal.
+        
+        Args:
+            query: Search query
+            workspace_id: Workspace ID for filtering
+            max_results: Maximum number of results
+            graph_boost: Boost weight for graph results (0.0-1.0)
+            max_hops: Maximum graph traversal hops
+        
+        Returns:
+            List of search results
+        """
+        from services.relationship_extraction_service import get_relationship_extraction_service
+        
+        # 1. Vector search
+        vector_results = await self.vector_search(query, workspace_id, max_results * 2)
+        
+        # 2. BM25 search
+        bm25_results = await self.bm25_search(query, workspace_id, max_results * 2)
+        
+        # 3. Graph traversal
+        graph_results = await self.graph_traversal(
+            query, workspace_id, max_results * 2, max_hops
+        )
+        
+        # 4. Combine and rerank
+        combined = self._combine_and_rerank(
+            vector_results, bm25_results, graph_results,
+            graph_boost=graph_boost
+        )
+        
+        return combined[:max_results]
+
+    # ─────────────────────────────────────────────────────────────────
+    # Optimized Embedding Generation
+    # ─────────────────────────────────────────────────────────────────
+
+    async def get_or_create_embedding(
+        self,
+        text: str,
+        provider: str = "openai",
+        model: str = None
+    ) -> List[float]:
+        """
+        Get or create embedding with Redis caching.
+        
+        Args:
+            text: Text to embed
+            provider: Embedding provider (openai, gemini)
+            model: Model name
+        
+        Returns:
+            Embedding vector
+        """
+        # 1. Check cache
+        cache_key = f"embedding:{provider}:{model}:{hashlib.md5(text.encode()).hexdigest()}"
+        cached = await cache_get(cache_key)
+        if cached:
+            return json.loads(cached)
+        
+        # 2. Generate embedding
+        if provider == "openai":
+            embedding = await self._openai_embedding(text, model or EMBEDDING_MODEL)
+        elif provider == "gemini":
+            embedding = await self._gemini_embedding(text, model or GEMINI_EMBEDDING_MODEL)
+        else:
+            raise ValueError(f"Unknown provider: {provider}")
+        
+        # 3. Cache result
+        await cache_set(cache_key, json.dumps(embedding), ttl=EMBEDDING_CACHE_TTL)
+        
+        return embedding
+
+    # ─────────────────────────────────────────────────────────────────
+    # Optimized Vector Search
+    # ─────────────────────────────────────────────────────────────────
+
+    async def optimized_vector_search(
+        self,
+        query: str,
+        workspace_id: str,
+        max_results: int = 25
+    ) -> List[SearchResult]:
+        """
+        Optimized vector search with pre-filtering.
+        
+        Args:
+            query: Search query
+            workspace_id: Workspace ID for filtering
+            max_results: Maximum number of results
+        
+        Returns:
+            List of search results
+        """
+        # 1. Pre-filter
+        query_embedding = await self.get_or_create_embedding(query)
+        
+        # 2. Vector search with pre-filter
+        pool = await get_db()
+        query = """
+        SELECT 
+            id,
+            content,
+            title,
+            source_table,
+            source_type,
+            1 - (embedding <=> $query_embedding) AS similarity,
+            metadata
+        FROM unified_embeddings
+        WHERE workspace_id = $workspace_id
+        AND 1 - (embedding <=> $query_embedding) > $threshold
+        ORDER BY embedding <=> $query_embedding
+        LIMIT $max_results
+        """
+        
+        results = await pool.fetch(query, {
+            "query_embedding": json.dumps(query_embedding),
+            "workspace_id": workspace_id,
+            "threshold": self.rag_settings.similarity_threshold,
+            "max_results": max_results
+        })
+        
+        return [self._row_to_result(row) for row in results]
+
 
 # Global service instance
 semantic_search_service = SemanticSearchService()

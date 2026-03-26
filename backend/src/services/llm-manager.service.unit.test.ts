@@ -253,23 +253,23 @@ describe('LLMManager', () => {
         expect(resolve('openai', 'text-embedding-3-small')).toBe('text-embedding-3-small');
 
         // Gemini
-        expect(resolve('gemini', 'text-embedding-004')).toBe('text-embedding-004');
+        expect(resolve('gemini', 'gemini-embedding-001')).toBe('gemini-embedding-001');
 
         // Invalid model names should return default (text-embedding-3-large for openai)
         expect(resolve('openai', 'invalid-model')).toBe('text-embedding-3-large');
-        expect(resolve('gemini', 'invalid')).toBe('text-embedding-004');
+        expect(resolve('gemini', 'invalid')).toBe('gemini-embedding-001');
       });
 
       it('should return default model when no model provided', () => {
         const resolve = (manager as any).resolveEmbeddingModelName.bind(manager);
         expect(resolve('openai')).toBe('text-embedding-3-large');
-        expect(resolve('gemini')).toBe('text-embedding-004');
+        expect(resolve('gemini')).toBe('gemini-embedding-001');
       });
 
       it('should handle empty string model', () => {
         const resolve = (manager as any).resolveEmbeddingModelName.bind(manager);
         expect(resolve('openai', '')).toBe('text-embedding-3-large');
-        expect(resolve('gemini', '   ')).toBe('text-embedding-004');
+        expect(resolve('gemini', '   ')).toBe('gemini-embedding-001');
       });
     });
 

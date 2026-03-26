@@ -1573,8 +1573,6 @@ export {
   app,
   httpServer,
   lsembPool as pgPool,
-  io,
-  redis,
   chatWss,
   chatConnections,
 };

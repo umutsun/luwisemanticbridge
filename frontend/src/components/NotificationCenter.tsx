@@ -40,7 +40,7 @@ export default function NotificationCenter({
   onSettingsClick,
   enableWebSocket = true // Varsayılan: AÇIK (artık kullanıyoruz)
 }: NotificationCenterProps) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const router = useRouter();
   const { user } = useAuthStore();
   const {
@@ -185,7 +185,7 @@ export default function NotificationCenter({
             )}
             {/* WebSocket status indicator */}
             {enableWebSocket && isConnected && (
-              <div className="absolute bottom-0 right-0 h-2 w-2 bg-green-500 rounded-full" title="Canlı bağlantı" />
+              <div className="absolute bottom-0 right-0 h-2 w-2 bg-green-500 rounded-full" title={t('notifications.liveConnection')} />
             )}
           </div>
         </Button>
@@ -250,7 +250,7 @@ export default function NotificationCenter({
                       </p>
                       <div className="flex items-center justify-between">
                         <span className="text-xs text-muted-foreground">
-                          {notification.source} • {new Date(notification.timestamp).toLocaleString('tr-TR', {
+                          {notification.source} • {new Date(notification.timestamp).toLocaleString(i18n.language === 'tr' ? 'tr-TR' : 'en-US', {
                             hour: '2-digit',
                             minute: '2-digit'
                           })}
