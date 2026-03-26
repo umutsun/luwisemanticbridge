@@ -103,7 +103,7 @@ BAĞLAM (en ilgiliden başlayarak sıralı):`;
 ${context || 'Veritabanında bu konuyla ilgili spesifik bilgi bulunmuyor.'}`;
 
       const messages: Anthropic.MessageParam[] = [];
-      
+
       // Add history
       history.forEach(h => {
         messages.push({
@@ -111,7 +111,7 @@ ${context || 'Veritabanında bu konuyla ilgili spesifik bilgi bulunmuyor.'}`;
           content: h.content
         });
       });
-      
+
       // Add current query
       messages.push({
         role: 'user',
@@ -134,6 +134,12 @@ ${context || 'Veritabanında bu konuyla ilgili spesifik bilgi bulunmuyor.'}`;
       return {
         content: textContent || 'Yanıt oluşturulamadı.'
       };
+    } catch (error: any) {
+      console.error('Claude generateResponse error:', error);
+      throw error;
+    }
+  }
+
   /**
    * 🧠 NEW: Semantic Segmentation using Claude-3-Haiku
    * Inserts markers at natural semantic boundaries for RAG chunking.
